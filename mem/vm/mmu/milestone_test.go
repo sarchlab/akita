@@ -72,13 +72,18 @@ var _ = Describe("MMU milestones", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
-			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
+		mmuCompPorts := makePorts("MMU", 16)
+		mmuComp.BindPort("Top", mmuCompPorts.Top)
+		mmuComp.BindPort("Control", mmuCompPorts.Control)
 
 		topPort = mmuComp.Ports.Top
 
-		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(mmuComp.Ports.Control)
+		(&noopConn{}).BindPort(topPort)
+		(&noopConn{}).BindPort(mmuComp.Ports.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		mw = mmuComp.Middlewares.Translation
 

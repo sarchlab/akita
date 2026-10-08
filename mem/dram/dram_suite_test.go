@@ -28,8 +28,8 @@ func TestValidateState(t *testing.T) {
 // the given buffer size.
 func defaultPorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
-		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(bufSize, bufSize),
+		Control: twowaybuffered.NewPort(bufSize, bufSize),
 	}
 }
 
@@ -43,8 +43,8 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(name, bufSize, bufSize)
-	p.SetOwner(testDriver{})
+	p := twowaybuffered.NewPort(bufSize, bufSize)
+	p.BindOwner(testDriver{}, name)
 
 	return p
 }
@@ -63,10 +63,13 @@ func storageFor(spec Spec) *mem.Storage {
 // buildDRAM builds a DRAM controller named name from spec, backed by a
 // storage that covers its geometry, with ports of the given buffer size.
 func buildDRAM(sim timing.Simulation, spec Spec, name string, bufSize int) *Comp {
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{Storage: storageFor(spec)}).
-		WithPorts(defaultPorts(name, bufSize)).
 		Build(name)
+	builtComponentPorts := defaultPorts(name, bufSize)
+	builtComponent.BindPort("Top", builtComponentPorts.Top)
+	builtComponent.BindPort("Control", builtComponentPorts.Control)
+	return builtComponent
 }

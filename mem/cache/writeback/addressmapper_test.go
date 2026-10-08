@@ -21,12 +21,20 @@ func buildWired(res Resources, spec Spec) *Comp {
 		res.Storage = mem.NewStorage(spec.TotalByteSize)
 	}
 
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(res).
-		WithPorts(makePorts("Cache", 4)).
 		Build("Cache")
+	builtComponentPorts := makePorts("Cache", 4)
+	builtComponent.BindPort("Top", builtComponentPorts.Top)
+	builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
+	builtComponent.BindPort("Control", builtComponentPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+
+	return builtComponent
 }
 
 // TestBuildMapsRemotePorts checks that Build turns Spec.AddressMapperType and
@@ -121,10 +129,17 @@ func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 // backing storage instead of failing on the first bank access.
 func TestBuildRequiresStorage(t *testing.T) {
 	assertPanics(t, "Resources.Storage is required", func() {
-		Definition.Builder().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithPorts(makePorts("Cache", 4)).
+		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		builtComponent := Definition.Builder().
+			WithSimulation(setupSim1).
 			Build("Cache")
+		builtComponentPorts := makePorts("Cache", 4)
+		builtComponent.BindPort("Top", builtComponentPorts.Top)
+		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
+		builtComponent.BindPort("Control", builtComponentPorts.Control)
+		if err := setupSim1.Initialize(); err != nil {
+			panic(err)
+		}
 	})
 }
 

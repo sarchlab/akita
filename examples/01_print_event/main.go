@@ -24,6 +24,9 @@ func main() {
 
 	engine.Schedule(timing.MakeEventBase(s.NewID(), 1, "printer"))
 
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 	err := engine.Run()
 	if err != nil {
 		panic(err)

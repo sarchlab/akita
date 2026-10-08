@@ -10,19 +10,21 @@ import (
 
 // NewConnection creates an ideal direct connection with the given tick frequency.
 // It registers the connection and its event handler with s. Ports are attached
-// separately with PlugIn. The simulation must be non-nil and the name valid.
+// separately with BindPort. The simulation must be non-nil and the name valid.
 func NewConnection(name string, s timing.Simulation, freq timing.Freq) *Connection {
 	if s == nil {
 		panic("direct: simulation is required")
 	}
 
+	s.RequireNameAvailable(name)
 	naming.MustBeValid(name)
 	spec := configuration{Freq: freq}
 	modeling.MustBeCheckpointable[configuration, State](name, spec)
 
 	conn := &Connection{
-		name: name,
-		spec: spec,
+		name:       name,
+		simulation: s,
+		spec:       spec,
 		// Secondary ticks run after components in the same cycle.
 		ticks: ticking.NewSecondaryScheduler(name, s, freq),
 		ports: ports{portMap: make(map[messaging.RemotePort]int)},

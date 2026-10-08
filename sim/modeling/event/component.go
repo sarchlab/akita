@@ -22,12 +22,12 @@ import (
 //   - State is the instance's mutable runtime data, saved in checkpoints.
 //     Only the component itself, its NewState and middlewares, writes it.
 //   - Resources holds the references to shared objects given to Build.
-//   - Ports holds the ports the system builder passed to Build, bound to this
-//     instance.
+//   - Ports holds the slots the system builder assigns with BindPort.
 //   - Middlewares holds the instance's behavior. Every event the instance
 //     receives goes to each field in declaration order.
 //
-// Spec, Resources, and Ports are fixed after Build.
+// Spec and Resources are fixed after Build; Initialize freezes Ports and
+// creates State and Middlewares.
 //
 // A Component is hookable (hooking.Hookable): tracing attaches to it with
 // AcceptHook.
@@ -48,6 +48,7 @@ type Component[S, T, R, P, M any] struct {
 // event component runs only when an event arrives. The instance handles one
 // event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+	c.RequireInitialized()
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
@@ -95,12 +96,14 @@ func (c *Component[S, T, R, P, M]) Schedule(e timing.Event) {
 // SaveCheckpoint writes the instance's spec hash and State. Its pending
 // events are saved with the engine's event queue.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
+	c.RequireInitialized()
 	return modeling.WriteCheckpoint(w, c.Spec, c.State, nil)
 }
 
 // LoadCheckpoint restores the State after verifying that the saved spec hash
 // matches this instance's.
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
+	c.RequireInitialized()
 	return modeling.ReadCheckpoint(r, c.Spec, &c.State, nil)
 }
 

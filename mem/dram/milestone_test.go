@@ -66,6 +66,7 @@ var _ = Describe("DRAM admission milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 
 		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
+		Expect(sim.Initialize()).To(Succeed())
 
 		topPort = memCtrl.Ports.Top
 
@@ -123,6 +124,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		spec.TRFC = 3
 
 		memCtrl := buildDRAM(sim, spec, "MemCtrl", 16)
+		Expect(sim.Initialize()).To(Succeed())
 
 		topPort := memCtrl.Ports.Top
 

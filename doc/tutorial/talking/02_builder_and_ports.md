@@ -50,32 +50,29 @@ Things to notice:
   `m.comp.Ports.Out`.
 - Middlewares run in the **field order** of `Middlewares`: `Send` first,
   then `ReceiveProcess`.
-- `Build` **registers the component and its ports with the simulation**,
+- `Build` registers the component; `BindPort` registers each port,
   which adds them to checkpointing, tracing, and monitoring.
 - The `Definition.Builder()` → `WithX` → `Build(name)` shape is universal
   across Akita components.
 
 The system builder creates the port with `twowaybuffered.NewPort` and passes it
-through `WithPorts`:
+with `component.BindPort` after Build:
 
 ```go
-outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
+outA := twowaybuffered.NewPort(16, 16)
 
 agentA := Definition.Builder().
     WithSimulation(sim).
     WithSpec(specA).
-    WithPorts(Ports{Out: outA}).
     Build("AgentA")
+agentA.BindPort("Out", outA)
 ```
 
-`NewPort("AgentA.Out", 16, 16)` creates a port named `<instance>.<field>`,
-with room for 16 incoming and 16 outgoing messages and no owner yet.
-`Build` sets the owner, and it checks the name and
-panics on a mismatch, so a typo fails fast. Every port in `Ports` must be
-given, and none is added after `Build`. This keeps the component agnostic
-to how its port is built (buffer sizes, instrumentation) while the
-component still owns which ports exist. The next page wires two agents
-together this way.
+`NewPort(16, 16)` creates an unnamed port with room for 16 messages in each
+direction. `agentA.BindPort("Out", outA)` assigns its owner, names it
+`AgentA.Out`, fills `agentA.Ports.Out`, and registers it. A second binding is
+rejected. After all wiring, `Initialize` checks the declared slots and creates
+State and Middlewares. The next page connects two agents and runs them.
 
 ## Why a Component Package?
 
@@ -89,9 +86,9 @@ A package of its own buys three things:
 - **Correct assembly, every time.** The package declares the parts once —
   the five structs, the middlewares, the `Definition` — and `Build`
   assembles them the same way for every instance. A caller cannot forget a
-  middleware or run them in the wrong order; `Build(name)` always returns a
-  fully wired `*Comp`.
-- **Easy instances.** `Definition.Builder().WithSpec(spec).WithPorts(ports).Build(name)`
+  middleware or run them in the wrong order; `Initialize` checks and
+  creates them after wiring.
+- **Easy instances.** `Definition.Builder().WithSpec(spec).Build(name)`
   stamps out an agent on demand — we build two, AgentA and AgentB — and
   `Definition.DefaultSpec` gives a base configuration to tweak.
 - **A clean surface.** Callers see only what they must supply — the Spec,

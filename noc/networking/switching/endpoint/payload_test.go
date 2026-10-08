@@ -73,12 +73,19 @@ func (payloadOwner) NotifyPortFree(messaging.Port) {}
 
 func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-	device := twowaybuffered.NewPort("Receiver.Port", 1, 1)
-	device.SetOwner(payloadOwner{"Receiver"})
-	network := twowaybuffered.NewPort("Endpoint.NetworkPort", 8, 8)
+	device := twowaybuffered.NewPort(1, 1)
+	device.BindOwner(payloadOwner{"Receiver"}, "Receiver.Port")
+	network := twowaybuffered.NewPort(8, 8)
 	ep := Definition.Builder().WithSimulation(s).
 		WithResources(Resources{DevicePorts: []messaging.Port{device}}).
-		WithPorts(Ports{NetworkPort: network}).Build("Endpoint")
+		Build("Endpoint")
+
+	ep.BindPort("NetworkPort", network)
+	ConnectDevices(ep)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+
 	return ep, network, device
 }
 

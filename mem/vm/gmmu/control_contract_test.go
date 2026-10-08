@@ -28,11 +28,17 @@ func TestControlContract(t *testing.T) {
 			WithResources(Resources{
 				PageTable: vm.NewPageTable(spec.Log2PageSize),
 			}).
-			WithPorts(defaultPorts("GMMU")).
 			Build("GMMU")
+		compPorts := defaultPorts("GMMU")
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range allPorts(comp) {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

@@ -20,7 +20,7 @@ var _ = Describe("Respond Stage", func() {
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
 		ports := makePorts("Cache", 4)
-		ports.Top = twowaybuffered.NewPort("Cache.Top", 1, 1)
+		ports.Top = twowaybuffered.NewPort(1, 1)
 
 		mw = buildStageTestCache(
 			Definition.DefaultSpec,
@@ -30,7 +30,6 @@ var _ = Describe("Respond Stage", func() {
 		)
 
 		topPort = ports.Top
-		(&noopConn{}).PlugIn(topPort)
 
 		s = &respondStage{cache: mw}
 	})

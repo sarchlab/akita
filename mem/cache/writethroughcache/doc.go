@@ -9,5 +9,5 @@
 // address-to-port mapper or remote ports) is injected through WithResources,
 // and the Top, Bottom, and Control port instances, created with
 // twowaybuffered.NewPort so the caller chooses the buffer sizes, are passed with
-// WithPorts.
+// BindPort after construction.
 package writethroughcache

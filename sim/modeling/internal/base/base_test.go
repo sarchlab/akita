@@ -40,10 +40,12 @@ type recordingSim struct {
 }
 
 func (s *recordingSim) RegisterPort(p naming.Named) {
+	s.Simulation.RegisterPort(p)
 	s.ports = append(s.ports, p.Name())
 }
 
 func (s *recordingSim) RegisterComponent(c naming.Named) {
+	s.Simulation.RegisterComponent(c)
 	s.components = append(s.components, c.Name())
 }
 
@@ -56,13 +58,20 @@ func newRecordingSim() *recordingSim {
 func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
 	c := &baseComp{}
 	base.Init(&c.ComponentBase, c,
-		sim, "C", baseSpec{Size: 4}, modeling.None{}, ports)
+		sim, "C", baseSpec{Size: 4}, modeling.None{})
+	base.Register(&c.ComponentBase)
+	if ports.In != nil {
+		c.BindPort("In", ports.In)
+	}
+	for i, p := range ports.Links {
+		c.BindPort(fmt.Sprintf("Links[%d]", i), p)
+	}
 
 	return c
 }
 
 func unowned(name string) messaging.Port {
-	return twowaybuffered.NewPort(name, 1, 1)
+	return twowaybuffered.NewPort(1, 1)
 }
 
 func expectPanic(t *testing.T, substr string, f func()) {
@@ -83,84 +92,72 @@ func expectPanic(t *testing.T, substr string, f func()) {
 	f()
 }
 
-func TestInitComponentBaseBindsEveryPortAndRegisterRegisters(t *testing.T) {
-	sim := newRecordingSim()
-	in, l0, l1 := unowned("C.In"), unowned("C.Links[0]"), unowned("C.Links[1]")
-
-	c := buildBase(sim, basePorts{In: in, Links: []messaging.Port{l0, l1}})
-
-	for _, p := range []messaging.Port{in, l0, l1} {
-		if p.Owner() != modeling.Component(c) {
-			t.Errorf("port %s is not bound to the component", p.Name())
-		}
+func TestBindPortEstablishesBothSides(t *testing.T) {
+	s := newRecordingSim()
+	c := buildBase(s, basePorts{})
+	if c.Ports.In != nil || len(s.ports) != 0 {
+		t.Fatal("Build must leave ports unbound")
 	}
-
-	if c.Ports.In != in || c.Ports.Links[1] != l1 {
-		t.Errorf("ports are not reachable through the Ports fields")
+	in, link := unowned(""), unowned("")
+	c.BindPort("In", in)
+	c.BindPort("Links[0]", link)
+	if c.Ports.In != in || in.Owner() != c || in.Name() != "C.In" || link.Name() != "C.Links[0]" {
+		t.Fatal("binding did not establish both sides")
 	}
-
-	if len(sim.ports) != 0 || len(sim.components) != 0 {
-		t.Errorf("InitComponentBase registered %v and %v, want nothing before Register",
-			sim.ports, sim.components)
+	if !reflect.DeepEqual(s.ports, []string{"C.In", "C.Links[0]"}) {
+		t.Fatal(s.ports)
 	}
-
-	base.Register(&c.ComponentBase)
-
-	want := []string{"C.In", "C.Links[0]", "C.Links[1]"}
-	if !reflect.DeepEqual(sim.ports, want) {
-		t.Errorf("registered ports %v, want %v", sim.ports, want)
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
 	}
-
-	if !reflect.DeepEqual(sim.components, []string{"C"}) {
-		t.Errorf("registered components %v, want [C]", sim.components)
+	expectPanic(t, "frozen", func() { c.BindPort("Links[1]", unowned("")) })
+}
+func TestInvalidBindingDoesNotMutate(t *testing.T) {
+	for _, slot := range []string{"Missing", "Links", "Links[-1]", "Links[01]", "In[0]"} {
+		t.Run(slot, func(t *testing.T) {
+			s := newRecordingSim()
+			c := buildBase(s, basePorts{})
+			p := unowned("")
+			expectPanic(t, "", func() { c.BindPort(slot, p) })
+			if p.Owner() != nil || p.Name() != "" || len(s.ports) != 0 {
+				t.Fatal("invalid binding mutated port")
+			}
+		})
+	}
+	s := newRecordingSim()
+	c := buildBase(s, basePorts{In: unowned("")})
+	replacement := unowned("")
+	expectPanic(t, "already", func() { c.BindPort("In", replacement) })
+	if replacement.Owner() != nil {
+		t.Fatal("replacement was partially bound")
 	}
 }
-
-func TestInitComponentBaseRejectsMisconfiguredPorts(t *testing.T) {
-	t.Run("missing port", func(t *testing.T) {
-		expectPanic(t, "port In is not given", func() {
-			buildBase(newRecordingSim(), basePorts{})
-		})
-	})
-
-	t.Run("misnamed port", func(t *testing.T) {
-		expectPanic(t, `want "C.In"`, func() {
-			buildBase(newRecordingSim(), basePorts{In: unowned("Other.In")})
-		})
-	})
-
-	t.Run("misnamed group member", func(t *testing.T) {
-		expectPanic(t, `want "C.Links[0]"`, func() {
-			buildBase(newRecordingSim(), basePorts{
-				In:    unowned("C.In"),
-				Links: []messaging.Port{unowned("C.Links")},
-			})
-		})
-	})
-
-	t.Run("port of another component", func(t *testing.T) {
-		in := unowned("C.In")
-		buildBase(newRecordingSim(), basePorts{In: in})
-
-		expectPanic(t, "already belongs to", func() {
-			buildBase(newRecordingSim(), basePorts{In: in})
-		})
-	})
-
-	t.Run("non-port field", func(t *testing.T) {
-		type badPorts struct {
-			N  int
-			In messaging.Port
-		}
-
-		expectPanic(t, "must be an exported messaging.Port or []messaging.Port", func() {
-			b := &base.ComponentBase[
-				baseSpec, modeling.None, modeling.None, badPorts, modeling.None]{}
-			base.Init(b, &baseComp{},
-				newRecordingSim(), "C", baseSpec{}, modeling.None{},
-				badPorts{In: unowned("C.In")})
-		})
-	})
+func TestInitializationValidatesBeforeFreezing(t *testing.T) {
+	s := newRecordingSim()
+	c := buildBase(s, basePorts{})
+	calls := 0
+	base.SetInitializer(&c.ComponentBase, func() { calls++ })
+	if err := s.Initialize(); err == nil || !strings.Contains(err.Error(), "In") {
+		t.Fatalf("missing port: %v", err)
+	}
+	if calls != 0 {
+		t.Fatal("initializer ran before validation")
+	}
+	c.BindPort("In", unowned(""))
+	c.BindPort("Links[1]", unowned(""))
+	if err := s.Initialize(); err == nil {
+		t.Fatal("slice hole accepted")
+	}
+	c.BindPort("Links[0]", unowned(""))
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatal(calls)
+	}
+	if err := s.Initialize(); err == nil {
+		t.Fatal("double initialization accepted")
+	}
 }
 
 func TestNameIsTheInstanceAndSpecIsKept(t *testing.T) {
@@ -193,7 +190,7 @@ func TestInitGivesTheInstanceItsOwnSpecSlices(t *testing.T) {
 
 	c := &listComp{}
 	base.Init(&c.ComponentBase, c, newRecordingSim(), "C",
-		spec, modeling.None{}, modeling.None{})
+		spec, modeling.None{})
 
 	spec.Targets[0] = "X"
 

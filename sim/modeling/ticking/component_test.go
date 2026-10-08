@@ -82,11 +82,22 @@ func newSim() timing.Simulation {
 }
 
 func newPort(name string) messaging.Port {
-	return twowaybuffered.NewPort(name, 1, 1)
+	return twowaybuffered.NewPort(1, 1)
 }
 
 func build(ports Ports) *Comp {
-	return Definition.Builder().WithSimulation(newSim()).WithPorts(ports).Build("C")
+	setupSim1 := newSim()
+	builtComponent := Definition.Builder().WithSimulation(setupSim1).Build("C")
+	builtComponentPorts := ports
+	builtComponent.BindPort("In", builtComponentPorts.In)
+	for i, p := range builtComponentPorts.Links {
+		builtComponent.BindPort(fmt.Sprintf("Links[%d]", i), p)
+	}
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
+
+	return builtComponent
 }
 
 func mustPanic(t *testing.T, substr string, f func()) {
@@ -133,8 +144,15 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 	sim := newSim()
 	c := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{In: newPort("C.In")}).
 		Build("C")
+	cPorts := Ports{In: newPort("C.In")}
+	c.BindPort("In", cPorts.In)
+	for i, p := range cPorts.Links {
+		c.BindPort(fmt.Sprintf("Links[%d]", i), p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	c.NotifyRecv(c.Ports.In)
 	if err := sim.Engine().Run(); err != nil {
@@ -180,11 +198,20 @@ func TestCheckpointRoundTrip(t *testing.T) {
 
 	spec := Definition.DefaultSpec
 	spec.Depth = 3
+	setupSim2 := newSim()
 	other := Definition.Builder().
-		WithSimulation(newSim()).
+		WithSimulation(setupSim2).
 		WithSpec(spec).
-		WithPorts(Ports{In: newPort("C.In")}).
 		Build("C")
+	otherPorts := Ports{In: newPort("C.In")}
+	other.BindPort("In", otherPorts.In)
+	for i, p := range otherPorts.Links {
+		other.BindPort(fmt.Sprintf("Links[%d]", i), p)
+	}
+	if err := setupSim2.Initialize(); err != nil {
+		panic(err)
+	}
+
 	if err := other.LoadCheckpoint(bytes.NewReader(saved)); err == nil {
 		t.Errorf("LoadCheckpoint into a different Spec succeeded, want an error")
 	}
@@ -210,10 +237,18 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 		}
 
 		mustPanic(t, "Second is not set by NewMiddlewares", func() {
-			def.Builder().
-				WithSimulation(newSim()).
-				WithPorts(Ports{In: newPort("C.In")}).
+			setupSim3 := newSim()
+			builtComponent := def.Builder().
+				WithSimulation(setupSim3).
 				Build("C")
+			builtComponentPorts := Ports{In: newPort("C.In")}
+			builtComponent.BindPort("In", builtComponentPorts.In)
+			for i, p := range builtComponentPorts.Links {
+				builtComponent.BindPort(fmt.Sprintf("Links[%d]", i), p)
+			}
+			if err := setupSim3.Initialize(); err != nil {
+				panic(err)
+			}
 		})
 	})
 
@@ -231,10 +266,18 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 		}
 
 		mustPanic(t, "must have a Freq timing.Freq field", func() {
-			def.Builder().
-				WithSimulation(newSim()).
-				WithPorts(Ports{In: newPort("C.In")}).
+			setupSim4 := newSim()
+			builtComponent := def.Builder().
+				WithSimulation(setupSim4).
 				Build("C")
+			builtComponentPorts := Ports{In: newPort("C.In")}
+			builtComponent.BindPort("In", builtComponentPorts.In)
+			for i, p := range builtComponentPorts.Links {
+				builtComponent.BindPort(fmt.Sprintf("Links[%d]", i), p)
+			}
+			if err := setupSim4.Initialize(); err != nil {
+				panic(err)
+			}
 		})
 	})
 }

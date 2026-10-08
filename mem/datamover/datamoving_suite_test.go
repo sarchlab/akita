@@ -25,10 +25,10 @@ func TestValidateState(t *testing.T) {
 // buffer sizes (each used for both the incoming and outgoing buffer).
 func makePorts(name string, top, inside, outside, control int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", top, top),
-		Inside:  twowaybuffered.NewPort(name+".Inside", inside, inside),
-		Outside: twowaybuffered.NewPort(name+".Outside", outside, outside),
-		Control: twowaybuffered.NewPort(name+".Control", control, control),
+		Top:     twowaybuffered.NewPort(top, top),
+		Inside:  twowaybuffered.NewPort(inside, inside),
+		Outside: twowaybuffered.NewPort(outside, outside),
+		Control: twowaybuffered.NewPort(control, control),
 	}
 }
 
@@ -42,8 +42,8 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(name, bufSize, bufSize)
-	p.SetOwner(testDriver{})
+	p := twowaybuffered.NewPort(bufSize, bufSize)
+	p.BindOwner(testDriver{}, name)
 
 	return p
 }

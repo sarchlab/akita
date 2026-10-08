@@ -37,10 +37,10 @@ type Port interface {
 
 	AsRemote() RemotePort
 
-	SetConnection(conn Connection)
+	BindConnection(conn Connection)
 	Connection() Connection
 	Owner() PortOwner
-	SetOwner(owner PortOwner)
+	BindOwner(owner PortOwner, name string)
 
 	// For connection
 	CanDeliver() bool

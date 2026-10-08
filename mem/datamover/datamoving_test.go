@@ -58,16 +58,24 @@ var _ = Describe("DataMover", func() {
 					Port: outsideMem.Ports.Top.AsRemote(),
 				},
 			}).
-			WithPorts(makePorts("DataMover", 16, 64, 64, 40960000)).
 			Build("DataMover")
+		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 40960000)
+		dataMover.BindPort("Top", dataMoverPorts.Top)
+		dataMover.BindPort("Inside", dataMoverPorts.Inside)
+		dataMover.BindPort("Outside", dataMoverPorts.Outside)
+		dataMover.BindPort("Control", dataMoverPorts.Control)
 
 		conn = direct.NewConnection("Conn", sim, timing.GHz)
-		conn.PlugIn(srcPort)
-		conn.PlugIn(dataMover.Ports.Top)
-		conn.PlugIn(dataMover.Ports.Inside)
-		conn.PlugIn(dataMover.Ports.Outside)
-		conn.PlugIn(insideMem.Ports.Top)
-		conn.PlugIn(outsideMem.Ports.Top)
+		conn.BindPort(srcPort)
+		conn.BindPort(dataMover.Ports.Top)
+		conn.BindPort(dataMover.Ports.Inside)
+		conn.BindPort(dataMover.Ports.Outside)
+		conn.BindPort(insideMem.Ports.Top)
+		conn.BindPort(outsideMem.Ports.Top)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	It("should move data outside to inside", func() {

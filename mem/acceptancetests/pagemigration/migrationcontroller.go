@@ -546,24 +546,24 @@ func setupMigrationController(
 	mover := buildDataMover(s, shared)
 
 	// The data mover reads and writes memory over the same fabric as the L2.
-	memConn.PlugIn(mover.Ports.Inside)
-	memConn.PlugIn(mover.Ports.Outside)
+	memConn.BindPort(mover.Ports.Inside)
+	memConn.BindPort(mover.Ports.Outside)
 
 	ctrl := buildMigrationController(s, shared, chains, mover)
 
 	// One control connection carries the controller plus every component it
 	// drains/pauses/flushes/invalidates/enables; directconnection routes by Dst.
 	ctrlConn := direct.NewConnection("ConnControl", s, timing.GHz)
-	ctrlConn.PlugIn(ctrl.Ports.Ctrl)
+	ctrlConn.BindPort(ctrl.Ports.Ctrl)
 	for _, c := range chains {
-		ctrlConn.PlugIn(c.rob.Ports.Control)
-		ctrlConn.PlugIn(c.at.Ports.Control)
-		ctrlConn.PlugIn(c.l1Cache.Ports.Control)
-		ctrlConn.PlugIn(c.l1TLB.Ports.Control)
+		ctrlConn.BindPort(c.rob.Ports.Control)
+		ctrlConn.BindPort(c.at.Ports.Control)
+		ctrlConn.BindPort(c.l1Cache.Ports.Control)
+		ctrlConn.BindPort(c.l1TLB.Ports.Control)
 	}
-	ctrlConn.PlugIn(shared.l2Cache.Ports.Control)
-	ctrlConn.PlugIn(shared.l2TLB.Ports.Control)
-	ctrlConn.PlugIn(shared.ioMMU.Ports.Control)
+	ctrlConn.BindPort(shared.l2Cache.Ports.Control)
+	ctrlConn.BindPort(shared.l2TLB.Ports.Control)
+	ctrlConn.BindPort(shared.ioMMU.Ports.Control)
 
 	connect(s, "ConnMover",
 		ctrl.Ports.Mover,
@@ -601,13 +601,12 @@ func buildDataMover(
 				LowModules:       memCtrlPorts,
 			},
 		}).
-		WithPorts(datamover.Ports{
-			Top:     newPort("DataMover.Top"),
-			Inside:  newPort("DataMover.Inside"),
-			Outside: newPort("DataMover.Outside"),
-			Control: newPort("DataMover.Control"),
-		}).
 		Build("DataMover")
+
+	mover.BindPort("Top", newPort("DataMover.Top"))
+	mover.BindPort("Inside", newPort("DataMover.Inside"))
+	mover.BindPort("Outside", newPort("DataMover.Outside"))
+	mover.BindPort("Control", newPort("DataMover.Control"))
 
 	return mover
 }
@@ -629,15 +628,15 @@ func buildMigrationController(
 	}
 	collectControlTargets(&res, shared, chains)
 
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(s).
 		WithSpec(spec).
 		WithResources(res).
-		WithPorts(migPorts{
-			Ctrl:  newPort("MigrationController.Ctrl"),
-			Mover: newPort("MigrationController.Mover"),
-		}).
 		Build("MigrationController")
+
+	builtComponent.BindPort("Ctrl", newPort("MigrationController.Ctrl"))
+	builtComponent.BindPort("Mover", newPort("MigrationController.Mover"))
+	return builtComponent
 }
 
 // collectControlTargets gathers the control-port references the migration FSM

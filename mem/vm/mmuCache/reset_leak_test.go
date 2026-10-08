@@ -38,14 +38,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 			LowModulePort: messaging.RemotePort("LowModule"),
 			UpModulePort:  messaging.RemotePort("UpModule"),
 		}).
-		WithPorts(defaultPorts("MMUCache")).
 		Build("MMUCache")
+	compPorts := defaultPorts("MMUCache")
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Bottom", compPorts.Bottom)
+	comp.BindPort("Control", compPorts.Control)
 
 	topPort := comp.Ports.Top
 	bottomPort := comp.Ports.Bottom
 	controlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, bottomPort, controlPort} {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
 	}
 
 	rec := &tracingtest.LeakRecorder{}

@@ -71,6 +71,12 @@ type Connector struct {
 	switches        []*switchNode
 	devices         []*deviceNode
 	connectionCount int
+	pending         []pendingConnection
+}
+
+type pendingConnection struct {
+	conn        *direct.Connection
+	left, right messaging.Port
 }
 
 // MakeConnector creates a network connector
@@ -177,10 +183,9 @@ func (c *Connector) ConnectDeviceWithEPName(
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
-	epPort = twowaybuffered.NewPort(epFullName+".NetworkPort",
-		param.DeviceEndParam.IncomingBufSize,
+	epPort = twowaybuffered.NewPort(param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize)
-	swPort, _ = swNode.addPort(epPort.AsRemote(),
+	swPort, _ = swNode.addPort(messaging.RemotePort(epFullName+".NetworkPort"),
 		param.SwitchEndParam)
 
 	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
@@ -204,14 +209,16 @@ func (c *Connector) createEndPoint(
 	epSpec.FlitByteSize = c.flitSize
 	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel
 	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
-	epSpec.DefaultSwitchDst = swPort.AsRemote()
+	epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("%s.Port[%d]", swNode.name, len(swNode.ports)-1))
 
 	endPoint := endpoint.Definition.Builder().
 		WithSimulation(c.simulation).
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: ports}).
-		WithPorts(endpoint.Ports{NetworkPort: epPort}).
 		Build(name)
+
+	endPoint.BindPort("NetworkPort", epPort)
+	endpoint.ConnectDevices(endPoint)
 
 	epNode := &deviceNode{
 		ports:    ports,
@@ -257,8 +264,7 @@ func (c *Connector) connectPorts(
 		panic("non-ideal (with latency) connection is not implemented.")
 	}
 
-	conn.PlugIn(left)
-	conn.PlugIn(right)
+	c.pending = append(c.pending, pendingConnection{conn, left, right})
 
 	return conn
 }
@@ -276,8 +282,8 @@ func (c *Connector) ConnectSwitches(
 	// and then record each remote.
 	leftPort, leftLink := leftNode.addPort("", param.LeftEndParam)
 	rightPort, rightLink := rightNode.addPort("", param.RightEndParam)
-	leftNode.links[leftLink].Remote = rightPort.AsRemote()
-	rightNode.links[rightLink].Remote = leftPort.AsRemote()
+	leftNode.links[leftLink].Remote = messaging.RemotePort(fmt.Sprintf("%s.Port[%d]", rightNode.name, rightLink))
+	rightNode.links[rightLink].Remote = messaging.RemotePort(fmt.Sprintf("%s.Port[%d]", leftNode.name, leftLink))
 
 	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 
@@ -310,8 +316,7 @@ func (c *Connector) createRemoteInfo(
 
 // EstablishRoute sets the routing table for all the nodes.
 //
-// It first builds the switches: a switch takes all of its ports at Build, so
-// the switches are built once every device and link is connected. Call it
+// It first builds and binds the switches and completes their links. Call it
 // after the last ConnectDevice and ConnectSwitches of the network.
 func (c *Connector) EstablishRoute() {
 	c.BuildSwitches()
@@ -340,9 +345,18 @@ func (c *Connector) BuildSwitches() {
 				RoutingTable: node.table,
 				Links:        node.links,
 			}).
-			WithPorts(switches.Ports{Port: node.ports}).
 			Build(node.name)
+		bindingPorts := switches.Ports{Port: node.ports}
+		for i, p := range bindingPorts.Port {
+			node.sw.BindPort(fmt.Sprintf("Port[%d]", i), p)
+		}
 	}
+	for _, link := range c.pending {
+		link.conn.BindPort(link.left)
+		link.conn.BindPort(link.right)
+	}
+
+	c.pending = nil
 }
 
 func (c *Connector) createRoutingNodeList() []Node {

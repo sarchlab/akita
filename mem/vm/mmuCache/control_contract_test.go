@@ -25,13 +25,19 @@ func TestControlContract(t *testing.T) {
 		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
+		compPorts := defaultPorts("MMUCache")
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range []messaging.Port{
 			comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
 		} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

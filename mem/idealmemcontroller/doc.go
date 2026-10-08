@@ -4,7 +4,7 @@
 // The controller is a ticking component. The system builder builds it with
 // Definition.Builder(), supplying the backing storage in Resources (required)
 // and the Top and Control port instances, created with twowaybuffered.NewPort, with
-// WithPorts.
+// BindPort after construction.
 package idealmemcontroller
 
 //go:generate mockgen -destination mock_sim_test.go -package idealmemcontroller -write_package_comment=false github.com/sarchlab/akita/v5/sim/messaging Port

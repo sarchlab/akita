@@ -19,20 +19,24 @@ func TestControlContract(t *testing.T) {
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
-			p := twowaybuffered.NewPort("ROB."+name, 16, 16)
-			(&noopConn{}).PlugIn(p)
+			p := twowaybuffered.NewPort(16, 16)
 			return p
 		}
 
 		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithPorts(Ports{
-				Top:     port("Top"),
-				Bottom:  port("Bottom"),
-				Control: port("Control"),
-			}).
 			Build("ROB")
+
+		comp.BindPort("Top", port("Top"))
+		comp.BindPort("Bottom", port("Bottom"))
+		comp.BindPort("Control", port("Control"))
+		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control} {
+			(&noopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,

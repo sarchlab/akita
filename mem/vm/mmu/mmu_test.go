@@ -23,7 +23,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -32,8 +32,8 @@ func (c *noopConn) NotifySend()                      {}
 // buffer size and a Control buffer size of 4.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
-		Control: twowaybuffered.NewPort(name+".Control", 4, 4),
+		Top:     twowaybuffered.NewPort(topBufSize, topBufSize),
+		Control: twowaybuffered.NewPort(4, 4),
 	}
 }
 
@@ -51,18 +51,24 @@ var _ = Describe("MMU", func() {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		mmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
-			WithPorts(makePorts("MMU", topBufSize)).
 			Build("MMU")
+		mmuCompPorts := makePorts("MMU", topBufSize)
+		mmuComp.BindPort("Top", mmuCompPorts.Top)
+		mmuComp.BindPort("Control", mmuCompPorts.Control)
 
 		topPort = mmuComp.Ports.Top
 
-		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(mmuComp.Ports.Control)
+		(&noopConn{}).BindPort(topPort)
+		(&noopConn{}).BindPort(mmuComp.Ports.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		translationMWRef = mmuComp.Middlewares.Translation
 	}
@@ -227,14 +233,21 @@ var _ = Describe("MMU Integration", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
-			WithPorts(makePorts("MMU", 4096)).
 			Build("MMU")
+		mmuCompPorts := makePorts("MMU", 4096)
+		mmuComp.BindPort("Top", mmuCompPorts.Top)
+		mmuComp.BindPort("Control", mmuCompPorts.Control)
 
 		topPort = mmuComp.Ports.Top
-		(&noopConn{}).PlugIn(topPort)
+		(&noopConn{}).BindPort(topPort)
 
-		agentPort = twowaybuffered.NewPort("Agent.Top", 4, 4)
-		(&noopConn{}).PlugIn(agentPort)
+		agentPort = twowaybuffered.NewPort(4, 4)
+		agentPort.BindOwner(testDriver{}, "Agent")
+		(&noopConn{}).BindPort(agentPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	It("should lookup", func() {
@@ -273,3 +286,8 @@ var _ = Describe("MMU Integration", func() {
 		Expect(rsp.RspTo).To(Equal(req.ID))
 	})
 })
+
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}

@@ -42,6 +42,10 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 			handlers := make([]*allocatingHandler, 2)
 			for i, s := range sims {
 				comp := idTickedDef.Builder().WithSimulation(s).Build("Comp")
+				if err := s.Initialize(); err != nil {
+					panic(err)
+				}
+
 				require.Equal(t, uint64(1), comp.NewID())
 				h := &allocatingHandler{ids: s}
 				handlers[i] = h
@@ -50,6 +54,7 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 				require.Equal(t, uint64(2), e.ID)
 				s.Engine().Schedule(e)
 			}
+
 			var wg sync.WaitGroup
 			errs := make([]error, len(sims))
 			for i, s := range sims {
@@ -75,10 +80,12 @@ func TestRestoringSimulationDoesNotChangeOtherIDCounters(t *testing.T) {
 		b.NewID()
 	}
 	path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
+	require.NoError(t, a.Initialize())
 	require.NoError(t, a.SaveCheckpoint(path, "ids"))
 	require.Equal(t, uint64(11), a.NewID())
 	require.Equal(t, uint64(101), b.NewID())
 	restored := buildIDTestSimulation(t, false)
+	require.NoError(t, restored.Initialize())
 	require.NoError(t, restored.LoadCheckpoint(path, "ids"))
 	require.NotSame(t, a.idGenerator, restored.idGenerator)
 	require.Equal(t, uint64(11), restored.NewID())
@@ -132,6 +139,10 @@ func TestComponentsScheduleWithSharedSimulationIDs(t *testing.T) {
 	s := buildIDTestSimulation(t, false)
 	ticked := idTickedDef.Builder().WithSimulation(s).Build("Ticked")
 	woken := idWakeupDef.Builder().WithSimulation(s).Build("Woken")
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+
 	ticked.TickLater()
 	woken.WakeAt(1000)
 	require.Equal(t, uint64(3), s.NewID(), "both scheduled events must use the simulation's counter")

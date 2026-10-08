@@ -15,72 +15,62 @@ engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
 
 // Create the ports first, so AgentA's Spec can name AgentB's port.
-outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
-outB := twowaybuffered.NewPort("AgentB.Out", 16, 16)
+outA := twowaybuffered.NewPort(16, 16)
+outB := twowaybuffered.NewPort(16, 16)
 
 specA := Definition.DefaultSpec
 specA.Freq = 1 * timing.Hz
-specA.PingDst = outB.AsRemote()
+specA.PingDst = "AgentB.Out"
 specA.NumPings = 2
 
 specB := Definition.DefaultSpec
 specB.Freq = 1 * timing.Hz
 
 agentA := Definition.Builder().
-    WithSimulation(sim).
-    WithSpec(specA).
-    WithPorts(Ports{Out: outA}).
-    Build("AgentA")
+	WithSimulation(sim).
+	WithSpec(specA).
+	Build("AgentA")
+agentAPorts := Ports{Out: outA}
+agentA.BindPort("Out", agentAPorts.Out)
 
 agentB := Definition.Builder().
-    WithSimulation(sim).
-    WithSpec(specB).
-    WithPorts(Ports{Out: outB}).
-    Build("AgentB")
+	WithSimulation(sim).
+	WithSpec(specB).
+	Build("AgentB")
+agentBPorts := Ports{Out: outB}
+agentB.BindPort("Out", agentBPorts.Out)
 
 conn := direct.NewConnection("Conn", sim, timing.GHz)
 
-conn.PlugIn(agentA.Ports.Out)
-conn.PlugIn(agentB.Ports.Out)
+conn.BindPort(agentA.Ports.Out)
+conn.BindPort(agentB.Ports.Out)
+if err := sim.Initialize(); err != nil {
+	panic(err)
+}
 
 // AgentA sends pings on its own, so start it; AgentB wakes when a ping
 // arrives.
 agentA.TickLater()
 
 err := engine.Run()
+if err != nil {
+	panic(err)
+}
 ```
 
 This code is the package's `Example` test, so it writes `Definition` and
 `Ports`; a system builder outside the package writes
 `tickingping.Definition` and `tickingping.Ports`.
 
-Step by step:
+The phases are explicit: configure the two Spec values, build the agents,
+bind each `Out` port, and attach both ports to the connection. `Initialize`
+creates State and Middlewares after wiring is complete. Then `TickLater`
+seeds Agent A's first event and the engine runs.
 
-1. **Engine.** A serial engine for deterministic runs.
-2. **Simulation.** `NewStandaloneSimulation` supplies a lightweight context
-   shared by the agents and connection, including their ID counter.
-   `sim.MakeBuilder().Build()` adds recording and inventory; enable live monitoring with `WithMonitor`.
-3. **Create ports.** The system builder creates both ports with
-   `twowaybuffered.NewPort`, choosing the buffer sizes (16 incoming, 16 outgoing)
-   and naming each `<instance>.<field>`. Creating them before the agents
-   lets AgentA's Spec name AgentB's port.
-4. **Choose specs.** Both agents start from `Definition.DefaultSpec` and
-   slow the clock to 1 Hz. AgentA is also told whom to ping (`PingDst`, the
-   remote address of B's port) and how many times (`NumPings = 2`). AgentB
-   keeps `NumPings` at zero, so it only responds.
-5. **Build agents.** Two instances of the same component type, named
-   `AgentA` and `AgentB`, each given its own port with `WithPorts`. `Build`
-   binds each port to its agent and registers both with the simulation.
-6. **Build connection.** A `direct.Connection` — zero-latency, ideal for
-   simple topologies.
-7. **Plug ports.** Each agent's `Out` port, reached as `agent.Ports.Out`,
-   goes into the connection. Now any port plugged into this connection can
-   reach any other.
-8. **Kick it off.** `TickLater` schedules Agent A to tick on the next
-   cycle. Agent B needs no kick: it wakes when a ping arrives on its port.
-9. **Run.** The engine fires ticks until no component has progress to make.
-   Agent A sends pings; Agent B counts down and replies; Agent A sees the
-   responses and prints durations.
+`AgentB.Out` is a planned address in the configuration. An actual port's
+`AsRemote()` is available only after its owner has bound it. Changing
+`specA.NumPings` before `Build` changes that instance; changing the original
+Spec after `Build` does not change the built component.
 
 ## Run It
 
@@ -105,8 +95,8 @@ cycle.
 - **A component = five structs + a `Definition`.** The same shape as the
   single component, now with a port and a second middleware.
 - **The system builder owns the wiring.** It creates every port with
-  `twowaybuffered.NewPort`, passes the ports to `Build` with `WithPorts`, and
-  plugs them into connections.
+  `twowaybuffered.NewPort`, binds them with `component.BindPort`, and
+  attaches them with `connection.BindPort`.
 - **Ports buffer messages.** Messages are value types: construct them with
   no `&`, check `CanSend()` before `Send` because the outgoing buffer can
   be full, and `Peek` lets you look at incoming messages without consuming.
@@ -114,7 +104,7 @@ cycle.
   any plugged port can reach any other.
 - **Components use builders; ports and connections use constructors.** Build
   components with `Definition.Builder().WithX().Build(name)`. Create ports with
-  `twowaybuffered.NewPort(name, in, out)` and connections with
+  `twowaybuffered.NewPort(in, out)` and connections with
   `direct.NewConnection(name, sim, freq)`.
 
 ## Where to Next

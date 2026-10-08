@@ -64,7 +64,7 @@ var _ = Describe("Bank Stage", func() {
 		// The stage sends on the Top port, so the test gives it a single-slot
 		// Top port to simulate a busy port.
 		ports := makePorts("Cache", 4)
-		ports.Top = twowaybuffered.NewPort("Cache.Top", 1, 1)
+		ports.Top = twowaybuffered.NewPort(1, 1)
 		comp := buildStageTestComp(spec, Resources{Storage: storage}, ports)
 		topPort = comp.Ports.Top
 

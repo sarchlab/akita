@@ -37,13 +37,18 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		WithSpec(spec).
-		WithPorts(makePorts("MemCtrl", 16)).
 		Build("MemCtrl")
+	compPorts := makePorts("MemCtrl", 16)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Control", compPorts.Control)
 
 	topPort := comp.Ports.Top
 	ctrlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, ctrlPort} {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
 	}
 
 	rec := &tracingtest.LeakRecorder{}

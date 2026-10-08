@@ -45,7 +45,7 @@ func TestBufferHooksRejectBrokenContracts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 			// Missing optional tracing support must not hide a malformed event.
-			port := twowaybuffered.NewPort("unowned", 1, 1)
+			port := twowaybuffered.NewPort(1, 1)
 			for _, pos := range []*hooking.HookPos{tc.enter, tc.leave} {
 				for _, item := range []any{nil, "not a message", &messaging.Msg{}} {
 					g.Expect(func() {
@@ -72,8 +72,10 @@ func TestBufferHooksAllowAbsentTracing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 			for _, owner := range []messaging.PortOwner{nil, &untracedPortOwner{}, &ibFakeComp{}} {
-				port := twowaybuffered.NewPort("untraced", 1, 1)
-				port.SetOwner(owner)
+				port := twowaybuffered.NewPort(1, 1)
+				if owner != nil {
+					port.BindOwner(owner, "Comp.Port")
+				}
 				hook := tc.newHook()
 				for _, pos := range []*hooking.HookPos{tc.enter, tc.leave} {
 					g.Expect(func() {
@@ -92,8 +94,8 @@ func TestBufferHooksTraceNilPayload(t *testing.T) {
 			comp := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Comp"}
 			tracer := &ibRecordingTracer{}
 			CollectTrace(comp, tracer)
-			port := twowaybuffered.NewPort("Comp.Port", 1, 1)
-			port.SetOwner(comp)
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(comp, "Comp.Port")
 			hook := tc.newHook()
 			ctx := hooking.HookCtx{Domain: port, Pos: tc.enter, Item: messaging.Msg{ID: 7}}
 			hook.Func(ctx)

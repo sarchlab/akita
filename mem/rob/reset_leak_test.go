@@ -27,8 +27,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 	port := func(name string) messaging.Port {
-		p := twowaybuffered.NewPort("Rob."+name, 4, 4)
-		(&noopConn{}).PlugIn(p)
+		p := twowaybuffered.NewPort(4, 4)
 		return p
 	}
 
@@ -38,8 +37,17 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	rob := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithPorts(Ports{Top: topPort, Bottom: port("Bottom"), Control: ctrlPort}).
 		Build("Rob")
+
+	rob.BindPort("Top", topPort)
+	rob.BindPort("Bottom", port("Bottom"))
+	rob.BindPort("Control", ctrlPort)
+	for _, p := range []messaging.Port{rob.Ports.Top, rob.Ports.Bottom, rob.Ports.Control} {
+		(&noopConn{}).BindPort(p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(rob, rec)

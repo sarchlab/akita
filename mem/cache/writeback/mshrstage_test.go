@@ -58,7 +58,7 @@ var _ = Describe("MSHR Stage", func() {
 		// Top port to simulate a busy port.
 		spec := stageTestSpec()
 		ports := makePorts("Cache", 4)
-		ports.Top = twowaybuffered.NewPort("Cache.Top", 1, 1)
+		ports.Top = twowaybuffered.NewPort(1, 1)
 		comp := buildStageTestComp(spec,
 			Resources{Storage: mem.NewStorage(spec.TotalByteSize)}, ports)
 		topPort = comp.Ports.Top

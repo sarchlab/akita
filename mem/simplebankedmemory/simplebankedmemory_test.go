@@ -34,9 +34,9 @@ func (c *loopbackConnection) Name() string {
 	return c.name
 }
 
-func (c *loopbackConnection) PlugIn(port messaging.Port) {
+func (c *loopbackConnection) BindPort(port messaging.Port) {
 	c.ports = append(c.ports, port)
-	port.SetConnection(c)
+	port.BindConnection(c)
 }
 
 func (c *loopbackConnection) Unplug(messaging.Port) {
@@ -93,8 +93,8 @@ func newTestAgent(name string) *testAgent {
 		name: name,
 	}
 
-	a.port = twowaybuffered.NewPort(fmt.Sprintf("%s.Port", name), 4, 4)
-	a.port.SetOwner(a)
+	a.port = twowaybuffered.NewPort(4, 4)
+	a.port.BindOwner(a, fmt.Sprintf("%s.Port", name))
 
 	return a
 }
@@ -143,8 +143,8 @@ func newBandwidthAgent(name string) *bandwidthAgent {
 		name: name,
 	}
 
-	a.port = twowaybuffered.NewPort(fmt.Sprintf("%s.Port", name), 8, 8)
-	a.port.SetOwner(a)
+	a.port = twowaybuffered.NewPort(8, 8)
+	a.port.BindOwner(a, fmt.Sprintf("%s.Port", name))
 
 	return a
 }
@@ -193,14 +193,19 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
-		WithPorts(makePorts("Mem", 32, 16)).
 		Build("Mem")
+	memCompPorts := makePorts("Mem", 32, 16)
+	memComp.BindPort("Top", memCompPorts.Top)
+	memComp.BindPort("Control", memCompPorts.Control)
 
 	topPort := memComp.Ports.Top
 	agent := newBandwidthAgent("Agent")
 	conn := newLoopbackConnection("Conn")
-	conn.PlugIn(topPort)
-	conn.PlugIn(agent.port)
+	conn.BindPort(topPort)
+	conn.BindPort(agent.port)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	return memComp, agent, conn, freq
 }
@@ -261,14 +266,20 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
-			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
+		memCompPorts := makePorts("Mem", 4, 16)
+		memComp.BindPort("Top", memCompPorts.Top)
+		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort := memComp.Ports.Top
 		agent = newTestAgent("Agent")
 		conn = newLoopbackConnection("Conn")
-		conn.PlugIn(topPort)
-		conn.PlugIn(agent.port)
+		conn.BindPort(topPort)
+		conn.BindPort(agent.port)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	AfterEach(func() {
@@ -351,6 +362,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 	})
 
 	It("accesses storage at the global request address (identity)", func() {
+		sim = modeling.NewStandaloneSimulation(engine)
 		// Storage is global: a request's address indexes the backing store
 		// directly, with no per-controller conversion.
 		spec := Definition.DefaultSpec
@@ -361,14 +373,19 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
-			WithPorts(makePorts("MemGlobal", 4, 16)).
 			Build("MemGlobal")
+		memCompPorts := makePorts("MemGlobal", 4, 16)
+		memComp.BindPort("Top", memCompPorts.Top)
+		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort := memComp.Ports.Top
 		agent = newTestAgent("AgentGlobal")
 		conn = newLoopbackConnection("ConnGlobal")
-		conn.PlugIn(topPort)
-		conn.PlugIn(agent.port)
+		conn.BindPort(topPort)
+		conn.BindPort(agent.port)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		// Write 4 bytes at a non-zero global address.
 		writeData := []byte{1, 2, 3, 4}

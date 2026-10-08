@@ -55,9 +55,9 @@ The reorder buffer references no shared resources, so its Resources type is
 The reorder buffer is a ticking component (`modeling/ticking`). The system
 builder builds it from `rob.Definition`: configuration is supplied as a whole
 through `WithSpec` (start from `Definition.DefaultSpec`), and the port instances
-through `WithPorts`. The system builder creates each port with
+with `component.BindPort` after Build. The system builder creates each port with
 `twowaybuffered.NewPort`, choosing its buffer sizes, and names it
-`"<instance>.<field>"`; `Build` binds and registers the ports.
+`component.BindPort("Field", port)`, which assigns `<instance>.<field>` and registers the port.
 
 ```go
 spec := rob.Definition.DefaultSpec
@@ -67,12 +67,10 @@ spec.BottomUnit = dramPort.AsRemote()
 reorderBuffer := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
-    WithPorts(rob.Ports{
-        Top:     twowaybuffered.NewPort("ROB.Top", 8, 8),
-        Bottom:  twowaybuffered.NewPort("ROB.Bottom", 8, 8),
-        Control: twowaybuffered.NewPort("ROB.Control", 8, 8),
-    }).
     Build("ROB")
+reorderBuffer.BindPort("Top", twowaybuffered.NewPort(8, 8))
+reorderBuffer.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
+reorderBuffer.BindPort("Control", twowaybuffered.NewPort(8, 8))
 
 topPort := reorderBuffer.Ports.Top
 ```
@@ -83,7 +81,7 @@ topPort := reorderBuffer.Ports.Top
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. Set `BottomUnit` to the downstream port. |
-| `WithPorts(p)` | The `Top`, `Bottom`, and `Control` port instances (required). |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 

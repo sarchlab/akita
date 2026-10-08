@@ -24,7 +24,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -33,8 +33,8 @@ func (c *noopConn) NotifySend()                      {}
 // the given buffer size and a Control port with a 16-message buffer.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
-		Control: twowaybuffered.NewPort(name+".Control", 16, 16),
+		Top:     twowaybuffered.NewPort(topBufSize, topBufSize),
+		Control: twowaybuffered.NewPort(16, 16),
 	}
 }
 
@@ -50,6 +50,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	// build constructs a controller with the given Top-port buffer size, injects
 	// the shared storage, and plugs a noopConn so its ports can be driven.
 	build := func(topBufSize int) {
+		sim = modeling.NewStandaloneSimulation(engine)
 		spec := Definition.DefaultSpec
 		spec.Width = 1
 		spec.Latency = 10
@@ -59,12 +60,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
-			WithPorts(makePorts("MemCtrl", topBufSize)).
 			Build("MemCtrl")
+		memControllerPorts := makePorts("MemCtrl", topBufSize)
+		memController.BindPort("Top", memControllerPorts.Top)
+		memController.BindPort("Control", memControllerPorts.Control)
 
 		topPort = memController.Ports.Top
 		conn := &noopConn{}
-		conn.PlugIn(topPort)
+		conn.BindPort(topPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeReadReq := func() messaging.Msg {

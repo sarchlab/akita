@@ -54,11 +54,9 @@ m := mmu.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
-    WithPorts(mmu.Ports{
-        Top:     twowaybuffered.NewPort("MMU.Top", 16, 16),
-        Control: twowaybuffered.NewPort("MMU.Control", 4, 4),
-    }).
     Build("MMU")
+m.BindPort("Top", twowaybuffered.NewPort(16, 16))
+m.BindPort("Control", twowaybuffered.NewPort(4, 4))
 ```
 
 | Method | Description |
@@ -66,12 +64,14 @@ m := mmu.Definition.Builder().
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset), returns

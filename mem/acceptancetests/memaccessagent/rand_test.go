@@ -38,11 +38,18 @@ func TestRandStateMatchesMathRand(t *testing.T) {
 }
 
 func buildAgent() *Comp {
-	return Definition.Builder().
-		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-		WithResources(Resources{LowModule: twowaybuffered.NewPort("Mem.Top", 1, 1)}).
-		WithPorts(Ports{Mem: twowaybuffered.NewPort("Agent.Mem", 4, 4)}).
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	builtComponent := Definition.Builder().
+		WithSimulation(setupSim1).
+		WithResources(Resources{LowModule: twowaybuffered.NewPort(1, 1)}).
 		Build("Agent")
+
+	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
+
+	return builtComponent
 }
 
 // TestRandStateSurvivesCheckpoint checks that an agent restored from a

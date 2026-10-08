@@ -34,9 +34,9 @@ func TestCache(t *testing.T) {
 // bufSize slots in each direction.
 func makePorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
-		Bottom:  twowaybuffered.NewPort(name+".Bottom", bufSize, bufSize),
-		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(bufSize, bufSize),
+		Bottom:  twowaybuffered.NewPort(bufSize, bufSize),
+		Control: twowaybuffered.NewPort(bufSize, bufSize),
 	}
 }
 
@@ -50,8 +50,8 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(name, bufSize, bufSize)
-	p.SetOwner(testDriver{})
+	p := twowaybuffered.NewPort(bufSize, bufSize)
+	p.BindOwner(testDriver{}, name)
 
 	return p
 }
@@ -62,7 +62,7 @@ func plugNoopConn(comp *Comp) {
 	for _, p := range []messaging.Port{
 		comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
 	} {
-		(&ccNoopConn{}).PlugIn(p)
+		(&ccNoopConn{}).BindPort(p)
 	}
 }
 
@@ -83,13 +83,19 @@ func stageTestSpec() Spec {
 // drives, with its ports plugged into noop connections. The test ticks the
 // stage under test directly rather than the component.
 func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 	comp := Definition.Builder().
-		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		WithSimulation(setupSim1).
 		WithSpec(spec).
 		WithResources(res).
-		WithPorts(ports).
 		Build("Cache")
+	comp.BindPort("Top", ports.Top)
+	comp.BindPort("Bottom", ports.Bottom)
+	comp.BindPort("Control", ports.Control)
 	plugNoopConn(comp)
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
 
 	return comp
 }
@@ -105,11 +111,10 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithSpec(dramSpec).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
-			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
-		}).
 		Build("DRAM")
+
+	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 	return dram.Ports.Top
 }
@@ -153,17 +158,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
 				AddressToPortMapper: addressToPortMapper,
 			}).
-			WithPorts(makePorts("Cache", 8)).
 			Build("Cache")
-		m = cacheComp.Middlewares.Pipeline
+		cacheCompPorts := makePorts("Cache", 8)
+		cacheComp.BindPort("Top", cacheCompPorts.Top)
+		cacheComp.BindPort("Bottom", cacheCompPorts.Bottom)
+		cacheComp.BindPort("Control", cacheCompPorts.Control)
 
 		conn = direct.NewConnection("Connection", sim, timing.GHz)
-		conn.PlugIn(cacheComp.Ports.Top)
-		conn.PlugIn(cacheComp.Ports.Bottom)
-		conn.PlugIn(cacheComp.Ports.Control)
-		conn.PlugIn(dramTop)
-		conn.PlugIn(agentPort)
-		conn.PlugIn(controlAgentPort)
+		conn.BindPort(cacheComp.Ports.Top)
+		conn.BindPort(cacheComp.Ports.Bottom)
+		conn.BindPort(cacheComp.Ports.Control)
+		conn.BindPort(dramTop)
+		conn.BindPort(agentPort)
+		conn.BindPort(controlAgentPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+		m = cacheComp.Middlewares.Pipeline
+
 	})
 
 	It("should do read hit", func() {

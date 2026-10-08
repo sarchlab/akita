@@ -221,12 +221,12 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 	spec := Definition.DefaultSpec
 	spec.NumOps = numOps
 
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(driverResources{LowModule: lowModule}).
-		WithPorts(driverPorts{
-			Mem: twowaybuffered.NewPort("Driver.Mem", 4, 4),
-		}).
 		Build("Driver")
+
+	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	return builtComponent
 }

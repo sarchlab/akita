@@ -81,8 +81,7 @@ The number of sets is not configured directly: it is
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides
 the engine and registers the component), `WithResources` (the backing storage
-plus the address-to-port mapping for lower memory), and `WithPorts` (the port
-instances).
+plus the address-to-port mapping for lower memory), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := writeback.Definition.DefaultSpec
@@ -98,12 +97,10 @@ cache := writeback.Definition.Builder().
         Storage:             mem.NewStorage(spec.TotalByteSize),
         AddressToPortMapper: lowModuleMapper,
     }).
-    WithPorts(writeback.Ports{
-        Top:     twowaybuffered.NewPort("L1Cache.Top", 8, 8),
-        Bottom:  twowaybuffered.NewPort("L1Cache.Bottom", 8, 8),
-        Control: twowaybuffered.NewPort("L1Cache.Control", 8, 8),
-    }).
     Build("L1Cache")
+cache.BindPort("Top", twowaybuffered.NewPort(8, 8))
+cache.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
+cache.BindPort("Control", twowaybuffered.NewPort(8, 8))
 
 topPort := cache.Ports.Top
 ```
@@ -113,7 +110,7 @@ topPort := cache.Ports.Top
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | Backing storage (required) and the lower-memory address mapping (`AddressToPortMapper` or `RemotePorts`) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 `Build` panics if `Resources.Storage` is nil; the cache no longer creates a
 default storage. Size the storage to hold at least `Spec.TotalByteSize` bytes.
@@ -148,7 +145,9 @@ The cache operates in one of six states (the `cacheState` constants):
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
   and `memprotocol.WriteDoneRsp`.

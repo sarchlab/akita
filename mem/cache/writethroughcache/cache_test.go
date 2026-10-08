@@ -26,8 +26,8 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(name, bufSize, bufSize)
-	p.SetOwner(testDriver{})
+	p := twowaybuffered.NewPort(bufSize, bufSize)
+	p.BindOwner(testDriver{}, name)
 
 	return p
 }
@@ -71,11 +71,11 @@ var _ = Describe("Cache", func() {
 		dram = idealmemcontroller.Definition.Builder().
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
-			WithPorts(idealmemcontroller.Ports{
-				Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
-				Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
-			}).
 			Build("DRAM")
+
+		dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
+		dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.Ports.Top.AsRemote(),
 		}
@@ -88,17 +88,20 @@ var _ = Describe("Cache", func() {
 				Storage:       mem.NewStorage(Definition.DefaultSpec.TotalByteSize),
 				AddressMapper: addressToPortMapper,
 			}).
-			WithPorts(Ports{
-				Top:     twowaybuffered.NewPort("Cache.Top", 4, 4),
-				Bottom:  twowaybuffered.NewPort("Cache.Bottom", 4, 4),
-				Control: twowaybuffered.NewPort("Cache.Control", 4, 4),
-			}).
 			Build("Cache")
 
-		connection.PlugIn(dram.Ports.Top)
-		connection.PlugIn(c.Ports.Top)
-		connection.PlugIn(c.Ports.Bottom)
-		connection.PlugIn(cuPort)
+		c.BindPort("Top", twowaybuffered.NewPort(4, 4))
+		c.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+		c.BindPort("Control", twowaybuffered.NewPort(4, 4))
+
+		connection.BindPort(dram.Ports.Top)
+		connection.BindPort(c.Ports.Top)
+		connection.BindPort(c.Ports.Bottom)
+		connection.BindPort(cuPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	It("should do read miss", func() {

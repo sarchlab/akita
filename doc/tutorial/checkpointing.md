@@ -29,6 +29,10 @@ checkpoint restores only the *runtime* that setup cannot
 reproduce: each component's `State`, the messages buffered in ports, shared
 resources, the event queue, the engine time, and the ID-generator counter.
 
+Call `s.Initialize()` after rebuilding and wiring, before `LoadCheckpoint`.
+Initialization creates the runtime containers; restore then replaces their
+contents. Do not seed new work before loading the saved event queue.
+
 That division drives the one rule that matters most:
 
 > **The golden rule: all mutable runtime state lives in `State`.**

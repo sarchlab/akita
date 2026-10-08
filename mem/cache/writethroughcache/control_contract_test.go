@@ -16,7 +16,7 @@ type ccNoopConn struct {
 }
 
 func (c *ccNoopConn) Name() string                     { return "noopConn" }
-func (c *ccNoopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *ccNoopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *ccNoopConn) Unplug(_ messaging.Port)          {}
 func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *ccNoopConn) NotifySend()                      {}
@@ -46,15 +46,21 @@ func TestControlContract(t *testing.T) {
 					Port: messaging.RemotePort("LowerCache"),
 				},
 			}).
-			WithPorts(makePorts("L1Cache", 4)).
 			Build("L1Cache")
+		compPorts := makePorts("L1Cache", 4)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		// Plug each port into a no-op connection before the component is
 		// ticked.
 		for _, p := range []messaging.Port{
 			comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
 		} {
-			(&ccNoopConn{}).PlugIn(p)
+			(&ccNoopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

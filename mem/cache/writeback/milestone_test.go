@@ -107,16 +107,23 @@ var _ = Describe("Write-Back Cache milestones", func() {
 				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
 				AddressToPortMapper: addressToPortMapper,
 			}).
-			WithPorts(makePorts("Cache", 8)).
 			Build("Cache")
+		cacheCompPorts := makePorts("Cache", 8)
+		cacheComp.BindPort("Top", cacheCompPorts.Top)
+		cacheComp.BindPort("Bottom", cacheCompPorts.Bottom)
+		cacheComp.BindPort("Control", cacheCompPorts.Control)
+
 		topPort = cacheComp.Ports.Top
 
 		conn = direct.NewConnection("Connection", sim, timing.GHz)
-		conn.PlugIn(topPort)
-		conn.PlugIn(cacheComp.Ports.Bottom)
-		conn.PlugIn(cacheComp.Ports.Control)
-		conn.PlugIn(dramTop)
-		conn.PlugIn(agentPort)
+		conn.BindPort(topPort)
+		conn.BindPort(cacheComp.Ports.Bottom)
+		conn.BindPort(cacheComp.Ports.Control)
+		conn.BindPort(dramTop)
+		conn.BindPort(agentPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		// Attach the recorder before driving so MsgIDAtReceiver hands out real
 		// receiver-side task IDs (it returns 0 when there are no hooks). The

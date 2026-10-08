@@ -81,7 +81,7 @@ type ProgressTracker interface {
 }
 
 // SetProgressTrackers attaches observers for writes and reads, respectively.
-// Call after Build and before running the simulation. Either tracker can be nil
+// Call after Initialize and before running the simulation. Either tracker can be nil
 // to disable reporting for that operation. After restoring a checkpoint, attach
 // fresh trackers initialized for the remaining and in-flight work.
 func SetProgressTrackers(a *Comp, writes, reads ProgressTracker) {

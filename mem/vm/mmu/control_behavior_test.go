@@ -38,14 +38,20 @@ var _ = Describe("MMU control behavior", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
-			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
+		compPorts := makePorts("MMU", 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Control", compPorts.Control)
 
 		topPort = comp.Ports.Top
 		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	// insertMappedPage adds a page that resolves locally: it is not migrating

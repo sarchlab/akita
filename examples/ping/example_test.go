@@ -13,18 +13,23 @@ func Example_pingWithEvents() {
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: twowaybuffered.NewPort("AgentA.Out", 16, 16)}).
 		Build("AgentA")
+
+	agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
 
 	agentB := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: twowaybuffered.NewPort("AgentB.Out", 16, 16)}).
 		Build("AgentB")
+
+	agentB.BindPort("Out", twowaybuffered.NewPort(16, 16))
 
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
 
-	conn.PlugIn(agentA.Ports.Out)
-	conn.PlugIn(agentB.Ports.Out)
+	conn.BindPort(agentA.Ports.Out)
+	conn.BindPort(agentB.Ports.Out)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 	SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())

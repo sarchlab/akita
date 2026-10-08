@@ -135,9 +135,9 @@ type Port interface {
     RetrieveOutgoing() (Msg, bool)
     NotifyAvailable()
 
-    SetConnection(conn Connection)
+    BindConnection(conn Connection)
     Owner() PortOwner
-    SetOwner(owner PortOwner)
+    BindOwner(owner PortOwner, name string)
     NumIncoming() int
     NumOutgoing() int
 }
@@ -146,12 +146,11 @@ type Port interface {
 Create a buffered port with `twowaybuffered.NewPort`:
 
 ```go
-port := twowaybuffered.NewPort("MyComp.Top", incomingCap, outgoingCap)
+port := twowaybuffered.NewPort(incomingCap, outgoingCap)
 ```
 
-In assembly, the system builder creates each port with no component and passes
-it to the component's `Build`, which binds the port to the component and
-registers it with the simulation (and the monitor).
+Call `component.BindPort("Top", port)` after building the component. This assigns
+the full name and owner, fills the declared slot, and registers the port.
 
 `Send` pushes onto the outgoing buffer — callers must check `CanSend` first;
 sending into a full buffer panics — and, when the buffer transitions from
@@ -171,7 +170,7 @@ type Connection interface {
     naming.Named
     hooking.Hookable
 
-    PlugIn(port Port)
+    BindPort(port Port)
     NotifyAvailable(port Port)
     NotifySend()
 }
@@ -195,24 +194,19 @@ and when it can send again. The owner is usually a component
 interface says nothing about which ports an owner has or how it reaches them.
 A component defined by a component model (`modeling/ticking` and its
 siblings) holds its ports in a typed `Ports` struct: the system builder creates
-each port with `twowaybuffered.NewPort` and passes them all to `Build`, which binds and
-registers them. An owner written without a component model, such as a test
-driver, calls `SetOwner` itself. A port must have an owner before it carries
-traffic: `Deliver`, `RetrieveOutgoing`, and `NotifyAvailable` panic on a port
-without one.
+each unnamed port and calls `component.BindPort("Field", port)`. Custom owners
+call `port.BindOwner(owner, fullName)` and register their ports themselves.
+A port must have an owner before `AsRemote` or message traffic.
 
 ## How It Works
 
-1. Setup code creates each port with `twowaybuffered.NewPort` and passes it to its component's
-   `Build`.
-2. A connection is plugged into the ports with `PlugIn`, and each port's
-   connection is set with `SetConnection`.
-3. To send, a component builds a message with `Src`/`Dst` remote port names and
-   calls `port.Send(msg)`.
-4. The connection picks up the message via `PeekOutgoing`/`RetrieveOutgoing`,
-   resolves `Dst`, and calls the destination port's `Deliver`.
-5. The destination component is notified by `NotifyRecv` and consumes the
-   message with `PeekIncoming`/`RetrieveIncoming`.
+1. Configure Spec structs and build components.
+2. Bind component ports with `component.BindPort("Field", port)`.
+3. Attach ports with `connection.BindPort(port)`, which calls the guarded
+   reverse setter `port.BindConnection(connection)`.
+4. Call `simulation.Initialize()` once, then seed work and run the engine.
+5. Components send messages; connections drain outgoing buffers and deliver
+   into destination incoming buffers, waking the receiving component.
 
 ## Hooks
 

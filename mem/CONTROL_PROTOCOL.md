@@ -335,11 +335,8 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    // during assembly:
    comp := mycomp.Definition.Builder().
        // ...
-       WithPorts(mycomp.Ports{
-           // ...
-           Control: twowaybuffered.NewPort("MyComp.Control", ctrlBufSize, ctrlBufSize),
-       }).
        Build("MyComp")
+
    ```
 2. Add a `memcontrolprotocol.State` field to the component's `State` struct so
    the control bookkeeping is uniform and serializable.

@@ -9,9 +9,8 @@ import (
 
 // A Component is an element of a simulation that owns ports and handles the
 // events addressed to it. The Component of each model (modeling/ticking,
-// modeling/wakeup, and modeling/event) implements it. Build registers an
-// instance as the owner of its ports, as the handler of its events, and as a
-// component of the simulation.
+// modeling/wakeup, and modeling/event) implements it. Build registers the instance and its event handler.
+// BindPort assigns its ports, and simulation.Initialize creates runtime state.
 type Component interface {
 	naming.Named
 	hooking.Hookable

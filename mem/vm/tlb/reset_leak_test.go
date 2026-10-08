@@ -34,10 +34,15 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: remotePort,
 			},
 		}).
-		WithPorts(defaultPorts("TLB")).
 		Build("TLB")
-
+	tlbCompPorts := defaultPorts("TLB")
+	tlbComp.BindPort("Top", tlbCompPorts.Top)
+	tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
+	tlbComp.BindPort("Control", tlbCompPorts.Control)
 	plugNoopConn(tlbComp)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	topPort := tlbComp.Ports.Top
 	bottomPort := tlbComp.Ports.Bottom

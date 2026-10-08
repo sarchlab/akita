@@ -36,9 +36,9 @@ func (h *portPresenceHook) Func(ctx hooking.HookCtx) {
 func TestPortReadPresenceAndNotifications(t *testing.T) {
 	comp := &portPresenceOwner{}
 	conn := &portPresenceConnection{}
-	p := NewPort("P", 2, 2)
-	p.SetOwner(comp)
-	p.SetConnection(conn)
+	p := NewPort(2, 2)
+	p.BindOwner(comp, "P")
+	p.BindConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)
 	first := messaging.Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
@@ -80,19 +80,10 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 }
 
 func TestPortWithoutOwnerPanics(t *testing.T) {
-	msg := messaging.Msg{Src: "Other", Dst: "P", Payload: registryTestMsg{}}
-	for name, use := range map[string]func(p messaging.Port){
-		"Deliver":          func(p messaging.Port) { p.Deliver(msg) },
-		"RetrieveOutgoing": func(p messaging.Port) { p.RetrieveOutgoing() },
-		"NotifyAvailable":  func(p messaging.Port) { p.NotifyAvailable() },
-	} {
-		p := NewPort("P", 1, 1)
-		p.SetConnection(&portPresenceConnection{})
-		require.PanicsWithValue(t,
-			`twowaybuffered: port "P" has no owner; a component's Build binds `+
-				`its ports, and any other owner must call SetOwner`,
-			func() { use(p) }, name)
-	}
+	p := NewPort(1, 1)
+	require.Panics(t, func() { p.AsRemote() })
+	require.Panics(t, func() { p.BindConnection(&portPresenceConnection{}) })
+	require.Panics(t, func() { p.Deliver(messaging.Msg{}) })
 }
 
 func assertEmptyPortReads(t *testing.T, p messaging.Port) {

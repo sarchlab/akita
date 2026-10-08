@@ -17,15 +17,22 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 	spec.AddressMapperType = "interleaved"
 	spec.InterleavingSize = 4096
 
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 	comp := Definition.Builder().
-		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		WithSimulation(setupSim1).
 		WithSpec(spec).
 		WithResources(Resources{
 			Storage:     mem.NewStorage(spec.TotalByteSize),
 			RemotePorts: []messaging.RemotePort{"DRAM0", "DRAM1"},
 		}).
-		WithPorts(makePorts("Cache", 4)).
 		Build("Cache")
+	compPorts := makePorts("Cache", 4)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Bottom", compPorts.Bottom)
+	comp.BindPort("Control", compPorts.Control)
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
 
 	pipeline := comp.Middlewares.Pipeline
 	want := map[uint64]messaging.RemotePort{0: "DRAM0", 4096: "DRAM1", 8192: "DRAM0"}
@@ -40,9 +47,16 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 // backing storage instead of failing on the first bank access.
 func TestBuildRequiresStorage(t *testing.T) {
 	require.PanicsWithValue(t, "writethroughcache: Resources.Storage is required", func() {
-		Definition.Builder().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithPorts(makePorts("Cache", 4)).
+		setupSim2 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		builtComponent := Definition.Builder().
+			WithSimulation(setupSim2).
 			Build("Cache")
+		builtComponentPorts := makePorts("Cache", 4)
+		builtComponent.BindPort("Top", builtComponentPorts.Top)
+		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
+		builtComponent.BindPort("Control", builtComponentPorts.Control)
+		if err := setupSim2.Initialize(); err != nil {
+			panic(err)
+		}
 	})
 }

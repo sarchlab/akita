@@ -85,11 +85,11 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
-			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
-		}).
 		Build("DRAM")
+
+	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+
 	dramTop := dram.Ports.Top
 
 	cacheSpec := writeback.Definition.DefaultSpec
@@ -107,12 +107,11 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 				Port: dramTop.AsRemote(),
 			},
 		}).
-		WithPorts(writeback.Ports{
-			Top:     twowaybuffered.NewPort("Cache.Top", 256, 256),
-			Bottom:  twowaybuffered.NewPort("Cache.Bottom", 256, 256),
-			Control: twowaybuffered.NewPort("Cache.Control", 16, 16),
-		}).
 		Build("Cache")
+
+	cache.BindPort("Top", twowaybuffered.NewPort(256, 256))
+	cache.BindPort("Bottom", twowaybuffered.NewPort(256, 256))
+	cache.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 	h := &cacheOverDRAM{
 		cache:       cache,
@@ -125,8 +124,12 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		agent:       messaging.RemotePort("Agent"),
 	}
 	for _, p := range []messaging.Port{h.top, h.ctrl, h.bottom, dramTop} {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
 	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+
 	return h
 }
 

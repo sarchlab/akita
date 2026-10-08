@@ -29,7 +29,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -38,18 +38,18 @@ func (c *noopConn) NotifySend()                      {}
 // component's owned ports can be driven directly in tests.
 func plugNoopConn(comp *Comp) {
 	conn := &noopConn{}
-	conn.PlugIn(comp.Ports.Top)
-	conn.PlugIn(comp.Ports.Bottom)
-	conn.PlugIn(comp.Ports.Control)
+	conn.BindPort(comp.Ports.Top)
+	conn.BindPort(comp.Ports.Bottom)
+	conn.BindPort(comp.Ports.Control)
 }
 
 // defaultPorts creates the ports of the TLB named name, with the historical
 // default buffer sizes.
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", 4, 4),
-		Bottom:  twowaybuffered.NewPort(name+".Bottom", 4, 4),
-		Control: twowaybuffered.NewPort(name+".Control", 1, 1),
+		Top:     twowaybuffered.NewPort(4, 4),
+		Bottom:  twowaybuffered.NewPort(4, 4),
+		Control: twowaybuffered.NewPort(1, 1),
 	}
 }
 
@@ -74,8 +74,8 @@ func newIdealEndpoint(name string) *idealEndpoint {
 	ep := &idealEndpoint{
 		name: name,
 	}
-	ep.port = twowaybuffered.NewPort(name+".Port", 4, 4)
-	ep.port.SetOwner(ep)
+	ep.port = twowaybuffered.NewPort(4, 4)
+	ep.port.BindOwner(ep, name+".Port")
 
 	return ep
 }

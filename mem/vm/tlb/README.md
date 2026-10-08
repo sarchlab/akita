@@ -60,12 +60,10 @@ t := tlb.Definition.Builder().
     WithResources(tlb.Resources{
         TranslationProviderMapper: mmuMapper,
     }).
-    WithPorts(tlb.Ports{
-        Top:     twowaybuffered.NewPort("L2TLB.Top", 4, 4),
-        Bottom:  twowaybuffered.NewPort("L2TLB.Bottom", 4, 4),
-        Control: twowaybuffered.NewPort("L2TLB.Control", 4, 4),
-    }).
     Build("L2TLB")
+t.BindPort("Top", twowaybuffered.NewPort(4, 4))
+t.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+t.BindPort("Control", twowaybuffered.NewPort(4, 4))
 ```
 
 | Method | Description |
@@ -73,12 +71,14 @@ t := tlb.Definition.Builder().
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
 - **Bottom**: forwards `vmprotocol.TranslationReq` on a miss, receives `vmprotocol.TranslationRsp`.

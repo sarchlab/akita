@@ -21,8 +21,13 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
-		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
+	mmuPorts := makePorts("TestMMU", 4096)
+	mmu.BindPort("Top", mmuPorts.Top)
+	mmu.BindPort("Control", mmuPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	mw := mmu.Middlewares.Translation
 
@@ -85,9 +90,13 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
-		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-
+	mmuPorts := makePorts("TestMMU", 4096)
+	mmu.BindPort("Top", mmuPorts.Top)
+	mmu.BindPort("Control", mmuPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 	mw := mmu.Middlewares.Translation
 
 	// Test multiple allocations to ensure unique physical pages
@@ -127,9 +136,13 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 		WithSimulation(sim).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
-		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-
+	mmuPorts := makePorts("TestMMU", 4096)
+	mmu.BindPort("Top", mmuPorts.Top)
+	mmu.BindPort("Control", mmuPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 	if mmu.Spec.AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
 	}
@@ -148,8 +161,13 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
-		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
+	mmuPorts := makePorts("TestMMU", 4096)
+	mmu.BindPort("Top", mmuPorts.Top)
+	mmu.BindPort("Control", mmuPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	if !mmu.Spec.AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")

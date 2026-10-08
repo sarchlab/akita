@@ -23,7 +23,7 @@ again, in the same order as in `Comp`.
 
 - `DefaultSpec` is the starting configuration. A system builder that wants
   something different copies it, changes fields, and passes the result in.
-- `NewMiddlewares` is the function from the previous page; `Build` calls it
+- `NewMiddlewares` is the function from the previous page; `Initialize` calls it
   to create each instance's middlewares.
 
 An optional third field, `NewState`, returns an instance's initial State.
@@ -48,12 +48,12 @@ starts from `DefaultSpec`, and `Build` returns a `*Comp`. Set the simulation
 the instance belongs to, supply its Resources — here a random source seeded
 with `1`, so the output is reproducible — and build with a unique name. The
 walker keeps the default Spec, so there is no `WithSpec` call, and it has no
-ports, so there is no `WithPorts` call.
+ports, so there are no port bindings.
 
-`Build` does all of the assembly: it checks that the Spec and State can be
-checkpointed, binds the ports, creates the State and the middlewares (here
-by calling `newMiddlewares`), and registers the instance with the
-simulation. Nothing is added to the component afterward.
+`Build` validates the Spec and State shapes and registers the configured
+instance. It leaves State and Middlewares unset. After all components and
+connections are built and bound, call `s.Initialize()` once. Initialization
+validates wiring, freezes topology, and runs `NewState` and `NewMiddlewares`.
 
 :::info The builder pattern
 
@@ -70,11 +70,11 @@ partially configured builder is just a value you can stash and reuse.
 
 **Akita's convention.** Every component, from this walker to the DRAM
 controller, is built with the same shape:
-`Definition.Builder().WithSimulation(…).WithSpec(…).WithResources(…).WithPorts(…).Build(name)`.
+`Definition.Builder().WithSimulation(…).WithSpec(…).WithResources(…).Build(name)`.
 The whole configuration goes in as one `Spec` through `WithSpec` (there is
 no setter per Spec field), starting from `Definition.DefaultSpec`. That is
 why the clock frequency lives in the Spec: `Build` reads `Freq` from it. The
-ports go in as one `Ports` struct through `WithPorts`; the next section
+ports go in as one `Ports` struct with `component.BindPort` after Build; the next section
 shows the system builder creating them.
 
 :::
@@ -82,6 +82,9 @@ shows the system builder creating them.
 ## Kicking It Off
 
 ```go
+if err := s.Initialize(); err != nil {
+    panic(err)
+}
 walker.TickLater()
 
 if err := s.Engine().Run(); err != nil {

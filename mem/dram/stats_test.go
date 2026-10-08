@@ -23,8 +23,8 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(name, bufSize, bufSize)
-	p.SetOwner(testDriver{})
+	p := twowaybuffered.NewPort(bufSize, bufSize)
+	p.BindOwner(testDriver{}, name)
 
 	return p
 }
@@ -105,16 +105,18 @@ var _ = Describe("DRAM Statistics", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
-			WithPorts(dram.Ports{
-				Top:     twowaybuffered.NewPort("StatsDRAM.Top", 1024, 1024),
-				Control: twowaybuffered.NewPort("StatsDRAM.Control", 1024, 1024),
-			}).
 			Build("StatsDRAM")
+
+		dramComp.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
+		dramComp.BindPort("Control", twowaybuffered.NewPort(1024, 1024))
 
 		topPort := dramComp.Ports.Top
 		srcPort := newDriverPort("Src.Top", 1024)
-		conn.PlugIn(topPort)
-		conn.PlugIn(srcPort)
+		conn.BindPort(topPort)
+		conn.BindPort(srcPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		// Send a write request
 		write := messaging.Msg{Payload: memprotocol.WriteReq{

@@ -105,6 +105,9 @@ func main() {
 	worker := Definition.Builder().
 		WithSimulation(sim).
 		Build("Worker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// A tracer only cares about tasks whose Kind matches this filter.
 	onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }

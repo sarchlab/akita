@@ -126,6 +126,9 @@ func main() {
 	worker := Definition.Builder().
 		WithSimulation(s).
 		Build("Worker")
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 
 	switch *mode {
 	case "save":

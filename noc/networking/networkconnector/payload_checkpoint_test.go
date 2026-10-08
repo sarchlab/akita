@@ -30,13 +30,13 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	t.Helper()
 	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace.sqlite3")).Build()
 	t.Cleanup(s.Terminate)
-	src := twowaybuffered.NewPort("Sender.Port", 1, 4)
-	dst := twowaybuffered.NewPort("Receiver.Port", 1, 4)
+	src := twowaybuffered.NewPort(1, 4)
+	dst := twowaybuffered.NewPort(1, 4)
 	for _, item := range []struct {
 		name string
 		port messaging.Port
 	}{{"Sender", src}, {"Receiver", dst}} {
-		item.port.SetOwner(payloadOwner{item.name})
+		item.port.BindOwner(payloadOwner{item.name}, item.name+".Port")
 		s.RegisterPort(item.port)
 	}
 	c := nc.MakeConnector().WithSimulation(s).WithFlitSize(16)
@@ -54,6 +54,9 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	c.ConnectDevice(right, []messaging.Port{dst}, dp)
 	c.ConnectSwitches(left, right, nc.SwitchToSwitchLinkParameter{LeftEndParam: sw, RightEndParam: sw, LinkParam: link})
 	c.EstablishRoute()
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 	return s, src, dst
 }
 

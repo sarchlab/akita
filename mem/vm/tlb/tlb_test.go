@@ -43,10 +43,15 @@ var _ = Describe("TLB", func() {
 					Port: remotePort,
 				},
 			}).
-			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
-
+		tlbCompPorts := defaultPorts("TLB")
+		tlbComp.BindPort("Top", tlbCompPorts.Top)
+		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
+		tlbComp.BindPort("Control", tlbCompPorts.Control)
 		plugNoopConn(tlbComp)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		topPort = tlbComp.Ports.Top
 		bottomPort = tlbComp.Ports.Bottom
@@ -526,14 +531,20 @@ var _ = Describe("TLB Integration", func() {
 					Port: lowModule.port.AsRemote(),
 				},
 			}).
-			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
+		tlbCompPorts := defaultPorts("TLB")
+		tlbComp.BindPort("Top", tlbCompPorts.Top)
+		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
+		tlbComp.BindPort("Control", tlbCompPorts.Control)
 
-		connection.PlugIn(agent.port)
-		connection.PlugIn(lowModule.port)
-		connection.PlugIn(tlbComp.Ports.Top)
-		connection.PlugIn(tlbComp.Ports.Bottom)
-		connection.PlugIn(tlbComp.Ports.Control)
+		connection.BindPort(agent.port)
+		connection.BindPort(lowModule.port)
+		connection.BindPort(tlbComp.Ports.Top)
+		connection.BindPort(tlbComp.Ports.Bottom)
+		connection.BindPort(tlbComp.Ports.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		page = vm.Page{
 			PID:   1,

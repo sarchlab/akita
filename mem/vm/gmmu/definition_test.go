@@ -19,9 +19,16 @@ func TestDefinitionMatchesSource(t *testing.T) {
 // table instead of failing on the first walk.
 func TestBuildRequiresPageTable(t *testing.T) {
 	require.PanicsWithValue(t, "gmmu: Resources.PageTable is required", func() {
-		Definition.Builder().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithPorts(defaultPorts("GMMU")).
+		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		builtComponent := Definition.Builder().
+			WithSimulation(setupSim1).
 			Build("GMMU")
+		builtComponentPorts := defaultPorts("GMMU")
+		builtComponent.BindPort("Top", builtComponentPorts.Top)
+		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
+		builtComponent.BindPort("Control", builtComponentPorts.Control)
+		if err := setupSim1.Initialize(); err != nil {
+			panic(err)
+		}
 	})
 }

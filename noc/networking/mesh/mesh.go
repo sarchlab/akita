@@ -19,6 +19,8 @@ type tile struct {
 
 // A Connector can help establishing a mesh or torus network.
 type Connector struct {
+	routePorts []routePort
+
 	connector networkconnector.Connector
 
 	freq                 timing.Freq
@@ -195,12 +197,21 @@ func (c *Connector) initializeGrid(cap [3]int) [][][]tile {
 	return grid
 }
 
+type routePort struct {
+	dst  *messaging.RemotePort
+	port messaging.Port
+}
+
 // EstablishNetwork creates the switches, links, and the routing tables for the
 // network to built.
 func (c *Connector) EstablishNetwork() {
 	c.createSwitches()
 	c.createLinks()
 	c.connector.BuildSwitches()
+	for _, r := range c.routePorts {
+		*r.dst = r.port.AsRemote()
+	}
+	c.routePorts = nil
 }
 
 func (c *Connector) createLinks() {
@@ -259,7 +270,7 @@ func (c *Connector) createSwitches() {
 						},
 					})
 
-				rt.local = swPort.AsRemote()
+				c.routePorts = append(c.routePorts, routePort{&rt.local, swPort})
 			}
 		}
 	}
@@ -276,8 +287,8 @@ func (c *Connector) connectWithLeftSwitch(x, y, z int) {
 	left := c.grid[x1][y][z]
 
 	portA, portB := c.createLink(left.sw, curr.sw, "Right", "Left")
-	left.rt.right = portA.AsRemote()
-	curr.rt.left = portB.AsRemote()
+	c.routePorts = append(c.routePorts, routePort{&left.rt.right, portA})
+	c.routePorts = append(c.routePorts, routePort{&curr.rt.left, portB})
 }
 
 func (c *Connector) connectWithTopSwitch(x, y, z int) {
@@ -291,8 +302,8 @@ func (c *Connector) connectWithTopSwitch(x, y, z int) {
 	top := c.grid[x][y1][z]
 
 	portA, portB := c.createLink(top.sw, curr.sw, "Bottom", "Top")
-	top.rt.bottom = portA.AsRemote()
-	curr.rt.top = portB.AsRemote()
+	c.routePorts = append(c.routePorts, routePort{&top.rt.bottom, portA})
+	c.routePorts = append(c.routePorts, routePort{&curr.rt.top, portB})
 }
 
 func (c *Connector) connectWithFrontSwitch(x, y, z int) {
@@ -306,8 +317,8 @@ func (c *Connector) connectWithFrontSwitch(x, y, z int) {
 	front := c.grid[x][y][z1]
 
 	portA, portB := c.createLink(front.sw, curr.sw, "Back", "Front")
-	front.rt.back = portA.AsRemote()
-	curr.rt.front = portB.AsRemote()
+	c.routePorts = append(c.routePorts, routePort{&front.rt.back, portA})
+	c.routePorts = append(c.routePorts, routePort{&curr.rt.front, portB})
 }
 
 func (c *Connector) createLink(

@@ -71,7 +71,7 @@ the shared store at the request's global address.
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
 engine and registers the component), `WithResources` (the backing storage,
-required), and `WithPorts` (the port instances).
+required), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := idealmemcontroller.Definition.DefaultSpec
@@ -86,11 +86,9 @@ ctrl := idealmemcontroller.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
-    WithPorts(idealmemcontroller.Ports{
-        Top:     twowaybuffered.NewPort("IdealMem.Top", 16, 16),
-        Control: twowaybuffered.NewPort("IdealMem.Control", 16, 16),
-    }).
     Build("IdealMem")
+ctrl.BindPort("Top", twowaybuffered.NewPort(16, 16))
+ctrl.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 topPort := ctrl.Ports.Top
 ```
@@ -100,7 +98,7 @@ topPort := ctrl.Ports.Top
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{Storage: s})` | Backing storage, possibly shared (required) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ### Default Configuration
 
@@ -114,7 +112,9 @@ topPort := ctrl.Ports.Top
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
   and `memprotocol.WriteDoneRsp`.

@@ -76,10 +76,8 @@ sw := switches.Definition.Builder().
             {Remote: epPort.AsRemote(), Latency: 1, NumInputChannel: 1, NumOutputChannel: 1},
         },
     }).
-    WithPorts(switches.Ports{Port: []messaging.Port{
-        twowaybuffered.NewPort("Switch0.Port[0]", 1, 1),
-    }}).
     Build("Switch0")
+sw.BindPort("Port[0]", twowaybuffered.NewPort(1, 1))
 ```
 
 `WithSimulation` and a non-nil `RoutingTable` are required, and `Links` must have

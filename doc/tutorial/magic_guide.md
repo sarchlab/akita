@@ -110,22 +110,24 @@ models. To run with perfect memory, you build an `idealmemcontroller` where you
 would have built `dram`.
 
 ```go
-top := twowaybuffered.NewPort("DRAM.Top", 1024, 1024)
-control := twowaybuffered.NewPort("DRAM.Control", 4, 4)
+top := twowaybuffered.NewPort(1024, 1024)
+control := twowaybuffered.NewPort(4, 4)
 
 // Real run:
 ctrl := dram.Definition.Builder().
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
-    WithPorts(dram.Ports{Top: top, Control: control}).
     Build("DRAM")
+ctrl.BindPort("Top", top)
+ctrl.BindPort("Control", control)
 
 // Idealized run — same ports, drop-in:
 ctrl := idealmemcontroller.Definition.Builder().
     WithSimulation(sim).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
-    WithPorts(idealmemcontroller.Ports{Top: top, Control: control}).
     Build("DRAM")
+ctrl.BindPort("Top", top)
+ctrl.BindPort("Control", control)
 ```
 
 Both components declare the same `Ports` fields (`Top`, `Control`) with the
@@ -150,8 +152,10 @@ t := tlb.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(res).
-    WithPorts(ports).
     Build("TLB")
+t.BindPort("Top", ports.Top)
+t.BindPort("Bottom", ports.Bottom)
+t.BindPort("Control", ports.Control)
 ```
 
 If the knob you want doesn't exist yet, adding a `Spec` field is the natural
@@ -208,13 +212,16 @@ pageTable := vm.NewPageTable(12)
 m := mmu.Definition.Builder().
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable}).
-    WithPorts(mmuPorts).
     Build("MMU")
+m.BindPort("Top", mmuPorts.Top)
+m.BindPort("Control", mmuPorts.Control)
 g := gmmu.Definition.Builder().
     WithSimulation(sim).
     WithResources(gmmu.Resources{PageTable: pageTable}).
-    WithPorts(gmmuPorts).
     Build("GMMU")
+g.BindPort("Top", gmmuPorts.Top)
+g.BindPort("Bottom", gmmuPorts.Bottom)
+g.BindPort("Control", gmmuPorts.Control)
 ```
 
 At runtime each component uses its held reference directly — no name, no map,
@@ -356,8 +363,9 @@ accesses := &Counter{}
 m := mmu.Definition.Builder().
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable, Accesses: accesses}).
-    WithPorts(mmuPorts).
     Build("MMU")
+m.BindPort("Top", mmuPorts.Top)
+m.BindPort("Control", mmuPorts.Control)
 // each TLB's port gets a hook that increments accesses
 ```
 

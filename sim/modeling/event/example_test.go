@@ -18,8 +18,12 @@ func Example() {
 	delay := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(Spec{Latency: 10}).
-		WithPorts(Ports{In: twowaybuffered.NewPort("Delay.In", 4, 4)}).
 		Build("Delay")
+
+	delay.BindPort("In", twowaybuffered.NewPort(4, 4))
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	delay.Ports.In.Deliver(messaging.Msg{ID: 1, Payload: req{}})
 

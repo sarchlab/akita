@@ -26,6 +26,9 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)
 	conn.State.NextPortID = 3
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := s.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)

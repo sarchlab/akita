@@ -17,7 +17,6 @@ type Builder[S, T, R, P, M any] struct {
 	simulation timing.Simulation
 	spec       S
 	resources  R
-	ports      P
 }
 
 // WithSimulation sets the simulation the instance belongs to and registers
@@ -41,18 +40,9 @@ func (b Builder[S, T, R, P, M]) WithResources(resources R) Builder[S, T, R, P, M
 	return b
 }
 
-// WithPorts sets the instance's ports, created by the system builder with
-// twowaybuffered.NewPort. Every port must be given and named "<instance>.<field>",
-// or "<instance>.<field>[i]" for member i of a port group.
-func (b Builder[S, T, R, P, M]) WithPorts(ports P) Builder[S, T, R, P, M] {
-	b.ports = ports
-	return b
-}
-
-// Build creates the instance with the given name. It checks the
-// configuration, binds the ports, creates the State with NewState and the
-// middlewares with NewMiddlewares, and registers the ports and the instance
-// with the simulation, in that order, so a Build that fails registers nothing.
+// Build registers a configured instance with the given name. It checks Spec
+// and State shapes, but leaves ports, State and Middlewares uninitialized.
+// Bind the ports and connections, then call the simulation's Initialize.
 func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	naming.MustBeValid(name)
 
@@ -66,18 +56,21 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 			typeName[S]()))
 	}
 
+	b.simulation.RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
 	c := &Component[S, T, R, P, M]{engine: b.simulation.Engine()}
 	base.Init(&c.ComponentBase, c,
-		b.simulation, name, b.spec, b.resources, b.ports)
+		b.simulation, name, b.spec, b.resources)
 
-	if b.def.NewState != nil {
-		c.State = b.def.NewState(c)
-	}
+	base.SetInitializer(&c.ComponentBase, func() {
+		if b.def.NewState != nil {
+			c.State = b.def.NewState(c)
+		}
 
-	c.Middlewares = b.def.NewMiddlewares(c)
-	c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
+		c.Middlewares = b.def.NewMiddlewares(c)
+		c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
+	})
 
 	base.Register(&c.ComponentBase)
 

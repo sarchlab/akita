@@ -30,14 +30,20 @@ var _ = Describe("DRAM control behavior", func() {
 		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithPorts(defaultPorts("DRAM", 16)).
 			Build("DRAM")
+		compPorts := defaultPorts("DRAM", 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Control", compPorts.Control)
 
 		topPort = comp.Ports.Top
 		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {

@@ -28,6 +28,10 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 		WithSimulation(s).
 		WithResources(switches.Resources{RoutingTable: routing.NewTable()}).
 		Build("Switch")
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+
 	sw.State.NextArbPort = 2
 
 	if err := s.SaveCheckpoint(path, buildID); err != nil {

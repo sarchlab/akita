@@ -81,14 +81,14 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 	spec := cache.Definition.DefaultSpec
 	spec.Downstream = lower.AsRemote()
 
-	return cache.Definition.Builder().
+	builtComponent := cache.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithPorts(cache.Ports{
-			Top:    twowaybuffered.NewPort(name+".Top", 4, 4),
-			Bottom: twowaybuffered.NewPort(name+".Bottom", 4, 4),
-		}).
 		Build(name)
+
+	builtComponent.BindPort("Top", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+	return builtComponent
 }
 
 func main() {
@@ -99,8 +99,10 @@ func main() {
 	// below it.
 	mem := memory.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(memory.Ports{Top: twowaybuffered.NewPort("Memory.Top", 4, 4)}).
 		Build("Memory")
+
+	mem.BindPort("Top", twowaybuffered.NewPort(4, 4))
+
 	l2 := buildCache(sim, "L2", mem.Ports.Top)
 	l1 := buildCache(sim, "L1", l2.Ports.Top)
 
@@ -109,13 +111,17 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: twowaybuffered.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
+
+	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	connect := func(name string, a, b messaging.Port) {
 		conn := direct.NewConnection(name, sim, timing.GHz)
-		conn.PlugIn(a)
-		conn.PlugIn(b)
+		conn.BindPort(a)
+		conn.BindPort(b)
 	}
 	connect("ConnClientL1", cli.Ports.Out, l1.Ports.Top)
 	connect("ConnL1L2", l1.Ports.Bottom, l2.Ports.Top)

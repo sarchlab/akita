@@ -29,7 +29,8 @@ var _ = Describe("Connector", func() {
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(0, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -69,7 +70,8 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(1+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -136,7 +138,8 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(8+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -190,3 +193,8 @@ var _ = Describe("Connector", func() {
 		connector.EstablishRoute()
 	})
 })
+
+type routeTestOwner struct{}
+
+func (routeTestOwner) NotifyRecv(messaging.Port)     {}
+func (routeTestOwner) NotifyPortFree(messaging.Port) {}

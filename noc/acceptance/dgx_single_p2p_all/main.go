@@ -49,6 +49,9 @@ func main() {
 			agents := createNetwork(s, t)
 			t.RegisterAgent(agents[i])
 			t.RegisterAgent(agents[j])
+			if err := s.Initialize(); err != nil {
+				panic(err)
+			}
 			t.GenerateMsgs(2000)
 
 			err := engine.Run()
@@ -95,7 +98,7 @@ func createAgents(
 	for i := 0; i < 9; i++ {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
-			twowaybuffered.NewPort(name+".Port0", 1, 1),
+			twowaybuffered.NewPort(1, 1),
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()

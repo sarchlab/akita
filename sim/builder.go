@@ -88,6 +88,7 @@ func (b Builder) Build() *Simulation {
 
 	b.createDataRecorder(s)
 	b.createEngine(s)
+	s.engine.SetRunGuard(s.setup.Ready)
 	b.createIDGenerator(s)
 	b.createMetaRecorder(s)
 	b.createSourceRecorder(s)

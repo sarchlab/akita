@@ -132,10 +132,6 @@ func setupTest(seed int64) (
 	chains := make([]agentChain, *numAgentsFlag)
 	for i := 0; i < *numAgentsFlag; i++ {
 		chains[i] = buildAgentChain(s, i, shared, seed)
-		memaccessagent.SetProgressTrackers(chains[i].agent,
-			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),
-			monitor.CreateProgressBar(chains[i].agent.Name()+".Reads", uint64(chains[i].agent.State.ReadLeft)),
-		)
 	}
 
 	memConn := setupConnections(s, shared, chains)
@@ -205,11 +201,10 @@ func buildMemCtrl(
 		WithResources(idealmemcontroller.Resources{
 			Storage: newStorage(s, capacity, name+".Storage"),
 		}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     newPort(name + ".Top"),
-			Control: newPort(name + ".Control"),
-		}).
 		Build(name)
+
+	memCtrl.BindPort("Top", newPort(name+".Top"))
+	memCtrl.BindPort("Control", newPort(name+".Control"))
 
 	return memCtrl
 }
@@ -235,12 +230,11 @@ func buildL2Cache(
 				LowModules:       memCtrlPorts,
 			},
 		}).
-		WithPorts(writeback.Ports{
-			Top:     newPort("L2Cache.Top"),
-			Bottom:  newPort("L2Cache.Bottom"),
-			Control: newPort("L2Cache.Control"),
-		}).
 		Build("L2Cache")
+
+	l2Cache.BindPort("Top", newPort("L2Cache.Top"))
+	l2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
+	l2Cache.BindPort("Control", newPort("L2Cache.Control"))
 
 	return l2Cache
 }
@@ -257,11 +251,10 @@ func buildMMU(
 		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
-		WithPorts(mmu.Ports{
-			Top:     newPort("IoMMU.Top"),
-			Control: newPort("IoMMU.Control"),
-		}).
 		Build("IoMMU")
+
+	ioMMU.BindPort("Top", newPort("IoMMU.Top"))
+	ioMMU.BindPort("Control", newPort("IoMMU.Control"))
 
 	return ioMMU
 }
@@ -283,12 +276,11 @@ func buildL2TLB(
 				Port: ioMMU.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(tlb.Ports{
-			Top:     newPort("L2TLB.Top"),
-			Bottom:  newPort("L2TLB.Bottom"),
-			Control: newPort("L2TLB.Control"),
-		}).
 		Build("L2TLB")
+
+	l2TLB.BindPort("Top", newPort("L2TLB.Top"))
+	l2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
+	l2TLB.BindPort("Control", newPort("L2TLB.Control"))
 
 	return l2TLB
 }
@@ -338,12 +330,11 @@ func buildL1Cache(
 				l2Cache.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(writethroughcache.Ports{
-			Top:     newPort(name + ".Top"),
-			Bottom:  newPort(name + ".Bottom"),
-			Control: newPort(name + ".Control"),
-		}).
 		Build(name)
+
+	l1Cache.BindPort("Top", newPort(name+".Top"))
+	l1Cache.BindPort("Bottom", newPort(name+".Bottom"))
+	l1Cache.BindPort("Control", newPort(name+".Control"))
 
 	return l1Cache
 }
@@ -368,12 +359,11 @@ func buildL1TLB(
 				Port: l2TLB.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(tlb.Ports{
-			Top:     newPort(name + ".Top"),
-			Bottom:  newPort(name + ".Bottom"),
-			Control: newPort(name + ".Control"),
-		}).
 		Build(name)
+
+	l1TLB.BindPort("Top", newPort(name+".Top"))
+	l1TLB.BindPort("Bottom", newPort(name+".Bottom"))
+	l1TLB.BindPort("Control", newPort(name+".Control"))
 
 	return l1TLB
 }
@@ -400,13 +390,12 @@ func buildAddressTranslator(
 				Port: l1TLB.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(addresstranslator.Ports{
-			Top:         newPort(name + ".Top"),
-			Bottom:      newPort(name + ".Bottom"),
-			Translation: newPort(name + ".Translation"),
-			Control:     newPort(name + ".Control"),
-		}).
 		Build(name)
+
+	at.BindPort("Top", newPort(name+".Top"))
+	at.BindPort("Bottom", newPort(name+".Bottom"))
+	at.BindPort("Translation", newPort(name+".Translation"))
+	at.BindPort("Control", newPort(name+".Control"))
 
 	return at
 }
@@ -422,15 +411,15 @@ func buildROB(
 
 	name := "ROB" + suffix
 
-	return rob.Definition.Builder().
+	builtComponent := rob.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(robSpec).
-		WithPorts(rob.Ports{
-			Top:     newPort(name + ".Top"),
-			Bottom:  newPort(name + ".Bottom"),
-			Control: newPort(name + ".Control"),
-		}).
 		Build(name)
+
+	builtComponent.BindPort("Top", newPort(name+".Top"))
+	builtComponent.BindPort("Bottom", newPort(name+".Bottom"))
+	builtComponent.BindPort("Control", newPort(name+".Control"))
+	return builtComponent
 }
 
 func buildAgent(
@@ -453,10 +442,9 @@ func buildAgent(
 		WithResources(memaccessagent.Resources{
 			LowModule: robComp.Ports.Top,
 		}).
-		WithPorts(memaccessagent.Ports{
-			Mem: newPort(name + ".Mem"),
-		}).
 		Build(name)
+
+	agent.BindPort("Mem", newPort(name+".Mem"))
 
 	return agent
 }
@@ -533,24 +521,24 @@ func setupConnections(
 
 	// Shared data path: all L1 caches plus the L2 cache on one connection.
 	dataConn := direct.NewConnection("ConnL1L2", s, timing.GHz)
-	dataConn.PlugIn(shared.l2Cache.Ports.Top)
+	dataConn.BindPort(shared.l2Cache.Ports.Top)
 	for _, c := range chains {
-		dataConn.PlugIn(c.l1Cache.Ports.Bottom)
+		dataConn.BindPort(c.l1Cache.Ports.Bottom)
 	}
 
 	// Shared translation path: all L1 TLBs plus the L2 TLB on one connection.
 	transConn := direct.NewConnection("ConnL1L2TLB", s, timing.GHz)
-	transConn.PlugIn(shared.l2TLB.Ports.Top)
+	transConn.BindPort(shared.l2TLB.Ports.Top)
 	for _, c := range chains {
-		transConn.PlugIn(c.l1TLB.Ports.Bottom)
+		transConn.BindPort(c.l1TLB.Ports.Bottom)
 	}
 
 	// L2 cache fans out to every memory controller on one connection; the
 	// interleaved mapper picks the right controller per physical address.
 	memConn := direct.NewConnection("ConnL2Mem", s, timing.GHz)
-	memConn.PlugIn(shared.l2Cache.Ports.Bottom)
+	memConn.BindPort(shared.l2Cache.Ports.Bottom)
 	for _, mc := range shared.memCtrls {
-		memConn.PlugIn(mc.Ports.Top)
+		memConn.BindPort(mc.Ports.Top)
 	}
 
 	connect(s, "ConnL2TLBMMU",
@@ -562,9 +550,9 @@ func setupConnections(
 }
 
 // newPort creates an unowned port named fullName, for a component that takes
-// its ports at Build. The component's Build binds and registers it.
+// its ports during wiring. BindPort names, binds, and registers it.
 func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(fullName, 16, 16)
+	return twowaybuffered.NewPort(16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the
@@ -582,8 +570,8 @@ func newStorage(
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := direct.NewConnection(name, s, timing.GHz)
-	conn.PlugIn(p1)
-	conn.PlugIn(p2)
+	conn.BindPort(p1)
+	conn.BindPort(p2)
 }
 
 func main() {
@@ -603,6 +591,16 @@ func main() {
 		migCtrl = setupMigrationController(s, shared, chains, memConn)
 	}
 
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+	monitor := s.Monitor().(*monitoring.Monitor)
+	for i := range chains {
+		memaccessagent.SetProgressTrackers(chains[i].agent,
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Reads", uint64(chains[i].agent.State.ReadLeft)),
+		)
+	}
 	for _, c := range chains {
 		c.agent.TickLater()
 	}

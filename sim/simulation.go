@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -9,6 +10,7 @@ import (
 )
 
 type Simulation struct {
+	setup            assembly.Setup
 	id               string
 	outputPath       string
 	engine           timing.Engine
@@ -74,17 +76,11 @@ func (s *Simulation) Monitor() Monitor {
 // typed Register methods pass the concrete object, which satisfies Entity, so
 // the inventory holds the live entity itself.
 func (s *Simulation) registerEntity(e Entity) {
+	s.setup.Register(e)
 	name := e.Name()
-	if name == "" {
-		panic("entity name cannot be empty")
-	}
 
 	if s.entityByName == nil {
 		s.entityByName = make(map[string]int)
-	}
-
-	if _, found := s.entityByName[name]; found {
-		panic("entity " + name + " already registered")
 	}
 
 	s.entities = append(s.entities, e)
@@ -111,7 +107,7 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. A component model's Build registers each port it binds;
+// name and monitored. A component model's BindPort registers each port it binds;
 // an owner written without a component model registers its own ports.
 func (s *Simulation) RegisterPort(p naming.Named) {
 	port, ok := p.(Port)
@@ -136,7 +132,7 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 }
 
 // RegisterConnection registers a connection with the simulation runtime
-// inventory. Setup code still owns topology construction and PlugIn calls, but
+// inventory. Setup code still owns topology construction and BindPort calls, but
 // registered connections are tracked as runtime entities in the global state
 // manager.
 func (s *Simulation) RegisterConnection(c naming.Named) {
@@ -178,3 +174,13 @@ func (s *Simulation) Terminate() {
 
 // NewID allocates an ID unique within this simulation.
 func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
+
+// Initialize validates the completed wiring, freezes topology, and creates state
+// and middleware. Call it once before seeding work or loading a checkpoint.
+func (s *Simulation) Initialize() error { return s.setup.Initialize() }
+
+// RequireSetup rejects structural changes after initialization begins.
+func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }
+
+// RequireNameAvailable validates a name before a binding changes either side.
+func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }

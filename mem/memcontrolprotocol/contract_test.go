@@ -48,10 +48,10 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
 	}
-	c.control = twowaybuffered.NewPort(name+".Control", 4, 4)
-	c.control.SetOwner(c)
+	c.control = twowaybuffered.NewPort(4, 4)
+	c.control.BindOwner(c, name+".Control")
 	conn := &noopConn{}
-	conn.PlugIn(c.control)
+	conn.BindPort(c.control)
 	return c
 }
 
@@ -161,7 +161,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "noopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}

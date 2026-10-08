@@ -200,14 +200,14 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(s).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(driverResources{LowModule: lowModule}).
-		WithPorts(driverPorts{
-			Mem: twowaybuffered.NewPort("Driver.Mem", 4, 4),
-		}).
 		Build("Driver")
+
+	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	return builtComponent
 }
 
 // buildSim assembles an identical simulation each time: a deterministic driver
@@ -228,17 +228,19 @@ func buildSim() (*sim.Simulation, *driver) {
 				WithSimulation(s).
 				Build("DRAM.Storage"),
 		}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("DRAM.Top", 8, 8),
-			Control: twowaybuffered.NewPort("DRAM.Control", 8, 8),
-		}).
 		Build("DRAM")
+
+	dram.BindPort("Top", twowaybuffered.NewPort(8, 8))
+	dram.BindPort("Control", twowaybuffered.NewPort(8, 8))
 
 	d := buildDriver(s, dram.Ports.Top)
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)
-	conn.PlugIn(d.Ports.Mem)
-	conn.PlugIn(dram.Ports.Top)
+	conn.BindPort(d.Ports.Mem)
+	conn.BindPort(dram.Ports.Top)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 
 	return s, d
 }

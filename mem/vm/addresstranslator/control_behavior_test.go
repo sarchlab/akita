@@ -50,8 +50,12 @@ var _ = Describe("Address Translator control behavior", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
-			WithPorts(makePorts("AddressTranslator", 16)).
 			Build("AddressTranslator")
+		tPorts := makePorts("AddressTranslator", 16)
+		t.BindPort("Top", tPorts.Top)
+		t.BindPort("Bottom", tPorts.Bottom)
+		t.BindPort("Translation", tPorts.Translation)
+		t.BindPort("Control", tPorts.Control)
 
 		topPort = t.Ports.Top
 		bottomPort = t.Ports.Bottom
@@ -62,8 +66,12 @@ var _ = Describe("Address Translator control behavior", func() {
 			topPort, bottomPort, translationPort, ctrlPort,
 		} {
 			conn := &noopConn{}
-			conn.PlugIn(p)
+			conn.BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {

@@ -21,10 +21,17 @@ func TestBuildRequiresBlocks(t *testing.T) {
 	spec.NumBlocks = 0
 
 	require.PanicsWithValue(t, "mmuCache: Spec.NumBlocks must be > 0", func() {
-		Definition.Builder().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		builtComponent := Definition.Builder().
+			WithSimulation(setupSim1).
 			WithSpec(spec).
-			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
+		builtComponentPorts := defaultPorts("MMUCache")
+		builtComponent.BindPort("Top", builtComponentPorts.Top)
+		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
+		builtComponent.BindPort("Control", builtComponentPorts.Control)
+		if err := setupSim1.Initialize(); err != nil {
+			panic(err)
+		}
 	})
 }

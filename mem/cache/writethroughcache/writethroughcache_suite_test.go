@@ -23,7 +23,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -32,9 +32,9 @@ func (c *noopConn) NotifySend()                      {}
 // name, each with the given buffer size.
 func makePorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
-		Bottom:  twowaybuffered.NewPort(name+".Bottom", bufSize, bufSize),
-		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(bufSize, bufSize),
+		Bottom:  twowaybuffered.NewPort(bufSize, bufSize),
+		Control: twowaybuffered.NewPort(bufSize, bufSize),
 	}
 }
 
@@ -44,12 +44,22 @@ func makePorts(name string, bufSize int) Ports {
 func buildStageTestCache(
 	spec Spec, res Resources, ports Ports, state state,
 ) *pipelineMW {
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 	comp := Definition.Builder().
-		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		WithSimulation(setupSim1).
 		WithSpec(spec).
 		WithResources(res).
-		WithPorts(ports).
 		Build("Cache")
+	comp.BindPort("Top", ports.Top)
+	comp.BindPort("Bottom", ports.Bottom)
+	comp.BindPort("Control", ports.Control)
+	for _, p := range []messaging.Port{ports.Top, ports.Bottom, ports.Control} {
+		(&noopConn{}).BindPort(p)
+	}
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
+
 	comp.State = state
 
 	return comp.Middlewares.Pipeline

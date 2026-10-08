@@ -25,7 +25,8 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should be able to connect ports outside current capacity", func() {
-		port := twowaybuffered.NewPort("Device.Port", 1, 1)
+		port := twowaybuffered.NewPort(1, 1)
+		port.BindOwner(testOwner{}, "Device.Port")
 
 		// 8,8,2 is the default capacity
 		connector.AddTile([3]int{8, 8, 2}, []messaging.Port{port})
@@ -33,3 +34,8 @@ var _ = Describe("Connector", func() {
 		connector.EstablishNetwork()
 	})
 })
+
+type testOwner struct{}
+
+func (testOwner) NotifyRecv(messaging.Port)     {}
+func (testOwner) NotifyPortFree(messaging.Port) {}

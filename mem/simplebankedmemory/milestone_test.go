@@ -105,8 +105,13 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
-			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
+		memCompPorts := makePorts("Mem", 4, 16)
+		memComp.BindPort("Top", memCompPorts.Top)
+		memComp.BindPort("Control", memCompPorts.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		topPort = memComp.Ports.Top
 
@@ -183,14 +188,19 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
-			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
+		memCompPorts := makePorts("Mem", 4, 16)
+		memComp.BindPort("Top", memCompPorts.Top)
+		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort = memComp.Ports.Top
 		agent = newTestAgent("Agent")
 		conn = newLoopbackConnection("Conn")
-		conn.PlugIn(topPort)
-		conn.PlugIn(agent.port)
+		conn.BindPort(topPort)
+		conn.BindPort(agent.port)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		// Attach the recorder before driving so the receiver-side task IDs are
 		// real (MsgIDAtReceiver returns 0 with no hooks).

@@ -58,7 +58,7 @@ func newMiddlewares(c *Comp) Middlewares {
 ```
 
 The next page hands this function to the component's `Definition`, and
-`Build` calls it once for each instance.
+`Initialize` calls it once for each instance.
 
 A few things to notice:
 

@@ -130,13 +130,19 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
-			WithPorts(makePorts("MemBank", 8, 16)).
 			Build("MemBank")
+		memCompPorts := makePorts("MemBank", 8, 16)
+		memComp.BindPort("Top", memCompPorts.Top)
+		memComp.BindPort("Control", memCompPorts.Control)
 
 		agent = newTestAgent("AgentBank")
 		conn = newLoopbackConnection("ConnBank")
-		conn.PlugIn(memComp.Ports.Top)
-		conn.PlugIn(agent.port)
+		conn.BindPort(memComp.Ports.Top)
+		conn.BindPort(agent.port)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	It("writes and reads back at the global address across banks", func() {

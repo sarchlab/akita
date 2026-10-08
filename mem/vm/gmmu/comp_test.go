@@ -23,7 +23,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -56,19 +56,25 @@ var _ = Describe("GMMU", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
-			WithPorts(defaultPorts("MMU")).
 			Build("MMU")
-
-		mw = gmmuComp.Middlewares.Walk
+		gmmuCompPorts := defaultPorts("MMU")
+		gmmuComp.BindPort("Top", gmmuCompPorts.Top)
+		gmmuComp.BindPort("Bottom", gmmuCompPorts.Bottom)
+		gmmuComp.BindPort("Control", gmmuCompPorts.Control)
 
 		topPort = gmmuComp.Ports.Top
 		bottomPort = gmmuComp.Ports.Bottom
 
 		topConn := &noopConn{}
-		topConn.PlugIn(topPort)
+		topConn.BindPort(topPort)
 		bottomConn := &noopConn{}
-		bottomConn.PlugIn(bottomPort)
-		(&noopConn{}).PlugIn(gmmuComp.Ports.Control)
+		bottomConn.BindPort(bottomPort)
+		(&noopConn{}).BindPort(gmmuComp.Ports.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+		mw = gmmuComp.Middlewares.Walk
+
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {

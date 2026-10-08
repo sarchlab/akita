@@ -29,7 +29,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -49,10 +49,10 @@ const (
 // defaults for the rest.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:         twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
-		Bottom:      twowaybuffered.NewPort(name+".Bottom", bottomBufSize, bottomBufSize),
-		Translation: twowaybuffered.NewPort(name+".Translation", translationBufSize, translationBufSize),
-		Control:     twowaybuffered.NewPort(name+".Control", ctrlBufSize, ctrlBufSize),
+		Top:         twowaybuffered.NewPort(topBufSize, topBufSize),
+		Bottom:      twowaybuffered.NewPort(bottomBufSize, bottomBufSize),
+		Translation: twowaybuffered.NewPort(translationBufSize, translationBufSize),
+		Control:     twowaybuffered.NewPort(ctrlBufSize, ctrlBufSize),
 	}
 }
 
@@ -89,8 +89,12 @@ var _ = Describe("Address Translator", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
-			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
+		tPorts := makePorts("AddressTranslator", topBufSize)
+		t.BindPort("Top", tPorts.Top)
+		t.BindPort("Bottom", tPorts.Bottom)
+		t.BindPort("Translation", tPorts.Translation)
+		t.BindPort("Control", tPorts.Control)
 
 		topPort = t.Ports.Top
 		bottomPort = t.Ports.Bottom
@@ -101,7 +105,10 @@ var _ = Describe("Address Translator", func() {
 			topPort, bottomPort, translationPort, ctrlPort,
 		} {
 			conn := &noopConn{}
-			conn.PlugIn(p)
+			conn.BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		tParseTransMW = t.Middlewares.ParseTranslate

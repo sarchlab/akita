@@ -179,22 +179,28 @@ func main() {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create the ports first, so AgentA's Spec can name AgentB's port.
-	outA := twowaybuffered.NewPort("AgentA.Out", 4, 4)
-	outB := twowaybuffered.NewPort("AgentB.Out", 4, 4)
+	outA := twowaybuffered.NewPort(4, 4)
+	outB := twowaybuffered.NewPort(4, 4)
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).
-		WithSpec(Spec{Freq: 1 * timing.GHz, PingDst: outB.AsRemote(), NumPings: 1}).
-		WithPorts(Ports{Out: outA}).
+		WithSpec(Spec{Freq: 1 * timing.GHz, PingDst: "AgentB.Out", NumPings: 1}).
 		Build("AgentA")
+
+	agentA.BindPort("Out", outA)
+
 	agentB := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: outB}).
 		Build("AgentB")
 
+	agentB.BindPort("Out", outB)
+
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
-	conn.PlugIn(agentA.Ports.Out)
-	conn.PlugIn(agentB.Ports.Out)
+	conn.BindPort(agentA.Ports.Out)
+	conn.BindPort(agentB.Ports.Out)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// Attach the hooks. The agents above never reference these.
 	engine.AcceptHook(&eventHook{})

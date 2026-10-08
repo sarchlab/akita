@@ -41,15 +41,21 @@ var _ = Describe("MMUCacheMiddleware", func() {
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
-			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
+		compPorts := defaultPorts("MMUCache")
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		topPort = comp.Ports.Top
 		bottomPort = comp.Ports.Bottom
 		controlPort = comp.Ports.Control
-		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(bottomPort)
-		(&noopConn{}).PlugIn(controlPort)
+		(&noopConn{}).BindPort(topPort)
+		(&noopConn{}).BindPort(bottomPort)
+		(&noopConn{}).BindPort(controlPort)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		mw = comp.Middlewares.Cache
 	})

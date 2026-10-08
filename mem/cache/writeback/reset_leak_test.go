@@ -45,9 +45,15 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: messaging.RemotePort("LowerCache"),
 			},
 		}).
-		WithPorts(makePorts("L1Cache", 16)).
 		Build("L1Cache")
+	compPorts := makePorts("L1Cache", 16)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Bottom", compPorts.Bottom)
+	comp.BindPort("Control", compPorts.Control)
 	plugNoopConn(comp)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	topPort := comp.Ports.Top
 	ctrlPort := comp.Ports.Control

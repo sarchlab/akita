@@ -46,7 +46,7 @@ remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component), `WithResources` (the page table, required), and
-`WithPorts` (the port instances). The GMMU does not build a page table of its
+`component.BindPort` after Build (the port instances). The GMMU does not build a page table of its
 own: the system builder creates one, usually with page size
 `2^Spec.Log2PageSize`, and may share it with other components. `Build` panics
 if `Resources.PageTable` is nil.
@@ -65,12 +65,10 @@ g := gmmu.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
-    WithPorts(gmmu.Ports{
-        Top:     twowaybuffered.NewPort("GMMU.Top", 16, 16),
-        Bottom:  twowaybuffered.NewPort("GMMU.Bottom", 16, 16),
-        Control: twowaybuffered.NewPort("GMMU.Control", 16, 16),
-    }).
     Build("GMMU")
+g.BindPort("Top", twowaybuffered.NewPort(16, 16))
+g.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
+g.BindPort("Control", twowaybuffered.NewPort(16, 16))
 ```
 
 | Method | Description |
@@ -78,12 +76,14 @@ g := gmmu.Definition.Builder().
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
 - **Bottom**: forwards `vmprotocol.TranslationReq` for remote pages, receives

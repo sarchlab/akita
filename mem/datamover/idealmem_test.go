@@ -15,13 +15,13 @@ func buildIdealMem(
 	storage *mem.Storage,
 	name string,
 ) *idealmemcontroller.Comp {
-	return idealmemcontroller.Definition.Builder().
+	builtComponent := idealmemcontroller.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort(name+".Top", 16, 16),
-			Control: twowaybuffered.NewPort(name+".Control", 16, 16),
-		}).
 		Build(name)
+
+	builtComponent.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	builtComponent.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	return builtComponent
 }

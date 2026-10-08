@@ -21,11 +21,13 @@ func TestPageSizeValidation(t *testing.T) {
 	builder := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
-		WithSpec(matchingSpec).
-		WithPorts(makePorts("MatchingPageSizes", 4096))
+		WithSpec(matchingSpec)
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
+	ports := makePorts("", 4096)
+	mmu.BindPort("Top", ports.Top)
+	mmu.BindPort("Control", ports.Control)
 	if mmu == nil {
 		t.Error("MMU creation should succeed with matching page sizes")
 	}
@@ -37,8 +39,7 @@ func TestPageSizeValidation(t *testing.T) {
 	builder2 := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable2}).
-		WithSpec(mismatchedSpec).
-		WithPorts(makePorts("MismatchedPageSizes", 4096))
+		WithSpec(mismatchedSpec)
 
 	// This should panic
 	defer func() {
@@ -52,7 +53,13 @@ func TestPageSizeValidation(t *testing.T) {
 		}
 	}()
 
-	builder2.Build("MismatchedPageSizes") // Should panic
+	bad := builder2.Build("MismatchedPageSizes")
+	badPorts := makePorts("", 4096)
+	bad.BindPort("Top", badPorts.Top)
+	bad.BindPort("Control", badPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestPageTableRequired tests that Build panics when no page table is given.
@@ -67,8 +74,13 @@ func TestPageTableRequired(t *testing.T) {
 		}
 	}()
 
-	Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(makePorts("NoPageTable", 4096)).
-		Build("NoPageTable") // Should panic
+		Build("NoPageTable")
+	builtComponentPorts := makePorts("NoPageTable", 4096)
+	builtComponent.BindPort("Top", builtComponentPorts.Top)
+	builtComponent.BindPort("Control", builtComponentPorts.Control)
+	if err := sim.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 }

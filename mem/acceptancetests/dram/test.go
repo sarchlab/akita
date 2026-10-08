@@ -43,10 +43,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 
 	// The agent sends to the memory controller's Top port, so the
 	// controller's ports are created before the agent is built.
-	memCtrlPorts := dram.Ports{
-		Top:     twowaybuffered.NewPort("Mem.Top", 16, 16),
-		Control: twowaybuffered.NewPort("Mem.Control", 16, 16),
-	}
+	memCtrlTop := twowaybuffered.NewPort(16, 16)
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
@@ -57,15 +54,10 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
-		WithResources(memaccessagent.Resources{LowModule: memCtrlPorts.Top}).
-		WithPorts(memaccessagent.Ports{
-			Mem: twowaybuffered.NewPort("MemAccessAgent.Mem", 16, 16),
-		}).
+		WithResources(memaccessagent.Resources{LowModule: memCtrlTop}).
 		Build("MemAccessAgent")
-	memaccessagent.SetProgressTrackers(agent,
-		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
-		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
-	)
+
+	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
 	dramSpec := dram.Definition.DefaultSpec
 	dramSpec.Freq = 1 * timing.GHz
@@ -79,11 +71,20 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 				WithSimulation(s).
 				Build("Mem.Storage"),
 		}).
-		WithPorts(memCtrlPorts).
 		Build("Mem")
 
-	conn.PlugIn(agent.Ports.Mem)
-	conn.PlugIn(memCtrl.Ports.Top)
+	memCtrl.BindPort("Top", memCtrlTop)
+	memCtrl.BindPort("Control", twowaybuffered.NewPort(16, 16))
+
+	conn.BindPort(agent.Ports.Mem)
+	conn.BindPort(memCtrl.Ports.Top)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+	memaccessagent.SetProgressTrackers(agent,
+		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+	)
 
 	return s, engine, agent
 }

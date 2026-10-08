@@ -51,17 +51,20 @@ func buildSim() (*sim.Simulation, *driver) {
 				Port: itlb.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(addresstranslator.Ports{
-			Top:         newPort("AT.Top"),
-			Bottom:      newPort("AT.Bottom"),
-			Translation: newPort("AT.Translation"),
-			Control:     newPort("AT.Control"),
-		}).
 		Build("AT")
+
+	at.BindPort("Top", newPort("AT.Top"))
+	at.BindPort("Bottom", newPort("AT.Bottom"))
+	at.BindPort("Translation", newPort("AT.Translation"))
+	at.BindPort("Control", newPort("AT.Control"))
 
 	d := buildDriver(s, at.Ports.Top)
 
 	setupConnection(s, d, at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl)
+
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 
 	return s, d
 }
@@ -82,11 +85,10 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(idealmemcontroller.Resources{
 			Storage: newStorage(s, 4*mem.GB, "MemCtrl.Storage"),
 		}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     newPort("MemCtrl.Top"),
-			Control: newPort("MemCtrl.Control"),
-		}).
 		Build("MemCtrl")
+
+	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
+	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
 
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
@@ -101,12 +103,11 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 				memCtrl.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(writeback.Ports{
-			Top:     newPort("L2Cache.Top"),
-			Bottom:  newPort("L2Cache.Bottom"),
-			Control: newPort("L2Cache.Control"),
-		}).
 		Build("L2Cache")
+
+	l2Cache.BindPort("Top", newPort("L2Cache.Top"))
+	l2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
+	l2Cache.BindPort("Control", newPort("L2Cache.Control"))
 
 	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
@@ -121,12 +122,11 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 				l2Cache.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(writethroughcache.Ports{
-			Top:     newPort("L1Cache.Top"),
-			Bottom:  newPort("L1Cache.Bottom"),
-			Control: newPort("L1Cache.Control"),
-		}).
 		Build("L1Cache")
+
+	l1Cache.BindPort("Top", newPort("L1Cache.Top"))
+	l1Cache.BindPort("Bottom", newPort("L1Cache.Bottom"))
+	l1Cache.BindPort("Control", newPort("L1Cache.Control"))
 
 	return l1Cache, l2Cache, memCtrl
 }
@@ -142,11 +142,10 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
-		WithPorts(mmu.Ports{
-			Top:     newPort("IoMMU.Top"),
-			Control: newPort("IoMMU.Control"),
-		}).
 		Build("IoMMU")
+
+	ioMMU.BindPort("Top", newPort("IoMMU.Top"))
+	ioMMU.BindPort("Control", newPort("IoMMU.Control"))
 
 	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
@@ -161,12 +160,11 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 				Port: ioMMU.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(tlb.Ports{
-			Top:     newPort("L2TLB.Top"),
-			Bottom:  newPort("L2TLB.Bottom"),
-			Control: newPort("L2TLB.Control"),
-		}).
 		Build("L2TLB")
+
+	l2TLB.BindPort("Top", newPort("L2TLB.Top"))
+	l2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
+	l2TLB.BindPort("Control", newPort("L2TLB.Control"))
 
 	tlbSpec := tlb.Definition.DefaultSpec
 	tlbSpec.NumWays = 8
@@ -181,12 +179,11 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 				Port: l2TLB.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(tlb.Ports{
-			Top:     newPort("TLB.Top"),
-			Bottom:  newPort("TLB.Bottom"),
-			Control: newPort("TLB.Control"),
-		}).
 		Build("TLB")
+
+	itlb.BindPort("Top", newPort("TLB.Top"))
+	itlb.BindPort("Bottom", newPort("TLB.Bottom"))
+	itlb.BindPort("Control", newPort("TLB.Control"))
 
 	return ioMMU, itlb, l2TLB
 }
@@ -220,9 +217,9 @@ func setupPageTable(s *sim.Simulation) vm.PageTable {
 }
 
 // newPort creates an unowned port named fullName, for a component that takes
-// its ports at Build. The component's Build binds and registers it.
+// its ports during wiring. BindPort names, binds, and registers it.
 func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(fullName, 16, 16)
+	return twowaybuffered.NewPort(16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the
@@ -240,8 +237,8 @@ func newStorage(
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := direct.NewConnection(name, s, timing.GHz)
-	conn.PlugIn(p1)
-	conn.PlugIn(p2)
+	conn.BindPort(p1)
+	conn.BindPort(p2)
 }
 
 func setupConnection(

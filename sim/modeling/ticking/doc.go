@@ -43,7 +43,7 @@
 //     such as a backing storage. The system builder supplies them.
 //   - Ports has one messaging.Port field per port and one []messaging.Port
 //     field per port group. The system builder creates the port instances,
-//     choosing their buffer sizes, and passes them to Build.
+//     choosing their buffer sizes, and binds them after Build.
 //   - Middlewares has one field per middleware. The component creates them
 //     with the Definition's NewMiddlewares, and they handle every event in
 //     field order. Middlewares hold only references; all mutable data lives
@@ -67,16 +67,15 @@
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    WithResources(res).
-//	    WithPorts(cache.Ports{Top: top, Bottom: bottom}).
 //	    Build("GPU[0].L1Cache")
 //
-// The system builder creates every port with twowaybuffered.NewPort, choosing its
-// buffer sizes, and names it "<instance>.<field>", for example
-// "GPU[0].L1Cache.Top", or "<instance>.<field>[i]" for member i of a port
-// group. Build binds each port to the instance and registers it with the
-// simulation; no port is added after Build. Middlewares reach the ports
-// through the Ports fields. A component's configuration does not change
-// after Build: do not reassign its Ports or Middlewares.
+// After Build, bind each declared slot with comp.BindPort("Top", port).
+// The component assigns the owner and full name, such as "GPU[0].L1Cache.Top".
+// Use "Links[0]" for an indexed port group. Bind connections with
+// conn.BindPort(port), then call the shared simulation's Initialize method.
+// Initialize validates all ports, freezes topology, and creates State and
+// Middlewares. Only then seed work and run the engine. Ports and Middlewares
+// must not be reassigned directly.
 //
 // # Type name and instance name
 //

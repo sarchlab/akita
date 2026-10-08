@@ -20,15 +20,21 @@ func TestRejectUnsupportedDevicePortsBeforeAttaching(t *testing.T) {
 		&unsupportedDevicePort{}, nil, (*twowaybuffered.Port)(nil),
 	} {
 		t.Run(fmt.Sprintf("%T", unsupported), func(t *testing.T) {
-			device := twowaybuffered.NewPort("Device.Port", 1, 1)
+			device := twowaybuffered.NewPort(1, 1)
+			device.BindOwner(payloadOwner{"Device"}, "Device.Port")
 			s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 			require.PanicsWithValue(t,
 				fmt.Sprintf("endpoint: device port must be *twowaybuffered.Port, got %T", unsupported),
 				func() {
-					Definition.Builder().WithSimulation(s).
+					builtComponent := Definition.Builder().WithSimulation(s).
 						WithResources(Resources{DevicePorts: []messaging.Port{device, unsupported}}).
-						WithPorts(Ports{NetworkPort: twowaybuffered.NewPort("EP.NetworkPort", 1, 1)}).
 						Build("EP")
+
+					builtComponent.BindPort("NetworkPort", twowaybuffered.NewPort(1, 1))
+					ConnectDevices(builtComponent)
+					if err := s.Initialize(); err != nil {
+						panic(err)
+					}
 				})
 			require.Nil(t, device.Connection(), "valid port was attached before incompatible port was rejected")
 		})

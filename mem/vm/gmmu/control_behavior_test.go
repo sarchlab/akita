@@ -52,14 +52,21 @@ var _ = Describe("GMMU control behavior", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
-			WithPorts(defaultPorts("GMMU")).
 			Build("GMMU")
+		compPorts := defaultPorts("GMMU")
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		topPort = comp.Ports.Top
 		ctrlPort = comp.Ports.Control
 		for _, p := range allPorts(comp) {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	// insertLocalPage maps vAddr to a page owned by this GMMU's device, so the

@@ -16,7 +16,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "noopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -30,11 +30,16 @@ func TestControlContract(t *testing.T) {
 		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithPorts(makePorts("BankedMem", 16, 16)).
 			Build("BankedMem")
+		compPorts := makePorts("BankedMem", 16, 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Control} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

@@ -16,6 +16,7 @@ import (
 type ParallelEngine struct {
 	hooking.HookableBase
 	*engineControl
+	runGuard func() error
 
 	nowLock                sync.RWMutex
 	now                    VTimeInPicoSec
@@ -34,6 +35,9 @@ type ParallelEngine struct {
 	failure  atomic.Pointer[PanicError]
 	failed   chan struct{}
 }
+
+// SetRunGuard installs a readiness check for this engine.
+func (e *ParallelEngine) SetRunGuard(check func() error) { e.runGuard = check }
 
 // Name returns the name of the engine. The engine is registered as a simulation
 // entity so its event-queue and time state are part of the state snapshot.
@@ -126,6 +130,11 @@ func (e *ParallelEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the ParallelEngine.
 func (e *ParallelEngine) Run() (err error) {
+	if e.runGuard != nil {
+		if err := e.runGuard(); err != nil {
+			return err
+		}
+	}
 	if err := e.engineControl.begin(); err != nil {
 		return err
 	}

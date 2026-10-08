@@ -16,7 +16,7 @@ type ccNoopConn struct {
 }
 
 func (c *ccNoopConn) Name() string                     { return "noopConn" }
-func (c *ccNoopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *ccNoopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *ccNoopConn) Unplug(_ messaging.Port)          {}
 func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *ccNoopConn) NotifySend()                      {}
@@ -38,11 +38,18 @@ func TestControlContract(t *testing.T) {
 				InsideMapper:  &mem.SinglePortMapper{Port: messaging.RemotePort("InsideMem")},
 				OutsideMapper: &mem.SinglePortMapper{Port: messaging.RemotePort("OutsideMem")},
 			}).
-			WithPorts(makePorts("DataMover", 16, 16, 16, 16)).
 			Build("DataMover")
+		compPorts := makePorts("DataMover", 16, 16, 16, 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Inside", compPorts.Inside)
+		comp.BindPort("Outside", compPorts.Outside)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range allPorts(comp) {
-			(&ccNoopConn{}).PlugIn(p)
+			(&ccNoopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

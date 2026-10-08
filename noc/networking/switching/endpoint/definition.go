@@ -21,19 +21,9 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	NewMiddlewares: newMiddlewares,
 }
 
-// newMiddlewares creates the middlewares and plugs the device ports into the
-// endpoint, which becomes their connection.
+// newMiddlewares creates behavior over the device ports wired by ConnectDevices.
 func newMiddlewares(c *Comp) middlewares {
 	devicePorts := c.Resources.DevicePorts
-
-	for _, p := range devicePorts {
-		mustBeBufferedDevicePort(p)
-	}
-
-	conn := deviceSide{c}
-	for _, p := range devicePorts {
-		conn.PlugIn(p)
-	}
 
 	return middlewares{
 		Outgoing: &outgoingMW{comp: c, devicePorts: devicePorts},

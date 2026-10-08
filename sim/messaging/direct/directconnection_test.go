@@ -44,15 +44,20 @@ var _ = Describe("DirectConnection", func() {
 		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		connection = NewConnection("Direct", sim, timing.GHz)
 
-		port1.EXPECT().SetConnection(connection)
-		connection.PlugIn(port1)
+		port1.EXPECT().Owner().Return(&agent{}).AnyTimes()
+		port1.EXPECT().Connection().Return(nil).AnyTimes()
+		port1.EXPECT().BindConnection(connection)
+		connection.BindPort(port1)
 
-		port2.EXPECT().SetConnection(connection)
-		connection.PlugIn(port2)
+		port2.EXPECT().Owner().Return(&agent{}).AnyTimes()
+		port2.EXPECT().Connection().Return(nil).AnyTimes()
+		port2.EXPECT().BindConnection(connection)
+		connection.BindPort(port2)
 	})
 
 	AfterEach(func() {
@@ -128,7 +133,7 @@ func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort mess
 		name:      name,
 		OutPort:   outPort,
 	}
-	a.OutPort.SetOwner(a)
+	a.OutPort.BindOwner(a, name+".Out")
 	sim.Engine().RegisterHandler(name, a)
 
 	return a
@@ -177,9 +182,9 @@ var _ = Describe("Direct Connection Integration", func() {
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
-				twowaybuffered.NewPort(fmt.Sprintf("Agent[%d].OutPort", i), 4, 4))
+				twowaybuffered.NewPort(4, 4))
 			agents = append(agents, a)
-			connection.PlugIn(a.OutPort)
+			connection.BindPort(a.OutPort)
 		}
 	})
 
@@ -202,6 +207,7 @@ var _ = Describe("Direct Connection Integration", func() {
 			agent.TickLater()
 		}
 
+		Expect(sim.Initialize()).To(Succeed())
 		Expect(engine.Run()).To(Succeed())
 
 		totalRecvedMsgCount := 0
@@ -233,9 +239,9 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent%d", i),
-			twowaybuffered.NewPort(fmt.Sprintf("Agent%d.OutPort", i), 4, 4))
+			twowaybuffered.NewPort(4, 4))
 		agents = append(agents, a)
-		connection.PlugIn(a.OutPort)
+		connection.BindPort(a.OutPort)
 	}
 
 	for _, agent := range agents {
@@ -256,6 +262,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 		agent.TickLater()
 	}
 
+	Expect(sim.Initialize()).To(Succeed())
 	Expect(engine.Run()).To(Succeed())
 
 	return engine.CurrentTime()
