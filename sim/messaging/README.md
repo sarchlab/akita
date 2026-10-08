@@ -12,8 +12,8 @@ Concrete transports live in separate packages:
 
 - [`twowaybuffered`](./twowaybuffered/README.md) provides `Port` with independent
   incoming and outgoing buffers. It works with direct connections and NoC endpoints.
-- [`direct`](./direct/README.md) provides the ideal `Connection` and
-  `Definition.Builder()`.
+- [`direct`](./direct/README.md) provides the ideal `Connection`, created with
+  `NewConnection(name, simulation, frequency)`.
 - `sim/messaging/wire` is reserved for the future wire port and connection; wire
   support is not implemented in this change.
 
