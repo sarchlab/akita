@@ -130,6 +130,9 @@ func ConnectDevices(c *Comp) {
 		if p.Owner() == nil {
 			panic("endpoint: device port has no owner")
 		}
+		if owner, ok := p.Owner().(interface{ RequireSetup() }); ok {
+			owner.RequireSetup()
+		}
 		if p.Connection() != nil {
 			panic("endpoint: device port already connected")
 		}
