@@ -93,6 +93,11 @@ func (d deviceSide) NotifySend() {
 	d.TickLater()
 }
 
+// mustBeBufferedDevicePort enforces v5 NoC's supported push-buffered transport.
+// The endpoint drains outgoing buffers and pushes reassembled messages through
+// CanDeliver/Deliver, with notifications for new messages and available capacity.
+// Planned wire ports use pull delivery and cannot support those push operations.
+// Custom ports may provide these semantics, but v5 NoC supports twowaybuffered only.
 func mustBeBufferedDevicePort(port messaging.Port) {
 	if p, ok := port.(*twowaybuffered.Port); !ok || p == nil {
 		panic(fmt.Sprintf("endpoint: device port must be *twowaybuffered.Port, got %T", port))

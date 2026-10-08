@@ -80,3 +80,21 @@ Device ports must be `*twowaybuffered.Port`. Build rejects unsupported and nil
 device ports before attaching any device port. The network connector constructs
 buffered network-facing ports and connects them with ideal `direct.Connection`
 links; wire ports are not supported.
+
+This restriction reflects the v5 NoC transport support policy. The endpoint
+requires buffered push delivery: it drains outgoing messages using
+`PeekOutgoing`/`RetrieveOutgoing`, checks incoming capacity with `CanDeliver`,
+and pushes each reassembled message into the destination's incoming buffer with
+`Deliver`. Device ports must notify the endpoint when outgoing data arrives or
+incoming capacity becomes available, so it can resume after backpressure.
+
+The planned wire ports in [#496](https://github.com/sarchlab/akita/issues/496)
+use pull delivery: a receiver reads its peer's outgoing slot through the wire,
+without an incoming buffer. Their push-side operations are unsupported, even
+though they implement the same `messaging.Port` interface. Method signatures
+alone therefore do not guarantee compatibility with this endpoint.
+
+A custom port could implement the required buffered push semantics, but v5 NoC
+support is intentionally limited to `*twowaybuffered.Port`. Component port
+fields remain `messaging.Port` so components can be used with other transports
+outside this NoC configuration.
