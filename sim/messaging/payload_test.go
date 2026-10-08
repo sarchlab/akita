@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"unsafe"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
 )
 
 type nestedTestPayload struct {
@@ -27,7 +25,7 @@ type hiddenPointerPayload struct {
 func (hiddenPointerPayload) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 func (*hiddenPointerPayload) UnmarshalJSON([]byte) error  { return nil }
 
-func init() { payloadregistry.Registry.Register(nestedTestPayload{}) }
+func init() { msgCodec.Register(nestedTestPayload{}) }
 
 func TestPayloadValidation(t *testing.T) {
 	invalid := []any{

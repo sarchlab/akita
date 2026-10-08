@@ -9,7 +9,6 @@ import (
 	"unicode"
 
 	"github.com/sarchlab/akita/v5/internal/valuecheck"
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
 )
 
 // A Protocol is an immutable set of payload types that travel over a port,
@@ -199,7 +198,7 @@ func defineProtocol(name string, roles ...RoleDef) *Protocol {
 			if err := valuecheck.Payload(reflect.TypeOf(msg), reflect.TypeOf(Msg{})); err != nil {
 				panic(fmt.Sprintf("protocol %q: payload %T: %v", name, msg, err))
 			}
-			payloadregistry.Registry.Register(msg)
+			msgCodec.Register(msg)
 		}
 
 		sends := make([]any, len(def.Sends))

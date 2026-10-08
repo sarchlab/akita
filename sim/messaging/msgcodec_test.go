@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
 )
 
 type registryTestMsg struct {
@@ -15,7 +13,7 @@ type registryTestMsg struct {
 }
 
 func TestMsgRegistryRoundTrip(t *testing.T) {
-	payloadregistry.Registry.Register(registryTestMsg{})
+	msgCodec.Register(registryTestMsg{})
 
 	msg := Msg{Payload: registryTestMsg{Value: 42}}
 	msg.ID = 7
@@ -29,14 +27,14 @@ func TestMsgRegistryRoundTrip(t *testing.T) {
 }
 
 func TestMsgRegistryUnknownType(t *testing.T) {
-	_, err := payloadregistry.Registry.DecodeSlice(
+	_, err := msgCodec.DecodeSlice(
 		json.RawMessage(`[{"type":"nonexistent.Type","payload":{}}]`))
 	if err == nil || !strings.Contains(err.Error(), "unknown payload type") {
 		t.Fatalf("expected unknown-type error, got %v", err)
 	}
 }
 
-func init() { payloadregistry.Registry.Register(registryTestMsg{}) }
+func init() { msgCodec.Register(registryTestMsg{}) }
 
 func roundTripMsg(msg Msg) error {
 	raw, err := json.Marshal(msg)

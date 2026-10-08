@@ -3,8 +3,6 @@ package messaging
 import (
 	"strings"
 	"testing"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
 )
 
 type protoTestReq struct {
@@ -61,11 +59,11 @@ func TestDefineProtocol(t *testing.T) {
 	}
 
 	// Defining the protocol must have registered its messages with the codec.
-	if err := payloadregistry.Registry.CheckRoundTrip(protoTestReq{}); err != nil {
+	if err := msgCodec.CheckRoundTrip(protoTestReq{}); err != nil {
 		t.Errorf("protoTestReq not registered: %v", err)
 	}
 
-	if err := payloadregistry.Registry.CheckRoundTrip(protoTestRsp{}); err != nil {
+	if err := msgCodec.CheckRoundTrip(protoTestRsp{}); err != nil {
 		t.Errorf("protoTestRsp not registered: %v", err)
 	}
 }

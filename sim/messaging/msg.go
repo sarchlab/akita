@@ -1,10 +1,6 @@
 package messaging
 
-import (
-	"encoding/json"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
-)
+import "encoding/json"
 
 // Msg carries routing information and a registered protocol payload. Payloads
 // are values. Slice and map storage is shared between sender and receiver;
@@ -23,7 +19,7 @@ type Msg struct {
 // PayloadRegistered reports whether v's concrete type was registered through
 // DefineProtocol. A nil payload is always valid.
 func PayloadRegistered(v any) bool {
-	return v == nil || payloadregistry.Registry.Contains(v)
+	return v == nil || msgCodec.Contains(v)
 }
 
 // IsRsp reports whether the message responds to another message.
@@ -39,7 +35,7 @@ func (m Msg) MarshalJSON() ([]byte, error) {
 	if m.Payload == nil {
 		return routing, nil
 	}
-	payload, err := payloadregistry.Registry.Encode(m.Payload)
+	payload, err := msgCodec.Encode(m.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +51,7 @@ func (m *Msg) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
-	payload, err := payloadregistry.Registry.Decode(data)
+	payload, err := msgCodec.Decode(data)
 	if err != nil {
 		return err
 	}
