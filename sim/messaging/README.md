@@ -83,6 +83,12 @@ registers the payload types before restoring a checkpoint. This is a convention,
 not an init-only runtime check. The registry supports concurrent registration;
 `Send` reads an immutable snapshot with an atomic load and a map lookup.
 
+Custom ports can call `messaging.PayloadRegistered(payload)` to perform the same
+registration check as `twowaybuffered.Port.Send`, including from another module.
+It returns true for nil or a registered value type, and false for unregistered
+types, including pointers. This read-only check does not register or serialize
+the payload; the registry remains private.
+
 Slice and map storage is shared between sender and receiver. Do not mutate it
 after sending. Inspect a payload with `switch req := msg.Payload.(type)` while
 using `msg.ID`, `msg.Src`, and the other envelope fields for routing and replies.

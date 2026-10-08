@@ -7,7 +7,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 )
 
@@ -282,7 +281,7 @@ func NewPort(name string, incomingBufCap, outgoingBufCap int) *Port {
 }
 
 func (p *Port) msgMustBeValid(msg messaging.Msg) {
-	if msg.Payload != nil && !payloadregistry.Registry.Contains(msg.Payload) {
+	if !messaging.PayloadRegistered(msg.Payload) {
 		panic(fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", msg.Payload))
 	}
 	portMustBeMsgSrc(p, msg)

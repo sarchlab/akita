@@ -19,7 +19,7 @@ var _ = messaging.DefineProtocol(messaging.RoleDef{
 func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 	p := NewPort("src", 1, 1)
 	p.SetConnection(&benchmarkConnection{})
-	for _, v := range []any{&registryTestMsg{}, struct{ Unregistered int }{}} {
+	for _, v := range []any{&registryTestMsg{}, (*registryTestMsg)(nil), struct{ Unregistered int }{}} {
 		require.PanicsWithValue(t,
 			fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", v),
 			func() { p.Send(messaging.Msg{Src: "src", Dst: "dst", Payload: v}) })
@@ -27,8 +27,12 @@ func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 			t.Fatal("invalid payload was buffered")
 		}
 	}
-	p.Send(messaging.Msg{Src: "src", Dst: "dst"})
-	if msg, ok := p.PeekOutgoing(); !ok || msg.Payload != nil {
-		t.Fatalf("nil payload was not accepted: %#v, %v", msg, ok)
+	for _, payload := range []any{nil, registryTestMsg{Value: 42}} {
+		p := NewPort("src", 1, 1)
+		p.SetConnection(&benchmarkConnection{})
+		p.Send(messaging.Msg{Src: "src", Dst: "dst", Payload: payload})
+		if msg, ok := p.PeekOutgoing(); !ok || msg.Payload != payload {
+			t.Fatalf("valid payload was not accepted: %#v, %v", msg, ok)
+		}
 	}
 }
