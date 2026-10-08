@@ -81,11 +81,11 @@ them at the destination.
 
 ## Connection Pattern
 
-All connection types follow the same pattern:
+Create an ideal direct connection, then plug in the ports:
 
 ```go
-// 1. Build the connection
-conn := builder.Build("my_connection")
+// 1. Create the connection
+conn := direct.NewConnection("my_connection", sim, timing.GHz)
 
 // 2. Plug in ports
 conn.PlugIn(portA)
