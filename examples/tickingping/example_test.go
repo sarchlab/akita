@@ -35,9 +35,7 @@ func Example() {
 		WithPorts(Ports{Out: outB}).
 		Build("AgentB")
 
-	conn := direct.Definition.Builder().
-		WithSimulation(sim).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", sim, timing.GHz)
 
 	conn.PlugIn(agentA.Ports.Out)
 	conn.PlugIn(agentB.Ports.Out)

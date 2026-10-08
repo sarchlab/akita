@@ -61,9 +61,7 @@ var _ = Describe("DataMover", func() {
 			WithPorts(makePorts("DataMover", 16, 64, 64, 40960000)).
 			Build("DataMover")
 
-		conn = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		conn = direct.NewConnection("Conn", sim, timing.GHz)
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.Ports.Top)
 		conn.PlugIn(dataMover.Ports.Inside)

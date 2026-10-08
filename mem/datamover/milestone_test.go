@@ -121,9 +121,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort = dataMover.Ports.Top
 
-		conn = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		conn = direct.NewConnection("Conn", sim, timing.GHz)
 		conn.PlugIn(srcPort)
 		conn.PlugIn(topPort)
 		conn.PlugIn(dataMover.Ports.Inside)

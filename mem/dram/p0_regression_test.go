@@ -32,9 +32,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	top := dramComp.Ports.Top
 	src := newDriverPort("P0Src.Top", 1024)
 
-	conn := direct.Definition.Builder().
-		WithSimulation(sim).
-		Build("P0Conn")
+	conn := direct.NewConnection("P0Conn", sim, timing.GHz)
 	conn.PlugIn(top)
 	conn.PlugIn(src)
 

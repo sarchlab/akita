@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestDirectConnectionCursorRoundTrip confirms a registered connection is part
@@ -23,7 +24,7 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
-	conn := direct.Definition.Builder().WithSimulation(s).Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 	conn.State.NextPortID = 3
 
 	if err := s.SaveCheckpoint(path, buildID); err != nil {

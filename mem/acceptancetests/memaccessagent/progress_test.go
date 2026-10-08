@@ -33,7 +33,7 @@ func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
 	agent := memaccessagent.Definition.Builder().WithSimulation(s).WithSpec(spec).
 		WithResources(memaccessagent.Resources{LowModule: controller.Ports.Top}).
 		WithPorts(memaccessagent.Ports{Mem: twowaybuffered.NewPort("Agent.Mem", 4, 4)}).Build("Agent")
-	connection := direct.Definition.Builder().WithSimulation(s).Build("Conn")
+	connection := direct.NewConnection("Conn", s, timing.GHz)
 	connection.PlugIn(agent.Ports.Mem)
 	connection.PlugIn(controller.Ports.Top)
 	return agent, engine

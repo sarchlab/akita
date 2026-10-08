@@ -553,9 +553,7 @@ func setupMigrationController(
 
 	// One control connection carries the controller plus every component it
 	// drains/pauses/flushes/invalidates/enables; directconnection routes by Dst.
-	ctrlConn := direct.Definition.Builder().
-		WithSimulation(s).
-		Build("ConnControl")
+	ctrlConn := direct.NewConnection("ConnControl", s, timing.GHz)
 	ctrlConn.PlugIn(ctrl.Ports.Ctrl)
 	for _, c := range chains {
 		ctrlConn.PlugIn(c.rob.Ports.Control)

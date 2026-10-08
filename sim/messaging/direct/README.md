@@ -34,35 +34,21 @@ func (c *Connection) NotifySend()                         // Port has outgoing m
 `Connection` implements `messaging.Connection`, so ports can use it as their
 connection for message delivery. It is a connection, not a component: ports plug
 into it during wiring. It ticks on secondary tick events, so it runs after the
-components of the same cycle. The only configuration is the `Freq` field on
-`Spec`, which sets the connection's tick frequency.
+components of the same cycle. Its constructor takes an explicit tick frequency.
 
-## Builder Pattern
+## Construction
 
-A connection owns no resources, so it is configured by `Spec` alone and wired to
-the simulation through `WithSimulation(sim)`. The simulation supplies the engine and
-registers the connection.
+Pass the name, simulation, and frequency to `NewConnection`. The constructor
+uses the simulation's engine and registers the connection and its event handler.
+It retains the frequency internally for checkpoint validation; no public
+`Definition`, `Spec`, or builder is needed.
 
 ```go
-spec := direct.Definition.DefaultSpec
-spec.Freq = 1 * timing.GHz
-
-conn := direct.Definition.Builder().
-    WithSimulation(sim).
-    WithSpec(spec).
-    Build("Connection")
-
+conn := direct.NewConnection("Connection", s, timing.GHz)
 conn.PlugIn(portA)
 conn.PlugIn(portB)
 conn.PlugIn(portC)
 ```
-
-### Builder Methods
-
-| Method | Description |
-|---|---|
-| `WithSimulation(r)` | Source of the engine and connection registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and set `Freq` |
 
 ## Usage
 
@@ -70,10 +56,7 @@ conn.PlugIn(portC)
 // Create engine and connection
 engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
-conn := direct.Definition.Builder().
-    WithSimulation(sim).
-    WithSpec(direct.Definition.DefaultSpec).
-    Build("Bus")
+conn := direct.NewConnection("Bus", sim, timing.GHz)
 
 // Create components with ports, then plug them in
 conn.PlugIn(cache.Ports.Bottom)

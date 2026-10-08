@@ -10,12 +10,12 @@ Wire ports and links with finite bandwidth or latency are not supported yet.
 The simplest connection type — zero-latency message forwarding between ports.
 
 ```go
-import "github.com/sarchlab/akita/v5/sim/messaging/direct"
+import (
+    "github.com/sarchlab/akita/v5/sim/messaging/direct"
+    "github.com/sarchlab/akita/v5/sim/timing"
+)
 
-conn := direct.Definition.Builder().
-    WithSimulation(sim).
-    WithSpec(direct.Definition.DefaultSpec).
-    Build("conn")
+conn := direct.NewConnection("conn", sim, timing.GHz)
 
 conn.PlugIn(componentA.Ports.Top)
 conn.PlugIn(componentB.Ports.Top)

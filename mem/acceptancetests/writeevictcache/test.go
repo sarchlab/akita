@@ -43,9 +43,7 @@ func buildEnvironment(
 	s := simBuilder.Build()
 	engine := s.Engine()
 
-	conn := direct.Definition.Builder().
-		WithSimulation(s).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	// The agent sends to the cache's Top port, so the cache's ports are
 	// created before the agent is built.

@@ -111,9 +111,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			Build("Cache")
 		topPort = cacheComp.Ports.Top
 
-		conn = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Connection")
+		conn = direct.NewConnection("Connection", sim, timing.GHz)
 		conn.PlugIn(topPort)
 		conn.PlugIn(cacheComp.Ports.Bottom)
 		conn.PlugIn(cacheComp.Ports.Control)

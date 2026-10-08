@@ -60,9 +60,7 @@ var _ = Describe("Cache", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		connection = direct.NewConnection("Conn", sim, timing.GHz)
 
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land

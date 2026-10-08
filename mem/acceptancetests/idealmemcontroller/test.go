@@ -39,9 +39,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 	s := simBuilder.Build()
 	engine := s.Engine()
 
-	conn := direct.Definition.Builder().
-		WithSimulation(s).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	// The agent sends to the DRAM's Top port, so the DRAM's ports are created
 	// before the agent is built.

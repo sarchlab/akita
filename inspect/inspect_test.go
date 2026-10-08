@@ -341,11 +341,6 @@ func TestModuleDiscovery(t *testing.T) {
 	}
 
 	want := definitionDirs(t, "..")
-	// direct.Definition builds a connection, not a component. Connection
-	// definitions are outside the inspector's component-model schema.
-	want = slices.DeleteFunc(want, func(path string) bool {
-		return path == "sim/messaging/direct"
-	})
 	if !slices.Equal(got, want) {
 		t.Errorf("discovered definitions differ from the declared ones\n"+
 			"got:  %v\nwant: %v", got, want)

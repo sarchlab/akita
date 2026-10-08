@@ -252,10 +252,7 @@ func (c *Connector) connectPorts(
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = direct.Definition.Builder().
-			WithSimulation(c.simulation).
-			WithSpec(direct.Spec{Freq: c.defaultFreq}).
-			Build(connName)
+		conn = direct.NewConnection(connName, c.simulation, c.defaultFreq)
 	} else {
 		panic("non-ideal (with latency) connection is not implemented.")
 	}

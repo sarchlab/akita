@@ -55,9 +55,7 @@ func defaultPorts(name string) Ports {
 
 // makeDirectConnection builds a direct connection using the given simulation.
 func makeDirectConnection(sim timing.Simulation) messaging.Connection {
-	return direct.Definition.Builder().
-		WithSimulation(sim).
-		Build("Conn")
+	return direct.NewConnection("Conn", sim, timing.GHz)
 }
 
 // idealEndpoint is a minimal messaging.PortOwner used as the remote peer of the

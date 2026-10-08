@@ -97,9 +97,7 @@ var _ = Describe("Cache milestones", func() {
 	buildCache := func(policy string) {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		connection = direct.NewConnection("Conn", sim, timing.GHz)
 
 		cuPort = newDriverPort("CU.Top", 16)
 

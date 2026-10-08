@@ -236,7 +236,7 @@ func buildSim() (*sim.Simulation, *driver) {
 
 	d := buildDriver(s, dram.Ports.Top)
 
-	conn := direct.Definition.Builder().WithSimulation(s).Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 	conn.PlugIn(d.Ports.Mem)
 	conn.PlugIn(dram.Ports.Top)
 

@@ -49,7 +49,7 @@ func main() {
 		WithPorts(client.Ports{Out: twowaybuffered.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
-	conn := direct.Definition.Builder().WithSimulation(sim).Build("Conn")
+	conn := direct.NewConnection("Conn", sim, timing.GHz)
 	conn.PlugIn(cli.Ports.Out)
 	conn.PlugIn(srv.Ports.Out)
 

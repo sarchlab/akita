@@ -113,7 +113,7 @@ func main() {
 		Build("Client")
 
 	connect := func(name string, a, b messaging.Port) {
-		conn := direct.Definition.Builder().WithSimulation(sim).Build(name)
+		conn := direct.NewConnection(name, sim, timing.GHz)
 		conn.PlugIn(a)
 		conn.PlugIn(b)
 	}

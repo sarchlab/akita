@@ -157,9 +157,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Build("Cache")
 		m = cacheComp.Middlewares.Pipeline
 
-		conn = direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Connection")
+		conn = direct.NewConnection("Connection", sim, timing.GHz)
 		conn.PlugIn(cacheComp.Ports.Top)
 		conn.PlugIn(cacheComp.Ports.Bottom)
 		conn.PlugIn(cacheComp.Ports.Control)

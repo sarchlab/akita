@@ -31,8 +31,10 @@ Link bandwidth and latency modeling are a separate change.
 
 Buffered ports move to `sim/messaging/twowaybuffered` as `Port`, constructed by
 `NewPort(name, in, out)`. Ideal connections move from `noc/directconnection` to
-`sim/messaging/direct` as `Connection`, built with `Definition.Builder()` and
-configured from `Definition.DefaultSpec`. Old paths and constructors are removed.
+`sim/messaging/direct` as `Connection`, constructed with
+`NewConnection(name, simulation, frequency)`. Frequency is explicit; ports and
+connections have no component `Definition`, default spec, or builder. Old paths
+and constructors are removed.
 
 NoC builders now explicitly support buffered ports and ideal direct connections.
 The port factory is removed; endpoint construction rejects unsupported device

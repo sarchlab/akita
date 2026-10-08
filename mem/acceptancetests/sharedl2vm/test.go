@@ -465,16 +465,14 @@ func setupConnections(
 	}
 
 	// Shared data path: all L1 caches plus the L2 cache on one connection.
-	dataConn := direct.Definition.Builder().WithSimulation(s).Build("ConnL1L2")
+	dataConn := direct.NewConnection("ConnL1L2", s, timing.GHz)
 	dataConn.PlugIn(shared.l2Cache.Ports.Top)
 	for _, c := range chains {
 		dataConn.PlugIn(c.l1Cache.Ports.Bottom)
 	}
 
 	// Shared translation path: all L1 TLBs plus the L2 TLB on one connection.
-	transConn := direct.Definition.Builder().
-		WithSimulation(s).
-		Build("ConnL1L2TLB")
+	transConn := direct.NewConnection("ConnL1L2TLB", s, timing.GHz)
 	transConn.PlugIn(shared.l2TLB.Ports.Top)
 	for _, c := range chains {
 		transConn.PlugIn(c.l1TLB.Ports.Bottom)
@@ -510,7 +508,7 @@ func newStorage(
 }
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
-	conn := direct.Definition.Builder().WithSimulation(s).Build(name)
+	conn := direct.NewConnection(name, s, timing.GHz)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

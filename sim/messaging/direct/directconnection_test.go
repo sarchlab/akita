@@ -46,9 +46,7 @@ var _ = Describe("DirectConnection", func() {
 		engine = NewMockEngine(mockCtrl)
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = Definition.Builder().
-			WithSimulation(sim).
-			Build("Direct")
+		connection = NewConnection("Direct", sim, timing.GHz)
 
 		port1.EXPECT().SetConnection(connection)
 		connection.PlugIn(port1)
@@ -175,9 +173,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		connection = NewConnection("Conn", sim, timing.GHz)
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
@@ -232,9 +228,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 	numMsgsPerAgent := 1000
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	connection := Definition.Builder().
-		WithSimulation(sim).
-		Build("Conn")
+	connection := NewConnection("Conn", sim, timing.GHz)
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {

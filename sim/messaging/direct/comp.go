@@ -14,8 +14,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Spec holds immutable configuration for the DirectConnection.
-type Spec struct {
+// configuration retains the immutable frequency for checkpoint validation.
+type configuration struct {
 	Freq timing.Freq `json:"freq"`
 }
 
@@ -53,7 +53,7 @@ type Connection struct {
 
 	lock  sync.Mutex
 	name  string
-	spec  Spec
+	spec  configuration
 	ticks *ticking.Scheduler
 	ports ports
 }

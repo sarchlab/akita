@@ -239,7 +239,7 @@ func newStorage(
 }
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
-	conn := direct.Definition.Builder().WithSimulation(s).Build(name)
+	conn := direct.NewConnection(name, s, timing.GHz)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

@@ -211,9 +211,7 @@ var _ = Describe("DRAM Integration", func() {
 
 	It("should read and write via direct connection", func() {
 		srcPort := newDriverPort("Src.Top", 1024)
-		conn := direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("Conn")
+		conn := direct.NewConnection("Conn", sim, timing.GHz)
 		topPort := memCtrl.Ports.Top
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)

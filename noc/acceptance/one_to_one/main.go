@@ -75,9 +75,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 			Build(name)
 	}
 
-	conn := direct.Definition.Builder().
-		WithSimulation(s).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	conn.PlugIn(netPorts[0])
 	conn.PlugIn(netPorts[1])

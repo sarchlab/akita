@@ -38,9 +38,7 @@ agentB := Definition.Builder().
     WithPorts(Ports{Out: outB}).
     Build("AgentB")
 
-conn := direct.Definition.Builder().
-    WithSimulation(sim).
-    Build("Conn")
+conn := direct.NewConnection("Conn", sim, timing.GHz)
 
 conn.PlugIn(agentA.Ports.Out)
 conn.PlugIn(agentB.Ports.Out)
@@ -114,9 +112,10 @@ cycle.
   be full, and `Peek` lets you look at incoming messages without consuming.
 - **Connections move messages.** Plug ports into a `direct.Connection` and
   any plugged port can reach any other.
-- **The builder pattern is universal.** Components are built with
-  `Definition.Builder().WithX().Build(name)`, and connections with
-  `direct.Definition.Builder().WithX().Build(name)`.
+- **Components use builders; ports and connections use constructors.** Build
+  components with `Definition.Builder().WithX().Build(name)`. Create ports with
+  `twowaybuffered.NewPort(name, in, out)` and connections with
+  `direct.NewConnection(name, sim, freq)`.
 
 ## Where to Next
 

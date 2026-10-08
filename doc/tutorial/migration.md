@@ -16,8 +16,8 @@ Concrete ports and connections now live under `sim/messaging`:
 | `messaging.NewPort(name, in, out)` | `twowaybuffered.NewPort(name, in, out)` |
 | `noc/directconnection` | `sim/messaging/direct` |
 | `directconnection.Comp` | `direct.Connection` |
-| `directconnection.MakeBuilder()` | `direct.Definition.Builder()` |
-| `directconnection.DefaultSpec()` | `direct.Definition.DefaultSpec` |
+| `directconnection.MakeBuilder()...Build(name)` | `direct.NewConnection(name, s, freq)` |
+| `directconnection.DefaultSpec()` | Pass the frequency directly; no public spec or defaults |
 
 Import `github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered` for port
 construction. Components continue to declare `messaging.Port` fields, while
@@ -27,6 +27,11 @@ can now call checkpoint methods directly on the returned pointer.
 
 Port names, `SetOwner`, buffer behavior, and message checkpoint encoding are
 unchanged. Owner-assigned names and one-time binding are a separate follow-up.
+
+Direct connections use a constructor, just like ports. Pass an explicit frequency
+(`timing.GHz` preserves the former default); the constructor registers the
+connection and its event handler with the simulation. Neither ports nor direct
+connections use the component `Definition` and builder API.
 
 The NoC connector creates only buffered ports and ideal direct connections.
 Remove `WithPortFactory` calls; `PortFactory` is removed. Device ports attached

@@ -97,9 +97,7 @@ var _ = Describe("DRAM Statistics", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		conn := direct.Definition.Builder().
-			WithSimulation(sim).
-			Build("StatsConn")
+		conn := direct.NewConnection("StatsConn", sim, timing.GHz)
 
 		spec := dram.Definition.DefaultSpec
 		spec.Freq = 1 * timing.GHz
