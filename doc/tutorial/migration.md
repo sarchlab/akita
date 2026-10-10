@@ -52,6 +52,17 @@ Custom `timing.Simulation` implementations must provide `Initialize`,
 `RequireSetup`, and `RequireNameAvailable`. Custom `timing.Engine` implementations
 must provide `SetRunGuard` and check the installed guard before executing events.
 
+## Domain API deferred to v5.1
+
+The pre-release `modeling.Domain[P]` and `modeling.NewDomain` APIs have been
+removed before v5.0. Domain Spec/builders and hierarchical composition support
+are planned for v5.1 ([#498](https://github.com/sarchlab/akita/issues/498)).
+
+For v5.0, use ordinary Go structs and builders to group components, assign their
+final hierarchical names before construction, and expose existing member ports.
+Exposing a port does not rebind its owner. Complete the platform's wiring before
+calling `Initialize()`.
+
 ## Buffered ports and direct connections
 
 Concrete ports and connections now live under `sim/messaging`:
