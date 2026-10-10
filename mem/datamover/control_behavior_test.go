@@ -47,8 +47,12 @@ var _ = Describe("DataMover control behavior", func() {
 					Port: messaging.RemotePort("OutsideMem"),
 				},
 			}).
-			WithPorts(makePorts("DataMover", 16, 64, 64, 1024)).
 			Build("DataMover")
+		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 1024)
+		dataMover.BindPort("Top", dataMoverPorts.Top)
+		dataMover.BindPort("Inside", dataMoverPorts.Inside)
+		dataMover.BindPort("Outside", dataMoverPorts.Outside)
+		dataMover.BindPort("Control", dataMoverPorts.Control)
 
 		topPort = dataMover.Ports.Top
 		insidePort = dataMover.Ports.Inside
@@ -57,8 +61,12 @@ var _ = Describe("DataMover control behavior", func() {
 		for _, p := range []messaging.Port{
 			topPort, ctrlPort, insidePort, outsidePort,
 		} {
-			(&ccNoopConn{}).PlugIn(p)
+			(&ccNoopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	// makeMove builds a 64-byte outside->inside transfer, the minimal move

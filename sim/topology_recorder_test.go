@@ -55,10 +55,10 @@ func (c *namedConnection) Name() string { return c.name }
 // newOwnedPort creates a real port owned by owner and, unless conn is nil,
 // plugged into conn.
 func newOwnedPort(name string, owner *portOwner, conn messaging.Connection) messaging.Port {
-	p := twowaybuffered.NewPort(name, 1, 1)
-	p.SetOwner(owner)
+	p := twowaybuffered.NewPort(1, 1)
+	p.BindOwner(owner, name)
 	if conn != nil {
-		p.SetConnection(conn)
+		p.BindConnection(conn)
 	}
 
 	return p

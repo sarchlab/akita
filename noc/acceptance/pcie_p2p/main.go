@@ -24,6 +24,9 @@ func main() {
 	t := acceptance.NewTest()
 
 	createNetwork(s, t)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 	t.GenerateMsgs(1000)
 
 	err := engine.Run()
@@ -46,7 +49,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = twowaybuffered.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
+			ports[j] = twowaybuffered.NewPort(1, 1)
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()

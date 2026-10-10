@@ -78,13 +78,13 @@
 //	comp := mem.Definition.Builder().
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
-//	    WithPorts(mem.Ports{Top: twowaybuffered.NewPort("Mem.Top", 4, 4)}).
 //	    Build("Mem")
 //
-// Every port is created by the system builder and named "<instance>.<field>",
-// or "<instance>.<field>[i]" for member i of a port group; Build binds and
-// registers them, and no port is added later. A component's configuration
-// does not change after Build: do not reassign its Spec, Resources, Ports, or
-// Middlewares. A component type is identified by its package's import path;
-// Name returns the instance name given to Build.
+// After Build, bind each declared slot with comp.BindPort("Top", port).
+// The component assigns the owner and full name, such as "GPU[0].L1Cache.Top".
+// Use "Links[0]" for an indexed port group. Bind connections with
+// conn.BindPort(port), then call the shared simulation's Initialize method.
+// Initialize validates all ports, freezes topology, and creates State and
+// Middlewares. Only then seed work and run the engine. Ports and Middlewares
+// must not be reassigned directly.
 package event

@@ -73,13 +73,12 @@ func setupTest(
 			MemProviderMapper:         atMemoryMapper,
 			TranslationProviderMapper: atTranslationMapper,
 		}).
-		WithPorts(addresstranslator.Ports{
-			Top:         newPort("AT.Top"),
-			Bottom:      newPort("AT.Bottom"),
-			Translation: newPort("AT.Translation"),
-			Control:     newPort("AT.Control"),
-		}).
 		Build("AT")
+
+	at.BindPort("Top", newPort("AT.Top"))
+	at.BindPort("Bottom", newPort("AT.Bottom"))
+	at.BindPort("Translation", newPort("AT.Translation"))
+	at.BindPort("Control", newPort("AT.Control"))
 
 	// Insert a reorder buffer between the agent and the address translator so
 	// the trace exercises the ROB instrumentation end-to-end.
@@ -96,18 +95,21 @@ func setupTest(
 		WithResources(memaccessagent.Resources{
 			LowModule: robComp.Ports.Top,
 		}).
-		WithPorts(memaccessagent.Ports{
-			Mem: newPort("MemAccessAgent.Mem"),
-		}).
 		Build("MemAccessAgent")
-	memaccessagent.SetProgressTrackers(agent,
-		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
-		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
-	)
+
+	agent.BindPort("Mem", newPort("MemAccessAgent.Mem"))
 
 	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,
 		l1Cache, l2Cache, memCtrl)
+
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+	memaccessagent.SetProgressTrackers(agent,
+		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+	)
 
 	return s, engine, agent
 }
@@ -119,15 +121,15 @@ func buildROB(s *sim.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = bottomUnit
 
-	return rob.Definition.Builder().
+	builtComponent := rob.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(robSpec).
-		WithPorts(rob.Ports{
-			Top:     newPort("ROB.Top"),
-			Bottom:  newPort("ROB.Bottom"),
-			Control: newPort("ROB.Control"),
-		}).
 		Build("ROB")
+
+	builtComponent.BindPort("Top", newPort("ROB.Top"))
+	builtComponent.BindPort("Bottom", newPort("ROB.Bottom"))
+	builtComponent.BindPort("Control", newPort("ROB.Control"))
+	return builtComponent
 }
 
 //nolint:funlen // wires the whole hierarchy in one place
@@ -146,11 +148,10 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(idealmemcontroller.Resources{
 			Storage: newStorage(s, 4*mem.GB, "MemCtrl.Storage"),
 		}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     newPort("MemCtrl.Top"),
-			Control: newPort("MemCtrl.Control"),
-		}).
 		Build("MemCtrl")
+
+	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
+	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
 
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
@@ -165,12 +166,11 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 				memCtrl.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(writeback.Ports{
-			Top:     newPort("L2Cache.Top"),
-			Bottom:  newPort("L2Cache.Bottom"),
-			Control: newPort("L2Cache.Control"),
-		}).
 		Build("L2Cache")
+
+	L2Cache.BindPort("Top", newPort("L2Cache.Top"))
+	L2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
+	L2Cache.BindPort("Control", newPort("L2Cache.Control"))
 
 	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
@@ -185,12 +185,11 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 				L2Cache.Ports.Top.AsRemote(),
 			},
 		}).
-		WithPorts(writethroughcache.Ports{
-			Top:     newPort("L1Cache.Top"),
-			Bottom:  newPort("L1Cache.Bottom"),
-			Control: newPort("L1Cache.Control"),
-		}).
 		Build("L1Cache")
+
+	L1Cache.BindPort("Top", newPort("L1Cache.Top"))
+	L1Cache.BindPort("Bottom", newPort("L1Cache.Bottom"))
+	L1Cache.BindPort("Control", newPort("L1Cache.Control"))
 
 	return L1Cache, L2Cache, memCtrl
 }
@@ -213,11 +212,10 @@ func buildTranslationHierarchy(
 		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
-		WithPorts(mmu.Ports{
-			Top:     newPort("IoMMU.Top"),
-			Control: newPort("IoMMU.Control"),
-		}).
 		Build("IoMMU")
+
+	IoMMU.BindPort("Top", newPort("IoMMU.Top"))
+	IoMMU.BindPort("Control", newPort("IoMMU.Control"))
 
 	L2TLBMapper := &mem.SinglePortMapper{
 		Port: IoMMU.Ports.Top.AsRemote(),
@@ -232,12 +230,11 @@ func buildTranslationHierarchy(
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: L2TLBMapper}).
-		WithPorts(tlb.Ports{
-			Top:     newPort("L2TLB.Top"),
-			Bottom:  newPort("L2TLB.Bottom"),
-			Control: newPort("L2TLB.Control"),
-		}).
 		Build("L2TLB")
+
+	L2TLB.BindPort("Top", newPort("L2TLB.Top"))
+	L2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
+	L2TLB.BindPort("Control", newPort("L2TLB.Control"))
 
 	TLBMapper := &mem.SinglePortMapper{
 		Port: L2TLB.Ports.Top.AsRemote(),
@@ -252,12 +249,11 @@ func buildTranslationHierarchy(
 		WithSimulation(s).
 		WithSpec(tlbSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: TLBMapper}).
-		WithPorts(tlb.Ports{
-			Top:     newPort("TLB.Top"),
-			Bottom:  newPort("TLB.Bottom"),
-			Control: newPort("TLB.Control"),
-		}).
 		Build("TLB")
+
+	TLB.BindPort("Top", newPort("TLB.Top"))
+	TLB.BindPort("Bottom", newPort("TLB.Bottom"))
+	TLB.BindPort("Control", newPort("TLB.Control"))
 
 	return IoMMU, TLB, L2TLB
 }
@@ -289,9 +285,9 @@ func setupPageTable(maxAddress uint64, s *sim.Simulation) vm.PageTable {
 }
 
 // newPort creates an unowned port named fullName, for a component that takes
-// its ports at Build. The component's Build binds and registers it.
+// its ports during wiring. BindPort names, binds, and registers it.
 func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(fullName, 16, 16)
+	return twowaybuffered.NewPort(16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the
@@ -309,8 +305,8 @@ func newStorage(
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := direct.NewConnection(name, s, timing.GHz)
-	conn.PlugIn(p1)
-	conn.PlugIn(p2)
+	conn.BindPort(p1)
+	conn.BindPort(p2)
 }
 
 func setupConnection(

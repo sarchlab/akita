@@ -25,6 +25,9 @@ func main() {
 	t := acceptance.NewTest()
 
 	createNetwork(s, t)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 	t.GenerateMsgs(20000)
 
 	err := engine.Run()
@@ -47,7 +50,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = twowaybuffered.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
+			ports[j] = twowaybuffered.NewPort(1, 1)
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
@@ -57,28 +60,29 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	// The two endpoints are linked directly, so each one sends its flits to
 	// the other's network port.
 	netPorts := []messaging.Port{
-		twowaybuffered.NewPort("EP1.NetworkPort", 4, 4),
-		twowaybuffered.NewPort("EP2.NetworkPort", 4, 4),
+		twowaybuffered.NewPort(4, 4),
+		twowaybuffered.NewPort(4, 4),
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {
 		epSpec := endpoint.Definition.DefaultSpec
 		epSpec.Freq = freq
 		epSpec.FlitByteSize = 8
-		epSpec.DefaultSwitchDst = netPorts[1-i].AsRemote()
+		epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("EP%d.NetworkPort", 2-i))
 
-		endpoint.Definition.Builder().
+		ep := endpoint.Definition.Builder().
 			WithSimulation(s).
 			WithSpec(epSpec).
 			WithResources(endpoint.Resources{DevicePorts: agents[i].AgentPorts}).
-			WithPorts(endpoint.Ports{NetworkPort: netPorts[i]}).
 			Build(name)
+		ep.BindPort("NetworkPort", netPorts[i])
+		endpoint.ConnectDevices(ep)
 	}
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)
 
-	conn.PlugIn(netPorts[0])
-	conn.PlugIn(netPorts[1])
+	conn.BindPort(netPorts[0])
+	conn.BindPort(netPorts[1])
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])

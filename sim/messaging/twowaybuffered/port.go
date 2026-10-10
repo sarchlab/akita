@@ -3,10 +3,12 @@ package twowaybuffered
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 )
 
@@ -25,26 +27,36 @@ type Port struct {
 
 // AsRemote returns the remote port name.
 func (p *Port) AsRemote() messaging.RemotePort {
+	if p.owner == nil {
+		panic("twowaybuffered: port must have an owner before AsRemote")
+	}
 	return messaging.RemotePort(p.name)
 }
 
-// SetConnection sets which connection is plugged in to this port.
-func (p *Port) SetConnection(conn messaging.Connection) {
+// BindConnection sets the reverse attachment once, during setup.
+// Assemblers normally call Connection.BindPort, which updates both sides.
+func (p *Port) BindConnection(conn messaging.Connection) {
+	if conn == nil || (reflect.ValueOf(conn).Kind() == reflect.Pointer && reflect.ValueOf(conn).IsNil()) {
+		panic("twowaybuffered: cannot bind a nil connection")
+	}
+	if p.owner == nil {
+		panic("twowaybuffered: bind owner before connection")
+	}
+	if owner, ok := p.owner.(interface{ RequireSetup() }); ok {
+		owner.RequireSetup()
+	}
+	if c, ok := conn.(interface{ RequireSetup() }); ok {
+		c.RequireSetup()
+	}
 	if p.conn != nil {
-		connName := p.conn.Name()
-		newConnName := conn.Name()
-		panicMsg := fmt.Sprintf(
-			"connection already set to %s, now connecting to %s",
-			connName, newConnName,
-		)
-		panic(panicMsg)
+		panic("twowaybuffered: port already has a connection")
 	}
 
 	p.conn = conn
 }
 
 // Connection returns the connection plugged in to this port, or nil if the port
-// is not connected. It is the read-side counterpart of SetConnection and lets
+// is not connected. It is the read-side counterpart of BindConnection and lets
 // the topology recorder reconstruct the component graph from the port side.
 func (p *Port) Connection() messaging.Connection {
 	return p.conn
@@ -55,9 +67,21 @@ func (p *Port) Owner() messaging.PortOwner {
 	return p.owner
 }
 
-// SetOwner sets the owner of the port.
-func (p *Port) SetOwner(owner messaging.PortOwner) {
+// BindOwner assigns the owner and name once. Component.BindPort coordinates
+// the declared slot and registration; custom owners call this method directly.
+func (p *Port) BindOwner(owner messaging.PortOwner, name string) {
+	if owner == nil || (reflect.ValueOf(owner).Kind() == reflect.Pointer && reflect.ValueOf(owner).IsNil()) {
+		panic("twowaybuffered: cannot bind a nil owner")
+	}
+	if p.owner != nil {
+		panic("twowaybuffered: port already has an owner")
+	}
+	naming.MustBeValid(name)
+	if c, ok := owner.(interface{ RequireSetup() }); ok {
+		c.RequireSetup()
+	}
 	p.owner = owner
+	p.name = name
 }
 
 // Name returns the name of the port.
@@ -255,28 +279,26 @@ func (p *Port) NotifyAvailable() {
 }
 
 // mustHaveOwner returns the port's owner. A port carries traffic only after
-// it is bound: a component's Build binds its ports, and an owner written
-// without a component model calls SetOwner. A port without an owner is a wiring
+// it is bound: a component's BindPort binds its ports, and an owner written
+// without a component model calls BindOwner. A port without an owner is a wiring
 // error, so it panics.
 func (p *Port) mustHaveOwner() messaging.PortOwner {
 	if p.owner == nil {
 		panic(fmt.Sprintf("twowaybuffered: port %q has no owner; a component's "+
-			"Build binds its ports, and any other owner must call SetOwner", p.name))
+			"BindPort binds its ports, and any other owner must call BindOwner", p.name))
 	}
 
 	return p.owner
 }
 
 // NewPort creates a port with default behavior, an incoming buffer, and an
-// outgoing buffer. The port has no owner yet: a component's Build binds it to
+// outgoing buffer. The port has no owner yet: a component's BindPort binds it to
 // the component, and an owner written without a component model calls
-// SetOwner.
-func NewPort(name string, incomingBufCap, outgoingBufCap int) *Port {
+// BindOwner.
+func NewPort(incomingBufCap, outgoingBufCap int) *Port {
 	p := new(Port)
 	p.incomingBuf = queueing.MakeBuffer[messaging.Msg](incomingBufCap)
 	p.outgoingBuf = queueing.MakeBuffer[messaging.Msg](outgoingBufCap)
-	p.name = name
-
 	return p
 }
 

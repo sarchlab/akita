@@ -14,7 +14,7 @@ type agentMiddleware struct {
 	comp *Comp
 
 	// writeProgressBar and readProgressBar observe the run. SetProgressTrackers
-	// attaches them after Build; they are not simulation state.
+	// attaches them after Initialize; they are not simulation state.
 	writeProgressBar ProgressTracker
 	readProgressBar  ProgressTracker
 }

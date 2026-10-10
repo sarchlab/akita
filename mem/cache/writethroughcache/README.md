@@ -70,7 +70,7 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 Configuration is supplied as a whole through `WithSpec` (start from
 `Definition.DefaultSpec`); the engine and registration come from
 `WithSimulation`; storage and the address-to-port mapping come from
-`WithResources`; the port instances come from `WithPorts`.
+`WithResources`; the port instances come from `component.BindPort` after Build.
 
 ```go
 spec := writethroughcache.Definition.DefaultSpec
@@ -85,12 +85,10 @@ cache := writethroughcache.Definition.Builder().
         Storage:       mem.NewStorage(spec.TotalByteSize),
         AddressMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
-    WithPorts(writethroughcache.Ports{
-        Top:     twowaybuffered.NewPort("L2Cache.Top", 16, 16),
-        Bottom:  twowaybuffered.NewPort("L2Cache.Bottom", 16, 16),
-        Control: twowaybuffered.NewPort("L2Cache.Control", 16, 16),
-    }).
     Build("L2Cache")
+cache.BindPort("Top", twowaybuffered.NewPort(16, 16))
+cache.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
+cache.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 topPort := cache.Ports.Top
 ```
@@ -102,12 +100,14 @@ topPort := cache.Ports.Top
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
 | `WithResources(r)` | Backing storage (required) and the address-to-port mapper / remote ports. |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required). |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top** — accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns
   `memprotocol.DataReadyRsp` and `memprotocol.WriteDoneRsp`.

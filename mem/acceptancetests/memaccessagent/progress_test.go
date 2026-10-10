@@ -24,18 +24,26 @@ func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
 	s := modeling.NewStandaloneSimulation(engine)
 	controller := idealmemcontroller.Definition.Builder().WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: mem.NewStorage(4096)}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("Mem.Top", 4, 4),
-			Control: twowaybuffered.NewPort("Mem.Control", 4, 4),
-		}).Build("Mem")
+		Build("Mem")
+
+	controller.BindPort("Top", twowaybuffered.NewPort(4, 4))
+	controller.BindPort("Control", twowaybuffered.NewPort(4, 4))
+
 	spec := memaccessagent.Definition.DefaultSpec
 	spec.MaxAddress, spec.WriteLeft, spec.ReadLeft = 4096, 8, 8
 	agent := memaccessagent.Definition.Builder().WithSimulation(s).WithSpec(spec).
 		WithResources(memaccessagent.Resources{LowModule: controller.Ports.Top}).
-		WithPorts(memaccessagent.Ports{Mem: twowaybuffered.NewPort("Agent.Mem", 4, 4)}).Build("Agent")
+		Build("Agent")
+
+	agent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+
 	connection := direct.NewConnection("Conn", s, timing.GHz)
-	connection.PlugIn(agent.Ports.Mem)
-	connection.PlugIn(controller.Ports.Top)
+	connection.BindPort(agent.Ports.Mem)
+	connection.BindPort(controller.Ports.Top)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+
 	return agent, engine
 }
 

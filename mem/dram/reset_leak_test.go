@@ -26,13 +26,18 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(1 * mem.MB)}).
-		WithPorts(defaultPorts("DRAM", 16)).
 		Build("DRAM")
+	compPorts := defaultPorts("DRAM", 16)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Control", compPorts.Control)
 
 	topPort := comp.Ports.Top
 	ctrlPort := comp.Ports.Control
-	(&noopConn{}).PlugIn(topPort)
-	(&noopConn{}).PlugIn(ctrlPort)
+	(&noopConn{}).BindPort(topPort)
+	(&noopConn{}).BindPort(ctrlPort)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// Attach the leak tracer BEFORE any traffic, so it sees every task start.
 	// Deliberately not CollectIncomingBufferTrace: those buffer tasks are ended

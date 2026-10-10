@@ -12,7 +12,7 @@ import (
 // Definition declares the switch, a ticking component: its default
 // configuration and its behavior. Its ports and middlewares are the fields of
 // Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name), passing one port per link in Ports.Port
+// Definition.Builder()...Build(name), then binds one port per link in Ports.Port
 // and the matching links in Resources.Links; tooling reads the same
 // declaration statically.
 var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{

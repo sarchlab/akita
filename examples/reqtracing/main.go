@@ -36,8 +36,9 @@ func main() {
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(server.Ports{Out: twowaybuffered.NewPort("Server.Out", 4, 4)}).
 		Build("Server")
+
+	srv.BindPort("Out", twowaybuffered.NewPort(4, 4))
 
 	clientSpec := client.Definition.DefaultSpec
 	clientSpec.Dst = srv.Ports.Out.AsRemote()
@@ -46,12 +47,16 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: twowaybuffered.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
+	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))
+
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
-	conn.PlugIn(cli.Ports.Out)
-	conn.PlugIn(srv.Ports.Out)
+	conn.BindPort(cli.Ports.Out)
+	conn.BindPort(srv.Ports.Out)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// The filter is how each tracer selects the tasks it cares about.
 	roundTrip := tracing.NewAverageTimeTracer(

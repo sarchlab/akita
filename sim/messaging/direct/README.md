@@ -26,7 +26,7 @@ type Connection struct {
     // ...
 }
 
-func (c *Connection) PlugIn(port messaging.Port)          // Connect a port
+func (c *Connection) BindPort(port messaging.Port)          // Connect a port
 func (c *Connection) NotifyAvailable(p messaging.Port)    // Port buffer space freed
 func (c *Connection) NotifySend()                         // Port has outgoing message
 ```
@@ -45,9 +45,9 @@ It retains the frequency internally for checkpoint validation; no public
 
 ```go
 conn := direct.NewConnection("Connection", s, timing.GHz)
-conn.PlugIn(portA)
-conn.PlugIn(portB)
-conn.PlugIn(portC)
+conn.BindPort(portA)
+conn.BindPort(portB)
+conn.BindPort(portC)
 ```
 
 ## Usage
@@ -59,8 +59,8 @@ sim := modeling.NewStandaloneSimulation(engine)
 conn := direct.NewConnection("Bus", sim, timing.GHz)
 
 // Create components with ports, then plug them in
-conn.PlugIn(cache.Ports.Bottom)
-conn.PlugIn(memCtrl.Ports.Top)
+conn.BindPort(cache.Ports.Bottom)
+conn.BindPort(memCtrl.Ports.Top)
 ```
 
 When component A sends a message to component B:

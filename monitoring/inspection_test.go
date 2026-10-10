@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,7 +46,9 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 		"parallel": timing.NewParallelEngine(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(e))
+			s := modeling.NewStandaloneSimulation(e)
+			require.NoError(t, s.Initialize())
+			m := newTestMonitorWithSimulation(s)
 			component := newSliceFieldComponent("snapshot", []int{10, 20})
 			m.RegisterComponent(component)
 			e.RegisterHandler("model", inspectionHandler(func(timing.Event) {
@@ -105,7 +108,9 @@ func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 	if err := e.Pause(); err != nil {
 		t.Fatal(err)
 	}
-	m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(e))
+	s := modeling.NewStandaloneSimulation(e)
+	require.NoError(t, s.Initialize())
+	m := newTestMonitorWithSimulation(s)
 	w := httptest.NewRecorder()
 	m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 	var state engineStateRsp
@@ -121,6 +126,8 @@ type stateReportingEngine struct {
 	timing.Engine
 	state timing.EngineState
 }
+
+func (stateReportingEngine) SetRunGuard(func() error) {}
 
 func (e stateReportingEngine) State() timing.EngineState { return e.state }
 

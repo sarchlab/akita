@@ -135,6 +135,9 @@ func main() {
 	worker := Definition.Builder().
 		WithSimulation(sim).
 		Build("Worker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	tracer := newMaxDurationTracer()
 	tracing.CollectTrace(worker, tracer)

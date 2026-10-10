@@ -1,5 +1,7 @@
 package switches
 
+import "fmt"
+
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,6 +30,7 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		port1 = NewMockPort(mockCtrl)
@@ -69,7 +72,7 @@ var _ = Describe("Switch", func() {
 
 		for _, p := range []*MockPort{port1, port2} {
 			p.EXPECT().Owner().Return(nil)
-			p.EXPECT().SetOwner(gomock.Any())
+			p.EXPECT().BindOwner(gomock.Any(), gomock.Any())
 		}
 
 		link := func(remote *MockPort) Link {
@@ -88,8 +91,15 @@ var _ = Describe("Switch", func() {
 				RoutingTable: routingTable,
 				Links:        []Link{link(remote1), link(remote2)},
 			}).
-			WithPorts(Ports{Port: []messaging.Port{port1, port2}}).
 			Build("Switch")
+		swPorts := Ports{Port: []messaging.Port{port1, port2}}
+		for i, p := range swPorts.Port {
+			sw.BindPort(fmt.Sprintf("Port[%d]", i), p)
+			p.(*MockPort).EXPECT().Owner().Return(sw).AnyTimes()
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		rfsMW = sw.Middlewares.RouteForwardSend
 		rpMW = sw.Middlewares.ReceivePipeline

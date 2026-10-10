@@ -29,10 +29,11 @@ Topology methods:
 - `ConnectDevice(switchID, ports, param)` — create an endpoint for the device's
   ports and link it to a switch.
 - `ConnectSwitches(leftID, rightID, param)` — add a bidirectional switch link.
-- `EstablishRoute()` — build the switches, then run the router to populate every
-  switch's routing table. Call it once, after the last `ConnectDevice` and
-  `ConnectSwitches`: a switch takes all of its ports at `Build`, so it is built
-  only when its links are final.
+- `EstablishRoute()` — build and bind the switches, complete pending links,
+  then run the router to populate every switch's routing table. Call it once,
+  after the last `ConnectDevice` and `ConnectSwitches`: `Resources.Links` is
+  fixed at Build, so each switch is built only when its links are final.
+  Call `simulation.Initialize()` after the remaining platform wiring.
 
 Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
 and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel
@@ -58,15 +59,17 @@ table for every reachable device port.
 
 ## How It Works
 
-`ConnectDevice` builds an `endpoint`, creates the switch-side port, records it
-on the switch's node, and links the two with a `direct.Connection`, recording
-the link as `Remote`s on both nodes. `ConnectSwitches` does the same
-symmetrically for two switches. A switch takes all of its ports at `Build`, so
-the connector builds the switches only in `EstablishRoute` (through
-`BuildSwitches`), once the topology is described; it then gathers all nodes
-and lets the chosen `Router` fill in every switch's `routing.Table` so that
-flits can reach any device. A `ConnectDevice` or `ConnectSwitches` that adds a
-port to a switch that is already built panics.
+`ConnectDevice` builds an `endpoint`, binds its network port, attaches the
+device ports through `endpoint.ConnectDevices`, and creates the switch-side
+port. It creates a `direct.Connection` and records the pending attachment
+and `Remote`s on both nodes. `ConnectSwitches` similarly records a pending
+link between two switches. Because `Resources.Links` is fixed at Build, the
+connector waits until the topology is described before building switches in
+`EstablishRoute`. Its `BuildSwitches` step binds every switch port and then
+attaches both ends of each pending connection. The chosen `Router` fills in
+every switch's `routing.Table` so flits can reach any device. Adding a port to
+a switch that is already built panics. Initialize the simulation after all
+platform wiring is complete.
 
 ## Supported ports and links
 

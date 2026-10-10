@@ -25,7 +25,7 @@ type noopConn struct {
 }
 
 func (c *noopConn) Name() string                     { return "NoopConn" }
-func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
@@ -34,8 +34,8 @@ func (c *noopConn) NotifySend()                      {}
 // named name, each with a buffer of 16 (the historical default).
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", 16, 16),
-		Bottom:  twowaybuffered.NewPort(name+".Bottom", 16, 16),
-		Control: twowaybuffered.NewPort(name+".Control", 16, 16),
+		Top:     twowaybuffered.NewPort(16, 16),
+		Bottom:  twowaybuffered.NewPort(16, 16),
+		Control: twowaybuffered.NewPort(16, 16),
 	}
 }

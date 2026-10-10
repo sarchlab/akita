@@ -26,13 +26,18 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
-			WithPorts(makePorts("MemCtrl", 16)).
 			Build("MemCtrl")
+		compPorts := makePorts("MemCtrl", 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Control", compPorts.Control)
 
 		ctrl := comp.Ports.Control
 		conn := &noopConn{}
-		conn.PlugIn(comp.Ports.Top)
-		conn.PlugIn(ctrl)
+		conn.BindPort(comp.Ports.Top)
+		conn.BindPort(ctrl)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,

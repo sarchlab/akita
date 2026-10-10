@@ -237,6 +237,7 @@ var _ = Describe("Simulation", func() {
 				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
 			}()
 			noSerializerSim.RegisterComponent(testComponent{name: "comp"})
+			Expect(noSerializerSim.Initialize()).To(Succeed())
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
@@ -259,6 +260,7 @@ var _ = Describe("Simulation", func() {
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
+			Expect(parallelSim.Initialize()).To(Succeed())
 			err := parallelSim.SaveCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
@@ -271,6 +273,7 @@ var _ = Describe("Simulation", func() {
 			err := writeArchive(path, "other-build", dummyPayloads(simulation))
 			Expect(err).ToNot(HaveOccurred())
 
+			Expect(simulation.Initialize()).To(Succeed())
 			err = simulation.LoadCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring("build ID mismatch")))
@@ -291,6 +294,7 @@ var _ = Describe("Simulation", func() {
 			err := writeArchive(path, "test-build", entries)
 			Expect(err).ToNot(HaveOccurred())
 
+			Expect(simulation.Initialize()).To(Succeed())
 			err = simulation.LoadCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
@@ -306,6 +310,7 @@ var _ = Describe("Simulation", func() {
 			err := writeArchive(path, "test-build", entries)
 			Expect(err).ToNot(HaveOccurred())
 
+			Expect(simulation.Initialize()).To(Succeed())
 			err = simulation.LoadCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
@@ -332,6 +337,7 @@ var _ = Describe("Simulation", func() {
 			Expect(len(full)).To(BeNumerically(">", 4))
 			Expect(os.WriteFile(path, full[:len(full)/2], 0o644)).To(Succeed())
 
+			Expect(simulation.Initialize()).To(Succeed())
 			err = simulation.LoadCheckpoint(path, "test-build")
 
 			Expect(err).To(HaveOccurred())
@@ -469,6 +475,9 @@ var _ = Describe("Checkpoint round trip", func() {
 			WithCapacity(4 * mem.KB).
 			WithSimulation(sim).
 			Build("Mem")
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		// Establish runtime state across all four entity kinds.
 		comp.State = roundTripState{Count: 7}
@@ -542,7 +551,11 @@ var resumeDef = ticking.Definition[
 
 func buildResumeSim() (*Simulation, *resumeComp) {
 	sim := MakeBuilder().Build()
-	return sim, resumeDef.Builder().WithSimulation(sim).Build("Worker")
+	c := resumeDef.Builder().WithSimulation(sim).Build("Worker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+	return sim, c
 }
 
 var _ = Describe("Mid-transaction resume", func() {
@@ -624,7 +637,11 @@ var tickCountDef = ticking.Definition[
 
 func buildTickCountSim() (*Simulation, *tickCountComp) {
 	sim := MakeBuilder().Build()
-	return sim, tickCountDef.Builder().WithSimulation(sim).Build("Ticker")
+	c := tickCountDef.Builder().WithSimulation(sim).Build("Ticker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+	return sim, c
 }
 
 var _ = Describe("Tick scheduler guard restore", func() {
@@ -701,7 +718,11 @@ var wakeDef = wakeup.Definition[wakeSpec, wakeState, modeling.None, noPorts, wak
 
 func buildWakeSim() (*Simulation, *wakeComp) {
 	sim := MakeBuilder().Build()
-	return sim, wakeDef.Builder().WithSimulation(sim).Build("Waker")
+	c := wakeDef.Builder().WithSimulation(sim).Build("Waker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+	return sim, c
 }
 
 var _ = Describe("Event-driven wakeup guard restore", func() {

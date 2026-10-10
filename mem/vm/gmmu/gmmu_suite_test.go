@@ -25,9 +25,9 @@ func TestValidateState(t *testing.T) {
 // default buffer sizes.
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(name+".Top", 16, 16),
-		Bottom:  twowaybuffered.NewPort(name+".Bottom", 16, 16),
-		Control: twowaybuffered.NewPort(name+".Control", 4, 4),
+		Top:     twowaybuffered.NewPort(16, 16),
+		Bottom:  twowaybuffered.NewPort(16, 16),
+		Control: twowaybuffered.NewPort(4, 4),
 	}
 }
 

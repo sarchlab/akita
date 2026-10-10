@@ -44,15 +44,22 @@ var _ = Describe("TLB control behavior", func() {
 					Port: remotePort,
 				},
 			}).
-			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
+		tlbCompPorts := defaultPorts("TLB")
+		tlbComp.BindPort("Top", tlbCompPorts.Top)
+		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
+		tlbComp.BindPort("Control", tlbCompPorts.Control)
 
 		topPort = tlbComp.Ports.Top
 		bottomPort = tlbComp.Ports.Bottom
 		controlPort = tlbComp.Ports.Control
 		for _, p := range []messaging.Port{topPort, bottomPort, controlPort} {
-			(&ccNoopConn{}).PlugIn(p)
+			(&ccNoopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeLookup := func(vAddr uint64) messaging.Msg {

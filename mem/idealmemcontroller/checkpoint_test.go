@@ -36,11 +36,13 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
-			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
-		}).
 		Build("DRAM")
+
+	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 
 	storage.Write(0x40, []byte(payload))
 	dram.State.CurrentCmdID = 7

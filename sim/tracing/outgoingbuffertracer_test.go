@@ -49,7 +49,7 @@ type obFakeConn struct {
 }
 
 func (c *obFakeConn) Name() string                   { return "Conn" }
-func (c *obFakeConn) PlugIn(messaging.Port)          {}
+func (c *obFakeConn) BindPort(messaging.Port)        {}
 func (c *obFakeConn) NotifyAvailable(messaging.Port) {}
 func (c *obFakeConn) NotifySend()                    {}
 
@@ -65,9 +65,9 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		tracer = &obRecordingTracer{}
 		CollectTrace(comp, tracer)
 
-		port = twowaybuffered.NewPort("Comp.Bottom", 4, 4)
-		port.SetOwner(comp)
-		port.SetConnection(&obFakeConn{})
+		port = twowaybuffered.NewPort(4, 4)
+		port.BindOwner(comp, "Comp.Bottom")
+		port.BindConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(port)
 	})
 
@@ -138,9 +138,9 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 	It("is a no-op when the owning component is not being traced", func() {
 		untraced := &obFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
-		p2 := twowaybuffered.NewPort("Untraced.Bottom", 4, 4)
-		p2.SetOwner(untraced)
-		p2.SetConnection(&obFakeConn{})
+		p2 := twowaybuffered.NewPort(4, 4)
+		p2.BindOwner(untraced, "Untraced.Bottom")
+		p2.BindConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(p2)
 
 		untraced.time = 100

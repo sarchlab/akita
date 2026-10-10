@@ -6,8 +6,11 @@
 package base
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -37,23 +40,23 @@ type ComponentBase[S, T, R, P, M any] struct {
 	// Build. They are fixed from then on.
 	Resources R
 
-	// Ports holds the instance's ports: the port instances the system builder
-	// passed to Build, bound to this instance. They are fixed from then on.
+	// Ports holds the slots assigned through BindPort during wiring.
+	// Initialization freezes these bindings; do not assign the fields directly.
 	Ports P
 
 	// Middlewares holds the instance's behavior. Every event the instance
 	// receives goes to each field in declaration order.
 	Middlewares M
 
-	name       string
-	owner      modeling.Component
-	simulation timing.Simulation
+	name        string
+	owner       modeling.Component
+	simulation  timing.Simulation
+	initialize  func()
+	initialized bool
 }
 
-// Init sets up the ComponentBase embedded in owner, a component being built:
-// it records the instance's name, simulation, Spec, and Resources, and binds
-// each port to owner. A model's Build calls it first, then creates the State
-// and the middlewares, and calls Register last.
+// Init records the instance identity, simulation, Spec and Resources.
+// State and Middlewares are created later by the deferred initializer.
 func Init[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
 	owner modeling.Component,
@@ -61,25 +64,17 @@ func Init[S, T, R, P, M any](
 	name string,
 	spec S,
 	resources R,
-	ports P,
 ) {
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
 	base.Spec = cloneSpec(spec)
 	base.Resources = resources
-	base.Ports = ports
-	bindPorts(owner, &base.Ports)
 }
 
-// Register registers the instance that embeds base with its simulation: each
-// of its ports, then the instance as the handler of its events (when the
-// engine takes handlers) and as a component. A model's Build calls it last,
-// once the State and the middlewares exist, so a Build that fails registers
-// nothing.
+// Register adds the configured instance and its event handler to the simulation.
+// BindPort registers ports separately during wiring.
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
-	registerPorts(base.simulation, &base.Ports)
-
 	base.simulation.Engine().RegisterHandler(base.name, base.owner)
 
 	base.simulation.RegisterComponent(base.owner)
@@ -161,51 +156,108 @@ func isNilable(k reflect.Kind) bool {
 	}
 }
 
-// bindPorts binds every port in the Ports struct that ports points to to
-// owner. Every port must be given and carry its full name: "<owner>.<field>"
-// for a port, and "<owner>.<field>[i]" for member i of a group.
-func bindPorts(owner modeling.Component, ports any) {
-	portwalk.ForEach(ports, func(slot string, v reflect.Value) {
-		if v.IsNil() {
-			panic(fmt.Sprintf(
-				"modeling: component %q: port %s is not given; pass it with WithPorts",
-				owner.Name(), slot))
-		}
+// SetInitializer records deferred state and middleware construction.
+func SetInitializer[S, T, R, P, M any](c *ComponentBase[S, T, R, P, M], fn func()) { c.initialize = fn }
 
-		port := v.Interface().(messaging.Port)
+// RequireSetup checks the simulation's assembly phase.
+func (c *ComponentBase[S, T, R, P, M]) RequireSetup() { c.simulation.RequireSetup() }
 
-		if want := owner.Name() + "." + slot; port.Name() != want {
-			panic(fmt.Sprintf(
-				"modeling: component %q: port %s is named %q, want %q",
-				owner.Name(), slot, port.Name(), want))
-		}
-
-		if other := port.Owner(); other != nil && other != owner {
-			panic(fmt.Sprintf(
-				"modeling: component %q: port %q already belongs to %s",
-				owner.Name(), port.Name(), ownerName(other)))
-		}
-
-		port.SetOwner(owner)
-	})
-}
-
-// ownerName names a port's owner for an error message. An owner need not be
-// named.
-func ownerName(owner messaging.PortOwner) string {
-	if named, ok := owner.(naming.Named); ok {
-		return fmt.Sprintf("%q", named.Name())
+// BindPort assigns one declared port slot and establishes its owner and name.
+// Indexed slice slots (for example Inputs[2]) grow the group as needed.
+func (c *ComponentBase[S, T, R, P, M]) BindPort(slot string, port messaging.Port) {
+	c.RequireSetup()
+	if port == nil || (reflect.ValueOf(port).Kind() == reflect.Pointer && reflect.ValueOf(port).IsNil()) {
+		panic("modeling: cannot bind a nil port")
 	}
-
-	return fmt.Sprintf("an unnamed %T", owner)
+	if port.Owner() != nil {
+		panic("modeling: port already has an owner")
+	}
+	name := c.name + "." + slot
+	naming.MustBeValid(name)
+	c.simulation.RequireNameAvailable(name)
+	fieldName := slot
+	index := -1
+	if i := strings.IndexByte(slot, '['); i >= 0 {
+		if !strings.HasSuffix(slot, "]") {
+			panic("modeling: invalid port slot " + slot)
+		}
+		fieldName = slot[:i]
+		var err error
+		index, err = strconv.Atoi(slot[i+1 : len(slot)-1])
+		if err != nil || index < 0 || fmt.Sprintf("%s[%d]", fieldName, index) != slot {
+			panic("modeling: invalid port index " + slot)
+		}
+	}
+	field := reflect.ValueOf(&c.Ports).Elem().FieldByName(fieldName)
+	if !field.IsValid() || !field.CanSet() {
+		panic("modeling: unknown port slot " + slot)
+	}
+	portType := reflect.TypeFor[messaging.Port]()
+	if index < 0 {
+		if field.Type() != portType {
+			panic("modeling: port group requires an index: " + slot)
+		}
+		if !field.IsNil() {
+			panic("modeling: port slot already bound: " + slot)
+		}
+	} else {
+		if field.Type() != reflect.SliceOf(portType) {
+			panic("modeling: slot is not a port group: " + slot)
+		}
+		if index < field.Len() && !field.Index(index).IsNil() {
+			panic("modeling: port slot already bound: " + slot)
+		}
+	}
+	port.BindOwner(c.owner, name)
+	if index < 0 {
+		field.Set(reflect.ValueOf(port))
+	} else {
+		if index >= field.Len() {
+			grown := reflect.MakeSlice(field.Type(), index+1, index+1)
+			reflect.Copy(grown, field)
+			field.Set(grown)
+		}
+		field.Index(index).Set(reflect.ValueOf(port))
+	}
+	c.simulation.RegisterPort(port)
 }
 
-// registerPorts registers every port in the Ports struct that ports points to
-// with the simulation.
-func registerPorts(sim timing.Simulation, ports any) {
-	portwalk.ForEach(ports, func(_ string, v reflect.Value) {
-		sim.RegisterPort(v.Interface().(messaging.Port))
+// ValidateSetup checks all declared port slots before any initializer runs.
+func (c *ComponentBase[S, T, R, P, M]) ValidateSetup() error {
+	var failures []error
+	portwalk.ForEach(&c.Ports, func(slot string, v reflect.Value) {
+		if v.IsNil() {
+			failures = append(failures, fmt.Errorf("port %s is not bound", slot))
+			return
+		}
+		p := v.Interface().(messaging.Port)
+		if reflect.ValueOf(p).Kind() == reflect.Pointer && reflect.ValueOf(p).IsNil() {
+			failures = append(failures, fmt.Errorf("port %s is nil", slot))
+			return
+		}
+		if p.Owner() != c.owner || p.Name() != c.name+"."+slot {
+			failures = append(failures, fmt.Errorf("port %s has inconsistent ownership", slot))
+		}
 	})
+	return errors.Join(failures...)
+}
+
+// InitializeComponent is called by the simulation after all setup validates.
+func (c *ComponentBase[S, T, R, P, M]) InitializeComponent() {
+	if c.initialized {
+		panic("modeling: component already initialized")
+	}
+	if c.initialize != nil {
+		c.initialize()
+	}
+	c.initialized = true
+}
+
+// RequireInitialized rejects execution or snapshots before initialization.
+func (c *ComponentBase[S, T, R, P, M]) RequireInitialized() {
+	if !c.initialized {
+		panic("modeling: component is not initialized")
+	}
 }
 
 // cloneSpec returns spec with its own copy of every slice field, so an

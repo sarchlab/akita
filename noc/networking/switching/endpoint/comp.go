@@ -24,8 +24,8 @@ type Spec struct {
 
 // Resources holds the external wiring referenced by the endpoint, namely the
 // device ports that communicate directly through it. These are ports owned by
-// other components; Build plugs them into the endpoint, which acts as their
-// connection. Every device port must be a *twowaybuffered.Port.
+// other components; ConnectDevices attaches them during wiring. The endpoint
+// acts as their connection. Every device port must be a *twowaybuffered.Port.
 type Resources struct {
 	DevicePorts []messaging.Port `json:"-"`
 }
@@ -77,10 +77,21 @@ type deviceSide struct {
 	*Comp
 }
 
-// PlugIn connects a device port to the endpoint.
-func (d deviceSide) PlugIn(port messaging.Port) {
+// BindPort connects a declared device port to the endpoint.
+func (d deviceSide) BindPort(port messaging.Port) {
+	d.RequireSetup()
 	mustBeBufferedDevicePort(port)
-	port.SetConnection(d)
+	found := false
+	for _, p := range d.Resources.DevicePorts {
+		if p == port {
+			found = true
+			break
+		}
+	}
+	if !found {
+		panic("endpoint: device port is not declared in Resources")
+	}
+	port.BindConnection(d)
 }
 
 // NotifyAvailable wakes the endpoint when a device port has room again.
@@ -101,5 +112,33 @@ func (d deviceSide) NotifySend() {
 func mustBeBufferedDevicePort(port messaging.Port) {
 	if p, ok := port.(*twowaybuffered.Port); !ok || p == nil {
 		panic(fmt.Sprintf("endpoint: device port must be *twowaybuffered.Port, got %T", port))
+	}
+}
+
+// ConnectDevices attaches the device ports declared by this endpoint. Call it
+// during wiring, after their owners and the endpoint have been constructed.
+// All devices are checked before any attachment changes.
+func ConnectDevices(c *Comp) {
+	c.RequireSetup()
+	seen := make(map[messaging.Port]bool)
+	for _, p := range c.Resources.DevicePorts {
+		mustBeBufferedDevicePort(p)
+		if seen[p] {
+			panic("endpoint: duplicate device port")
+		}
+		seen[p] = true
+		if p.Owner() == nil {
+			panic("endpoint: device port has no owner")
+		}
+		if owner, ok := p.Owner().(interface{ RequireSetup() }); ok {
+			owner.RequireSetup()
+		}
+		if p.Connection() != nil {
+			panic("endpoint: device port already connected")
+		}
+	}
+	conn := deviceSide{c}
+	for _, p := range c.Resources.DevicePorts {
+		conn.BindPort(p)
 	}
 }

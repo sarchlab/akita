@@ -85,6 +85,9 @@ func main() {
 		WithSimulation(s).
 		WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
 		Build("Walker")
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// Nothing wakes a component with no ports, so start it explicitly.
 	walker.TickLater()

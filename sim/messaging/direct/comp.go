@@ -5,6 +5,7 @@ package direct
 import (
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
@@ -29,9 +30,9 @@ type ports struct {
 	portMap map[messaging.RemotePort]int
 }
 
-func (p *ports) addPort(port messaging.Port) {
+func (p *ports) addPort(port messaging.Port, name messaging.RemotePort) {
 	p.ports = append(p.ports, port)
-	p.portMap[port.AsRemote()] = len(p.ports) - 1
+	p.portMap[name] = len(p.ports) - 1
 }
 
 func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
@@ -51,11 +52,12 @@ type Connection struct {
 	// State is the connection's mutable data, saved in checkpoints.
 	State State
 
-	lock  sync.Mutex
-	name  string
-	spec  configuration
-	ticks *ticking.Scheduler
-	ports ports
+	lock       sync.Mutex
+	name       string
+	simulation timing.Simulation
+	spec       configuration
+	ticks      *ticking.Scheduler
+	ports      ports
 }
 
 // Name returns the connection's name.
@@ -63,13 +65,27 @@ func (c *Connection) Name() string {
 	return c.name
 }
 
-// PlugIn marks the port connects to this DirectConnection.
-func (c *Connection) PlugIn(port messaging.Port) {
+// BindPort adds a port and establishes its reverse connection attachment.
+func (c *Connection) BindPort(port messaging.Port) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.ports.addPort(port)
-	port.SetConnection(c)
+	c.simulation.RequireSetup()
+	if port == nil || (reflect.ValueOf(port).Kind() == reflect.Pointer && reflect.ValueOf(port).IsNil()) {
+		panic("direct: cannot bind a nil port")
+	}
+	if port.Owner() == nil {
+		panic("direct: bind the port owner first")
+	}
+	if port.Connection() != nil {
+		panic("direct: port already has a connection")
+	}
+	name := port.AsRemote()
+	if _, exists := c.ports.portMap[name]; exists {
+		panic("direct: duplicate port name")
+	}
+	port.BindConnection(c)
+	c.ports.addPort(port, name)
 }
 
 // NotifyAvailable is called by a port to notify the connection can deliver again.
@@ -143,3 +159,6 @@ func (c *Connection) SaveCheckpoint(w io.Writer) error {
 func (c *Connection) LoadCheckpoint(r io.Reader) error {
 	return modeling.ReadCheckpoint(r, c.spec, &c.State, c.ticks)
 }
+
+// RequireSetup rejects connection changes after simulation initialization.
+func (c *Connection) RequireSetup() { c.simulation.RequireSetup() }

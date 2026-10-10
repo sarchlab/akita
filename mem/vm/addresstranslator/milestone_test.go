@@ -117,8 +117,12 @@ var _ = Describe("Address Translator milestones", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
-			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
+		atPorts := makePorts("AddressTranslator", topBufSize)
+		at.BindPort("Top", atPorts.Top)
+		at.BindPort("Bottom", atPorts.Bottom)
+		at.BindPort("Translation", atPorts.Translation)
+		at.BindPort("Control", atPorts.Control)
 
 		topPort = at.Ports.Top
 		bottomPort = at.Ports.Bottom
@@ -129,7 +133,10 @@ var _ = Describe("Address Translator milestones", func() {
 			topPort, bottomPort, translationPort, ctrlPort,
 		} {
 			conn := &noopConn{}
-			conn.PlugIn(p)
+			conn.BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		ptMW = at.Middlewares.ParseTranslate

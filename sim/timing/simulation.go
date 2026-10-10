@@ -10,8 +10,12 @@ type Simulation interface {
 	Engine() Engine
 	NewID() uint64
 
+	Initialize() error
+	RequireSetup()
+	RequireNameAvailable(name string)
+
 	// Registration adds elements to the simulation's inventory for checkpointing,
-	// lookup, tracing, and monitoring. Lightweight contexts may leave it empty.
+	// lookup, tracing, and monitoring. Standalone contexts retain the inventory for initialization.
 	RegisterComponent(c naming.Named)
 	RegisterConnection(c naming.Named)
 	RegisterResource(c naming.Named)

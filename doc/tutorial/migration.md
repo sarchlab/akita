@@ -7,13 +7,58 @@ sidebar_position: 7
 This guide covers all breaking changes between Akita V4 and V5. Each section
 explains the motivation, shows before/after code, and notes pitfalls.
 
+## Construction, binding, and initialization
+
+Configure plain Spec structs first; changing a Spec before Build changes the
+next instance. Build components with their final full names and Resources,
+then bind ports and connections. Finally initialize the shared simulation:
+
+```go
+spec := rob.Definition.DefaultSpec
+spec.BufferSize = 8
+r := rob.Definition.Builder().WithSimulation(s).WithSpec(spec).Build("GPU.ROB")
+r.BindPort("Top", twowaybuffered.NewPort(8, 8))
+r.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
+r.BindPort("Control", twowaybuffered.NewPort(1, 1))
+conn := direct.NewConnection("GPU.Link", s, timing.GHz)
+conn.BindPort(r.Ports.Top)
+// Bind the other components and links before initialization.
+if err := s.Initialize(); err != nil {
+    panic(err)
+}
+// State and Middlewares now exist. Seed work, then run.
+```
+
+`Build` registers the configured component and event handler. `BindPort` fills
+the declared slot, assigns the owner and name (`GPU.ROB.Top`), and registers
+the port. Indexed groups use names such as `BindPort("Inputs[0]", p)`.
+`connection.BindPort(p)` establishes both sides of the connection attachment.
+Bindings are one-time; rejected bindings leave existing wiring intact.
+
+`Initialize` checks every declared port before running any initializer.
+Missing ports and slice holes return an error and leave setup editable. After
+validation succeeds, topology freezes and `NewState`/`NewMiddlewares` run in
+component registration order. An initializer panic leaves that simulation
+unusable; rebuild it instead of retrying partially created runtime state.
+Initialize once before execution, checkpoint save/load, or seeding work that
+uses State or Middlewares. Rebuild and initialize before restoring a checkpoint.
+
+`AsRemote()` requires a bound owner. During configuration, use the planned full
+port name, or build and bind the destination before asking for its address.
+Components remain unaware of domains; domain configuration/builders are a
+separate change.
+
+Custom `timing.Simulation` implementations must provide `Initialize`,
+`RequireSetup`, and `RequireNameAvailable`. Custom `timing.Engine` implementations
+must provide `SetRunGuard` and check the installed guard before executing events.
+
 ## Buffered ports and direct connections
 
 Concrete ports and connections now live under `sim/messaging`:
 
 | Before | After |
 |---|---|
-| `messaging.NewPort(name, in, out)` | `twowaybuffered.NewPort(name, in, out)` |
+| `messaging.NewPort(name, in, out)` | `twowaybuffered.NewPort(in, out)` |
 | `noc/directconnection` | `sim/messaging/direct` |
 | `directconnection.Comp` | `direct.Connection` |
 | `directconnection.MakeBuilder()...Build(name)` | `direct.NewConnection(name, s, freq)` |
@@ -25,8 +70,9 @@ construction. Components continue to declare `messaging.Port` fields, while
 import paths are removed. Calls that type-asserted the old constructor result
 can now call checkpoint methods directly on the returned pointer.
 
-Port names, `SetOwner`, buffer behavior, and message checkpoint encoding are
-unchanged. Owner-assigned names and one-time binding are a separate follow-up.
+Ports are now unnamed until their owner binds them. `SetOwner`, `SetConnection`,
+`WithPorts`, and connection `PlugIn` are removed. Buffer behavior and message
+checkpoint encoding are unchanged.
 
 Direct connections use a constructor, just like ports. Pass an explicit frequency
 (`timing.GHz` preserves the former default); the constructor registers the
@@ -36,7 +82,7 @@ connections use the component `Definition` and builder API.
 The NoC connector creates only buffered ports and ideal direct connections.
 Remove `WithPortFactory` calls; `PortFactory` is removed. Device ports attached
 to an endpoint must be `*twowaybuffered.Port`; unsupported implementations,
-including nil ports, panic during construction before any device port is
+including nil ports, panic during device wiring before any device port is
 attached. Wire support and non-ideal link timing remain separate changes.
 
 ## Simulation umbrella and tool names
@@ -633,7 +679,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them) and slices or arrays of scalars. No maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
-| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
@@ -758,22 +804,17 @@ spec.BottomUnit = bottomUnit.AsRemote()
 r := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
-    WithPorts(rob.Ports{
-        Top:     twowaybuffered.NewPort("ROB.Top", 4, 4),
-        Bottom:  twowaybuffered.NewPort("ROB.Bottom", 4, 4),
-        Control: twowaybuffered.NewPort("ROB.Control", 4, 4),
-    }).
     Build("ROB")
+r.BindPort("Top", twowaybuffered.NewPort(4, 4))
+r.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+r.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
-conn.PlugIn(r.Ports.Top)
+conn.BindPort(r.Ports.Top)
 ```
 
-`Build` validates the Spec and State, binds each port to the instance
-(checking that it is named `<instance>.<Field>`, or `<instance>.<Field>[i]` for
-member `i` of a port group), creates the State and the middlewares, and
-registers the ports and the instance with the simulation. No port or middleware
-is added afterward; the component and outside code reach ports as fields,
-`r.Ports.Top`.
+`Build` validates the Spec and State shapes and registers the component.
+`BindPort` assigns each declared port; `Initialize` creates State and Middlewares
+after wiring. Access ports through fields such as `r.Ports.Top`.
 
 ### Defining Components in V5: Philosophy and Patterns
 
@@ -800,7 +841,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 4. Ports (declared by the component, created by the system builder)
    - A component declares the ports it has as the fields of its `Ports` struct, tagged with the protocol roles they speak, but never constructs the instances or owns connections.
-   - The system builder creates each port with `twowaybuffered.NewPort("<instance>.<Field>", in, out)`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
+   - The system builder creates each port with `twowaybuffered.NewPort(in, out)`, choosing its buffer sizes, and binds each declared slot with `component.BindPort("Field", port)`.
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
@@ -821,16 +862,11 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 #### Build and Wire
 
-1. Create ports
-   - Create every port with `twowaybuffered.NewPort`, named `<instance>.<Field>` (or `<instance>.<Field>[i]` for member `i` of a port group).
-   - Creating ports first lets one component's Spec name another's port (`spec.BottomUnit = port.AsRemote()`).
-
-2. Build from the Definition
-   - `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)` validates the configuration, binds the ports, creates the State and middlewares, and registers everything with the simulation.
-
-3. Wire topology
-   - Build the connections and plug in the ports, reached as `comp.Ports.X`.
-   - Use names consistently so components and tooling can introspect topology.
+1. Configure Spec structs and build components with their final full names.
+2. Create unnamed ports and bind them with `component.BindPort("Field", port)`.
+3. Build connections and attach ports with `connection.BindPort(port)`.
+4. Call `simulation.Initialize()` before accessing runtime State or Middlewares,
+   seeding work, or running. The initialized topology is fixed.
 
 #### Determinism and Introspection
 
@@ -876,7 +912,7 @@ V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a
 | Wiring through an address mapping | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources. |
 | Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
 
-`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Since ports are created before `Build`, their remote names are known in time to fill such a list.
+`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Fill remote-port lists with planned full names during configuration, or bind the destination ports before calling `AsRemote()`.
 
 A component's Resources are not part of its checkpoint. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring; a shared object they point to, such as a `mem.Storage`, is a registered resource that checkpoints itself. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 
@@ -891,7 +927,7 @@ A component's Resources are not part of its checkpoint. The setup that rebuilds 
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `twowaybuffered.NewPort("<instance>.<Field>", in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
+- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
 
 ---
@@ -973,11 +1009,9 @@ ctrl := dram.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
-    WithPorts(dram.Ports{
-        Top:     twowaybuffered.NewPort("DRAM.Top", 1024, 1024),
-        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
-    }).
     Build("DRAM")
+ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
+ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
 ```
 
 ### Statistics
@@ -1025,11 +1059,9 @@ ctrl := dram.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
-    WithPorts(dram.Ports{
-        Top:     twowaybuffered.NewPort("DRAM.Top", 4, 4),
-        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
-    }).
     Build("DRAM")
+ctrl.BindPort("Top", twowaybuffered.NewPort(4, 4))
+ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
 ```
 
 ---
@@ -1039,8 +1071,8 @@ ctrl := dram.Definition.Builder().
 In V4, ports were created internally by component builders. In V5, the
 component owns its port *topology* — the fields of its `Ports` struct say
 which ports it has — but it does not create the instances. The system builder
-creates each port with `twowaybuffered.NewPort` and passes all of them to `Build`
-through `WithPorts`. This makes wiring explicit and lets ports be sized or
+creates each port with `twowaybuffered.NewPort` and assigns it with
+`component.BindPort` after Build. This makes wiring explicit and lets ports be sized or
 implemented differently without changing the component.
 
 **Before (V4):**
@@ -1060,49 +1092,27 @@ cache := writeback.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(writeback.Resources{Storage: storage}).
-    WithPorts(writeback.Ports{
-        Top:     twowaybuffered.NewPort("Cache.Top", 4, 4),
-        Bottom:  twowaybuffered.NewPort("Cache.Bottom", 4, 4),
-        Control: twowaybuffered.NewPort("Cache.Control", 4, 4),
-    }).
     Build("Cache")
+cache.BindPort("Top", twowaybuffered.NewPort(4, 4))
+cache.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+cache.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
-conn.PlugIn(cache.Ports.Top)
+conn.BindPort(cache.Ports.Top)
 ```
 
-`Build` binds each port to the new component and registers it with the
-simulation, exactly as it registers the component. It panics if a port is
-missing, is not named `<instance>.<Field>`, or already belongs to another
-component, so a typo or a forgotten port fails fast. No port is added after
-`Build`.
+`component.BindPort("Top", port)` assigns the name, owner, field, and simulation
+registration together. It rejects an unknown slot, an occupied slot, or a port
+that already has an owner before changing the topology. `Initialize` reports
+missing ports and holes in port groups.
 
-A port group is a `[]messaging.Port` field; the system builder chooses its
-size and names member `i` `<instance>.<Field>[i]`.
+### Custom port owners
 
-### SetOwner
-
-The `Port` interface in V5 includes a `SetOwner(owner PortOwner)` method.
-Because the system builder creates ports before the component exists, a port
-is created without an owner, and `Build` calls `SetOwner` to associate
-it with the component:
-
-```go
-outPort := twowaybuffered.NewPort("Agent.Out", 4, 4)
-
-agent := ping.Definition.Builder().
-    WithSimulation(sim).
-    WithPorts(ping.Ports{Out: outPort}).
-    Build("Agent") // calls outPort.SetOwner(agent)
-```
-
-A port must have an owner before it carries traffic; a port without one
-panics when a connection delivers to it or takes a message from it. Code that
-drives a port by hand, such as a test, calls `SetOwner` itself.
-
-Creating the port first also lets another component's Spec name it
-(`outPort.AsRemote()`) before either component is built. This decouples port
-creation from component construction, which suits the V5 wiring model where
-topology is assembled separately from component internals.
+Owners outside the component models use the lower-level
+`port.BindOwner(owner, fullName)` and register the port themselves. Connections
+use `port.BindConnection(connection)` to set the reverse attachment; normal
+assembly code calls `connection.BindPort(port)` so both sides are updated.
+An unowned port has no remote address. Use a planned full address during
+configuration, or call `AsRemote()` after binding.
 
 ---
 

@@ -33,8 +33,9 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	src := newDriverPort("P0Src.Top", 1024)
 
 	conn := direct.NewConnection("P0Conn", sim, timing.GHz)
-	conn.PlugIn(top)
-	conn.PlugIn(src)
+	conn.BindPort(top)
+	conn.BindPort(src)
+	Expect(sim.Initialize()).To(Succeed())
 
 	return &p0Harness{engine: engine, dram: dramComp, src: src, top: top}
 }
@@ -221,6 +222,7 @@ var _ = Describe("P0: channel guard", func() {
 			spec := Definition.DefaultSpec
 			spec.NumChannel = numChannel
 			buildDRAM(sim, spec, "ChannelGuard", 16)
+			Expect(sim.Initialize()).To(Succeed())
 		}
 	}
 

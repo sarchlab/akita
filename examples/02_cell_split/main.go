@@ -79,6 +79,9 @@ func main() {
 
 	engine.Schedule(firstEvt)
 
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
 	err := engine.Run()
 	if err != nil {
 		panic(err)

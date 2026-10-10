@@ -77,7 +77,7 @@ type DataMoveRsp struct {
 Configuration is supplied as a whole through `WithSpec` (start from
 `Definition.DefaultSpec`); the engine and registration come from
 `WithSimulation`; the side mappers come from `WithResources`; the port
-instances come from `WithPorts`.
+instances come from `component.BindPort` after Build.
 
 ```go
 spec := datamover.Definition.DefaultSpec
@@ -92,13 +92,11 @@ mover := datamover.Definition.Builder().
         InsideMapper:  &mem.SinglePortMapper{Port: l2Port},
         OutsideMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
-    WithPorts(datamover.Ports{
-        Top:     twowaybuffered.NewPort("DMA.Top", 16, 16),
-        Inside:  twowaybuffered.NewPort("DMA.Inside", 16, 16),
-        Outside: twowaybuffered.NewPort("DMA.Outside", 16, 16),
-        Control: twowaybuffered.NewPort("DMA.Control", 16, 16),
-    }).
     Build("DMA")
+mover.BindPort("Top", twowaybuffered.NewPort(16, 16))
+mover.BindPort("Inside", twowaybuffered.NewPort(16, 16))
+mover.BindPort("Outside", twowaybuffered.NewPort(16, 16))
+mover.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 ctrlPort := mover.Ports.Control
 ```
@@ -110,12 +108,14 @@ ctrlPort := mover.Ports.Control
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
 | `WithResources(r)` | The inside/outside address-to-port mappers. |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required). |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top** — accepts `DataMoveReq`, returns `DataMoveRsp` to the
   requester once the move completes.

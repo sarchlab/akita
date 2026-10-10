@@ -44,8 +44,8 @@ func NewAgent(
 
 	sim.RegisterComponent(a)
 
-	for _, p := range ports {
-		p.SetOwner(a)
+	for i, p := range ports {
+		p.BindOwner(a, fmt.Sprintf("%s.Port[%d]", name, i))
 		sim.RegisterPort(p)
 		a.AgentPorts = append(a.AgentPorts, p)
 	}

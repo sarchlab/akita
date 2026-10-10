@@ -13,6 +13,7 @@ import (
 type SerialEngine struct {
 	hooking.HookableBase
 	*engineControl
+	runGuard func() error
 
 	time           VTimeInPicoSec
 	queue          *unsafeEventQueue
@@ -36,6 +37,9 @@ func NewSerialEngine() *SerialEngine {
 
 	return e
 }
+
+// SetRunGuard installs a readiness check for this engine.
+func (e *SerialEngine) SetRunGuard(check func() error) { e.runGuard = check }
 
 // Name returns the name of the engine. The engine is registered as a simulation
 // entity so its event-queue and time state are part of the state snapshot.
@@ -70,6 +74,11 @@ func (e *SerialEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the SerialEngine.
 func (e *SerialEngine) Run() (err error) {
+	if e.runGuard != nil {
+		if err := e.runGuard(); err != nil {
+			return err
+		}
+	}
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
 	if err := e.engineControl.begin(); err != nil {
@@ -101,6 +110,11 @@ func (e *SerialEngine) Run() (err error) {
 // deterministic mid-run boundary — unlike Pause, which stops at a
 // non-reproducible point — used to take a mid-transaction checkpoint.
 func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
+	if e.runGuard != nil {
+		if err := e.runGuard(); err != nil {
+			return err
+		}
+	}
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
 	if err := e.engineControl.begin(); err != nil {

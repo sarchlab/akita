@@ -59,7 +59,6 @@ var _ = Describe("Bottom Parser", func() {
 		// The bottomParser reads responses from the cache's real Bottom port,
 		// so the tests deliver into it.
 		bottomPort = ports.Bottom
-		(&noopConn{}).PlugIn(bottomPort)
 
 		p = &bottomParser{cache: c}
 	})

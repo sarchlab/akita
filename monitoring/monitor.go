@@ -113,7 +113,7 @@ func (m *Monitor) RegisterComponent(c Component) {
 
 // RegisterPort registers a port's incoming and outgoing buffers with the
 // monitor. The simulation registers every port this way, when the port is
-// built or when its component's Build binds it.
+// built or when its component's BindPort binds it.
 func (m *Monitor) RegisterPort(p monitorPort) {
 	m.registerPortBuffers(p)
 }

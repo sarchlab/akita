@@ -20,8 +20,11 @@ package-level `Definition`:
 | `Middlewares` | the behavior, one field per middleware | component (`NewMiddlewares`) |
 
 The system builder is the code that assembles a simulation. It builds every
-instance with `Definition.Builder()...Build(name)`, passing all of its ports;
-`Build` binds and registers them, and no port is added later. Use
+instance with `Definition.Builder()...Build(name)`, then calls
+`component.BindPort("Field", port)` and `connection.BindPort(port)`.
+`simulation.Initialize()` validates wiring, freezes topology, and creates State
+and Middlewares. Configure plain Spec structs before Build; seed runtime work
+after Initialize. Components do not need to know their containing domain. Use
 `modeling.None` for the Resources of a component that references no shared
 objects.
 
@@ -109,8 +112,9 @@ Each package doc shows how to declare and build a component of its model.
   `Resources`, `Ports`, and `Middlewares` — and the same methods — `Name`,
   `NewID`, and `CurrentTime`. They come from a base type in
   `modeling/internal/base`, which also holds the steps of `Build`: a
-  component model is defined only by the three model packages. `Spec`,
-  `Resources`, and `Ports` are fixed after `Build`.
+  component model is defined only by the three model packages. `Spec` and
+  `Resources` are fixed after `Build`; `Initialize` freezes port bindings and
+  creates State and Middlewares.
 
 ### Domain
 

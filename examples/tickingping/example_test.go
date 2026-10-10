@@ -11,13 +11,13 @@ func Example() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	// Create the ports first, so AgentA's Spec can name AgentB's port.
-	outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
-	outB := twowaybuffered.NewPort("AgentB.Out", 16, 16)
+	// Choose buffer sizes; binding below assigns each port its name.
+	outA := twowaybuffered.NewPort(16, 16)
+	outB := twowaybuffered.NewPort(16, 16)
 
 	specA := Definition.DefaultSpec
 	specA.Freq = 1 * timing.Hz
-	specA.PingDst = outB.AsRemote()
+	specA.PingDst = "AgentB.Out"
 	specA.NumPings = 2
 
 	specB := Definition.DefaultSpec
@@ -26,19 +26,24 @@ func Example() {
 	agentA := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(specA).
-		WithPorts(Ports{Out: outA}).
 		Build("AgentA")
+
+	agentA.BindPort("Out", outA)
 
 	agentB := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(specB).
-		WithPorts(Ports{Out: outB}).
 		Build("AgentB")
+
+	agentB.BindPort("Out", outB)
 
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
 
-	conn.PlugIn(agentA.Ports.Out)
-	conn.PlugIn(agentB.Ports.Out)
+	conn.BindPort(agentA.Ports.Out)
+	conn.BindPort(agentB.Ports.Out)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// AgentA sends pings on its own, so start it; AgentB wakes when a ping
 	// arrives.

@@ -23,8 +23,10 @@ func buildTestMMU(sim timing.Simulation, name string) *Comp {
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
-		WithPorts(makePorts(name, 4096)).
 		Build(name)
+	compPorts := makePorts(name, 4096)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Control", compPorts.Control)
 
 	return comp
 }

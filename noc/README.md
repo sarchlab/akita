@@ -17,8 +17,8 @@ import (
 
 conn := direct.NewConnection("conn", sim, timing.GHz)
 
-conn.PlugIn(componentA.Ports.Top)
-conn.PlugIn(componentB.Ports.Top)
+conn.BindPort(componentA.Ports.Top)
+conn.BindPort(componentB.Ports.Top)
 ```
 
 `direct.Connection` lives in `sim/messaging/direct` and is a connection that forwards messages
@@ -88,8 +88,8 @@ Create an ideal direct connection, then plug in the ports:
 conn := direct.NewConnection("my_connection", sim, timing.GHz)
 
 // 2. Plug in ports
-conn.PlugIn(portA)
-conn.PlugIn(portB)
+conn.BindPort(portA)
+conn.BindPort(portB)
 
 // 3. Components send via their ports as usual
 portA.Send(msg) // connection handles delivery to portB

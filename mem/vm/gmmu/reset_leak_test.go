@@ -41,11 +41,17 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
-		WithPorts(defaultPorts("GMMU")).
 		Build("GMMU")
+	compPorts := defaultPorts("GMMU")
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Bottom", compPorts.Bottom)
+	comp.BindPort("Control", compPorts.Control)
 
 	for _, p := range allPorts(comp) {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
 	}
 
 	topPort := comp.Ports.Top

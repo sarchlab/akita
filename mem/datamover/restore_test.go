@@ -11,15 +11,25 @@ import (
 )
 
 func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
-	return Definition.Builder().
-		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	builtComponent := Definition.Builder().
+		WithSimulation(setupSim1).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{
 			InsideMapper:  &mem.SinglePortMapper{Port: inside},
 			OutsideMapper: &mem.SinglePortMapper{Port: outside},
 		}).
-		WithPorts(makePorts("DataMover", 1, 1, 1, 1)).
 		Build("DataMover")
+	builtComponentPorts := makePorts("DataMover", 1, 1, 1, 1)
+	builtComponent.BindPort("Top", builtComponentPorts.Top)
+	builtComponent.BindPort("Inside", builtComponentPorts.Inside)
+	builtComponent.BindPort("Outside", builtComponentPorts.Outside)
+	builtComponent.BindPort("Control", builtComponentPorts.Control)
+	if err := setupSim1.Initialize(); err != nil {
+		panic(err)
+	}
+
+	return builtComponent
 }
 
 func dataTransferOf(t *testing.T, comp *Comp) *dataTransferMW {

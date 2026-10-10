@@ -128,8 +128,7 @@ Activate → Read/Write → Precharge → (next row)
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
 preset (or `Definition.DefaultSpec`), tweak the fields you need, and pass it in. Wiring is
 supplied through `WithSimulation` (which provides the engine and registers the
-component), `WithResources` (the backing storage), and `WithPorts` (the port
-instances).
+component), `WithResources` (the backing storage), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := dram.DDR4Spec
@@ -142,11 +141,9 @@ ctrl := dram.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
-    WithPorts(dram.Ports{
-        Top:     twowaybuffered.NewPort("DRAM.Top", 1024, 1024),
-        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
-    }).
     Build("DRAM")
+ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
+ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
 topPort := ctrl.Ports.Top
 ```
@@ -158,7 +155,7 @@ topPort := ctrl.Ports.Top
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` or a preset (DDR4Spec, HBM2Spec, ...) |
 | `WithResources(Resources{Storage: s})` | Backing storage (required; no longer built internally) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 `Build` panics if the storage is missing, if `NumChannel > 1` (instantiate one
 controller per channel), if `BurstLength` is 0, or if `Scheduler` or
@@ -220,7 +217,9 @@ completed requests, bytes moved, and cycles), which the monitor also shows.
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top** (`mem` responder): accepts `memprotocol.ReadReq` and
   `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp` and

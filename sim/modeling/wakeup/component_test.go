@@ -60,11 +60,16 @@ var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middleware
 }
 
 func build(sim timing.Simulation, spec Spec) *Comp {
-	return Definition.Builder().
+	builtComponent := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithPorts(Ports{In: twowaybuffered.NewPort("C.In", 4, 4)}).
 		Build("C")
+
+	builtComponent.BindPort("In", twowaybuffered.NewPort(4, 4))
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
+	return builtComponent
 }
 
 func newSim() timing.Simulation {

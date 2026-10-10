@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -59,7 +60,8 @@ func TestInjectedMonitorLifecycle(t *testing.T) {
 		t.Fatal("monitor did not receive the simulation and recording destination")
 	}
 	component := namedComponent("Agent")
-	port := twowaybuffered.NewPort("Agent.Top", 2, 2)
+	port := twowaybuffered.NewPort(2, 2)
+	port.BindOwner(monitorPortOwner{}, "Agent.Port")
 	s.RegisterComponent(component)
 	s.RegisterPort(port)
 	s.Terminate()
@@ -77,6 +79,9 @@ func TestMonitoringIsOptIn(t *testing.T) {
 	defer s.Terminate()
 	if s.Monitor() != nil {
 		t.Fatal("default simulation unexpectedly has a monitor")
+	}
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.Engine().Run(); err != nil {
 		t.Fatalf("running without a monitor: %v", err)
@@ -104,3 +109,8 @@ func TestHeadlessSimulationPreservesTracing(t *testing.T) {
 	}
 	t.Log("No monitor attached; SQLite retained the traced task")
 }
+
+type monitorPortOwner struct{}
+
+func (monitorPortOwner) NotifyRecv(messaging.Port)     {}
+func (monitorPortOwner) NotifyPortFree(messaging.Port) {}

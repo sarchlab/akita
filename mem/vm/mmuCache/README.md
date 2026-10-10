@@ -49,7 +49,7 @@ levels.
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
 engine and registers the component), `WithResources` (the low- and up-module
-remote ports), and `WithPorts` (the port instances).
+remote ports), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := mmuCache.Definition.DefaultSpec
@@ -64,12 +64,10 @@ c := mmuCache.Definition.Builder().
         LowModulePort: mmuPort,
         UpModulePort:  tlbPort,
     }).
-    WithPorts(mmuCache.Ports{
-        Top:     twowaybuffered.NewPort("MMUCache.Top", 16, 16),
-        Bottom:  twowaybuffered.NewPort("MMUCache.Bottom", 16, 16),
-        Control: twowaybuffered.NewPort("MMUCache.Control", 16, 16),
-    }).
     Build("MMUCache")
+c.BindPort("Top", twowaybuffered.NewPort(16, 16))
+c.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
+c.BindPort("Control", twowaybuffered.NewPort(16, 16))
 ```
 
 | Method | Description |
@@ -77,12 +75,14 @@ c := mmuCache.Definition.Builder().
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak (`NumBlocks` must be > 0) |
 | `WithResources(Resources{...})` | External wiring (low- and up-module remote ports) |
-| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+| `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports
 
 The system builder creates each port with `twowaybuffered.NewPort`, choosing its
-buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+buffer sizes, and calls `component.BindPort("Field", port)` after Build.
+After all connections are bound, `simulation.Initialize()` creates State and
+middlewares and freezes the topology.
 
 - **Top**: accepts `vmprotocol.TranslationReq` from the upstream requester.
 - **Bottom**: forwards `vmprotocol.TranslationReq` to the downstream provider and

@@ -34,15 +34,22 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
-			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
+		compPorts := makePorts("AddressTranslator", topBufSize)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Translation", compPorts.Translation)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range []messaging.Port{
 			comp.Ports.Top, comp.Ports.Bottom,
 			comp.Ports.Translation, comp.Ports.Control,
 		} {
 			conn := &noopConn{}
-			conn.PlugIn(p)
+			conn.BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

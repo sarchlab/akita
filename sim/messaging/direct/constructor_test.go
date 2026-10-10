@@ -12,6 +12,7 @@ import (
 func TestNewConnectionUsesExplicitFrequency(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockEngine(ctrl)
+	engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 	engine.EXPECT().RegisterHandler("Link", gomock.Any())
 	engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(250))
 	engine.EXPECT().Schedule(gomock.Any()).Do(func(evt timing.Event) {

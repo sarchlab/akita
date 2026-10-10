@@ -57,7 +57,7 @@ var _ = Describe("Directory", func() {
 		// Success cases read the sent request back via RetrieveOutgoing;
 		// failure cases pre-fill the slot.
 		ports := makePorts("Cache", 4)
-		ports.Bottom = twowaybuffered.NewPort("Cache.Bottom", 1, 1)
+		ports.Bottom = twowaybuffered.NewPort(1, 1)
 
 		c = buildStageTestCache(
 			Spec{
@@ -79,7 +79,6 @@ var _ = Describe("Directory", func() {
 		)
 
 		bottomPort = ports.Bottom
-		(&noopConn{}).PlugIn(bottomPort)
 
 		d = &directory{
 			cache: c,

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
 
@@ -48,7 +49,9 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(body), "live") {
 		t.Fatalf("live endpoint: %d %s, %v", response.StatusCode, body, err)
 	}
-	s.RegisterPort(twowaybuffered.NewPort("Agent.Top", 2, 2))
+	portUnderTest := twowaybuffered.NewPort(2, 2)
+	portUnderTest.BindOwner(monitorPortOwner{}, "Agent.Port")
+	s.RegisterPort(portUnderTest)
 	if len(monitor.buffers) != 2 {
 		t.Fatal("registered port buffers missing")
 	}
@@ -103,3 +106,8 @@ func TestProgressBarBeforeStartPanicsClearly(t *testing.T) {
 	}()
 	m.CreateProgressBar("too early", 1)
 }
+
+type monitorPortOwner struct{}
+
+func (monitorPortOwner) NotifyRecv(messaging.Port)     {}
+func (monitorPortOwner) NotifyPortFree(messaging.Port) {}

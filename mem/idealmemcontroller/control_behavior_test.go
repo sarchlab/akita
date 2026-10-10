@@ -36,14 +36,20 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
-			WithPorts(makePorts("MemCtrl", 16)).
 			Build("MemCtrl")
+		memControllerPorts := makePorts("MemCtrl", 16)
+		memController.BindPort("Top", memControllerPorts.Top)
+		memController.BindPort("Control", memControllerPorts.Control)
 
 		topPort = memController.Ports.Top
 		ctrlPort = memController.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {

@@ -60,11 +60,12 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 
 ## Builder Pattern
 
-A switch takes all of its ports at `Build`: one port per link, created by the
-system builder with `twowaybuffered.NewPort` and named `"<instance>.Port[i]"`, and the
-matching links in `Resources.Links`. No port is added later, so a switch is
-built once its links are known; `networkconnector` builds its switches in
-`EstablishRoute`.
+A switch receives its final `Resources.Links` at `Build`. The system builder
+then creates one unnamed port per link and binds each indexed slot, for example
+`sw.BindPort("Port[0]", port)` assigns the name `"<instance>.Port[0]"`. Finish binding ports and
+connections before `simulation.Initialize()`. The network connector builds
+switches in `EstablishRoute` because their link resources must be final at
+Build; `BuildSwitches` also binds the ports and completes pending links.
 
 ```go
 sw := switches.Definition.Builder().
@@ -76,11 +77,11 @@ sw := switches.Definition.Builder().
             {Remote: epPort.AsRemote(), Latency: 1, NumInputChannel: 1, NumOutputChannel: 1},
         },
     }).
-    WithPorts(switches.Ports{Port: []messaging.Port{
-        twowaybuffered.NewPort("Switch0.Port[0]", 1, 1),
-    }}).
     Build("Switch0")
+sw.BindPort("Port[0]", twowaybuffered.NewPort(1, 1))
 ```
 
-`WithSimulation` and a non-nil `RoutingTable` are required, and `Links` must have
-one entry per port; `Build` panics otherwise.
+`Build` requires `WithSimulation`. During `simulation.Initialize()`, the
+switch initializers require a non-nil `RoutingTable` and one `Links` entry per
+bound port; a mismatch panics. Correct those resources and bindings before
+initialization.

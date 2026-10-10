@@ -43,7 +43,7 @@ func main() {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
 			ports := []messaging.Port{
-				twowaybuffered.NewPort(name+".Port0", 1, 1),
+				twowaybuffered.NewPort(1, 1),
 			}
 			agent := acceptance.NewAgent(sim, freq, name, ports, test)
 			agent.TickLater()
@@ -54,6 +54,10 @@ func main() {
 	}
 
 	connector.EstablishNetwork()
+
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	test.GenerateMsgs(uint64(numMessages))
 

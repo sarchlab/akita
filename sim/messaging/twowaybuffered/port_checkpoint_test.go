@@ -9,7 +9,7 @@ import (
 )
 
 func newCkptPort(in, out int) *Port {
-	return NewPort("P", in, out)
+	return NewPort(in, out)
 }
 
 func TestPortCheckpointRoundTrip(t *testing.T) {

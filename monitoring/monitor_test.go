@@ -711,8 +711,8 @@ type portedComponent struct {
 
 func newPortedComponent(name string) *portedComponent {
 	c := &portedComponent{name: name}
-	c.port = twowaybuffered.NewPort(name+".p", 4, 4)
-	c.port.SetOwner(c)
+	c.port = twowaybuffered.NewPort(4, 4)
+	c.port.BindOwner(c, name+".P")
 
 	return c
 }
@@ -781,7 +781,7 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 	monitor := NewMonitor()
-	comp := newPortedComponent("comp")
+	comp := newPortedComponent("Comp")
 	monitor.RegisterComponent(comp)
 	monitor.RegisterPort(comp.port)
 
@@ -800,7 +800,7 @@ func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 		names[b.Buffer] = true
 	}
 
-	if !names["comp.p.in"] || !names["comp.p.out"] {
+	if !names["Comp.P.in"] || !names["Comp.P.out"] {
 		t.Fatalf("expected port adapters in result, got %#v", bufs)
 	}
 }
@@ -987,3 +987,5 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 			http.StatusConflict, recorder.Code)
 	}
 }
+
+func (*fakeEngine) SetRunGuard(func() error) {}

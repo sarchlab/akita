@@ -59,15 +59,22 @@ var _ = Describe("Writethrough cache control behavior", func() {
 					Port: messaging.RemotePort("LowerCache"),
 				},
 			}).
-			WithPorts(makePorts("L1Cache", 16)).
 			Build("L1Cache")
+		compPorts := makePorts("L1Cache", 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 
 		topPort = comp.Ports.Top
 		bottomPort = comp.Ports.Bottom
 		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
-			(&ccNoopConn{}).PlugIn(p)
+			(&ccNoopConn{}).BindPort(p)
 		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {

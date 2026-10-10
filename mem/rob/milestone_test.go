@@ -90,7 +90,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec.BottomUnit = bottomUnitRemote
 
 		port := func(name string, bufSize int) messaging.Port {
-			return twowaybuffered.NewPort("Rob."+name, bufSize, bufSize)
+			return twowaybuffered.NewPort(bufSize, bufSize)
 		}
 
 		topPort = port("Top", 4)
@@ -100,12 +100,18 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		rob = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithPorts(Ports{Top: topPort, Bottom: bottomPort, Control: ctrlPort}).
 			Build("Rob")
+
+		rob.BindPort("Top", topPort)
+		rob.BindPort("Bottom", bottomPort)
+		rob.BindPort("Control", ctrlPort)
 
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 			conn := &noopConn{}
-			conn.PlugIn(p)
+			conn.BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		rec = &milestoneRecorder{}

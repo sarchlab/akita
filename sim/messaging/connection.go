@@ -10,7 +10,7 @@ type Connection interface {
 	naming.Named
 	hooking.Hookable
 
-	PlugIn(port Port)
+	BindPort(port Port)
 	NotifyAvailable(port Port)
 
 	NotifySend()

@@ -35,9 +35,11 @@ per-message reassembly records (`AssemblingMsgs`, `AssembledMsgs`).
 middlewares are `Outgoing` (device → network) and `Incoming` (network → device),
 run in that order every cycle.
 
-The endpoint is also the connection of its device ports: `Build` plugs every
-port in `Resources.DevicePorts` into it, and activity on a device port wakes the
-endpoint. No port is added after `Build`.
+The endpoint becomes the connection of its device ports when
+`endpoint.ConnectDevices(ep)` attaches every port in `Resources.DevicePorts`
+during wiring. Bind the device owners first, call `ConnectDevices`, and finish
+the network links before `simulation.Initialize()`. Activity on a connected
+device port then wakes the endpoint.
 
 ## How It Works
 
@@ -63,20 +65,18 @@ ep := endpoint.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(endpoint.Resources{DevicePorts: ports}).
-    WithPorts(endpoint.Ports{
-        NetworkPort: twowaybuffered.NewPort("EndPoint0.NetworkPort", 4, 4),
-    }).
     Build("EndPoint0")
+ep.BindPort("NetworkPort", twowaybuffered.NewPort(4, 4))
+endpoint.ConnectDevices(ep) // owners of DevicePorts must already be bound
 ```
 
 `WithSimulation` is required (`Build` panics otherwise). The system builder
-creates the network port with `twowaybuffered.NewPort`, named
-`"<instance>.NetworkPort"`, and sets `Spec.DefaultSwitchDst` to the port at the
-other end of the link; `Build` binds and registers the network port and plugs in
-the device ports. `DefaultSpec` defaults to a 32-byte flit, 0.25 encoding
+creates an unnamed network port with `twowaybuffered.NewPort` and sets `Spec.DefaultSwitchDst` to the port at the
+other end of the link. `ep.BindPort` binds the network port;
+`endpoint.ConnectDevices` attaches the device ports before `simulation.Initialize`. `DefaultSpec` defaults to a 32-byte flit, 0.25 encoding
 overhead, and single input/output channels.
 
-Device ports must be `*twowaybuffered.Port`. Build rejects unsupported and nil
+Device ports must be `*twowaybuffered.Port`. ConnectDevices rejects unsupported and nil
 device ports before attaching any device port. The network connector constructs
 buffered network-facing ports and connects them with ideal `direct.Connection`
 links; wire ports are not supported.

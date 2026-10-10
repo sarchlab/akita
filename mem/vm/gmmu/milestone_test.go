@@ -112,15 +112,21 @@ var _ = Describe("GMMU milestones", func() {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
-			WithPorts(defaultPorts("GMMU")).
 			Build("GMMU")
+		gmmuCompPorts := defaultPorts("GMMU")
+		gmmuComp.BindPort("Top", gmmuCompPorts.Top)
+		gmmuComp.BindPort("Bottom", gmmuCompPorts.Bottom)
+		gmmuComp.BindPort("Control", gmmuCompPorts.Control)
 
 		topPort = gmmuComp.Ports.Top
 		bottomPort = gmmuComp.Ports.Bottom
 
-		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(bottomPort)
-		(&noopConn{}).PlugIn(gmmuComp.Ports.Control)
+		(&noopConn{}).BindPort(topPort)
+		(&noopConn{}).BindPort(bottomPort)
+		(&noopConn{}).BindPort(gmmuComp.Ports.Control)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		walk = gmmuComp.Middlewares.Walk
 		respond = gmmuComp.Middlewares.Respond

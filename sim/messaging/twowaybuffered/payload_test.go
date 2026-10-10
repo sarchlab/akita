@@ -17,20 +17,22 @@ var _ = messaging.DefineProtocol(messaging.RoleDef{
 })
 
 func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
-	p := NewPort("src", 1, 1)
-	p.SetConnection(&benchmarkConnection{})
+	p := NewPort(1, 1)
+	p.BindOwner(&portPresenceOwner{}, "Src")
+	p.BindConnection(&benchmarkConnection{})
 	for _, v := range []any{&registryTestMsg{}, (*registryTestMsg)(nil), struct{ Unregistered int }{}} {
 		require.PanicsWithValue(t,
 			fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", v),
-			func() { p.Send(messaging.Msg{Src: "src", Dst: "dst", Payload: v}) })
+			func() { p.Send(messaging.Msg{Src: "Src", Dst: "dst", Payload: v}) })
 		if p.NumOutgoing() != 0 {
 			t.Fatal("invalid payload was buffered")
 		}
 	}
 	for _, payload := range []any{nil, registryTestMsg{Value: 42}} {
-		p := NewPort("src", 1, 1)
-		p.SetConnection(&benchmarkConnection{})
-		p.Send(messaging.Msg{Src: "src", Dst: "dst", Payload: payload})
+		p := NewPort(1, 1)
+		p.BindOwner(&portPresenceOwner{}, "Src")
+		p.BindConnection(&benchmarkConnection{})
+		p.Send(messaging.Msg{Src: "Src", Dst: "dst", Payload: payload})
 		if msg, ok := p.PeekOutgoing(); !ok || msg.Payload != payload {
 			t.Fatalf("valid payload was not accepted: %#v, %v", msg, ok)
 		}

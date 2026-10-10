@@ -62,6 +62,9 @@ func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		engine.RegisterHandler("C", handlerFunc(func(timing.Event) {}))
 		sim := modeling.NewStandaloneSimulation(engine)
+		if err := sim.Initialize(); err != nil {
+			t.Fatal(err)
+		}
 
 		return ticking.NewScheduler("C", sim, 1*timing.GHz), engine
 	}

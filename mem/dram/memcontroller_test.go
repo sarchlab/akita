@@ -213,8 +213,9 @@ var _ = Describe("DRAM Integration", func() {
 		srcPort := newDriverPort("Src.Top", 1024)
 		conn := direct.NewConnection("Conn", sim, timing.GHz)
 		topPort := memCtrl.Ports.Top
-		conn.PlugIn(topPort)
-		conn.PlugIn(srcPort)
+		conn.BindPort(topPort)
+		conn.BindPort(srcPort)
+		Expect(sim.Initialize()).To(Succeed())
 
 		writeData := []byte{1, 2, 3, 4}
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
@@ -1102,10 +1103,16 @@ var _ = Describe("Builder Configuration", func() {
 		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 
 		Expect(func() {
-			Definition.Builder().
+			builtComponent := Definition.Builder().
 				WithSimulation(sim).
-				WithPorts(defaultPorts("NoStorage", 16)).
 				Build("NoStorage")
+			builtComponentPorts := defaultPorts("NoStorage", 16)
+			builtComponent.BindPort("Top", builtComponentPorts.Top)
+			builtComponent.BindPort("Control", builtComponentPorts.Control)
+			if err := sim.Initialize(); err != nil {
+				panic(err)
+			}
+
 		}).To(PanicWith("dram: Resources.Storage is required"))
 	})
 })

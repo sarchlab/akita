@@ -115,6 +115,9 @@ func main() {
 		WithSimulation(sim).
 		WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
 		Build("Walker")
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	// Observe the walker's own steps.
 	walker.AcceptHook(&stepLogger{})

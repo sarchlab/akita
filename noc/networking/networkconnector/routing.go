@@ -72,8 +72,7 @@ func (sn *switchNode) addPort(
 		panic(fmt.Sprintf("networkconnector: switch %s is already built", sn.name))
 	}
 
-	port := twowaybuffered.NewPort(fmt.Sprintf("%s.Port[%d]", sn.name, len(sn.ports)),
-		param.OutgoingBufSize, param.OutgoingBufSize)
+	port := twowaybuffered.NewPort(param.OutgoingBufSize, param.OutgoingBufSize)
 
 	sn.ports = append(sn.ports, port)
 	sn.links = append(sn.links, switches.Link{

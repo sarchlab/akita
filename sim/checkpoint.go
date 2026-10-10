@@ -81,6 +81,9 @@ func (s *Simulation) LoadCheckpoint(path, buildID string) error {
 }
 
 func (s *Simulation) checkpointPreflight() error {
+	if err := s.setup.Ready(); err != nil {
+		return err
+	}
 	if _, ok := s.engine.(*timing.SerialEngine); !ok {
 		return fmt.Errorf("checkpoint: only timing.SerialEngine is supported, got %T",
 			s.engine)

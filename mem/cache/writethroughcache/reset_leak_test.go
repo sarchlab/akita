@@ -45,15 +45,21 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: messaging.RemotePort("LowerCache"),
 			},
 		}).
-		WithPorts(makePorts("L1Cache", 16)).
 		Build("L1Cache")
+	compPorts := makePorts("L1Cache", 16)
+	comp.BindPort("Top", compPorts.Top)
+	comp.BindPort("Bottom", compPorts.Bottom)
+	comp.BindPort("Control", compPorts.Control)
 
 	// Plug each port into a no-op connection before the component is ticked.
 	topPort := comp.Ports.Top
 	bottomPort := comp.Ports.Bottom
 	ctrlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
-		(&ccNoopConn{}).PlugIn(p)
+		(&ccNoopConn{}).BindPort(p)
+	}
+	if err := sim.Initialize(); err != nil {
+		panic(err)
 	}
 
 	rec := &tracingtest.LeakRecorder{}

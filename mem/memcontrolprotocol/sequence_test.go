@@ -1,6 +1,7 @@
 package memcontrolprotocol_test
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -80,20 +81,21 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
 		}).
-		WithPorts(tlb.Ports{
-			Top:     twowaybuffered.NewPort("TLB.Top", 16, 16),
-			Bottom:  twowaybuffered.NewPort("TLB.Bottom", 16, 16),
-			Control: twowaybuffered.NewPort("TLB.Control", 16, 16),
-		}).
 		Build("TLB")
+
+	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Control", twowaybuffered.NewPort(16, 16))
+
 	tick := stepperOf(comp)
 
 	top := comp.Ports.Top
 	bottom := comp.Ports.Bottom
 	ctrl := comp.Ports.Control
 	for _, p := range []messaging.Port{top, bottom, ctrl} {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
 	}
+	require.NoError(t, sim.Initialize())
 
 	const pid = vm.PID(1)
 
@@ -397,18 +399,18 @@ func buildWritebackForSequence(
 				Port: messaging.RemotePort("LowerCache"),
 			},
 		}).
-		WithPorts(writeback.Ports{
-			Top:     twowaybuffered.NewPort("L1Cache.Top", 16, 16),
-			Bottom:  twowaybuffered.NewPort("L1Cache.Bottom", 16, 16),
-			Control: twowaybuffered.NewPort("L1Cache.Control", 16, 16),
-		}).
 		Build("L1Cache")
+
+	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 	bottom := comp.Ports.Bottom
 	ctrl := comp.Ports.Control
 	for _, p := range []messaging.Port{comp.Ports.Top, bottom, ctrl} {
-		(&noopConn{}).PlugIn(p)
+		(&noopConn{}).BindPort(p)
 	}
+	require.NoError(t, sim.Initialize())
 
 	return comp, storage, ctrl, bottom
 }

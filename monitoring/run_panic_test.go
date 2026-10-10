@@ -23,7 +23,11 @@ func TestMonitorReportsRunFailureWithoutRepanicking(t *testing.T) {
 	e := timing.NewSerialEngine()
 	e.RegisterHandler("model", runPanicHandler{})
 	e.Schedule(timing.EventBase{Time_: 1, HandlerID_: "model"})
-	m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(e))
+	s := modeling.NewStandaloneSimulation(e)
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestMonitorWithSimulation(s)
 	messages := make(runLog, 1)
 	previous := log.Writer()
 	log.SetOutput(messages)

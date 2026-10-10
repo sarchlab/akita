@@ -28,11 +28,12 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
-		devicePort = twowaybuffered.NewPort("DevicePort", 1, 1)
-		devicePort.SetOwner(payloadOwner{"Device"})
+		devicePort = twowaybuffered.NewPort(1, 1)
+		devicePort.BindOwner(payloadOwner{"Device"}, "DevicePort")
 		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
 		networkPort.EXPECT().
@@ -47,7 +48,7 @@ var _ = Describe("End Point", func() {
 
 		networkPort.EXPECT().Name().Return("EndPoint.NetworkPort").AnyTimes()
 		networkPort.EXPECT().Owner().Return(nil)
-		networkPort.EXPECT().SetOwner(gomock.Any())
+		networkPort.EXPECT().BindOwner(gomock.Any(), "EndPoint.NetworkPort")
 
 		spec := Definition.DefaultSpec
 		spec.Freq = 1
@@ -58,8 +59,15 @@ var _ = Describe("End Point", func() {
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{DevicePorts: []messaging.Port{devicePort}}).
-			WithPorts(Ports{NetworkPort: networkPort}).
 			Build("EndPoint")
+
+		endPoint.BindPort("NetworkPort", networkPort)
+		networkPort.EXPECT().Owner().Return(endPoint).AnyTimes()
+		ConnectDevices(endPoint)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
+
 	})
 
 	AfterEach(func() {

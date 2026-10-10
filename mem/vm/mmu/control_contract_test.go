@@ -22,11 +22,16 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{PageTable: vm.NewPageTable(12)}).
-			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
+		compPorts := makePorts("MMU", 16)
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Control", compPorts.Control)
 
 		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Control} {
-			(&noopConn{}).PlugIn(p)
+			(&noopConn{}).BindPort(p)
+		}
+		if err := sim.Initialize(); err != nil {
+			panic(err)
 		}
 
 		return &memcontrolprotocol.Harness{

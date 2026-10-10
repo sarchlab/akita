@@ -48,9 +48,9 @@ func buildEnvironment(
 	// The agent sends to the cache's Top port, so the cache's ports are
 	// created before the agent is built.
 	cachePorts := writethroughcache.Ports{
-		Top:     twowaybuffered.NewPort("Cache.Top", 16, 16),
-		Bottom:  twowaybuffered.NewPort("Cache.Bottom", 16, 16),
-		Control: twowaybuffered.NewPort("Cache.Control", 16, 16),
+		Top:     twowaybuffered.NewPort(16, 16),
+		Bottom:  twowaybuffered.NewPort(16, 16),
+		Control: twowaybuffered.NewPort(16, 16),
 	}
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -62,14 +62,9 @@ func buildEnvironment(
 		WithSimulation(s).
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{LowModule: cachePorts.Top}).
-		WithPorts(memaccessagent.Ports{
-			Mem: twowaybuffered.NewPort("MemAccessAgent.Mem", 16, 16),
-		}).
 		Build("MemAccessAgent")
-	memaccessagent.SetProgressTrackers(agent,
-		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
-		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
-	)
+
+	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
 	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
@@ -80,11 +75,10 @@ func buildEnvironment(
 				WithSimulation(s).
 				Build("DRAM.Storage"),
 		}).
-		WithPorts(idealmemcontroller.Ports{
-			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
-			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
-		}).
 		Build("DRAM")
+
+	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.Ports.Top.AsRemote()
@@ -107,13 +101,23 @@ func buildEnvironment(
 				Build("Cache.Storage"),
 			AddressMapper: addressToPortMapper,
 		}).
-		WithPorts(cachePorts).
 		Build("Cache")
+	writeAroundCachePorts := cachePorts
+	writeAroundCache.BindPort("Top", writeAroundCachePorts.Top)
+	writeAroundCache.BindPort("Bottom", writeAroundCachePorts.Bottom)
+	writeAroundCache.BindPort("Control", writeAroundCachePorts.Control)
 
-	conn.PlugIn(agent.Ports.Mem)
-	conn.PlugIn(writeAroundCache.Ports.Bottom)
-	conn.PlugIn(writeAroundCache.Ports.Top)
-	conn.PlugIn(dram.Ports.Top)
+	conn.BindPort(agent.Ports.Mem)
+	conn.BindPort(writeAroundCache.Ports.Bottom)
+	conn.BindPort(writeAroundCache.Ports.Top)
+	conn.BindPort(dram.Ports.Top)
+	if err := s.Initialize(); err != nil {
+		panic(err)
+	}
+	memaccessagent.SetProgressTrackers(agent,
+		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+	)
 
 	return s, engine, agent
 }

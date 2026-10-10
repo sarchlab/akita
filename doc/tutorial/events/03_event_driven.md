@@ -124,16 +124,18 @@ sim := modeling.NewStandaloneSimulation(engine)
 
 agentA := ping.Definition.Builder().
     WithSimulation(sim).
-    WithPorts(ping.Ports{Out: twowaybuffered.NewPort("AgentA.Out", 16, 16)}).
     Build("AgentA")
+agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
 agentB := ping.Definition.Builder().
     WithSimulation(sim).
-    WithPorts(ping.Ports{Out: twowaybuffered.NewPort("AgentB.Out", 16, 16)}).
     Build("AgentB")
+agentB.BindPort("Out", twowaybuffered.NewPort(16, 16))
 
 conn := direct.NewConnection("Conn", sim, timing.GHz)
-conn.PlugIn(agentA.Ports.Out)
-conn.PlugIn(agentB.Ports.Out)
+conn.BindPort(agentA.Ports.Out)
+conn.BindPort(agentB.Ports.Out)
+
+if err := sim.Initialize(); err != nil { panic(err) }
 
 ping.SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 ping.SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
@@ -142,7 +144,7 @@ engine.Run()
 ```
 
 The system builder creates each port, choosing its buffer sizes, and passes
-all of them to `Build`, which binds them to the component. `SchedulePing`
+them to `component.BindPort` after Build, then calls `Initialize`. `SchedulePing`
 records a ping in the State and calls `WakeAt(sendAt)`; that is enough to
 start the simulation.
 

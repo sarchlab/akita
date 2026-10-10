@@ -30,10 +30,15 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 					Port: "RemotePort",
 				},
 			}).
-			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
-
+		compPorts := defaultPorts("TLB")
+		comp.BindPort("Top", compPorts.Top)
+		comp.BindPort("Bottom", compPorts.Bottom)
+		comp.BindPort("Control", compPorts.Control)
 		plugNoopConn(comp)
+		if err := sim.Initialize(); err != nil {
+			panic(err)
+		}
 
 		ctrlMW = comp.Middlewares.Ctrl
 	})

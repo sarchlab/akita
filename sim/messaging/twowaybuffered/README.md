@@ -7,14 +7,16 @@ and NoC endpoints; it does not depend on either implementation.
 ```go
 import "github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
-port := twowaybuffered.NewPort("Cache.Top", 8, 4)
+port := twowaybuffered.NewPort(8, 4)
 ```
 
-`NewPort(name, incomingCapacity, outgoingCapacity)` returns `*twowaybuffered.Port`.
-Pass it to the owning component's builder in a `messaging.Port` field. The name
-must match that field, such as `Cache.Top`; the component builder sets its owner
-and registers it. Owners outside the component model call `SetOwner` themselves.
-Named construction and owner binding are unchanged by the package move.
+`NewPort(incomingCapacity, outgoingCapacity)` returns `*twowaybuffered.Port`.
+Create ports without names, then call `component.BindPort("Top", port)`.
+For a component named `Cache`, this assigns `Cache.Top`, records the owner,
+and registers the port. Custom owners call `port.BindOwner(owner, "Cache.Top")`
+and register the port themselves. Binding is one-time; an unowned port has no
+remote address. Attach it with `connection.BindPort(port)` during setup.
+After all wiring, call `simulation.Initialize()` before sending work or running.
 
 A component calls `CanSend` before `Send`, and reads `PeekIncoming` or
 `RetrieveIncoming`. A connection reads `PeekOutgoing` or `RetrieveOutgoing` and

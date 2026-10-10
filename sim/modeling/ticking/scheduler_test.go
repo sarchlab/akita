@@ -13,6 +13,8 @@ type testEngine struct {
 	scheduled []timing.Event
 }
 
+func (*testEngine) SetRunGuard(func() error) {}
+
 func (e *testEngine) CurrentTime() timing.VTimeInPicoSec {
 	return e.now
 }
