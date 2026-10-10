@@ -116,26 +116,14 @@ Each package doc shows how to declare and build a component of its model.
   `Resources` are fixed after `Build`; `Initialize` freezes port bindings and
   creates State and Middlewares.
 
-### Domain
+### Composing subsystems
 
-A named bundle of components that exposes selected internal ports at its
-boundary. Domains nest — components form a domain (e.g., a shader array),
-and domains compose into larger domains (e.g., a GPU) — with hierarchical
-names following the `Domain.Domain.Component` convention.
+Use ordinary Go structs and builders to group components and expose selected
+member ports. Assign each component its final hierarchical name, such as
+`GPU[0].SA[0].CU[0]`, before building it. Exposing a member port does not change
+its owner or name. Components remain unaware of the containing subsystem.
 
-The boundary is a struct of ports, like a component's `Ports`; each field holds
-the internal port it exposes.
-
-```go
-type GPUPorts struct {
-    Top messaging.Port
-}
-
-gpu := modeling.NewDomain("GPU[0]", GPUPorts{Top: commandProcessor.Ports.ToDriver})
-
-// Outside code addresses the domain, not its internals.
-port := gpu.Ports.Top
-```
+A framework domain API with its own Spec and builder is deferred to v5.1.
 
 ## Simulation context
 
