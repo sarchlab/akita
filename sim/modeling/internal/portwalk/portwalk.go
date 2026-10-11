@@ -1,5 +1,5 @@
 // Package portwalk walks the port slots of a Ports struct. The component
-// models and modeling.Domain share it.
+// models share it.
 package portwalk
 
 import (
