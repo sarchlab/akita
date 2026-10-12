@@ -3,10 +3,9 @@ package queueing
 // PipelineStage represents a single item occupying a lane and stage in a
 // pipeline. It is a plain data record used to inspect pipeline occupancy.
 type PipelineStage[T any] struct {
-	Lane      int `json:"lane"`
-	Stage     int `json:"stage"`
-	Item      T   `json:"item"`
-	CycleLeft int `json:"cycle_left"`
+	Lane  int `json:"lane"`
+	Stage int `json:"stage"`
+	Item  T   `json:"item"`
 }
 
 // Sink is the destination a Pipeline pushes completed items into. Both
@@ -63,10 +62,10 @@ func (p *Pipeline[T]) CanAccept() bool {
 }
 
 // Accept inserts an item into the first stage of the pipeline. It occupies
-// the next free lane. The item starts with CycleLeft=0, meaning it will
-// attempt to advance to the next stage on the very next Tick. The total
-// latency through the pipeline equals NumStages ticks. Accept panics when
-// stage 0 is full; callers must check CanAccept before inserting.
+// the next free lane and attempts to advance to the next stage on the very
+// next Tick. Each stage takes one cycle, so the total latency through the
+// pipeline equals NumStages ticks. Accept panics when stage 0 is full; callers
+// must check CanAccept before inserting.
 func (p *Pipeline[T]) Accept(item T) {
 	// Use a fixed-size bitset on the stack for small widths,
 	// fall back to a slice for larger ones.
@@ -98,27 +97,18 @@ func (p *Pipeline[T]) Accept(item T) {
 	}
 
 	p.stages = append(p.stages, PipelineStage[T]{
-		Lane:      lane,
-		Stage:     0,
-		Item:      item,
-		CycleLeft: 0,
+		Lane:  lane,
+		Stage: 0,
+		Item:  item,
 	})
 }
 
-// AcceptWithDelay inserts an item like Accept, but the item dwells delay extra
-// cycles at stage 0 before it becomes eligible to advance. Accept(item) is
-// equivalent to AcceptWithDelay(item, 0).
-func (p *Pipeline[T]) AcceptWithDelay(item T, delay int) {
-	p.Accept(item)
-	p.stages[len(p.stages)-1].CycleLeft = delay
-}
-
-// Tick advances the pipeline by one cycle. Items at the last stage with
-// CycleLeft==0 are pushed into sink. Items at intermediate stages advance
+// Tick advances the pipeline by one cycle. Items at the last stage are pushed
+// into sink. Items at intermediate stages advance
 // to the next stage if the next stage has a free lane. Stages are processed
 // from last to first to prevent double-advancement.
 //
-// Returns true if any item moved or consumed a dwell cycle.
+// Returns true if any item moved.
 func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	n := len(p.stages)
 	if n == 0 {
@@ -128,20 +118,13 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	moved := false
 	lastStage := p.numStages - 1
 
-	// Phase 1: Consume dwell or output items at the last stage.
+	// Phase 1: Try to output items at the last stage.
 	for i := n - 1; i >= 0; i-- {
 		s := &p.stages[i]
 		if s.Stage != lastStage {
 			continue
 		}
-		if s.CycleLeft > 0 {
-			// A single-stage pipeline starts at the last stage. Consume its
-			// dwell here, since advanceItems only visits intermediate stages.
-			s.CycleLeft--
-			moved = true
-			continue
-		}
-		if s.CycleLeft == 0 && sink.CanPush() {
+		if sink.CanPush() {
 			sink.Push(s.Item)
 			p.stages[i] = p.stages[n-1]
 			n--
@@ -185,13 +168,6 @@ func (p *Pipeline[T]) advanceItems() bool {
 		for i := 0; i < n; i++ {
 			s := &p.stages[i]
 			if s.Stage != stage {
-				continue
-			}
-
-			if s.CycleLeft > 0 {
-				s.CycleLeft--
-				moved = true
-
 				continue
 			}
 

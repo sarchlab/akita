@@ -40,21 +40,12 @@ func TestPipelineAcceptAssignsLane(t *testing.T) {
 	assert.Equal(t, 0, p.stages[1].Stage)
 }
 
-func TestPipelineAcceptCycleLeft(t *testing.T) {
-	p := newPipeline(1, 4)
-	p.Accept(42)
-	assert.Equal(t, 0, p.stages[0].CycleLeft) // CycleLeft starts at 0
-}
-
 func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	// Single lane, single stage pipeline.
 	p := newPipeline(1, 1)
 	postBuf := newPostBuf(10)
 
 	p.Accept(100)
-
-	// CycleLeft should be 0 for a 1-stage pipeline.
-	assert.Equal(t, 0, p.stages[0].CycleLeft)
 
 	moved := p.Tick(postBuf)
 	assert.True(t, moved)
@@ -77,7 +68,6 @@ func TestPipelineTickMultiStage(t *testing.T) {
 	assert.True(t, moved)
 	assert.Equal(t, 1, len(p.stages))
 	assert.Equal(t, 1, p.stages[0].Stage)
-	assert.Equal(t, 0, p.stages[0].CycleLeft)
 
 	// Tick 2: advance to stage 2 (last stage).
 	moved = p.Tick(postBuf)
@@ -118,7 +108,7 @@ func TestPipelineMultiLane(t *testing.T) {
 	p.Accept(1)
 	p.Accept(2)
 
-	// Both items at stage 0 with CycleLeft=0.
+	// Both items at stage 0.
 	// Tick 1: both advance to stage 1 (last stage).
 	p.Tick(postBuf)
 	for _, s := range p.stages {
@@ -135,8 +125,8 @@ func TestPipelineBlockedByNextStage(t *testing.T) {
 	// 1 lane, 2 stages. Put items at both stages.
 	p := newPipeline(1, 2)
 	p.stages = []PipelineStage[int]{
-		{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
-		{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
+		{Lane: 0, Stage: 0, Item: 10},
+		{Lane: 0, Stage: 1, Item: 20},
 	}
 
 	// postBuf is full, so stage-1 item can't leave, stage-0 can't advance.
@@ -149,8 +139,8 @@ func TestPipelineBlockedByNextStage(t *testing.T) {
 func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	p := newPipeline(1, 2)
 	p.stages = []PipelineStage[int]{
-		{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
-		{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
+		{Lane: 0, Stage: 0, Item: 10},
+		{Lane: 0, Stage: 1, Item: 20},
 	}
 
 	postBuf := newPostBuf(10)
@@ -196,54 +186,15 @@ func TestPipelineStreamOfItems(t *testing.T) {
 	assert.Equal(t, 2, value3)
 }
 
-func TestPipelineCycleLeftDecrement(t *testing.T) {
-	p := newPipeline(1, 2)
-	p.stages = []PipelineStage[int]{
-		{Lane: 0, Stage: 0, Item: 99, CycleLeft: 2},
-	}
-	postBuf := newPostBuf(10)
-
-	// Tick 1: CycleLeft 2→1.
-	moved := p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 1, p.stages[0].CycleLeft)
-	assert.Equal(t, 0, p.stages[0].Stage)
-
-	// Tick 2: CycleLeft 1→0.
-	moved = p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 0, p.stages[0].CycleLeft)
-	assert.Equal(t, 0, p.stages[0].Stage)
-
-	// Tick 3: advance to stage 1.
-	moved = p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 1, p.stages[0].Stage)
-
-	// Tick 4: output.
-	moved = p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 0, len(p.stages))
-	assert.Equal(t, 1, postBuf.Size())
-}
-
 func TestPipelineFullAcceptDoesNotChangeContents(t *testing.T) {
-	for _, delayed := range []bool{false, true} {
-		p := newPipeline(2, 2)
-		p.Accept(0)
-		p.Accept(1)
-		before := p.Stages()
-		assert.Panics(t, func() {
-			if delayed {
-				p.AcceptWithDelay(2, 3)
-			} else {
-				p.Accept(2)
-			}
-		})
-		assert.Equal(t, before, p.Stages())
-		sink := newPostBuf(2)
-		p.Tick(sink)
-		p.Tick(sink)
-		assert.ElementsMatch(t, []int{0, 1}, sink.Elements())
-	}
+	p := newPipeline(2, 2)
+	p.Accept(0)
+	p.Accept(1)
+	before := p.Stages()
+	assert.Panics(t, func() { p.Accept(2) })
+	assert.Equal(t, before, p.Stages())
+	sink := newPostBuf(2)
+	p.Tick(sink)
+	p.Tick(sink)
+	assert.ElementsMatch(t, []int{0, 1}, sink.Elements())
 }

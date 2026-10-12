@@ -39,9 +39,9 @@ func TestBufferJSONRoundTrip(t *testing.T) {
 
 func TestPipelineJSONRoundTrip(t *testing.T) {
 	p := MakePipeline[int](2, 3)
-	p.AcceptWithDelay(1, 2) // lands at stage 0 with a 2-cycle dwell
-	p.Accept(2)
-	p.Tick(&nopSink[int]{}) // advance so stages/cycle-left are non-trivial
+	p.Accept(1)
+	p.Tick(&nopSink[int]{}) // item 1 moves to stage 1
+	p.Accept(2)             // item 2 lands at stage 0
 
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestPipelineJSONRoundTrip(t *testing.T) {
 	}
 
 	// Draining both from the restored state yields identical output only if
-	// width, numStages, stage, lane, and cycle-left all survived.
+	// width, numStages, stage, and lane all survived.
 	if a, b := drainPipeline(&p), drainPipeline(&got); !reflect.DeepEqual(a, b) {
 		t.Fatalf("drained output mismatch: %v vs %v", a, b)
 	}

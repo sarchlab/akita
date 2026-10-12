@@ -95,7 +95,6 @@ madeProgress := pipe.Tick(&post)
 |--------|-------------|
 | `CanAccept() bool` | True if a lane is free at stage 0 |
 | `Accept(item T)` | Insert into the first stage; panic if full |
-| `AcceptWithDelay(item T, delay int)` | Like `Accept` (including panic if full), but the item dwells `delay` extra cycles at stage 0 |
 | `Tick(sink Sink[T]) bool` | Advance one cycle; completed items go to `sink`. Returns true if any item moved |
 | `Stages() []PipelineStage[T]` | Copy of current occupancy, for inspection and testing |
 | `Clear()` | Remove all items |
@@ -103,10 +102,10 @@ madeProgress := pipe.Tick(&post)
 ### Pipeline Behavior
 
 - Each item occupies one lane at one stage, described by `PipelineStage[T]`
-  (`Lane`, `Stage`, `Item`, `CycleLeft`).
+  (`Lane`, `Stage`, `Item`).
 - Items advance from stage `i` to stage `i+1` when the same lane is free at the
   next stage.
-- Items at the last stage with `CycleLeft == 0` are pushed into the sink, but
+- Items at the last stage are pushed into the sink, but
   only while `sink.CanPush()` is true.
 - Stages are processed from last to first to prevent double-advancement within
   a tick.
