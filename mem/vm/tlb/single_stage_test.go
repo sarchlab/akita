@@ -1,0 +1,92 @@
+package tlb
+
+import (
+	"testing"
+
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
+)
+
+func newSingleStageTLB(t *testing.T) *Comp {
+	t.Helper()
+	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	spec := Definition.DefaultSpec
+	spec.Latency = 1
+	spec.NumReqPerCycle = 1
+	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).
+		WithResources(Resources{
+			TranslationProviderMapper: &mem.SinglePortMapper{Port: "Walker"},
+		}).Build("TLB")
+	ports := defaultPorts("TLB")
+	comp.BindPort("Top", ports.Top)
+	comp.BindPort("Bottom", ports.Bottom)
+	comp.BindPort("Control", ports.Control)
+	plugNoopConn(comp)
+	require.NoError(t, sim.Initialize())
+	return comp
+}
+
+func deliverSingleStageRequest(comp *Comp) messaging.Msg {
+	req := messaging.Msg{
+		ID: comp.NewID(), Src: "Requester", Dst: comp.Ports.Top.AsRemote(),
+		Payload:      vmprotocol.TranslationReq{PID: 1, VAddr: 0x1000, DeviceID: 1},
+		TrafficClass: "vmprotocol.TranslationReq",
+	}
+	comp.Ports.Top.Deliver(req)
+	return req
+}
+
+func tickSingleStageLookup(t *testing.T, comp *Comp) {
+	t.Helper()
+	// Admission, extra dwell, pipeline output, and post-pipeline lookup.
+	// Latency=1 is a stage count; this test does not assert a one-cycle hit.
+	for tick := range 4 {
+		require.True(t, modelingtest.Tick(comp), "tick %d must make progress", tick+1)
+	}
+	require.Empty(t, comp.State.Pipeline.Stages())
+	require.Zero(t, comp.State.BufferItems.Size())
+}
+
+func TestSingleStageTLBHitCompletes(t *testing.T) {
+	comp := newSingleStageTLB(t)
+	page := vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000, Valid: true}
+	setUpdate(&comp.State.Sets[0], 0, page)
+	setVisit(&comp.State.Sets[0], 0)
+	req := deliverSingleStageRequest(comp)
+	tickSingleStageLookup(t, comp)
+	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
+	require.True(t, ok)
+	require.Equal(t, req.ID, rsp.RspTo)
+	require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+	_, ok = comp.Ports.Bottom.RetrieveOutgoing()
+	require.False(t, ok, "a resident hit must not fetch a translation")
+}
+
+func TestSingleStageTLBMissCompletes(t *testing.T) {
+	comp := newSingleStageTLB(t)
+	req := deliverSingleStageRequest(comp)
+	tickSingleStageLookup(t, comp)
+	fetch, ok := comp.Ports.Bottom.RetrieveOutgoing()
+	require.True(t, ok)
+	require.Equal(t, req.Payload, fetch.Payload)
+	page := vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000, Valid: true}
+	comp.Ports.Bottom.Deliver(messaging.Msg{
+		ID: comp.NewID(), Src: "Walker", Dst: comp.Ports.Bottom.AsRemote(),
+		RspTo: fetch.ID, Payload: vmprotocol.TranslationRsp{Page: page},
+		TrafficClass: "vmprotocol.TranslationRsp",
+	})
+	require.True(t, modelingtest.Tick(comp)) // Receive the downstream mapping.
+	require.True(t, modelingtest.Tick(comp)) // Respond to the original requester.
+	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
+	require.True(t, ok)
+	require.Equal(t, req.ID, rsp.RspTo)
+	require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+	require.Empty(t, comp.State.MSHREntries)
+	require.False(t, comp.State.HasRespondingMSHR)
+}

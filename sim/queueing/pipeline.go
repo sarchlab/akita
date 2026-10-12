@@ -118,7 +118,7 @@ func (p *Pipeline[T]) AcceptWithDelay(item T, delay int) {
 // to the next stage if the next stage has a free lane. Stages are processed
 // from last to first to prevent double-advancement.
 //
-// Returns true if any item moved.
+// Returns true if any item moved or consumed a dwell cycle.
 func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	n := len(p.stages)
 	if n == 0 {
@@ -128,16 +128,24 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	moved := false
 	lastStage := p.numStages - 1
 
-	// Phase 1: Try to output items at last stage with CycleLeft == 0.
+	// Phase 1: Consume dwell or output items at the last stage.
 	for i := n - 1; i >= 0; i-- {
 		s := &p.stages[i]
-		if s.Stage == lastStage && s.CycleLeft == 0 {
-			if sink.CanPush() {
-				sink.Push(s.Item)
-				p.stages[i] = p.stages[n-1]
-				n--
-				moved = true
-			}
+		if s.Stage != lastStage {
+			continue
+		}
+		if s.CycleLeft > 0 {
+			// A single-stage pipeline starts at the last stage. Consume its
+			// dwell here, since advanceItems only visits intermediate stages.
+			s.CycleLeft--
+			moved = true
+			continue
+		}
+		if s.CycleLeft == 0 && sink.CanPush() {
+			sink.Push(s.Item)
+			p.stages[i] = p.stages[n-1]
+			n--
+			moved = true
 		}
 	}
 
