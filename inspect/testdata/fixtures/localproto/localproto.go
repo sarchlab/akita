@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Protocol is a local protocol carrying memprotocol's messages.
@@ -24,6 +25,7 @@ var Protocol = messaging.DefineProtocol(
 
 // Spec configures the component.
 type Spec struct {
+	Freq timing.Freq `json:"freq"`
 	// Width is the datapath width.
 	Width int `json:"width"`
 }

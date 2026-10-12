@@ -62,7 +62,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
 	c := &Component[S, T, R, P, M]{
-		ticks: NewScheduler(name, b.simulation, specFreq(b.spec)),
+		ticks: NewScheduler(name, b.simulation, specFreq(name, b.spec)),
 	}
 	base.Init(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources)
@@ -82,16 +82,20 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 }
 
 // specFreq returns the Spec's Freq field, the clock the instance ticks at.
-func specFreq(spec any) timing.Freq {
+func specFreq(name string, spec any) timing.Freq {
 	v := reflect.ValueOf(spec)
 
 	f := v.FieldByName("Freq")
 	if !f.IsValid() || f.Type() != freqType {
 		panic(fmt.Sprintf(
-			"ticking: Spec %s must have a Freq timing.Freq field", v.Type()))
+			"ticking: component %q: Spec %s must have a Freq timing.Freq field", name, v.Type()))
 	}
 
-	return f.Interface().(timing.Freq)
+	freq := f.Interface().(timing.Freq)
+	if freq == 0 {
+		panic(fmt.Sprintf("ticking: component %q: Spec %s has zero Freq", name, v.Type()))
+	}
+	return freq
 }
 
 // typeName returns the import path of the package that declares S, which

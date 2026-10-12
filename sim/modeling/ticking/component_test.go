@@ -281,3 +281,9 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 		})
 	})
 }
+
+func TestBuildRejectsZeroFrequency(t *testing.T) {
+	mustPanic(t, `component "ZeroClock": Spec ticking_test.Spec has zero Freq`, func() {
+		Definition.Builder().WithSimulation(newSim()).WithSpec(Spec{Freq: 0}).Build("ZeroClock")
+	})
+}

@@ -1,6 +1,10 @@
 package modelingtest
 
 import (
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/nofreq"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
@@ -34,5 +38,18 @@ func TestDefaultsDetectExactIntegerDrift(t *testing.T) {
 				t.Fatal("integer drift was missed")
 			}
 		})
+	}
+}
+
+func TestCheckTickingRejectsMissingFreq(t *testing.T) {
+	if os.Getenv("AKITA_TEST_MISSING_FREQ") == "1" {
+		CheckTicking(t, nofreq.Definition)
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestCheckTickingRejectsMissingFreq$")
+	cmd.Env = append(os.Environ(), "AKITA_TEST_MISSING_FREQ=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "must have a Freq timing.Freq field") {
+		t.Fatalf("CheckTicking must fail for missing Freq: %v\n%s", err, out)
 	}
 }

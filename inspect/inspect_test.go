@@ -33,6 +33,7 @@ var expectedErrors = []struct {
 }{
 	{"custom IsZero", "fixtures/customzero", "spec.Value with custom IsZero"},
 	{"dash scalar", "fixtures/dashscalar", "spec.Hidden must not be tagged"},
+	{"missing ticking Freq", "fixtures/nofreq", "must have a Freq timing.Freq field"},
 	{"duplicatejson", "fixtures/duplicatejson", "duplicate JSON"},
 	{"pointerspec", "fixtures/pointerspec", "disallowed Spec"},
 	{"pointertype", "fixtures/pointertype", "Spec must be a struct"},
@@ -146,7 +147,7 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 		} {
 			def, ok := byPkg[fixturePath(pkg)]
 			if !ok || def.Name != pkg || def.Model != schema.ModelTicking ||
-				len(def.Spec) != 1 || def.Spec[0].Default != depth {
+				len(def.Spec) != 2 || def.Spec[1].Default != depth {
 				t.Errorf("%s: got %+v, want a ticking definition with Depth %d",
 					pkg, def, depth)
 			}

@@ -60,3 +60,9 @@ field must be exported and encoded. `json:",omitzero"` is also rejected on
 fields with custom `IsZero() bool` methods, which could hide distinct values.
 Move rebuilt data to State or Resources.
 Custom JSON must supply both methods and round-trip the configured value.
+
+## Ticking frequency validation
+
+Before: zero `Spec.Freq` failed at the first tick; after: Build rejects it.
+Ticking Specs must declare `Freq timing.Freq` in runtime, inspector, and
+`modelingtest.CheckTicking`; supply a nonzero value before Build.
