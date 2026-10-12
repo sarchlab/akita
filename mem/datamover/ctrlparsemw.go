@@ -64,7 +64,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 	// The slot is free and this request is being admitted. Attribute the
 	// at-head admission wait to the buffer task (which the port hook closes at
-	// retrieve), keyed by the peeked message so it matches the hook's key.
+	// retrieve), using the task ID stored in the port's head entry.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,

@@ -11,14 +11,14 @@ type RequestTaskParents struct {
 	byTask    map[uint64]uint64
 }
 
-// ResolveStart records req_out identity or resolves a request/buffer/transport parent.
+// ResolveStart records req_out/flit_e2e identity or resolves a task parent.
 // Call for every start before filtering or retaining the event.
 func (p *RequestTaskParents) ResolveStart(task TaskStart) TaskStart {
 	if task.MsgID == 0 {
 		return task
 	}
 	switch task.Kind {
-	case ReqOutTaskKind:
+	case ReqOutTaskKind, "flit_e2e":
 		if p.byMessage == nil {
 			p.byMessage = make(map[uint64]uint64)
 			p.byTask = make(map[uint64]uint64)
@@ -37,7 +37,7 @@ func (p *RequestTaskParents) ResolveStart(task TaskStart) TaskStart {
 	return task
 }
 
-// End forgets a completed req_out. Call for every task end, including tasks
+// End forgets a completed req_out or flit_e2e. Call for every end, including tasks
 // omitted by the observer's recording filter.
 func (p *RequestTaskParents) End(taskID uint64) {
 	msgID, ok := p.byTask[taskID]

@@ -158,7 +158,9 @@ before its outgoing-buffer child.
 `TaskStart.MsgID` identifies the message handled by a task. `req_in` starts
 have no simulation-supplied parent. `DBTracer` and `BackTraceTracer` each own a
 `RequestTaskParents`, which records `MsgID -> req_out task ID`, resolves parents
-on receive/buffer/message-transport starts, and deletes the mapping on req_out end. Buffer tasks
+on receive/buffer/message-transport starts, and deletes the mapping on req_out end.
+It also records `MsgID -> flit_e2e task ID` until flit_e2e ends, so NoC flit
+buffers remain children of the transport task through every network hop. Buffer tasks
 for responses resolve using `Detail.(messaging.Msg).RspTo`; their `MsgID` still
 identifies the response itself. NoC `msg_e2e` tasks resolve the same way.
 Explicit parents of other task kinds are

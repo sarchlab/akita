@@ -179,23 +179,15 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	return true
 }
 
-// endInflightTasks completes the req_in tracing task of every in-flight
-// transaction, finalizes its downstream read/write req_out tasks, and closes
-// its directory-pipeline and bank subtasks, so a hard Reset that drops the
-// transaction table leaves no started-never-ended task. A slot already marked Removed can still hold a
-// downstream write whose response will be ignored, so every slot is visited and
-// the already-ended req_in end is idempotent. Mirrors respondStage (req_in),
-// bottomparser (req_out), and the directory/bank pipelines (subtasks).
+// endInflightTasks ends each live task before discarding its state. Removed
+// transactions have completed req_in but can still own a downstream req_out.
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.comp
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
 
-		switch {
-		case trans.HasRead:
-			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
-		case trans.HasWrite:
+		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
 			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
 		}
 

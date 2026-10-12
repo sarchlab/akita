@@ -198,8 +198,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	srcP.RetrieveIncoming()
 
 	// Charge the in-flight src-read wait to the req_in opened for this move
-	// transaction (same key used as the parent of the read req_out's
-	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	// transaction (the stored receive ID also parents the read req_out), so the dominant latency of a move is attributed.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindData,
@@ -293,8 +292,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	dstP.RetrieveIncoming()
 
 	// Charge the in-flight dst-write wait to the req_in opened for this move
-	// transaction (same key used as the parent of the write req_out's
-	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	// transaction (the stored receive ID also parents the write req_out), so the dominant latency of a move is attributed.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindSubTask,

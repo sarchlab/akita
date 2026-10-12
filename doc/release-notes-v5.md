@@ -99,7 +99,11 @@ including MGPUSim, in this order:
    read before `RetrieveIncoming`. The port stores IDs in buffer entries and
    saves/restores them with the typed messages. Custom `messaging.Port`
    implementations need this method and should emit `PortBufferTrace` as
-   hook `Detail` (message `Item` is unchanged). Recreate old checkpoints.
+   hook `Detail` (message `Item` is unchanged). Retrieve hooks now run under
+   the port lock, like enqueue hooks. Custom hooks must use the supplied
+   `PortBufferTrace.HeadTaskID` instead of calling buffer operations such as
+   Peek/NumIncoming/NumOutgoing, which would deadlock. Owner/Name access is
+   safe. Recreate old checkpoints.
 6. Custom tracers that need parent links use a per-tracer
    `RequestTaskParents`: pass every start through
    `ResolveStart(TaskStart) TaskStart`, then call `End(taskID uint64)` on every
@@ -112,7 +116,8 @@ Removed functions: `MsgIDAtReceiver`, `ForgetMsgIDAtReceiver`,
 come first throughout the tracing API.
 
 `DBTracer` and `BackTraceTracer` resolve req_in parents from observed req_out
-starts and discard correlation on req_out end. Unmatched requests have no
+starts and discard correlation on req_out end. Flit buffer parents are resolved from observed `flit_e2e`
+starts and forgotten when that transport task ends. Unmatched requests have no
 parent, including requests already in flight at restore. Correlation is
 observer state and is not checkpointed. Buffer tasks use the same helper,
 including response buffers linked by the message's `RspTo`. Existing task and

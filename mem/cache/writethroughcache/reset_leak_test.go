@@ -142,3 +142,35 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 			len(open), rec.OpenSummary())
 	}
 }
+
+type resetEndCounter struct {
+	tracing.NopTracer
+	ends map[uint64]int
+}
+
+func (r *resetEndCounter) EndTask(task tracing.TaskEnd) { r.ends[task.ID]++ }
+
+func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
+	pipeline := buildStageTestCache(Definition.DefaultSpec, Resources{
+		Storage:       mem.NewStorage(1 * mem.MB),
+		AddressMapper: &mem.SinglePortMapper{Port: "Lower"},
+	}, makePorts("Cache", 8), state{})
+	comp := pipeline.comp
+	rec := &resetEndCounter{ends: make(map[uint64]int)}
+	tracing.CollectTrace(comp, rec)
+	completed := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	active := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	write := tracing.TraceReqInitiate(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	tracing.TraceReqComplete(comp, completed)
+	comp.State.Transactions = []transactionState{
+		{HasRead: true, RecvTaskID: completed, Removed: true, HasWriteToBottom: true, WriteTaskID: write},
+		{HasWrite: true, RecvTaskID: active},
+	}
+	(&ctrlMiddleware{comp: comp}).endInflightTasks()
+	for _, id := range []uint64{completed, active, write} {
+		if rec.ends[id] != 1 {
+			t.Fatalf("task %d ended %d times, want once", id, rec.ends[id])
+		}
+	}
+	t.Log("reset ended live receive/write tasks once; completed receive was not ended again")
+}

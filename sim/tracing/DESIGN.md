@@ -10,7 +10,8 @@ admission milestones. Port hook metadata makes buffer observers stateless.
 `RequestTaskParents` is private state of each tracer instance, shared as an
 implementation helper by DBTracer, BackTraceTracer, and custom tracers. It
 resolves message correlation into task parents and forgets each mapping on
-req_out end. A missed sender start leaves parent zero; the helper is never
+req_out end. It also correlates flit buffer tasks with observed flit_e2e tasks
+for their transport lifetime. A missed sender start leaves parent zero; the helper is never
 checkpointed. The DB schema and Daisen task-parent joins are unchanged.
 
 The historical registry proposal below has been superseded. All three global

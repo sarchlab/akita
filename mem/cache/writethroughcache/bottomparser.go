@@ -72,6 +72,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 	// Trace the original request to lower memory.
 	tracing.TraceReqFinalize(p.cache.comp, trans.WriteTaskID)
+	trans.WriteTaskID = 0
 
 	return true
 }
@@ -133,6 +134,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 
 	// Trace the original request to lower memory.
 	tracing.TraceReqFinalize(p.cache.comp, trans.ReadTaskID)
+	trans.ReadTaskID = 0
 
 	return true
 }

@@ -72,3 +72,19 @@ func TestTransportAndBufferParents(t *testing.T) {
 		}
 	}
 }
+
+func TestFlitBufferParentsFollowTransportLifetime(t *testing.T) {
+	var parents RequestTaskParents
+	parents.ResolveStart(TaskStart{ID: 101, MsgID: 7, Kind: "flit_e2e", ParentID: 100})
+	for _, kind := range []string{IncomingBufferTaskKind, OutgoingBufferTaskKind} {
+		buffer := TaskStart{ID: 102, MsgID: 7, Kind: kind}
+		require.Equal(t, uint64(101), parents.ResolveStart(buffer).ParentID)
+		var freshObserver RequestTaskParents
+		require.Zero(t, freshObserver.ResolveStart(buffer).ParentID)
+	}
+	parents.End(101)
+	require.Empty(t, parents.byMessage)
+	require.Empty(t, parents.byTask)
+	require.Zero(t, parents.ResolveStart(TaskStart{ID: 103, MsgID: 7, Kind: IncomingBufferTaskKind}).ParentID)
+	t.Log("flit message 7: incoming/outgoing buffers parent to transport task 101; no match after its end")
+}

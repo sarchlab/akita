@@ -347,6 +347,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.cache.bottomPort().RetrieveIncoming()
 
 	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchTaskID)
+	trans.FetchTaskID = 0
 
 	return true
 }
@@ -451,6 +452,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 
 			wb.cache.bottomPort().RetrieveIncoming()
 			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionTaskID)
+			e.EvictionTaskID = 0
 
 			return true
 		}
