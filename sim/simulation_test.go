@@ -241,7 +241,7 @@ var _ = Describe("Simulation", func() {
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			err := noSerializerSim.SaveCheckpoint(path, "test-build")
+			err := noSerializerSim.SaveCheckpoint(path)
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"has no checkpoint serializer")))
@@ -261,7 +261,7 @@ var _ = Describe("Simulation", func() {
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
 			Expect(parallelSim.Initialize()).To(Succeed())
-			err := parallelSim.SaveCheckpoint(path, "test-build")
+			err := parallelSim.SaveCheckpoint(path)
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"only timing.SerialEngine is supported")))
@@ -274,7 +274,7 @@ var _ = Describe("Simulation", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(simulation.Initialize()).To(Succeed())
-			err = simulation.LoadCheckpoint(path, "test-build")
+			err = simulation.LoadCheckpoint(path)
 
 			Expect(err).To(MatchError(ContainSubstring("build ID mismatch")))
 		})
@@ -291,11 +291,11 @@ var _ = Describe("Simulation", func() {
 					archiveEntry{name: entity.Name(), data: []byte("{}")})
 			}
 
-			err := writeArchive(path, "test-build", entries)
+			err := writeArchive(path, simulation.buildID, entries)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(simulation.Initialize()).To(Succeed())
-			err = simulation.LoadCheckpoint(path, "test-build")
+			err = simulation.LoadCheckpoint(path)
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"rebuilt entity \"IDGenerator\" is missing from checkpoint")))
@@ -307,11 +307,11 @@ var _ = Describe("Simulation", func() {
 			entries := append(dummyPayloads(simulation),
 				archiveEntry{name: "GhostEntity", data: []byte("{}")})
 
-			err := writeArchive(path, "test-build", entries)
+			err := writeArchive(path, simulation.buildID, entries)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(simulation.Initialize()).To(Succeed())
-			err = simulation.LoadCheckpoint(path, "test-build")
+			err = simulation.LoadCheckpoint(path)
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"saved entity \"GhostEntity\" is not rebuilt")))
@@ -322,7 +322,7 @@ var _ = Describe("Simulation", func() {
 			Expect(os.WriteFile(
 				path, []byte("this is not a gzip archive"), 0o644)).To(Succeed())
 
-			err := simulation.LoadCheckpoint(path, "test-build")
+			err := simulation.LoadCheckpoint(path)
 
 			Expect(err).To(HaveOccurred())
 		})
@@ -330,7 +330,7 @@ var _ = Describe("Simulation", func() {
 		It("should reject a truncated archive", func() {
 			path := filepath.Join(GinkgoT().TempDir(), "truncated.tar.gz")
 			Expect(writeArchive(
-				path, "test-build", dummyPayloads(simulation))).To(Succeed())
+				path, simulation.buildID, dummyPayloads(simulation))).To(Succeed())
 
 			full, err := os.ReadFile(path)
 			Expect(err).ToNot(HaveOccurred())
@@ -338,7 +338,7 @@ var _ = Describe("Simulation", func() {
 			Expect(os.WriteFile(path, full[:len(full)/2], 0o644)).To(Succeed())
 
 			Expect(simulation.Initialize()).To(Succeed())
-			err = simulation.LoadCheckpoint(path, "test-build")
+			err = simulation.LoadCheckpoint(path)
 
 			Expect(err).To(HaveOccurred())
 		})
@@ -489,7 +489,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		advanceTo(engine, 100)
 
 		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
-		Expect(sim.SaveCheckpoint(path, "test-build")).To(Succeed())
+		Expect(sim.SaveCheckpoint(path)).To(Succeed())
 
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
@@ -499,7 +499,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		advanceTo(engine, 500)
 
 		// Restore and confirm every piece came back.
-		Expect(sim.LoadCheckpoint(path, "test-build")).To(Succeed())
+		Expect(sim.LoadCheckpoint(path)).To(Succeed())
 
 		Expect(comp.State.Count).To(Equal(7))
 		data := storage.Read(0, 4)
@@ -561,7 +561,6 @@ func buildResumeSim() (*Simulation, *resumeComp) {
 var _ = Describe("Mid-transaction resume", func() {
 	It("resumes from a checkpoint with a pending tick identically to running uninterrupted", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
-		const buildID = "test-build"
 
 		// Reference run: set up mid-transaction state (work pending, one tick
 		// already scheduled), checkpoint there, then continue to completion.
@@ -573,7 +572,7 @@ var _ = Describe("Mid-transaction resume", func() {
 		refW.State = resumeState{Pending: 5}
 		refW.TickLater() // schedule the first tick -> non-empty engine queue
 
-		Expect(refSim.SaveCheckpoint(path, buildID)).To(Succeed())
+		Expect(refSim.SaveCheckpoint(path)).To(Succeed())
 
 		refEngine := refSim.Engine().(*timing.SerialEngine)
 		Expect(refEngine.Run()).To(Succeed())
@@ -588,7 +587,7 @@ var _ = Describe("Mid-transaction resume", func() {
 			resSim.Terminate()
 			os.Remove("akita_sim_" + resSim.ID() + ".sqlite3")
 		}()
-		Expect(resSim.LoadCheckpoint(path, buildID)).To(Succeed())
+		Expect(resSim.LoadCheckpoint(path)).To(Succeed())
 
 		resEngine := resSim.Engine().(*timing.SerialEngine)
 		Expect(resEngine.Run()).To(Succeed())
@@ -648,7 +647,6 @@ var _ = Describe("Tick scheduler guard restore", func() {
 	It("restores the guard from the checkpoint so a stimulus before the "+
 		"pending tick fires schedules no duplicate", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
-		const buildID = "test-build"
 
 		// Checkpoint with exactly one tick pending in the engine queue and the
 		// engine still at time 0.
@@ -658,7 +656,7 @@ var _ = Describe("Tick scheduler guard restore", func() {
 			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
 		}()
 		srcC.TickLater()
-		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
+		Expect(srcSim.SaveCheckpoint(path)).To(Succeed())
 
 		// Restore into a fresh sim. The component's guard is restored directly
 		// from the checkpoint, so it already agrees that a tick is scheduled.
@@ -667,7 +665,7 @@ var _ = Describe("Tick scheduler guard restore", func() {
 			dstSim.Terminate()
 			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
 		}()
-		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
+		Expect(dstSim.LoadCheckpoint(path)).To(Succeed())
 
 		// A stimulus (what NotifyRecv does) arrives before the pending tick
 		// fires. With the guard restored, this is recognized as redundant and
@@ -729,7 +727,6 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 	It("restores the wakeup guard from the checkpoint so a redundant "+
 		"wakeup request after restore schedules no duplicate", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
-		const buildID = "test-build"
 		const wakeTime = timing.VTimeInPicoSec(1000)
 
 		// Checkpoint with one wakeup pending in the engine queue.
@@ -739,7 +736,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
 		}()
 		srcC.WakeAt(wakeTime)
-		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
+		Expect(srcSim.SaveCheckpoint(path)).To(Succeed())
 
 		// Restore into a fresh sim, whose wakeup guard is restored directly from
 		// the checkpoint.
@@ -748,7 +745,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 			dstSim.Terminate()
 			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
 		}()
-		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
+		Expect(dstSim.LoadCheckpoint(path)).To(Succeed())
 
 		// A redundant request for a wakeup at the already-pending time. With the
 		// guard restored, it is recognized as redundant and queues no duplicate.

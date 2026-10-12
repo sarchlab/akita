@@ -52,3 +52,25 @@ Call `simulation.Initialize()` after wiring and before seeding work, running,
 or saving/loading checkpoints. Validation failures leave setup editable; once
 initializers begin, topology is frozen. Downstream simulators must migrate this
 call order. Domain configuration and builders remain a separate change.
+
+## Spec checkpoint integrity
+
+Before: Spec fields could use `json:"-"` or be unexported; after: every Spec
+field must be exported and encoded. `json:",omitzero"` is also rejected on
+fields with custom `IsZero() bool` methods, which could hide distinct values.
+Move rebuilt data to State or Resources.
+Custom JSON must supply both methods and round-trip the configured value.
+
+## Ticking frequency validation
+
+Before: zero `Spec.Freq` failed at the first tick; after: Build rejects it.
+Ticking Specs must declare `Freq timing.Freq` in runtime, inspector, and
+`modelingtest.CheckTicking`; supply a nonzero value before Build.
+
+## Simulation checkpoint build identity
+
+Before: `s.SaveCheckpoint(path, id)` / `s.LoadCheckpoint(path, id)`; after:
+`s.SaveCheckpoint(path)` / `s.LoadCheckpoint(path)`. Build identity is derived
+automatically from the running binary's build information, stored in the
+checkpoint, and checked on load. There is no public override.
+Per-entity checkpoint methods are unchanged.

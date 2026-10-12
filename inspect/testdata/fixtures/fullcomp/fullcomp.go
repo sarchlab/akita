@@ -36,12 +36,11 @@ type Spec struct {
 
 	// Mode selects how precisely the component is modeled.
 	Mode Mode `json:"mode"`
-
-	Hidden int `json:"-"`
 }
 
 // State is the mutable runtime state.
 type State struct {
+	Hidden int `json:"-"`
 	// Served counts the requests served.
 	Served int `json:"served"`
 }

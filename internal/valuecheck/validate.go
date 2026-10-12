@@ -14,6 +14,9 @@ import (
 // that customize their own JSON from the structural and data-loss checks.
 var jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
 
+// jsonZeroerType identifies the custom zero predicate used by omitzero.
+var jsonZeroerType = reflect.TypeFor[interface{ IsZero() bool }]()
+
 // jsonUnmarshalerType is the reflect.Type of json.Unmarshaler. A type that
 // customizes MarshalJSON must also customize UnmarshalJSON: round-tripping is
 // two independent mechanisms, and with only the marshal half a checkpoint
@@ -178,6 +181,22 @@ func (w *walker) validateFields(t reflect.Type, path string, allowComposite bool
 		}
 
 		fieldPath := fmt.Sprintf("%s.%s", path, field.Name)
+		if !allowComposite {
+			if field.Tag.Get("json") == "-" {
+				return fmt.Errorf("%s: Spec field must not be tagged json:\"-\"", fieldPath)
+			}
+			if !field.IsExported() {
+				return fmt.Errorf("%s: Spec field must be exported", fieldPath)
+			}
+			_, options, _ := strings.Cut(field.Tag.Get("json"), ",")
+			if slices.Contains(strings.Split(options, ","), "omitzero") &&
+				(field.Type.Implements(jsonZeroerType) || reflect.PointerTo(field.Type).Implements(jsonZeroerType)) {
+				return fmt.Errorf("%s: Spec field with custom IsZero must not use json:\",omitzero\"", fieldPath)
+			}
+			if err := validateSpecJSONType(field.Type, fieldPath); err != nil {
+				return err
+			}
+		}
 
 		if err := w.validateFieldType(field.Type, fieldPath, allowComposite); err != nil {
 			return err
@@ -304,7 +323,10 @@ type walker struct {
 
 // Spec validates a component configuration.
 func Spec(v any) error {
-	return (&walker{seen: map[reflect.Type]bool{}}).validateValue(reflect.ValueOf(v), "spec", false)
+	if err := (&walker{seen: map[reflect.Type]bool{}}).validateValue(reflect.ValueOf(v), "spec", false); err != nil {
+		return err
+	}
+	return validateSpecJSONValue(reflect.ValueOf(v), "spec")
 }
 
 // State validates a component state, trusting paired custom JSON methods.
@@ -319,4 +341,57 @@ func Payload(t, opaque reflect.Type) error {
 		return fmt.Errorf("payload: invalid nil type")
 	}
 	return (&walker{strict: true, opaque: opaque, seen: map[reflect.Type]bool{}}).validateFieldType(t, "payload", true)
+}
+
+// Spec custom serialization must provide both directions. The inspector checks
+// this same type contract without executing package code.
+func validateSpecJSONType(t reflect.Type, path string) error {
+	if (t.Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(jsonMarshalerType)) &&
+		!reflect.PointerTo(t).Implements(jsonUnmarshalerType) {
+		return fmt.Errorf("%s: type %s customizes MarshalJSON but has no UnmarshalJSON", path, t)
+	}
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		return validateSpecJSONType(t.Elem(), path+"[]")
+	}
+	return nil
+}
+
+// Verify supported custom codecs against the actual configuration, rather than
+// assuming the presence of two methods guarantees lossless serialization.
+func validateSpecJSONValue(v reflect.Value, path string) error {
+	t := v.Type()
+	if err := validateSpecJSONType(t, path); err != nil {
+		return err
+	}
+	if t.Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(jsonMarshalerType) {
+		src := reflect.New(t)
+		src.Elem().Set(v)
+		data, err := json.Marshal(src.Interface())
+		if err != nil {
+			return fmt.Errorf("%s: marshal Spec: %w", path, err)
+		}
+		dst := reflect.New(t)
+		if err := json.Unmarshal(data, dst.Interface()); err != nil {
+			return fmt.Errorf("%s: unmarshal Spec: %w", path, err)
+		}
+		if !reflect.DeepEqual(v.Interface(), dst.Elem().Interface()) {
+			return fmt.Errorf("%s: custom JSON does not round-trip Spec value", path)
+		}
+		return nil
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if err := validateSpecJSONValue(v.Field(i), path+"."+t.Field(i).Name); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			if err := validateSpecJSONValue(v.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

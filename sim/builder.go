@@ -127,6 +127,7 @@ func (b Builder) createTopologyRecorder(s *Simulation) {
 func (b Builder) createSimulation() *Simulation {
 	return &Simulation{
 		id:           xid.New().String(),
+		buildID:      defaultBuildID(),
 		entityByName: make(map[string]int),
 	}
 }

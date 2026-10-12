@@ -31,6 +31,9 @@ var expectedErrors = []struct {
 	pkgSubstr string
 	msgSubstr string
 }{
+	{"custom IsZero", "fixtures/customzero", "spec.Value with custom IsZero"},
+	{"dash scalar", "fixtures/dashscalar", "spec.Hidden must not be tagged"},
+	{"missing ticking Freq", "fixtures/nofreq", "must have a Freq timing.Freq field"},
 	{"duplicatejson", "fixtures/duplicatejson", "duplicate JSON"},
 	{"pointerspec", "fixtures/pointerspec", "disallowed Spec"},
 	{"pointertype", "fixtures/pointertype", "Spec must be a struct"},
@@ -48,9 +51,9 @@ var expectedErrors = []struct {
 	{"pointer definition", "fixtures/pointerdef", "not a pointer"},
 	{"container behind json dash", "fixtures/dashcontainer",
 		"Spec fields must be scalars"},
-	{"unexported-only spec", "fixtures/unexportedonly", "serializes as {}"},
+	{"unexported-only spec", "fixtures/unexportedonly", "must be exported"},
 	{"non-struct resources", "fixtures/badresources", "must be a struct"},
-	{"omitzero-only spec", "fixtures/omitzeroonly", "serializes as {}"},
+	{"omitzero-only spec", "fixtures/omitzeroonly", "must be exported"},
 	{"container behind MarshalJSON", "fixtures/marshalercontainer",
 		"Spec fields must be scalars"},
 	{"ports field that is not a port", "fixtures/badport",
@@ -144,7 +147,7 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 		} {
 			def, ok := byPkg[fixturePath(pkg)]
 			if !ok || def.Name != pkg || def.Model != schema.ModelTicking ||
-				len(def.Spec) != 1 || def.Spec[0].Default != depth {
+				len(def.Spec) != 2 || def.Spec[1].Default != depth {
 				t.Errorf("%s: got %+v, want a ticking definition with Depth %d",
 					pkg, def, depth)
 			}

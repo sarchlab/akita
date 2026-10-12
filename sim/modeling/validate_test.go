@@ -281,3 +281,83 @@ func TestValidateSpec_RejectsContainerBehindMarshalJSON(t *testing.T) {
 		t.Fatalf("expected a scalar-field error, got %v", err)
 	}
 }
+
+type scalarCodec int
+
+func (s scalarCodec) MarshalJSON() ([]byte, error) { return json.Marshal(int(s)) }
+func (s *scalarCodec) UnmarshalJSON(b []byte) error {
+	var n int
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*s = scalarCodec(n)
+	return nil
+}
+
+type lossyCodec int
+
+func (s lossyCodec) MarshalJSON() ([]byte, error)  { return []byte("0"), nil }
+func (s *lossyCodec) UnmarshalJSON(b []byte) error { *s = 0; return nil }
+
+type scalarMarshalOnly int
+
+func (s scalarMarshalOnly) MarshalJSON() ([]byte, error) { return json.Marshal(int(s)) }
+
+type customZero int
+
+func (v customZero) IsZero() bool { return v < 10 }
+
+type pointerZero int
+
+func (v *pointerZero) IsZero() bool { return *v < 10 }
+
+func TestValidateSpecJSONIntegrity(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		spec any
+		want string
+	}{
+
+		{"custom IsZero", struct {
+			Value customZero `json:",omitzero"`
+		}{1}, "spec.Value: Spec field with custom IsZero"},
+		{"pointer IsZero", struct {
+			Value pointerZero `json:",omitzero"`
+		}{2}, "spec.Value: Spec field with custom IsZero"},
+		{"ordinary omitzero", struct {
+			Value int `json:",omitzero"`
+		}{1}, ""},
+		{"omitzero field name", struct {
+			Value customZero `json:"omitzero"`
+		}{1}, ""},
+		{"IsZero with omitempty", struct {
+			Value customZero `json:",omitempty"`
+		}{1}, ""},
+		{"dash", struct {
+			Hidden int `json:"-"`
+		}{1}, "spec.Hidden"},
+		{"unexported", struct {
+			Visible int
+			hidden  int
+		}{1, 2}, "spec.hidden"},
+		{"marshal only", struct{ N scalarMarshalOnly }{3}, "no UnmarshalJSON"},
+		{"lossy", struct{ N lossyCodec }{3}, "does not round-trip"},
+		{"paired", struct{ N scalarCodec }{3}, ""},
+		{"omitempty", struct {
+			N int `json:",omitempty"`
+		}{3}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateSpec(tc.spec)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+		})
+	}
+}

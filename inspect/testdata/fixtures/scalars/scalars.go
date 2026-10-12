@@ -15,7 +15,8 @@ type Choice string
 const Escaped Choice = "quote\"\n\t\\中文"
 
 type Spec struct {
-	StringNumber uint64 `json:",string"`
+	Freq         timing.Freq `json:"freq"`
+	StringNumber uint64      `json:",string"`
 	Fraction     float32
 	Choice       Choice
 	Quoted       int `json:"'"`
@@ -41,7 +42,7 @@ func (idleMW) Handle(timing.Event) bool { return false }
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{
+	DefaultSpec: Spec{Freq: timing.GHz,
 		StringNumber: 18446744073709551615, Fraction: 0.1, Choice: Escaped,
 		Lanes: []int{1, 2},
 	},

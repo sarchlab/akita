@@ -5,11 +5,13 @@ package genericaliasdef
 import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Spec configures the component.
 type Spec struct {
-	Depth int `json:"depth"`
+	Freq  timing.Freq `json:"freq"`
+	Depth int         `json:"depth"`
 }
 
 type (
@@ -30,6 +32,6 @@ type Def[S any] = ticking.Definition[S, State, modeling.None, Ports, Middlewares
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the component through the generic alias.
-var Definition = Def[Spec]{DefaultSpec: Spec{Depth: 4}, NewMiddlewares: newMiddlewares}
+var Definition = Def[Spec]{DefaultSpec: Spec{Freq: timing.GHz, Depth: 4}, NewMiddlewares: newMiddlewares}
 
 func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

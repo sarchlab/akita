@@ -5,9 +5,11 @@ package zerodefaults
 import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type Spec struct {
+	Freq    timing.Freq `json:"freq"`
 	Count   int
 	Label   string
 	Enabled bool

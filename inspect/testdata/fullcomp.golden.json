@@ -40,11 +40,6 @@
         "accurate",
         "fast"
       ]
-    },
-    {
-      "name": "Hidden",
-      "type": "int",
-      "default": 0
     }
   ],
   "resources": [

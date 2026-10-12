@@ -8,15 +8,12 @@ import (
 )
 
 // SaveCheckpoint writes a checkpoint archive for the simulation. The simulation
-// must use a SerialEngine and be stopped outside an event handler. buildID
-// overrides the build identity (mainly for tests); pass "" to use the default.
+// must use a SerialEngine and be stopped outside an event handler. The build
+// identity is derived automatically from the running binary's build information.
 // It returns an error for the first registered entity that cannot be saved.
-func (s *Simulation) SaveCheckpoint(path, buildID string) error {
+func (s *Simulation) SaveCheckpoint(path string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
-	}
-	if buildID == "" {
-		buildID = defaultBuildID()
 	}
 
 	payloads := make([]archiveEntry, 0, len(s.entities))
@@ -36,27 +33,24 @@ func (s *Simulation) SaveCheckpoint(path, buildID string) error {
 			archiveEntry{name: entity.Name(), data: buf.Bytes()})
 	}
 
-	return writeArchive(path, buildID, payloads)
+	return writeArchive(path, s.buildID, payloads)
 }
 
 // LoadCheckpoint loads a checkpoint archive into this rebuilt simulation. It
 // checks the build identity and that the saved entity set matches the rebuilt
 // one, then hands each entity its payload.
-func (s *Simulation) LoadCheckpoint(path, buildID string) error {
+func (s *Simulation) LoadCheckpoint(path string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
-	}
-	if buildID == "" {
-		buildID = defaultBuildID()
 	}
 
 	savedBuildID, payloads, err := readArchive(path)
 	if err != nil {
 		return err
 	}
-	if savedBuildID != buildID {
+	if savedBuildID != s.buildID {
 		return fmt.Errorf("checkpoint: build ID mismatch: checkpoint %q, current %q",
-			savedBuildID, buildID)
+			savedBuildID, s.buildID)
 	}
 	if err := s.checkpointCoverage(payloads); err != nil {
 		return err

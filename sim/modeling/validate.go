@@ -25,13 +25,17 @@ func MustBeCheckpointable[S, T any](name string, spec S) {
 	}
 }
 
-// ValidateSpec checks that the given value is a struct whose fields, including
-// fields tagged `json:"-"`, are scalars (bool, int*, uint*, float*, string, and
-// named types based on them) or slices and arrays of scalars, such as a list
+// ValidateSpec checks that the given value is a struct with exported fields
+// that are not tagged `json:"-"`. Fields must be scalars (bool, int*, uint*,
+// float*, string, and named types based on them) or slices and arrays of
+// scalars, such as a list
 // of remote ports whose length depends on the configuration. Maps, nested
 // structs, slices of containers, pointers, interfaces, channels, and functions
 // are not allowed: a Spec is flat configuration, and anything a component
-// derives or references belongs in State or Resources.
+// derives or references belongs in State or Resources. Custom JSON codecs must
+// implement both MarshalJSON and UnmarshalJSON and round-trip the given value.
+// A field whose type defines IsZero() bool must not use json:",omitzero": its
+// custom zero predicate could omit distinct configuration values from the hash.
 func ValidateSpec(v any) error {
 	return valuecheck.Spec(v)
 }

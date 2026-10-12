@@ -77,6 +77,12 @@ func extractModelDefinition(
 		return nil, err
 	}
 
+	if model == schema.ModelTicking {
+		freq, _, _ := types.LookupFieldOrMethod(specType, false, pkg.Types, "Freq")
+		if freq == nil || qualifiedTypeName(types.Unalias(freq.Type())) != "github.com/sarchlab/akita/v5/sim/timing.Freq" {
+			return nil, posErrorf(pkg, lit.Pos(), "Spec %s must have a Freq timing.Freq field", specType)
+		}
+	}
 	return def, nil
 }
 

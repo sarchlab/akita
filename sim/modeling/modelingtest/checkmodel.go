@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/event"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // CheckTicking asserts that the inspector's static view of the package that
@@ -23,6 +24,14 @@ func CheckTicking[S, T, R, P, M any](
 	t *testing.T, def ticking.Definition[S, T, R, P, M],
 ) {
 	t.Helper()
+	specType := reflect.TypeFor[S]()
+	if specType.Kind() != reflect.Struct {
+		t.Fatalf("Spec %s must be a struct", specType)
+	}
+	f, ok := specType.FieldByName("Freq")
+	if !ok || f.Type != reflect.TypeFor[timing.Freq]() {
+		t.Fatalf("Spec %s must have a Freq timing.Freq field", specType)
+	}
 	checkModel[S, P, M](t, schema.ModelTicking, def.DefaultSpec)
 }
 
