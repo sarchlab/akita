@@ -63,11 +63,11 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		if dumpLog {
 			write := state.PendingWriteReq[msg.RspTo]
 			log.Printf("%d, agent, write complete, 0x%X\n",
-				m.comp.CurrentTime(), write.Payload.(memprotocol.WriteReq).Address)
+				m.comp.CurrentTime(), write.Msg.Payload.(memprotocol.WriteReq).Address)
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tracing.TraceReqFinalize(m.comp, req)
+		tracing.TraceReqFinalize(m.comp, req.TaskID)
 		delete(state.PendingWriteReq, msg.RspTo)
 
 		if m.writeProgressBar != nil {
@@ -82,12 +82,12 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		if dumpLog {
 			log.Printf("%d, agent, read complete, 0x%X, %v\n",
-				m.comp.CurrentTime(), req.Payload.(memprotocol.ReadReq).Address, content.Data)
+				m.comp.CurrentTime(), req.Msg.Payload.(memprotocol.ReadReq).Address, content.Data)
 		}
 
-		m.checkReadResult(req, msg, state)
+		m.checkReadResult(req.Msg, msg, state)
 
-		tracing.TraceReqFinalize(m.comp, req)
+		tracing.TraceReqFinalize(m.comp, req.TaskID)
 		delete(state.PendingReadReq, msg.RspTo)
 
 		if m.readProgressBar != nil {
@@ -187,11 +187,10 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
+	taskID := tracing.TraceReqInitiate(m.comp, readReq, 0)
 	m.memPort().Send(readReq)
 
-	tracing.TraceReqInitiate(m.comp, readReq, 0)
-
-	state.PendingReadReq[readReq.ID] = readReq
+	state.PendingReadReq[readReq.ID] = pendingRequest{Msg: readReq, TaskID: taskID}
 	state.ReadLeft--
 
 	if m.readProgressBar != nil {
@@ -225,7 +224,7 @@ func (m *agentMiddleware) isAddressInPendingReq(state *State, addr uint64) bool 
 
 func (m *agentMiddleware) isAddressInPendingWrite(state *State, addr uint64) bool {
 	for _, write := range state.PendingWriteReq {
-		if write.Payload.(memprotocol.WriteReq).Address == addr {
+		if write.Msg.Payload.(memprotocol.WriteReq).Address == addr {
 			return true
 		}
 	}
@@ -235,7 +234,7 @@ func (m *agentMiddleware) isAddressInPendingWrite(state *State, addr uint64) boo
 
 func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool {
 	for _, read := range state.PendingReadReq {
-		if read.Payload.(memprotocol.ReadReq).Address == addr {
+		if read.Msg.Payload.(memprotocol.ReadReq).Address == addr {
 			return true
 		}
 	}
@@ -271,13 +270,12 @@ func (m *agentMiddleware) doWrite() bool {
 		return false
 	}
 
+	taskID := tracing.TraceReqInitiate(m.comp, writeReq, 0)
 	m.memPort().Send(writeReq)
-
-	tracing.TraceReqInitiate(m.comp, writeReq, 0)
 
 	state.WriteLeft--
 	m.addKnownValue(state, address, data)
-	state.PendingWriteReq[writeReq.ID] = writeReq
+	state.PendingWriteReq[writeReq.ID] = pendingRequest{Msg: writeReq, TaskID: taskID}
 
 	if m.writeProgressBar != nil {
 		m.writeProgressBar.IncrementInProgress(1)

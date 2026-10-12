@@ -36,11 +36,13 @@ var _ = Describe("End Point", func() {
 		devicePort.BindOwner(payloadOwner{"Device"}, "DevicePort")
 		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
+		networkPort.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		networkPort.EXPECT().
 			AsRemote().
 			Return(messaging.RemotePort("NetworkPort")).
 			AnyTimes()
 		defaultSwitchPort = NewMockPort(mockCtrl)
+		defaultSwitchPort.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		defaultSwitchPort.EXPECT().
 			AsRemote().
 			Return(messaging.RemotePort("DefaultSwitchPort")).

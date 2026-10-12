@@ -78,9 +78,9 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	_ = msg.Payload.(ReadReq)
 	req := msg
 
-	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
+	taskID := tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
-	tracing.TraceReqComplete(m.comp, req)
+	tracing.TraceReqComplete(m.comp, taskID)
 	port.RetrieveIncoming()
 	return true
 }

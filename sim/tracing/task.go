@@ -9,6 +9,8 @@ import (
 // domain clock, after the NumHooks==0 guard, so the clock is never read when
 // tracing is disabled.
 type TaskStart struct {
+	// MsgID identifies the handled message, independently of the task ID.
+	MsgID    uint64
 	ID       uint64
 	ParentID uint64
 	Kind     string

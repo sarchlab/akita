@@ -269,30 +269,27 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	return true
 }
 
-// endInflightTasks completes the req_in tracing task of every in-flight
-// transaction, finalizes its downstream fetch and eviction-writeback req_out
-// tasks, and closes its directory-pipeline and bank subtasks, so a hard Reset
-// that drops the transaction table leaves no started-never-ended task and no
-// leaked receiver-registry entry. A slot already marked Removed can still hold
-// an in-flight eviction (its req_in long since completed), so every slot is
-// visited and the req_in end is idempotent. Mirrors bank/mshr-stage (req_in),
-// write-buffer stage (req_out), and the directory/bank pipelines (subtasks).
+// endInflightTasks ends each live task before discarding its state. Removed
+// transactions have completed req_in but can still own an eviction req_out.
+// Flush eviction transactions borrow their parent's receive ID; ProcessingFlush
+// owns that task and ends it once, independently of how many blocks it evicts.
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
+	tracing.EndTaskOnReset(comp, comp.State.ProcessingFlush.RecvTaskID)
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
 
-		if trans.HasRead || trans.HasWrite || trans.HasFlush {
-			tracing.EndReqInOnReset(comp, trans.reqMeta().ID)
+		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
+			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasFetchReadReq {
-			tracing.EndTaskOnReset(comp, trans.FetchReadReqMeta.ID)
+			tracing.EndTaskOnReset(comp, trans.FetchTaskID)
 		}
 
 		if trans.HasEvictionWriteReq {
-			tracing.EndTaskOnReset(comp, trans.EvictionWriteReqMeta.ID)
+			tracing.EndTaskOnReset(comp, trans.EvictionTaskID)
 		}
 
 		if trans.DirPipelinePID != 0 {

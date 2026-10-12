@@ -45,7 +45,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 		trans.DirPipelineTaskID = pid
 		tracing.StartTask(d.cache.comp, tracing.TaskStart{
 			ID:       pid,
-			ParentID: d.reqInTaskID(trans),
+			ParentID: trans.RecvTaskID,
 			Kind:     tracing.PipelineTaskKind,
 			What:     d.cache.comp.Name() + ".dir_pipeline",
 		})
@@ -77,7 +77,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 		trans := &next.Transactions[transIdx]
 
 		tracing.AddMilestone(d.cache.comp, tracing.Milestone{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			Kind:   tracing.MilestoneKindWork,
 			What:   d.cache.comp.Name() + ".dir_pipeline",
 		})
@@ -98,28 +98,6 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 	}
 
 	return madeProgress
-}
-
-// reqInTaskID returns the ID of the transaction's req_in task — the cache's
-// single receiver-side task for the request. The cache no longer opens a
-// separate cache_transaction child, so this req_in task is what carries the
-// transaction's hit/miss tags, its processing milestones, and its downstream
-// req_out children, in addition to parenting the directory pipeline subtask.
-func (d *directory) reqInTaskID(trans *transactionState) uint64 {
-	return reqInTaskIDOf(d.cache.comp, trans)
-}
-
-// reqInTaskIDOf recovers a transaction's req_in task ID from its stored request
-// meta, for any stage that has the component but not a *directory. The req_in
-// task is keyed by the original request's message ID at the cache (see
-// tracing.TraceReqReceive in intake), so reconstructing a message carrying that
-// meta recovers the same ID.
-func reqInTaskIDOf(comp *Comp, trans *transactionState) uint64 {
-	if trans.HasRead {
-		return tracing.MsgIDAtReceiver(trans.ReadMeta, comp)
-	}
-
-	return tracing.MsgIDAtReceiver(trans.WriteMeta, comp)
 }
 
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {
@@ -159,12 +137,12 @@ func (d *directory) processMSHRHit(
 
 	if trans.HasRead {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			What:   "read-mshr-hit",
 		})
 	} else {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			What:   "write-mshr-hit",
 		})
 	}
@@ -205,7 +183,7 @@ func (d *directory) processReadHit(
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "read-hit",
 	})
 
@@ -237,7 +215,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "read-miss",
 	})
 
@@ -308,6 +286,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 		return false
 	}
 
+	trans.WriteTaskID = tracing.TraceReqInitiate(d.cache.comp, writeToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
@@ -315,8 +294,6 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	trans.WriteToBottomPID = trans.WritePID
 	trans.WriteToBottomData = trans.WriteData
 	trans.WriteToBottomDirtyMask = trans.WriteDirtyMask
-
-	tracing.TraceReqInitiate(d.cache.comp, writeToBottom, d.reqInTaskID(trans))
 
 	return true
 }
@@ -349,9 +326,8 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
+	trans.ReadTaskID = tracing.TraceReqInitiate(d.cache.comp, readToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(readToBottom)
-
-	tracing.TraceReqInitiate(d.cache.comp, readToBottom, d.reqInTaskID(trans))
 
 	trans.HasReadToBottom = true
 	trans.ReadToBottomMeta = readToBottom

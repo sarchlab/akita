@@ -19,8 +19,7 @@ import (
 // leaving the req_in, the fetch req_out, and the directory-pipeline subtask
 // open — then issues a Reset without answering the fetch and asserts every
 // task the transaction opened is ended. A mid-flight Reset that drops the
-// transaction table must leave no started-never-ended task (and no leaked
-// receiver-registry entry).
+// transaction table must leave no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
@@ -124,4 +123,41 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		t.Errorf("Reset left %d tracing task(s) unended: %s",
 			len(open), rec.OpenSummary())
 	}
+}
+
+type resetEndCounter struct {
+	tracing.NopTracer
+	ends map[uint64]int
+}
+
+func (r *resetEndCounter) EndTask(task tracing.TaskEnd) { r.ends[task.ID]++ }
+
+func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
+	comp := buildStageTestComp(stageTestSpec(), Resources{
+		Storage:             mem.NewStorage(1 * mem.MB),
+		AddressToPortMapper: &mem.SinglePortMapper{Port: "Lower"},
+	}, makePorts("Cache", 8))
+	rec := &resetEndCounter{ends: make(map[uint64]int)}
+	tracing.CollectTrace(comp, rec)
+	completed := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	active := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	flush := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	eviction := tracing.TraceReqInitiate(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	tracing.TraceReqComplete(comp, completed)
+	comp.State.HasProcessingFlush = true
+	comp.State.ProcessingFlush = flushReqState{RecvTaskID: flush}
+	comp.State.Transactions = []transactionState{
+		{HasRead: true, RecvTaskID: completed, Removed: true,
+			HasEvictionWriteReq: true, EvictionTaskID: eviction},
+		{HasWrite: true, RecvTaskID: active},
+		{HasFlush: true, RecvTaskID: flush},
+		{HasFlush: true, RecvTaskID: flush},
+	}
+	(&ctrlMiddleware{pipeline: comp.Middlewares.Pipeline}).endInflightTasks()
+	for _, id := range []uint64{completed, active, flush, eviction} {
+		if rec.ends[id] != 1 {
+			t.Fatalf("task %d ended %d times, want once", id, rec.ends[id])
+		}
+	}
+	t.Log("reset ended live receive/eviction tasks and shared flush once; completed receive was not ended again")
 }

@@ -32,6 +32,8 @@ type Spec struct {
 
 // txn is a request being handled. Left counts the cycles until it is done.
 type txn struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	Req  messaging.Msg `json:"req"`
 	Left int           `json:"left"`
 }
@@ -88,9 +90,9 @@ func (m *serveMW) receive() bool {
 
 	_ = msg.Payload.(ReadReq)
 	req := msg
-	tracing.TraceReqReceive(m.comp, req)
+	recvTaskID := tracing.TraceReqReceive(m.comp, req)
 	m.comp.State.Pending = append(m.comp.State.Pending,
-		txn{Req: req, Left: m.comp.Spec.Latency})
+		txn{Req: req, RecvTaskID: recvTaskID, Left: m.comp.Spec.Latency})
 	port.RetrieveIncoming()
 
 	return true
@@ -129,7 +131,7 @@ func (m *serveMW) respond() bool {
 			Seq: req.Payload.(ReadReq).Seq,
 		}})
 
-	tracing.TraceReqComplete(m.comp, req)
+	tracing.TraceReqComplete(m.comp, s.Pending[0].RecvTaskID)
 	s.Pending = s.Pending[1:]
 
 	return true

@@ -131,7 +131,7 @@ var _ = Describe("GMMU milestones", func() {
 		walk = gmmuComp.Middlewares.Walk
 		respond = gmmuComp.Middlewares.Respond
 
-		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out
+		// Attach the recorder before driving so buffer enqueue allocates
 		// real task IDs (it returns 0 when there are no hooks).
 		rec = &milestoneRecorder{}
 		tracing.CollectTrace(gmmuComp, rec)
@@ -300,7 +300,8 @@ var _ = Describe("GMMU milestones", func() {
 		// (a) The downstream req_out is a child task of req_in.
 		reqOut, hasReqOut := rec.taskStart("req_out")
 		Expect(hasReqOut).To(BeTrue())
-		Expect(reqOut.ID).To(Equal(downstream.ID))
+		Expect(reqOut.MsgID).To(Equal(downstream.ID))
+		Expect(reqOut.ID).NotTo(Equal(downstream.ID))
 		Expect(reqOut.ParentID).To(Equal(reqInID))
 
 		// Deliver the remote response.
@@ -328,7 +329,7 @@ var _ = Describe("GMMU milestones", func() {
 		// returns.
 		var reqOutEnded bool
 		for _, e := range rec.ends {
-			if e.ID == downstream.ID {
+			if e.ID == reqOut.ID {
 				reqOutEnded = true
 			}
 		}

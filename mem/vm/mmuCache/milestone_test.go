@@ -190,21 +190,22 @@ var _ = Describe("MMUCache milestones", func() {
 		req, bottomReqID := driveRoundTrip(0x2000)
 
 		// req_in opens for the Top request and closes when the response returns.
-		// Its ID is read from the recorded start because the completion path has
-		// already forgotten the receiver-task registry entry by now.
+		// Its ID is read from the start; the completed transaction was removed.
 		reqInStart, ok := rec.firstStart("req_in")
 		Expect(ok).To(BeTrue())
 		Expect(reqInStart.ID).ToNot(BeZero())
-		Expect(reqInStart.ParentID).To(Equal(req.ID))
+		Expect(reqInStart.MsgID).To(Equal(req.ID))
+		Expect(reqInStart.ParentID).To(BeZero())
 		Expect(rec.hasEnd(reqInStart.ID)).To(BeTrue())
 
 		// req_out opens for the forwarded Bottom request, parented to req_in, and
 		// closes when its response returns.
 		reqOutStart, ok := rec.firstStart("req_out")
 		Expect(ok).To(BeTrue())
-		Expect(reqOutStart.ID).To(Equal(bottomReqID))
+		Expect(reqOutStart.MsgID).To(Equal(bottomReqID))
+		Expect(reqOutStart.ID).NotTo(Equal(bottomReqID))
 		Expect(reqOutStart.ParentID).To(Equal(reqInStart.ID))
-		Expect(rec.hasEnd(bottomReqID)).To(BeTrue())
+		Expect(rec.hasEnd(reqOutStart.ID)).To(BeTrue())
 
 		// The completion path released the in-flight entry — no leak.
 		Expect(comp.State.InflightReqs).To(BeEmpty())
@@ -212,8 +213,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	// bufTaskID returns the ID of the first incoming-buffer task located at the
 	// given port. Buffer task IDs are read from recorded starts because the
-	// retrieve that admits the message has already forgotten their registry
-	// entries by the time the test inspects them.
+	// retrieve has already removed their port entries.
 	bufTaskID := func(portName string) uint64 {
 		for _, s := range rec.starts {
 			if s.Kind == tracing.IncomingBufferTaskKind &&
@@ -257,8 +257,7 @@ var _ = Describe("MMUCache milestones", func() {
 		driveRoundTrip(0x2000)
 
 		// req_in opens at retrieve and is completed when the downstream response
-		// returns. Its ID is read from the recorded start because the completion
-		// path has already forgotten the receiver-task registry entry by now.
+		// returns. Read its original identity from the recorded start.
 		reqInStart, ok := rec.firstStart("req_in")
 		Expect(ok).To(BeTrue())
 
@@ -294,7 +293,8 @@ var _ = Describe("MMUCache milestones", func() {
 		Expect(ok).To(BeTrue())
 		reqOutStart, ok := rec.firstStart("req_out")
 		Expect(ok).To(BeTrue())
-		Expect(reqOutStart.ID).To(Equal(bottomReqID))
+		Expect(reqOutStart.MsgID).To(Equal(bottomReqID))
+		Expect(reqOutStart.ID).NotTo(Equal(bottomReqID))
 		Expect(rec.hasEnd(reqInStart.ID)).To(BeFalse())
 		Expect(rec.hasEnd(reqOutStart.ID)).To(BeFalse())
 
@@ -320,9 +320,7 @@ var _ = Describe("MMUCache milestones", func() {
 		}
 		Expect(acked).To(BeTrue())
 
-		// The reset ended both tasks (finalize req_out, complete req_in) instead
-		// of merely forgetting the registry entry, so no task is left unended and
-		// the in-flight table is empty.
+		// Reset ends both original tasks before clearing the in-flight table.
 		Expect(rec.hasEnd(reqInStart.ID)).To(BeTrue())
 		Expect(rec.hasEnd(reqOutStart.ID)).To(BeTrue())
 		Expect(comp.State.InflightReqs).To(BeEmpty())

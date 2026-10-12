@@ -115,7 +115,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 
 		topPort = memComp.Ports.Top
 
-		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out a
+		// Attach the recorder before driving so buffer enqueue allocates a
 		// real buffer task ID (it returns 0 with no hooks). The admission
 		// milestone lands on the Top-port buffer task, so the buffer task must
 		// exist.
@@ -203,7 +203,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		}
 
 		// Attach the recorder before driving so the receiver-side task IDs are
-		// real (MsgIDAtReceiver returns 0 with no hooks).
+		// real (request starts return 0 with no hooks).
 		rec = &milestoneRecorder{}
 		tracing.CollectTrace(memComp, rec)
 	})

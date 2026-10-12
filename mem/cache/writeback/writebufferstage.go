@@ -149,6 +149,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		TrafficBytes: 12,
 		TrafficClass: "memprotocol.ReadReq"}
 
+	trans.FetchTaskID = tracing.TraceReqInitiate(wb.cache.comp, read, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(read)
 
 	trans.HasFetchReadReq = true
@@ -156,10 +157,6 @@ func (wb *writeBufferStage) fetchFromBottom(
 	next.InflightFetchIndices = append(next.InflightFetchIndices, transIdx)
 
 	next.WriteBufferBuf.Pop()
-
-	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(wb.cache.comp, read,
-		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -257,16 +254,13 @@ func (wb *writeBufferStage) write() bool {
 		TrafficBytes: len(trans.EvictingData) + 12,
 		TrafficClass: "memprotocol.WriteReq"}
 
+	trans.EvictionTaskID = tracing.TraceReqInitiate(wb.cache.comp, write, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(write)
 
 	trans.HasEvictionWriteReq = true
 	trans.EvictionWriteReqMeta = write
 	next.PendingEvictionIndices = next.PendingEvictionIndices[1:]
 	next.InflightEvictionIndices = append(next.InflightEvictionIndices, transIdx)
-
-	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(wb.cache.comp, write,
-		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -338,7 +332,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	for _, coalescedIdx := range trans.MSHRTransactionIndices {
 		coalesced := &next.Transactions[coalescedIdx]
 		tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
-			TaskID: tracing.MsgIDAtReceiver(coalesced.reqMeta(), wb.cache.comp),
+			TaskID: coalesced.RecvTaskID,
 			Kind:   tracing.MilestoneKindData,
 			What:   wb.cache.comp.Name() + ".Bottom",
 		})
@@ -352,7 +346,8 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort().RetrieveIncoming()
 
-	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchReadReqMeta)
+	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchTaskID)
+	trans.FetchTaskID = 0
 
 	return true
 }
@@ -450,13 +445,14 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			// milestone on the request's req_in (keyed to the original request,
 			// not the WriteDoneRsp) so the eviction wait is marked resolved.
 			tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
-				TaskID: tracing.MsgIDAtReceiver(e.reqMeta(), wb.cache.comp),
+				TaskID: e.RecvTaskID,
 				Kind:   tracing.MilestoneKindData,
 				What:   wb.cache.comp.Name() + ".evict",
 			})
 
 			wb.cache.bottomPort().RetrieveIncoming()
-			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionWriteReqMeta)
+			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionTaskID)
+			e.EvictionTaskID = 0
 
 			return true
 		}

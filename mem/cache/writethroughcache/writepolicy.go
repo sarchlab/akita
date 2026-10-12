@@ -115,7 +115,7 @@ func (d *directory) writearoundWriteHit(
 	bankBuf.Push(postCoalesceIdx)
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
 
@@ -131,7 +131,7 @@ func (d *directory) writearoundWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
 
@@ -174,7 +174,7 @@ func (d *directory) writeevictWriteHit(
 	nextBlock.IsValid = false
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
 
@@ -190,7 +190,7 @@ func (d *directory) writeevictWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
 
@@ -216,7 +216,7 @@ func (d *directory) writethroughWriteHit(
 	}
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
 
@@ -288,7 +288,7 @@ func (d *directory) writethroughWriteMiss(
 	ok := d.writethroughFullLineWriteMiss(trans, postCoalesceIdx)
 	if ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: d.reqInTaskID(trans),
+			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
 	}
@@ -357,7 +357,7 @@ func (d *directory) writethroughPartialWriteMiss(
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: d.reqInTaskID(trans),
+		TaskID: trans.RecvTaskID,
 		What:   "write-miss",
 	})
 

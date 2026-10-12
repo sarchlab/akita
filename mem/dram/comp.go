@@ -355,6 +355,8 @@ type pendingCompletion struct {
 
 // transactionState is a serializable representation of a Transaction.
 type transactionState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	ID              uint64          `json:"id"`
 	HasRead         bool            `json:"has_read"`
 	HasWrite        bool            `json:"has_write"`

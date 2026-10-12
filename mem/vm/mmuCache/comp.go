@@ -3,7 +3,6 @@ package mmuCache
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -81,18 +80,10 @@ type state struct {
 	InflightReqs map[uint64]inflightReqState `json:"inflight_reqs"`
 }
 
-// inflightReqState is the serializable identity of a forwarded translation,
-// retaining both the original Top request and the forwarded Bottom request so
-// the tracing req_in/req_out tasks can be reconstructed when the Bottom
-// response arrives.
+// inflightReqState owns the tracing IDs for a forwarded walk.
 type inflightReqState struct {
-	TopReqID  uint64               `json:"top_req_id"`
-	TopReqSrc messaging.RemotePort `json:"top_req_src"`
-	TopReqDst messaging.RemotePort `json:"top_req_dst"`
-
-	BottomReqID  uint64               `json:"bottom_req_id"`
-	BottomReqSrc messaging.RemotePort `json:"bottom_req_src"`
-	BottomReqDst messaging.RemotePort `json:"bottom_req_dst"`
+	RecvTaskID uint64 `json:"recv_task_id"`
+	SendTaskID uint64 `json:"send_task_id"`
 }
 
 // blockState is a serializable snapshot of a single cache block.
@@ -155,16 +146,6 @@ func initSets(numLevels, numBlocks int) []setState {
 		sets[i] = s
 	}
 	return sets
-}
-
-// restoreTransReq reconstructs a TranslationReq carrying only the metadata the
-// tracing API keys on (ID/Src/Dst). It is used to reconstruct the original Top
-// request and the forwarded Bottom request when the Bottom response returns, so
-// req_in/req_out tasks can be completed without retaining the live messages.
-func restoreTransReq(
-	id uint64, src, dst messaging.RemotePort,
-) messaging.Msg {
-	return messaging.Msg{ID: id, Src: src, Dst: dst, Payload: vmprotocol.TranslationReq{}}
 }
 
 // Comp is the mmuCache component.

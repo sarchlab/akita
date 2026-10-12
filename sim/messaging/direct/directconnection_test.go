@@ -38,9 +38,11 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		port1 = NewMockPort(mockCtrl)
+		port1.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		port1.EXPECT().AsRemote().Return(messaging.RemotePort("port1")).AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
+		port2.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)

@@ -14,8 +14,7 @@ import (
 // started but not yet ended. It exists for reset-leak tests: attach it with
 // [tracing.CollectTrace], drive the component into an in-flight state, issue a
 // control Reset, then assert [LeakRecorder.OpenTasks] is empty — any task still
-// open is a started-never-ended leak (and, for a req_in, a leaked
-// receiver-registry entry, since the component ends and forgets it together).
+// open is a started-never-ended leak.
 //
 // It records only task starts and ends, so milestones and tags — which never
 // open a task — do not register, and a blanket end-on-reset of a task that was

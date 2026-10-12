@@ -34,6 +34,7 @@ var _ = Describe("Switch", func() {
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		port1 = NewMockPort(mockCtrl)
+		port1.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		port1.EXPECT().AsRemote().
 			Return(messaging.RemotePort("LocalPort1")).
 			AnyTimes()
@@ -42,6 +43,7 @@ var _ = Describe("Switch", func() {
 			AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
+		port2.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		port2.EXPECT().AsRemote().
 			Return(messaging.RemotePort("LocalPort2")).
 			AnyTimes()
@@ -50,16 +52,19 @@ var _ = Describe("Switch", func() {
 			AnyTimes()
 
 		remote1 := NewMockPort(mockCtrl)
+		remote1.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		remote1.EXPECT().AsRemote().
 			Return(messaging.RemotePort("RemotePort1")).
 			AnyTimes()
 
 		remote2 := NewMockPort(mockCtrl)
+		remote2.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		remote2.EXPECT().AsRemote().
 			Return(messaging.RemotePort("RemotePort2")).
 			AnyTimes()
 
 		dstPort = NewMockPort(mockCtrl)
+		dstPort.EXPECT().PeekIncomingTaskID().Return(uint64(0)).AnyTimes()
 		dstPort.EXPECT().
 			AsRemote().
 			Return(messaging.RemotePort("DstPort")).

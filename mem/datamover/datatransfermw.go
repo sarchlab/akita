@@ -148,18 +148,17 @@ func (m *dataTransferMW) readFromSrc() bool {
 		return false
 	}
 
+	taskID := tracing.TraceReqInitiate(m.comp, req, trans.RecvTaskID)
 	srcP.Send(req)
 
 	trans.NextReadAddr += state.SrcByteGranularity
 	trans.PendingRead[req.ID] = pendingReadState{
+		TaskID:  taskID,
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
 		Address: req.Payload.(memprotocol.ReadReq).Address,
 	}
-
-	tracing.TraceReqInitiate(m.comp, req,
-		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
 }
@@ -199,21 +198,14 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	srcP.RetrieveIncoming()
 
 	// Charge the in-flight src-read wait to the req_in opened for this move
-	// transaction (same key used as the parent of the read req_out's
-	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	// transaction (the stored receive ID also parents the read req_out), so the dominant latency of a move is attributed.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindData,
 		What:   m.srcPort().Name(),
 	})
 
-	// Create a temporary msg for tracing
-	traceReq := messaging.Msg{Payload: memprotocol.ReadReq{},
-		ID:  originalReq.ID,
-		Src: originalReq.Src,
-		Dst: originalReq.Dst}
-
-	tracing.TraceReqFinalize(m.comp, traceReq)
+	tracing.TraceReqFinalize(m.comp, originalReq.TaskID)
 
 	return true
 }
@@ -252,10 +244,12 @@ func (m *dataTransferMW) writeToDst() bool {
 		return false
 	}
 
+	taskID := tracing.TraceReqInitiate(m.comp, req, trans.RecvTaskID)
 	dstP.Send(req)
 
 	trans.NextWriteAddr += state.DstByteGranularity
 	trans.PendingWrite[req.ID] = pendingWriteState{
+		TaskID:  taskID,
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
@@ -263,9 +257,6 @@ func (m *dataTransferMW) writeToDst() bool {
 		Data:    data,
 	}
 	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
-
-	tracing.TraceReqInitiate(m.comp, req,
-		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
 }
@@ -301,21 +292,14 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	dstP.RetrieveIncoming()
 
 	// Charge the in-flight dst-write wait to the req_in opened for this move
-	// transaction (same key used as the parent of the write req_out's
-	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	// transaction (the stored receive ID also parents the write req_out), so the dominant latency of a move is attributed.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindSubTask,
 		What:   m.dstPort().Name(),
 	})
 
-	// Create a temporary msg for tracing
-	traceReq := messaging.Msg{Payload: memprotocol.WriteReq{},
-		ID:  originalReq.ID,
-		Src: originalReq.Src,
-		Dst: originalReq.Dst}
-
-	tracing.TraceReqFinalize(m.comp, traceReq)
+	tracing.TraceReqFinalize(m.comp, originalReq.TaskID)
 
 	// Processing a write ack is real progress: the component must tick again
 	// so the remaining acks drain and the transaction can finish (which now

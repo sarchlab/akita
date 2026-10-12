@@ -179,18 +179,14 @@ func resetStatistics(state *state) {
 // endInflightTasks completes the req_in tracing task of every admitted
 // transaction and closes each of its not-yet-completed sub-trans subtasks, so a
 // hard Reset that drops the transaction table leaves no started-never-ended
-// task and no leaked receiver-registry entry. DRAM is a leaf, so there is no
+// task. DRAM is a leaf, so there is no
 // downstream req_out. Mirrors respondMW.finalizeTransaction (req_in) and
 // bankTickMW.endSubTransTasks (sub-trans).
 func (m *ctrlMiddleware) endInflightTasks() {
 	for i := range m.comp.State.Transactions {
 		t := &m.comp.State.Transactions[i]
 
-		reqMsgID := t.WriteMsg.ID
-		if t.HasRead {
-			reqMsgID = t.ReadMsg.ID
-		}
-		tracing.EndReqInOnReset(m.comp, reqMsgID)
+		tracing.EndTaskOnReset(m.comp, t.RecvTaskID)
 
 		for _, sub := range t.SubTransactions {
 			if !sub.Completed {

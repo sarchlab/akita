@@ -114,7 +114,7 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should respond to top", func() {
-			madeProgress := tlbMW.lookup(req)
+			madeProgress := tlbMW.lookup(pipelineTLBReqState{Msg: req})
 
 			Expect(madeProgress).To(BeTrue())
 			rsp, _ := topPort.RetrieveOutgoing()
@@ -151,7 +151,7 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
-			madeProgress := tlbMW.lookup(req)
+			madeProgress := tlbMW.lookup(pipelineTLBReqState{Msg: req})
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := &tlbComp.State
@@ -224,7 +224,7 @@ var _ = Describe("TLB", func() {
 			next.RespondingMSHRData = mshrEntryState{
 				PID:      1,
 				VAddr:    0x100,
-				Requests: []messaging.Msg{req},
+				Requests: []pipelineTLBReqState{{Msg: req}},
 			}
 			// Also add the MSHR entry
 			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
@@ -241,7 +241,7 @@ var _ = Describe("TLB", func() {
 			next := &tlbComp.State
 			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
 			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100)
-			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, req)
+			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, pipelineTLBReqState{Msg: req})
 			next.MSHREntries[idx].HasReqToBottom = true
 			next.MSHREntries[idx].ReqToBottom = fetchBottom
 
@@ -260,7 +260,7 @@ var _ = Describe("TLB", func() {
 			next.RespondingMSHRData = mshrEntryState{
 				PID:      1,
 				VAddr:    0x100,
-				Requests: []messaging.Msg{req},
+				Requests: []pipelineTLBReqState{{Msg: req}},
 			}
 
 			madeProgress := tlbMW.respondMSHREntry()

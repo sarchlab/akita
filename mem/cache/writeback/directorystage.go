@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
@@ -50,7 +49,7 @@ func (ds *directoryStage) processTransaction() bool {
 		// still gets its pipeline interval marked work. Re-emitted on retries; the
 		// (Kind, What) dedup keeps the first.
 		tracing.AddMilestone(ds.cache.comp, tracing.Milestone{
-			TaskID: tracing.MsgIDAtReceiver(trans.reqMeta(), ds.cache.comp),
+			TaskID: trans.RecvTaskID,
 			Kind:   tracing.MilestoneKindWork,
 			What:   ds.cache.comp.Name() + ".dir_pipeline",
 		})
@@ -153,7 +152,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 	ds.popDirPostBuf()
 
 	tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
+		TaskID: trans.RecvTaskID,
 		What:   "read-mshr-hit",
 	})
 
@@ -172,7 +171,7 @@ func (ds *directoryStage) handleReadHit(
 	}
 
 	tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
+		TaskID: trans.RecvTaskID,
 		What:   "read-hit",
 	})
 
@@ -203,7 +202,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 		ok := ds.evict(transIdx, trans, victimSetID, victimWayID)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
+				TaskID: trans.RecvTaskID,
 				What:   "read-miss",
 			})
 		}
@@ -214,7 +213,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 	ok := ds.fetch(transIdx, trans, victimSetID, victimWayID)
 	if ok {
 		tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-			TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
+			TaskID: trans.RecvTaskID,
 			What:   "read-miss",
 		})
 	}
@@ -233,7 +232,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 		ok := ds.doWriteMSHRHit(transIdx, trans, mshrIdx)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
+				TaskID: trans.RecvTaskID,
 				What:   "write-mshr-hit",
 			})
 		}
@@ -249,7 +248,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 		ok := ds.doWriteHit(transIdx, trans, setID, wayID)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
+				TaskID: trans.RecvTaskID,
 				What:   "write-hit",
 			})
 		}
@@ -260,7 +259,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 	ok := ds.doWriteMiss(transIdx, trans)
 	if ok {
 		tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-			TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
+			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
 	}
@@ -549,7 +548,7 @@ func (ds *directoryStage) fetch(
 	spec := ds.cache.comp.Spec
 	next := &ds.cache.comp.State
 
-	addr, pid, reqMeta := ds.transAddrPIDReqMeta(trans)
+	addr, pid := ds.transAddrPID(trans)
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	bankNum := bankID(setID, wayID,
@@ -572,7 +571,7 @@ func (ds *directoryStage) fetch(
 	ds.updateBlockForFetch(next, setID, wayID, cacheLineID, pid)
 
 	tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(reqMeta, ds.cache.comp),
+		TaskID: trans.RecvTaskID,
 		What: fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
 			next.MSHRState.Entries[mshrIdx].Address,
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag),
@@ -590,14 +589,14 @@ func (ds *directoryStage) fetch(
 	return true
 }
 
-func (ds *directoryStage) transAddrPIDReqMeta(
+func (ds *directoryStage) transAddrPID(
 	trans *transactionState,
-) (uint64, vm.PID, messaging.Msg) {
+) (uint64, vm.PID) {
 	if trans.HasRead {
-		return trans.ReadAddress, trans.ReadPID, trans.ReadMeta
+		return trans.ReadAddress, trans.ReadPID
 	}
 
-	return trans.WriteAddress, trans.WritePID, trans.WriteMeta
+	return trans.WriteAddress, trans.WritePID
 }
 
 func (ds *directoryStage) updateBlockForFetch(
@@ -657,7 +656,7 @@ func (ds *directoryStage) startDirPipeline(transIdx int) {
 
 	tracing.StartTask(ds.cache.comp, tracing.TaskStart{
 		ID:       pid,
-		ParentID: tracing.MsgIDAtReceiver(trans.reqMeta(), ds.cache.comp),
+		ParentID: trans.RecvTaskID,
 		Kind:     tracing.PipelineTaskKind,
 		What:     ds.cache.comp.Name() + ".dir_pipeline",
 	})

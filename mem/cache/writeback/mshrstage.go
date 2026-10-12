@@ -119,11 +119,11 @@ func (s *mshrStage) respondRead(
 	// own work — record it so the interval since the fill-data milestone is not
 	// an unexplained tail before the response.
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, s.cache.comp),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
@@ -141,11 +141,11 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 	// resolve through this MSHR stage is a dependency on the fetcher, not this
 	// request's own bank work.
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, s.cache.comp),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {

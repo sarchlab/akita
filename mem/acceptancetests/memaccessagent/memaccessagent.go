@@ -41,14 +41,20 @@ type Resources struct {
 	LowModule messaging.Port
 }
 
+// pendingRequest keeps the request and its independent tracing task together.
+type pendingRequest struct {
+	Msg    messaging.Msg `json:"msg"`
+	TaskID uint64        `json:"task_id"`
+}
+
 // State contains the mutable runtime data for the MemAccessAgent.
 type State struct {
-	WriteLeft       int                      `json:"write_left"`
-	ReadLeft        int                      `json:"read_left"`
-	KnownMemValue   map[uint64][]uint32      `json:"known_mem_value"`
-	PendingReadReq  map[uint64]messaging.Msg `json:"pending_read_req"`
-	PendingWriteReq map[uint64]messaging.Msg `json:"pending_write_req"`
-	RNG             randState                `json:"rng"`
+	WriteLeft       int                       `json:"write_left"`
+	ReadLeft        int                       `json:"read_left"`
+	KnownMemValue   map[uint64][]uint32       `json:"known_mem_value"`
+	PendingReadReq  map[uint64]pendingRequest `json:"pending_read_req"`
+	PendingWriteReq map[uint64]pendingRequest `json:"pending_write_req"`
+	RNG             randState                 `json:"rng"`
 }
 
 // Ports holds the MemAccessAgent's ports.

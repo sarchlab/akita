@@ -78,6 +78,7 @@ type segmentTableEntry struct {
 // DBTracers can connect with different backends so that the tasks can be stored
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
 type DBTracer struct {
+	parents    RequestTaskParents
 	mu         sync.Mutex
 	timeTeller timing.TimeTeller
 	backend    datarecording.DataRecorder
@@ -102,6 +103,8 @@ func (t *DBTracer) IsTracing() bool {
 func (t *DBTracer) StartTask(task TaskStart) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	task = t.parents.ResolveStart(task)
 
 	t.startingTaskMustBeValid(task)
 
@@ -189,6 +192,8 @@ func (t *DBTracer) EndTask(task TaskEnd) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.parents.End(task.ID)
+
 	originalTask, ok := t.tracingTasks[task.ID]
 	if !ok {
 		return
@@ -267,6 +272,7 @@ func (t *DBTracer) Terminate() {
 	defer t.mu.Unlock()
 
 	t.tracingTasks = nil
+	t.parents = RequestTaskParents{}
 	t.backend.Flush()
 }
 

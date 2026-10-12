@@ -112,12 +112,6 @@ func (m *ctrlMiddleware) performCtrlEnable(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -130,12 +124,6 @@ func (m *ctrlMiddleware) performCtrlDrain(msg messaging.Msg) bool {
 	state.CurrentCmdSrc = msg.Src
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -150,12 +138,6 @@ func (m *ctrlMiddleware) performCtrlPause(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -183,12 +165,6 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindDependency,
-		What:   m.comp.Name() + ".Table",
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -276,12 +252,6 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		msg.Src, msg.ID, true, ""))
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
@@ -299,7 +269,7 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 	// open, and their responses are discarded (OutstandingBottomReqs was cleared
 	// above), so end both tasks here — finalize the req_out and complete the
 	// req_in — mirroring the normal handleRsp completion so a mid-walk reset
-	// leaves no unended tasks rather than just an orphaned registry entry.
+	// leaves no unended tasks.
 	m.endInflightTasks()
 	state.InflightReqs = map[uint64]inflightReqState{}
 
@@ -328,14 +298,13 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 
 // endInflightTasks finalizes the forwarded req_out and completes the original
 // req_in for every walk still in flight, so a hard Reset that drops the
-// in-flight table leaves no started-never-ended task and no leaked
-// receiver-registry entry. The matching responses are discarded by handleRsp
+// in-flight table leaves no started-never-ended task. The matching responses are discarded by handleRsp
 // once OutstandingBottomReqs is cleared, so without this the tasks would never
 // close. Mirrors the completion path in handleRsp.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		tracing.EndTaskOnReset(m.comp, inflight.BottomReqID)
-		tracing.EndReqInOnReset(m.comp, inflight.TopReqID)
+		tracing.EndTaskOnReset(m.comp, inflight.SendTaskID)
+		tracing.EndTaskOnReset(m.comp, inflight.RecvTaskID)
 	}
 }
 

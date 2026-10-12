@@ -24,6 +24,9 @@ type Spec struct {
 
 // txn pairs a request from above with the request the cache sent below.
 type txn struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+	SendTaskID uint64 `json:"send_task_id"`
+
 	UpReq   messaging.Msg `json:"up_req"`
 	DownReq messaging.Msg `json:"down_req"`
 }
@@ -94,16 +97,15 @@ func (m *forwardMW) forwardDown() bool {
 	upReq := msg
 
 	// Open the handling task for the request we received.
-	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
+	recvTaskID := tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
 	downReq := memory.NewReq(m.comp.NewID(),
 		bottom.AsRemote(), m.comp.Spec.Downstream)
-	tracing.TraceReqInitiate(m.comp, downReq,
-		tracing.MsgIDAtReceiver(upReq, m.comp))
+	sendTaskID := tracing.TraceReqInitiate(m.comp, downReq, recvTaskID)
 	bottom.Send(downReq)
 
-	m.comp.State.Txns[downReq.ID] = txn{UpReq: upReq, DownReq: downReq}
+	m.comp.State.Txns[downReq.ID] = txn{UpReq: upReq, DownReq: downReq, RecvTaskID: recvTaskID, SendTaskID: sendTaskID}
 	top.RetrieveIncoming()
 	return true
 }
@@ -123,11 +125,11 @@ func (m *forwardMW) respondUp() bool {
 	downRsp := msg
 	t := m.comp.State.Txns[downRsp.RspTo]
 
-	tracing.TraceReqFinalize(m.comp, t.DownReq) // close the downstream task
+	tracing.TraceReqFinalize(m.comp, t.SendTaskID) // close the downstream task
 
 	top.Send(memory.NewRsp(m.comp.NewID(),
 		top.AsRemote(), t.UpReq.Src, t.UpReq.ID))
-	tracing.TraceReqComplete(m.comp, t.UpReq) // close the handling task
+	tracing.TraceReqComplete(m.comp, t.RecvTaskID) // close the handling task
 
 	delete(m.comp.State.Txns, downRsp.RspTo)
 	bottom.RetrieveIncoming()

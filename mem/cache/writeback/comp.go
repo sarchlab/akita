@@ -223,7 +223,8 @@ func (s *state) indexHasInflightBottomTransaction(i int) bool {
 
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
-	Msg messaging.Msg `json:"msg_meta"`
+	RecvTaskID uint64        `json:"recv_task_id"`
+	Msg        messaging.Msg `json:"msg_meta"`
 
 	// FilterAddresses / FilterPID narrow which dirty blocks are written
 	// back. An empty address list matches every block address; a zero PID
@@ -256,6 +257,10 @@ const (
 // transactionState is the canonical runtime transaction type.
 // All fields are flat and directly JSON-serializable.
 type transactionState struct {
+	RecvTaskID     uint64 `json:"recv_task_id"`
+	FetchTaskID    uint64 `json:"fetch_task_id"`
+	EvictionTaskID uint64 `json:"eviction_task_id"`
+
 	Action action `json:"action"`
 
 	ID uint64 `json:"id"`
@@ -345,23 +350,9 @@ func (t *transactionState) accessReqAddress() uint64 {
 	panic("no access request")
 }
 
-// reqMeta returns the original message of the primary request.
-func (t *transactionState) reqMeta() messaging.Msg {
-	if t.HasRead {
-		return t.ReadMeta
-	}
-	if t.HasWrite {
-		return t.WriteMeta
-	}
-	if t.HasFlush {
-		return t.FlushMeta
-	}
-	panic("no request")
-}
-
 // hasReqMeta reports whether the transaction carries a primary request, i.e.
-// whether reqMeta is safe to call and there is a req_in task to attribute work
-// to. Every transaction that reaches the bank in a real run has one (it passed
+// whether there is a req_in task to attribute work to. Every transaction that
+// reaches the bank in a real run has one (it passed
 // through the directory); it guards against synthetic bank-only transactions.
 func (t *transactionState) hasReqMeta() bool {
 	return t.HasRead || t.HasWrite || t.HasFlush

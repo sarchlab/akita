@@ -147,12 +147,12 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 
 // endInflightTasks completes the req_in tracing task of every in-flight access
 // so a hard Reset that drops InflightTransactions leaves no
-// started-never-ended task and no leaked receiver-registry entry. The ideal
+// started-never-ended task. The ideal
 // memory controller is a leaf, so there is no downstream req_out to finalize.
-// Mirrors the completion in memMiddleware.traceReqComplete.
+// Mirrors the completion in memMiddleware.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, tx := range m.comp.State.InflightTransactions {
-		tracing.EndReqInOnReset(m.comp, tx.ReqID)
+		tracing.EndTaskOnReset(m.comp, tx.RecvTaskID)
 	}
 }
 

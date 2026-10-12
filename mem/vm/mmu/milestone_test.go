@@ -87,7 +87,7 @@ var _ = Describe("MMU milestones", func() {
 
 		mw = mmuComp.Middlewares.Translation
 
-		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out
+		// Attach the recorder before driving so buffer enqueue allocates
 		// real task IDs (it returns 0 when there are no hooks).
 		rec = &milestoneRecorder{}
 		tracing.CollectTrace(mmuComp, rec)
@@ -165,7 +165,7 @@ var _ = Describe("MMU milestones", func() {
 		Expect(sent).To(BeTrue())
 
 		// The walk milestone lands on the req_in (walking.RecvTaskID ==
-		// MsgIDAtReceiver(req)), labelling the local-walk latency as work.
+		// the stored RecvTaskID), labelling the local-walk latency as work.
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
 

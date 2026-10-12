@@ -65,25 +65,24 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 
 	// A free sub-transaction-queue slot opened: the at-head wait the message
 	// spent blocked on the SubTransQueue is over. This admission wait belongs to
-	// the incoming-buffer task; req_in (opened at retrieve, below) covers only
+	// the incoming-buffer task; req_in (opened at admission below) covers only
 	// the processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(msgI, m.comp),
+		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindQueue,
 		What:   m.comp.Name() + ".SubTransQueue",
 	})
 
+	ts.RecvTaskID = tracing.TraceReqReceive(m.comp, msgI)
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)
 	m.topPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(m.comp, msgI)
-
 	for _, st := range ts.SubTransactions {
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       st.ID,
-			ParentID: tracing.MsgIDAtReceiver(msgI, m.comp),
+			ParentID: ts.RecvTaskID,
 			Kind:     "sub-trans",
 			What:     "sub-trans",
 			Location: m.comp.Name() + ".SubTransQueue",

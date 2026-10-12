@@ -64,7 +64,7 @@ func (s *bankStage) extractFromBuf() bool {
 	trans.BankTaskID = pid
 	tracing.StartTask(s.cache.comp, tracing.TaskStart{
 		ID:       pid,
-		ParentID: reqInTaskIDOf(s.cache.comp, trans),
+		ParentID: trans.RecvTaskID,
 		Kind:     tracing.PipelineTaskKind,
 		What:     s.cache.comp.Name() + ".bank",
 	})
@@ -218,7 +218,7 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 		// write. That is a dependency it was blocked on — not its own work —
 		// so it gets a dependency milestone, not the bank subtask.
 		tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-			TaskID: reqInTaskIDOf(s.cache.comp, waiter),
+			TaskID: waiter.RecvTaskID,
 			Kind:   tracing.MilestoneKindDependency,
 			What:   s.cache.comp.Name() + ".fill",
 		})
@@ -238,7 +238,7 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 // req_in has a corresponding child bar.
 func (s *bankStage) finishBank(trans *transactionState) {
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: reqInTaskIDOf(s.cache.comp, trans),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})

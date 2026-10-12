@@ -102,12 +102,6 @@ func (m *ctrlMiddleware) performCtrlEnable(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -120,12 +114,6 @@ func (m *ctrlMiddleware) performCtrlDrain(msg messaging.Msg) bool {
 	state.CurrentCmdSrc = msg.Src
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -140,12 +128,6 @@ func (m *ctrlMiddleware) performCtrlPause(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -173,12 +155,6 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindDependency,
-		What:   m.comp.Name() + ".Sets",
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -233,12 +209,6 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		msg.Src, msg.ID, true, ""))
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.controlPort().Name(),
-	})
-	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
@@ -280,8 +250,7 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 // flight — coalesced into an MSHR entry, draining from the responding MSHR, or
 // staged in the lookup pipeline/buffer — finalizes each MSHR's downstream fetch
 // req_out, and closes each staged request's pipeline subtask, so a hard Reset
-// that discards them leaves no started-never-ended task and no leaked
-// receiver-registry entry. The end is idempotent where a request appears in more
+// that discards them leaves no started-never-ended task. The end is idempotent where a request appears in more
 // than one structure. Mirrors the respond path (req_in), the bottom fetch
 // (req_out), and finishPipeline (subtask) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
@@ -306,16 +275,16 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 func (m *ctrlMiddleware) endMSHREntryTasks(entry *mshrEntryState) {
 	for i := range entry.Requests {
-		tracing.EndReqInOnReset(m.comp, entry.Requests[i].ID)
+		tracing.EndTaskOnReset(m.comp, entry.Requests[i].RecvTaskID)
 	}
 
 	if entry.HasReqToBottom {
-		tracing.EndTaskOnReset(m.comp, entry.ReqToBottom.ID)
+		tracing.EndTaskOnReset(m.comp, entry.SendTaskID)
 	}
 }
 
 func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
-	tracing.EndReqInOnReset(m.comp, item.Msg.ID)
+	tracing.EndTaskOnReset(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
 		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)

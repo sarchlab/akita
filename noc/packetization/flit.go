@@ -28,4 +28,8 @@ type Flit struct {
 	// MsgTaskID identifies the message's end-to-end tracing task. It is distinct
 	// from MsgID and travels on every flit so arrival order does not affect tracing.
 	MsgTaskID uint64 `json:"msg_task_id"`
+
+	// FlitTaskID is allocated independently of the enclosing message ID. It
+	// follows the flit through checkpointed endpoint, port, and switch state.
+	FlitTaskID uint64 `json:"flit_task_id"`
 }

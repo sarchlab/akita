@@ -19,7 +19,7 @@ import (
 // the top request and the downstream req_out for the bottom fetch — then issues
 // a Reset and asserts every task is ended. A mid-flight Reset drops the
 // transaction table, so each started task must be ended by endInflightTasks or
-// it leaks (and, for a req_in, leaks a receiver-registry entry too).
+// it leaks.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
@@ -141,4 +141,36 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		t.Errorf("Reset left %d tracing task(s) unended: %s",
 			len(open), rec.OpenSummary())
 	}
+}
+
+type resetEndCounter struct {
+	tracing.NopTracer
+	ends map[uint64]int
+}
+
+func (r *resetEndCounter) EndTask(task tracing.TaskEnd) { r.ends[task.ID]++ }
+
+func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
+	pipeline := buildStageTestCache(Definition.DefaultSpec, Resources{
+		Storage:       mem.NewStorage(1 * mem.MB),
+		AddressMapper: &mem.SinglePortMapper{Port: "Lower"},
+	}, makePorts("Cache", 8), state{})
+	comp := pipeline.comp
+	rec := &resetEndCounter{ends: make(map[uint64]int)}
+	tracing.CollectTrace(comp, rec)
+	completed := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	active := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
+	write := tracing.TraceReqInitiate(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	tracing.TraceReqComplete(comp, completed)
+	comp.State.Transactions = []transactionState{
+		{HasRead: true, RecvTaskID: completed, Removed: true, HasWriteToBottom: true, WriteTaskID: write},
+		{HasWrite: true, RecvTaskID: active},
+	}
+	(&ctrlMiddleware{comp: comp}).endInflightTasks()
+	for _, id := range []uint64{completed, active, write} {
+		if rec.ends[id] != 1 {
+			t.Fatalf("task %d ended %d times, want once", id, rec.ends[id])
+		}
+	}
+	t.Log("reset ended live receive/write tasks once; completed receive was not ended again")
 }

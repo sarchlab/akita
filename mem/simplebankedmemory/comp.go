@@ -46,6 +46,8 @@ type Spec struct {
 
 // bankPipelineItemState is a serializable representation of a pipeline item.
 type bankPipelineItemState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	IsRead    bool          `json:"is_read"`
 	ReadMsg   messaging.Msg `json:"read_msg"`
 	WriteMsg  messaging.Msg `json:"write_msg"`

@@ -24,6 +24,9 @@ type Spec struct {
 // between forwarding a request to the bottom unit and releasing the matching
 // response back to the top.
 type transactionState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+	SendTaskID uint64 `json:"send_task_id"`
+
 	// ReqFromTopID is the ID of the original request received on the Top port.
 	// The response sent back to the top sets RspTo to this value so it can be
 	// matched with the original requester's bookkeeping.

@@ -52,8 +52,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original read request.
-	read := trans.ReadMeta
-	tracing.TraceReqComplete(s.cache.comp, read)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }
@@ -76,8 +75,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original write request.
-	write := trans.WriteMeta
-	tracing.TraceReqComplete(s.cache.comp, write)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }

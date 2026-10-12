@@ -82,7 +82,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	// traversal as work on req_in before the response send and before
 	// TraceReqComplete, so the same-tick complete does not absorb it via the
 	// same-time dedup.
-	m.finishPipeline(item.ReadMsg, item.PipelineTaskID)
+	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
 	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{
 		Data: item.ReadData},
@@ -96,7 +96,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, item.ReadMsg)
+	tracing.TraceReqComplete(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -136,7 +136,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	// See finalizeRead: attribute the bank-pipeline traversal as work on
 	// req_in at pipeline exit, before the response send and TraceReqComplete.
-	m.finishPipeline(item.WriteMsg, item.PipelineTaskID)
+	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
 	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 		ID:           m.comp.NewID(),
@@ -148,7 +148,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, item.WriteMsg)
+	tracing.TraceReqComplete(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -160,12 +160,11 @@ func (m *tickFinalizeMW) finalizeWrite(
 // pipeline interval as productive work rather than a blocking gap) and closes
 // the PipelineTaskKind subtask opened at dispatch. Call it before the response
 // send and before TraceReqComplete so the same-tick complete does not shadow the
-// work milestone via the dedup. req is the original request message (the req_in
-// key, matching TraceReqReceive/TraceReqComplete); pipelineTaskID is the subtask
-// opened at dispatch, or zero when tracing was disabled at dispatch.
-func (m *tickFinalizeMW) finishPipeline(req messaging.Msg, pipelineTaskID uint64) {
+// work milestone via the dedup. Both task IDs are retained in the pipeline
+// entry from dispatch through completion.
+func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		TaskID: recvTaskID,
 		Kind:   tracing.MilestoneKindWork,
 		What:   m.comp.Name() + ".pipeline",
 	})
