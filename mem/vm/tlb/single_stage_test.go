@@ -44,9 +44,8 @@ func deliverSingleStageRequest(comp *Comp) messaging.Msg {
 
 func tickSingleStageLookup(t *testing.T, comp *Comp) {
 	t.Helper()
-	// Admission, extra dwell, pipeline output, and post-pipeline lookup.
-	// Latency=1 is a stage count; this test does not assert a one-cycle hit.
-	for tick := range 4 {
+	// Admission, pipeline output (Latency=1), and post-pipeline lookup.
+	for tick := range 3 {
 		require.True(t, modelingtest.Tick(comp), "tick %d must make progress", tick+1)
 	}
 	require.Empty(t, comp.State.Pipeline.Stages())
@@ -89,4 +88,30 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 	require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
 	require.Empty(t, comp.State.MSHREntries)
 	require.False(t, comp.State.HasRespondingMSHR)
+}
+
+// TestTLBPipelineAcceptsEveryCycle guards against a stage-0 dwell, which made
+// each request hold the pipeline entry for two cycles and halved throughput.
+func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
+	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	spec := Definition.DefaultSpec
+	spec.Latency = 4
+	spec.NumReqPerCycle = 1
+	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).
+		WithResources(Resources{
+			TranslationProviderMapper: &mem.SinglePortMapper{Port: "Walker"},
+		}).Build("TLB")
+	ports := defaultPorts("TLB")
+	comp.BindPort("Top", ports.Top)
+	comp.BindPort("Bottom", ports.Bottom)
+	comp.BindPort("Control", ports.Control)
+	plugNoopConn(comp)
+	require.NoError(t, sim.Initialize())
+
+	for i := 1; i <= spec.Latency; i++ {
+		deliverSingleStageRequest(comp)
+		require.True(t, modelingtest.Tick(comp))
+		require.Len(t, comp.State.Pipeline.Stages(), i,
+			"a new request must enter the pipeline every cycle")
+	}
 }
