@@ -2,6 +2,9 @@ package modeling_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -129,6 +132,39 @@ func TestCheckpointPreservesStateBuffer(t *testing.T) {
 	for _, want := range []int{7, 8} {
 		if got, _ := dst.Items.Pop(); got != want {
 			t.Fatalf("Pop = %d, want %d", got, want)
+		}
+	}
+}
+
+func TestCheckpointExcludedSpecFieldRejectedBeforeRebuild(t *testing.T) {
+	type spec struct {
+		Visible int `json:"visible"`
+		Hidden  int `json:"-"`
+	}
+	saved, rebuilt := spec{Visible: 1, Hidden: 2}, spec{Visible: 1, Hidden: 3}
+	var buf bytes.Buffer
+	// Reproduce the old archive: both configurations had identical JSON hashes.
+	if err := modeling.WriteCheckpoint(&buf, saved, ckptState{}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var archive struct {
+		SpecHash string `json:"spec_hash"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &archive); err != nil {
+		t.Fatal(err)
+	}
+	rebuiltJSON, err := json.Marshal(rebuilt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(rebuiltJSON)
+	if archive.SpecHash != hex.EncodeToString(hash[:]) {
+		t.Fatal("expected the old hash to ignore the changed Hidden field")
+	}
+	for _, cfg := range []spec{saved, rebuilt} {
+		if err := modeling.ValidateSpec(cfg); err == nil || !strings.Contains(err.Error(), "spec.Hidden") {
+			t.Fatalf("configuration must fail validation before save/load: %v", err)
 		}
 	}
 }

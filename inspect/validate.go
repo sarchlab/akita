@@ -21,51 +21,26 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 	}
 	// Spec fields must be scalars or slices of scalars even when the Spec
 	// customizes its JSON.
-	hasUnexported, encodesField := false, false
 	for i := range st.NumFields() {
 		f := st.Field(i)
 		if err := validateSpecFieldType(f.Type()); err != nil {
 			return posErrorf(pkg, f.Pos(), "Spec field %s: %v", f.Name(), err)
 		}
+		if reflect.StructTag(st.Tag(i)).Get("json") == "-" {
+			return posErrorf(pkg, f.Pos(), "Spec field spec.%s must not be tagged json:\"-\"", f.Name())
+		}
 		if !f.Exported() {
-			hasUnexported = true
-		} else if encodedWhenZero(reflect.StructTag(st.Tag(i))) {
-			encodesField = true
+			return posErrorf(pkg, f.Pos(), "Spec field spec.%s must be exported", f.Name())
+		}
+		_, options, _ := strings.Cut(reflect.StructTag(st.Tag(i)).Get("json"), ",")
+		if slices.Contains(strings.Split(options, ","), "omitzero") && hasCustomIsZero(f.Type()) {
+			return posErrorf(pkg, f.Pos(), "Spec field spec.%s with custom IsZero must not use json:\",omitzero\"", f.Name())
+		}
+		if err := validateSpecJSONType(pkg, f.Type(), index); err != nil {
+			return err
 		}
 	}
-	if jsonPkg := index["encoding/json"]; jsonPkg != nil {
-		marshaler := jsonPkg.Types.Scope().Lookup("Marshaler").Type().Underlying().(*types.Interface)
-		unmarshaler := jsonPkg.Types.Scope().Lookup("Unmarshaler").Type().Underlying().(*types.Interface)
-		if types.Implements(typ, marshaler) {
-			if !types.Implements(types.NewPointer(typ), unmarshaler) {
-				return fmt.Errorf("%s: Spec customizes MarshalJSON but has no UnmarshalJSON", pkg.PkgPath)
-			}
-			return nil
-		}
-	}
-	// Mirror modeling's data-loss guard: a Spec whose state is unexported
-	// serializes as {} and would lose it across a checkpoint.
-	if hasUnexported && !encodesField {
-		return fmt.Errorf("%s: Spec has unexported fields but serializes as {}; "+
-			"export the fields", pkg.PkgPath)
-	}
-	return nil
-}
-
-// encodedWhenZero reports whether encoding/json writes an exported field whose
-// value is zero: it is not tagged "-" and has neither the omitempty nor the
-// omitzero option.
-func encodedWhenZero(tag reflect.StructTag) bool {
-	jsonTag := tag.Get("json")
-	if jsonTag == "-" {
-		return false
-	}
-
-	_, opts, _ := strings.Cut(jsonTag, ",")
-	options := strings.Split(opts, ",")
-
-	return !slices.Contains(options, "omitempty") &&
-		!slices.Contains(options, "omitzero")
+	return validateSpecJSONType(pkg, typ, index)
 }
 
 // validateSpecFieldType accepts scalar field types (booleans, integers except
@@ -129,4 +104,33 @@ func validateFieldMetadata(pkg *packages.Package, specType types.Type, fields []
 		seen[field.JSONName] = true
 	}
 	return nil
+}
+
+func validateSpecJSONType(pkg *packages.Package, typ types.Type, index pkgIndex) error {
+	if jsonPkg := index["encoding/json"]; jsonPkg != nil {
+		marshaler := jsonPkg.Types.Scope().Lookup("Marshaler").Type().Underlying().(*types.Interface)
+		unmarshaler := jsonPkg.Types.Scope().Lookup("Unmarshaler").Type().Underlying().(*types.Interface)
+		if (types.Implements(typ, marshaler) || types.Implements(types.NewPointer(typ), marshaler)) &&
+			!types.Implements(types.NewPointer(typ), unmarshaler) {
+			return fmt.Errorf("%s: Spec type %s customizes MarshalJSON but has no UnmarshalJSON", pkg.PkgPath, typ)
+		}
+	}
+	switch t := typ.Underlying().(type) {
+	case *types.Slice:
+		return validateSpecJSONType(pkg, t.Elem(), index)
+	case *types.Array:
+		return validateSpecJSONType(pkg, t.Elem(), index)
+	}
+	return nil
+}
+
+// hasCustomIsZero matches encoding/json's IsZero() bool method contract.
+func hasCustomIsZero(typ types.Type) bool {
+	obj, _, _ := types.LookupFieldOrMethod(types.NewPointer(typ), false, nil, "IsZero")
+	if obj == nil {
+		return false
+	}
+	sig, ok := obj.Type().(*types.Signature)
+	return ok && sig.Params().Len() == 0 && sig.Results().Len() == 1 &&
+		types.Identical(sig.Results().At(0).Type(), types.Typ[types.Bool])
 }
