@@ -16,7 +16,6 @@ import (
 // this also guards that connections reach the entity inventory.
 func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
-	const buildID = "conn-test"
 
 	s := sim.MakeBuilder().Build()
 	defer func() {
@@ -30,13 +29,13 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
 	conn.State.NextPortID = 99 // mutate away from the checkpoint
 
-	if err := s.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if conn.State.NextPortID != 3 {

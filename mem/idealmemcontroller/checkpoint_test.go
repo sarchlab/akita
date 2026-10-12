@@ -17,7 +17,6 @@ import (
 // No traffic is driven, so the ports stay empty and the engine queue is idle.
 func TestCheckpointRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
-	const buildID = "test-build"
 	const payload = "persisted bytes"
 
 	s := sim.MakeBuilder().Build()
@@ -47,7 +46,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	storage.Write(0x40, []byte(payload))
 	dram.State.CurrentCmdID = 7
 
-	if err := s.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
@@ -55,7 +54,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	storage.Write(0x40, make([]byte, len(payload)))
 	dram.State.CurrentCmdID = 99
 
-	if err := s.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 

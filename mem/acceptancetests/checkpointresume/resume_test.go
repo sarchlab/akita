@@ -274,7 +274,7 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 // completion, and asserts it matches the uninterrupted reference exactly.
 func resumeAndVerify(
 	t *testing.T,
-	path, buildID string,
+	path string,
 	wantVerified int,
 	wantTime timing.VTimeInPicoSec,
 ) {
@@ -284,7 +284,7 @@ func resumeAndVerify(
 	defer cleanup(resSim)
 
 	resEngine := resSim.Engine().(*timing.SerialEngine)
-	if err := resSim.LoadCheckpoint(path, buildID); err != nil {
+	if err := resSim.LoadCheckpoint(path); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if err := resEngine.Run(); err != nil {
@@ -308,7 +308,7 @@ func resumeAndVerify(
 // checkpointAtMidTransaction advances a fresh source sim to a genuinely
 // mid-transaction boundary (requests in flight, found via RunUntil) and writes
 // a checkpoint there.
-func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime timing.VTimeInPicoSec) {
+func checkpointAtMidTransaction(t *testing.T, path string, wantTime timing.VTimeInPicoSec) {
 	t.Helper()
 
 	srcSim, srcD := buildSim()
@@ -335,7 +335,7 @@ func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime tim
 	t.Logf("checkpoint at t=%d: %d requests in flight, writesAcked=%d",
 		srcEngine.CurrentTime(), inFlight, srcD.State.WritesAcked)
 
-	if err := srcSim.SaveCheckpoint(path, buildID); err != nil {
+	if err := srcSim.SaveCheckpoint(path); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 	cleanup(srcSim)
@@ -343,11 +343,10 @@ func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime tim
 
 func TestMidTransactionResumeOracle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
-	const buildID = "resume-oracle"
 
 	wantVerified, wantTime := runReference(t)
-	checkpointAtMidTransaction(t, path, buildID, wantTime)
-	resumeAndVerify(t, path, buildID, wantVerified, wantTime)
+	checkpointAtMidTransaction(t, path, wantTime)
+	resumeAndVerify(t, path, wantVerified, wantTime)
 }
 
 // TestResumeOracleDeterministicAcrossBoundaries checkpoints the same simulation
@@ -363,7 +362,6 @@ func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
 		boundary := wantTime * timing.VTimeInPicoSec(i) / slices
 		t.Run(fmt.Sprintf("boundary_%d_of_%d", i, slices), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "ck.tar.gz")
-			const buildID = "multi-boundary"
 
 			srcSim, srcD := buildSim()
 			srcEngine := srcSim.Engine().(*timing.SerialEngine)
@@ -371,12 +369,12 @@ func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
 			if err := srcEngine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)
 			}
-			if err := srcSim.SaveCheckpoint(path, buildID); err != nil {
+			if err := srcSim.SaveCheckpoint(path); err != nil {
 				t.Fatalf("SaveCheckpoint: %v", err)
 			}
 			cleanup(srcSim)
 
-			resumeAndVerify(t, path, buildID, wantVerified, wantTime)
+			resumeAndVerify(t, path, wantVerified, wantTime)
 		})
 	}
 }

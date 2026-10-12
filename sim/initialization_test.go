@@ -42,7 +42,7 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.Zero(t, calls)
 			require.ErrorContains(t, s.Engine().Run(), "Initialize")
 			path := filepath.Join(t.TempDir(), "snapshot.tar.gz")
-			require.ErrorContains(t, s.SaveCheckpoint(path, "test"), "Initialize")
+			require.ErrorContains(t, s.SaveCheckpoint(path), "Initialize")
 			require.NoFileExists(t, path)
 			require.ErrorContains(t, s.Initialize(), "Top")
 			require.Zero(t, calls)

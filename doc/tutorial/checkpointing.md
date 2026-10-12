@@ -16,7 +16,7 @@ components. The whole user-facing surface is small:
 | make messages checkpointable | a protocol: `messaging.DefineProtocol(...)` as a package-level `var` |
 | make an event checkpointable | `timing.RegisterEvent(MyEvent{})` in an `init()` |
 | make a component checkpointable | declare it with a component model — five structs and a `Definition` — and keep all mutable data in `State` (the model does the rest) |
-| take / restore a checkpoint | `sim.SaveCheckpoint(path, "")` / `sim.LoadCheckpoint(path, "")` |
+| take / restore a checkpoint | `sim.SaveCheckpoint(path)` / `sim.LoadCheckpoint(path)` |
 
 There is **no** custom marshalling to write, no wire format to learn, and no
 encoder/decoder to call. Default JSON does the work.
@@ -28,6 +28,10 @@ the *shape*: components, ports, connections, resources, and wiring. The
 checkpoint restores only the *runtime* that setup cannot
 reproduce: each component's `State`, the messages buffered in ports, shared
 resources, the event queue, the engine time, and the ID-generator counter.
+
+Build identity is derived automatically from the running binary's build
+information and stored in the checkpoint. Loading checks it against the current
+simulation's identity; callers do not supply or configure an ID.
 
 Call `s.Initialize()` after rebuilding and wiring, before `LoadCheckpoint`.
 Initialization creates the runtime containers; restore then replaces their

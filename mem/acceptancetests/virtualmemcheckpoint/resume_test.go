@@ -305,7 +305,7 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 // completion, and asserts it matches the uninterrupted reference exactly.
 func resumeAndVerify(
 	t *testing.T,
-	path, buildID string,
+	path string,
 	wantVerified int,
 	wantTime timing.VTimeInPicoSec,
 ) {
@@ -315,7 +315,7 @@ func resumeAndVerify(
 	defer cleanup(s)
 
 	engine := s.Engine().(*timing.SerialEngine)
-	if err := s.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if err := engine.Run(); err != nil {
@@ -338,7 +338,6 @@ func resumeAndVerify(
 
 func TestVirtualMemMidTransactionResume(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
-	const buildID = "virtualmem-resume"
 
 	wantVerified, wantTime := runReference(t)
 
@@ -366,12 +365,12 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 	t.Logf("checkpoint at t=%d: %d driver requests in flight, writesAcked=%d",
 		engine.CurrentTime(), inFlight(d), d.State.WritesAcked)
 
-	if err := s.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 	cleanup(s)
 
-	resumeAndVerify(t, path, buildID, wantVerified, wantTime)
+	resumeAndVerify(t, path, wantVerified, wantTime)
 }
 
 func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
@@ -382,7 +381,6 @@ func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
 		boundary := wantTime * timing.VTimeInPicoSec(i) / slices
 		t.Run(fmt.Sprintf("boundary_%d_of_%d", i, slices), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "ck.tar.gz")
-			const buildID = "virtualmem-multi"
 
 			s, d := buildSim()
 			engine := s.Engine().(*timing.SerialEngine)
@@ -390,12 +388,12 @@ func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
 			if err := engine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)
 			}
-			if err := s.SaveCheckpoint(path, buildID); err != nil {
+			if err := s.SaveCheckpoint(path); err != nil {
 				t.Fatalf("SaveCheckpoint: %v", err)
 			}
 			cleanup(s)
 
-			resumeAndVerify(t, path, buildID, wantVerified, wantTime)
+			resumeAndVerify(t, path, wantVerified, wantTime)
 		})
 	}
 }

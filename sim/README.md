@@ -143,11 +143,11 @@ to the end*.
 
 ```go
 // Save (engine stopped, outside an event handler):
-err := s.SaveCheckpoint("snap.tar.gz", "")  // "" uses the default build ID
+err := s.SaveCheckpoint("snap.tar.gz")
 
 // Resume: rebuild the *identical* simulation, bind its links, and successfully
 // call s.Initialize() with the same setup code, then:
-err := s.LoadCheckpoint("snap.tar.gz", "")
+err := s.LoadCheckpoint("snap.tar.gz")
 engine.Run()                                   // continue to completion
 ```
 
@@ -157,6 +157,8 @@ shared resources, the event queue, the engine time, and the ID-generator
 counter). The archive holds a `build_id` entry plus one payload per entity; the
 payload files are the inventory (there is no manifest). Loading validates the
 build ID and that the saved and rebuilt entity sets match exactly.
+Build identity is derived automatically from the running binary's build
+information; callers do not supply or configure it.
 
 ### The golden rule: all mutable runtime state lives in `State`
 

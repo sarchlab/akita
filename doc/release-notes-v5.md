@@ -66,3 +66,11 @@ Custom JSON must supply both methods and round-trip the configured value.
 Before: zero `Spec.Freq` failed at the first tick; after: Build rejects it.
 Ticking Specs must declare `Freq timing.Freq` in runtime, inspector, and
 `modelingtest.CheckTicking`; supply a nonzero value before Build.
+
+## Simulation checkpoint build identity
+
+Before: `s.SaveCheckpoint(path, id)` / `s.LoadCheckpoint(path, id)`; after:
+`s.SaveCheckpoint(path)` / `s.LoadCheckpoint(path)`. Build identity is derived
+automatically from the running binary's build information, stored in the
+checkpoint, and checked on load. There is no public override.
+Per-entity checkpoint methods are unchanged.

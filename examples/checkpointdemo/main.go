@@ -34,11 +34,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// A fixed build identity keeps the demo reproducible across separate `go run`
-// invocations. Real code passes "" to use the default build identity, which
-// changes whenever the binary does.
-const buildID = "checkpoint-demo"
-
 const (
 	batch1 = 5
 	batch2 = 3
@@ -135,7 +130,7 @@ func main() {
 		runBatch(engine, worker, batch1)
 		report("save", "phase 1 done", engine, worker)
 
-		if err := s.SaveCheckpoint(*ckpt, buildID); err != nil {
+		if err := s.SaveCheckpoint(*ckpt); err != nil {
 			panic(err)
 		}
 		fmt.Printf("[save] checkpoint written to %s\n", *ckpt)
@@ -144,7 +139,7 @@ func main() {
 		report("save", "FINAL", engine, worker)
 
 	case "load":
-		if err := s.LoadCheckpoint(*ckpt, buildID); err != nil {
+		if err := s.LoadCheckpoint(*ckpt); err != nil {
 			panic(err)
 		}
 		report("load", "resumed", engine, worker)

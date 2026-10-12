@@ -10,6 +10,7 @@ import (
 )
 
 type Simulation struct {
+	buildID          string
 	setup            assembly.Setup
 	id               string
 	outputPath       string

@@ -28,7 +28,8 @@ func (payloadOwner) NotifyPortFree(messaging.Port) {}
 
 func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Port) {
 	t.Helper()
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace.sqlite3")).Build()
+	s := sim.MakeBuilder().
+		WithOutputFileName(filepath.Join(t.TempDir(), "trace.sqlite3")).Build()
 	t.Cleanup(s.Terminate)
 	src := twowaybuffered.NewPort(1, 4)
 	dst := twowaybuffered.NewPort(1, 4)
@@ -131,7 +132,7 @@ func TestNetworkPayloadDeliveryAndCheckpoint(t *testing.T) {
 				}
 			}
 			path := filepath.Join(t.TempDir(), "network.tar.gz")
-			if err := s.SaveCheckpoint(path, "network-payload-test"); err != nil {
+			if err := s.SaveCheckpoint(path); err != nil {
 				t.Fatal(err)
 			}
 			if copies := checkpointPayloadCopies(t, path, data); copies != 1 {
@@ -139,7 +140,7 @@ func TestNetworkPayloadDeliveryAndCheckpoint(t *testing.T) {
 			}
 			uninterrupted := finishPayloadNetwork(t, s, dst)
 			restored, _, restoredDst := payloadNetwork(t)
-			if err := restored.LoadCheckpoint(path, "network-payload-test"); err != nil {
+			if err := restored.LoadCheckpoint(path); err != nil {
 				t.Fatal(err)
 			}
 			resumed := finishPayloadNetwork(t, restored, restoredDst)
