@@ -152,14 +152,13 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // endInflightTasks completes the req_in tracing task of every page walk still in
 // flight — local (WalkingTranslations) and remote (RemoteMemReqs) — and
 // finalizes the remote-fetch req_out for the remote ones, so a hard Reset that
-// drops both leaves no started-never-ended task and no leaked receiver-registry
-// entry. The RemoteMemReqs key is the downstream request's own ID, which is the
-// req_out task ID. A walk briefly pending removal can appear in both; the end is
+// drops both leaves no started-never-ended task. RemoteMemReqs entries store
+// both task IDs. A walk briefly pending removal can appear in both; the end is
 // idempotent. Mirrors walkMW (local req_in) and respondMW (remote req_out +
 // req_in) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tracing.EndReqInOnReset(m.comp, walking.ReqID)
+		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
 		// These walks have not yet reached an exit, so their walk subtask is
 		// still open. (Remote walks in RemoteMemReqs already closed theirs in
 		// processRemoteMemReq.)
@@ -168,9 +167,9 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		}
 	}
 
-	for reqOutID, walking := range m.comp.State.RemoteMemReqs {
-		tracing.EndTaskOnReset(m.comp, reqOutID)
-		tracing.EndReqInOnReset(m.comp, walking.ReqID)
+	for _, walking := range m.comp.State.RemoteMemReqs {
+		tracing.EndTaskOnReset(m.comp, walking.SendTaskID)
+		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
 	}
 }
 

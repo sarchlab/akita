@@ -97,7 +97,8 @@ func TestBufferHooksTraceNilPayload(t *testing.T) {
 			port := twowaybuffered.NewPort(1, 1)
 			port.BindOwner(comp, "Comp.Port")
 			hook := tc.newHook()
-			ctx := hooking.HookCtx{Domain: port, Pos: tc.enter, Item: messaging.Msg{ID: 7}}
+			ctx := hooking.HookCtx{Domain: port, Pos: tc.enter, Item: messaging.Msg{ID: 7},
+				Detail: messaging.PortBufferTrace{TaskID: comp.NewID()}}
 			hook.Func(ctx)
 			ctx.Pos = tc.leave
 			hook.Func(ctx)

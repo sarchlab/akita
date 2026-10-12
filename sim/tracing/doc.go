@@ -19,7 +19,13 @@
 // request/response messages, the [TraceReqInitiate], [TraceReqReceive],
 // [TraceReqComplete], and [TraceReqFinalize] helpers open and close the nested
 // req_out/req_in tasks. A component that drops in-flight work on reset ends the
-// open tasks with [EndReqInOnReset] and [EndTaskOnReset].
+// open tasks with [EndTaskOnReset]. Start helpers return independent task IDs;
+// components store them in checkpointed State and pass them to completion,
+// milestone, tag, and reset helpers. No message-to-task registry exists.
+// [TaskStart.MsgID] lets each observer's [RequestTaskParents] link requests.
+// Missing sender starts leave ParentID zero, including after checkpoint restore.
+// Ports own buffer task IDs; read messaging.Port.PeekIncomingTaskID before
+// retrieving to attach admission milestones.
 //
 // # Collecting
 //

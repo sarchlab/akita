@@ -141,7 +141,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	})
 	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
 
-	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
+	tracing.TraceReqComplete(m.comp, walking.RecvTaskID)
 
 	return true
 }
@@ -164,7 +164,7 @@ func (m *translationMW) parseFromTop() bool {
 	// buffer — is over. The req_in opened at retrieve covers only the walk
 	// processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(reqI, m.comp),
+		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".walk",
 	})
@@ -175,7 +175,6 @@ func (m *translationMW) parseFromTop() bool {
 	case vmprotocol.TranslationReq:
 		req := reqI
 
-		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s",
@@ -189,7 +188,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
+	recvTaskID := tracing.TraceReqReceive(m.comp, req)
 	walkTaskID := m.comp.NewID()
 
 	ts := transactionState{
@@ -267,9 +266,4 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 
 		state.NextPhysicalPage += pageSize
 	}
-}
-
-func (m *translationMW) traceReqComplete(recvTaskID, reqMsgID uint64) {
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: recvTaskID})
-	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

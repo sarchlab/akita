@@ -6,7 +6,9 @@ import (
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
-// All four port message hook positions carry the Port as Domain and a Msg as Item.
+// All four port message hook positions carry the Port as Domain, a Msg as Item,
+// and PortBufferTrace as Detail. Hooks must not call buffer operations (peek, count, or mutate): the port
+// may hold its buffer lock while notifying them.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
 // HookPosPortMsgRecvd marks when an inbound message arrives at the port.
@@ -22,6 +24,14 @@ var HookPosPortMsgRetrieveIncoming = &hooking.HookPos{
 // from the outgoing buffer.
 var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 	Name: "Port Msg Retrieve Outgoing",
+}
+
+// PortBufferTrace describes the buffer task affected by a port hook. TaskID is
+// the enqueued or removed entry's task. HeadTaskID is the task that just reached
+// the head (zero if none). These IDs are stored in the port checkpoint.
+type PortBufferTrace struct {
+	TaskID     uint64
+	HeadTaskID uint64
 }
 
 // A RemotePort is a string that refers to another port.
@@ -54,6 +64,10 @@ type Port interface {
 	Send(msg Msg)
 	RetrieveIncoming() (Msg, bool)
 	PeekIncoming() (Msg, bool)
+
+	// PeekIncomingTaskID returns the head entry's buffer task ID, or zero
+	// when empty or untraced. Read it before RetrieveIncoming.
+	PeekIncomingTaskID() uint64
 
 	// Buffer counts
 	NumIncoming() int

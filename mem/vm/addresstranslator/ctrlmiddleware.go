@@ -156,8 +156,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 
 // endInflightTasks completes the req_in tracing task of every in-flight request
 // and finalizes the req_out it currently owns, so a hard Reset that drops both
-// transaction tables leaves no started-never-ended task and no leaked
-// receiver-registry entry. A request awaiting translation (Transactions) holds a
+// transaction tables leaves no started-never-ended task. A request awaiting translation (Transactions) holds a
 // translation req_out (TranslationReqID); one already translated and forwarded
 // (InflightReqToBottom) holds the downstream req_out (ReqToBottomID). The end is
 // idempotent for a req_out a response already finalized. Mirrors respond()
@@ -166,14 +165,14 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
 		for _, inc := range trans.IncomingReqs {
-			tracing.EndReqInOnReset(m.comp, inc.ID)
+			tracing.EndTaskOnReset(m.comp, inc.RecvTaskID)
 		}
-		tracing.EndTaskOnReset(m.comp, trans.TranslationReqID)
+		tracing.EndTaskOnReset(m.comp, trans.TranslationTaskID)
 	}
 
 	for _, r := range m.comp.State.InflightReqToBottom {
-		tracing.EndReqInOnReset(m.comp, r.ReqFromTopID)
-		tracing.EndTaskOnReset(m.comp, r.ReqToBottomID)
+		tracing.EndTaskOnReset(m.comp, r.RecvTaskID)
+		tracing.EndTaskOnReset(m.comp, r.SendTaskID)
 	}
 }
 

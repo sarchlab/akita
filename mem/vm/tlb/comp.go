@@ -89,12 +89,14 @@ type setState struct {
 
 // mshrEntryState is a serializable representation of an mshrEntry.
 type mshrEntryState struct {
-	PID            uint32          `json:"pid"`
-	VAddr          uint64          `json:"vaddr"`
-	Requests       []messaging.Msg `json:"requests"`
-	HasReqToBottom bool            `json:"has_req_to_bottom"`
-	ReqToBottom    messaging.Msg   `json:"req_to_bottom"`
-	Page           vm.Page         `json:"page"`
+	SendTaskID uint64 `json:"send_task_id"`
+
+	PID            uint32                `json:"pid"`
+	VAddr          uint64                `json:"vaddr"`
+	Requests       []pipelineTLBReqState `json:"requests"`
+	HasReqToBottom bool                  `json:"has_req_to_bottom"`
+	ReqToBottom    messaging.Msg         `json:"req_to_bottom"`
+	Page           vm.Page               `json:"page"`
 }
 
 // GetPID returns the PID of the MSHR entry.
@@ -107,6 +109,8 @@ func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
 // of the tracing pipeline subtask opened (as a child of req_in) when the request
 // enters the pipeline at retrieve and closed when it is popped at lookup.
 type pipelineTLBReqState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	Msg            messaging.Msg `json:"msg"`
 	PipelineTaskID uint64        `json:"pipeline_task_id"`
 }

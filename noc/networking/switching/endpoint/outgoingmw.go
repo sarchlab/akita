@@ -42,6 +42,7 @@ func msgToFlits(
 				MsgID:        msg.ID,
 				Dst:          msg.Dst,
 				MsgTaskID:    msgTaskID,
+				FlitTaskID:   newID(),
 				Msg:          carried,
 			}}
 	}
@@ -97,7 +98,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 		// accept it; charge that span to the flit_e2e task.
 		if m.comp.NumHooks() > 0 {
 			tracing.AddMilestone(m.comp, tracing.Milestone{
-				TaskID: flit.ID,
+				TaskID: flit.Payload.(packetization.Flit).FlitTaskID,
 				Kind:   tracing.MilestoneKindNetworkBusy,
 				What:   m.comp.Name() + ".NetworkPort",
 			})
@@ -174,11 +175,8 @@ func (m *outgoingMW) prepareFlits() bool {
 		meta := state.MsgOutBuf[0]
 		state.MsgOutBuf = state.MsgOutBuf[1:]
 
-		// One msg_e2e task per message. Its ID is generated here (unique, not
-		// meta.ID — a sender's req_out already owns meta.ID in an integrated
-		// simulation), travels in every flit as MsgTaskID, and is the parent of
-		// each per-flit flit_e2e task. It is parented to the message's own ID so
-		// it nests under that req_out when one exists.
+		// The transport tasks carry their IDs in checkpointed flit state.
+		// Observers resolve msg_e2e under req_out using the original MsgID.
 		msgTaskID := m.comp.NewID()
 		flits := msgToFlits(
 			m.comp.NewID,
@@ -188,7 +186,7 @@ func (m *outgoingMW) prepareFlits() bool {
 
 		m.logMsgE2EStart(meta, msgTaskID)
 		for _, fs := range flits {
-			m.logFlitE2ETask(fs, false, meta, msgTaskID)
+			m.logFlitE2EStart(fs)
 		}
 
 		madeProgress = true
@@ -204,32 +202,26 @@ func (m *outgoingMW) logMsgE2EStart(meta messaging.Msg, msgTaskID uint64) {
 	}
 
 	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       msgTaskID,
-		ParentID: meta.ID,
-		Kind:     "msg_e2e",
-		What:     "msg_e2e",
-		Detail:   meta,
+		ID:     msgTaskID,
+		MsgID:  meta.ID,
+		Kind:   "msg_e2e",
+		What:   "msg_e2e",
+		Detail: meta,
 	})
 }
 
-func (m *outgoingMW) logFlitE2ETask(
-	fs messaging.Msg, isEnd bool, meta messaging.Msg, msgE2ETaskID uint64,
-) {
+func (m *outgoingMW) logFlitE2EStart(flit messaging.Msg) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
-
-	if isEnd {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: fs.ID})
-		return
-	}
-
+	part := flit.Payload.(packetization.Flit)
 	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       fs.ID,
-		ParentID: msgE2ETaskID,
+		ID:       part.FlitTaskID,
+		MsgID:    flit.ID,
+		ParentID: part.MsgTaskID,
 		Kind:     "flit_e2e",
 		What:     "flit_e2e",
 		Location: m.comp.Name() + ".FlitBuf",
-		Detail:   fs,
+		Detail:   flit,
 	})
 }

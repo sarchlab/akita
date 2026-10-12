@@ -60,6 +60,8 @@ type Resources struct {
 
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	ID    uint64               `json:"id"`
 	Src   messaging.RemotePort `json:"src"`
 	Dst   messaging.RemotePort `json:"dst"`
@@ -77,6 +79,8 @@ type incomingReqState struct {
 
 // transactionState is a serializable representation of a runtime transaction.
 type transactionState struct {
+	TranslationTaskID uint64 `json:"translation_task_id"`
+
 	IncomingReqs      []incomingReqState   `json:"incoming_reqs"`
 	TranslationReqID  uint64               `json:"translation_req_id"`
 	TranslationReqSrc messaging.RemotePort `json:"translation_req_src"`
@@ -87,6 +91,9 @@ type transactionState struct {
 
 // reqToBottomState is a serializable representation of a runtime reqToBottom.
 type reqToBottomState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+	SendTaskID uint64 `json:"send_task_id"`
+
 	ReqFromTopID    uint64               `json:"req_from_top_id"`
 	ReqFromTopSrc   messaging.RemotePort `json:"req_from_top_src"`
 	ReqFromTopDst   messaging.RemotePort `json:"req_from_top_dst"`
@@ -190,23 +197,6 @@ func createTranslatedReq(
 	}
 }
 
-// restoreMemMsg reconstructs a concrete mem message from saved metadata. It
-// preserves the original message ID so tracing lookups (keyed by the message
-// ID) resolve to the same task as the original incoming message.
-func restoreMemMsg(
-	id uint64, src, dst messaging.RemotePort, rspTo uint64, typ string,
-) messaging.Msg {
-	meta := messaging.Msg{ID: id, Src: src, Dst: dst, RspTo: rspTo}
-	switch typ {
-	case "memprotocol.WriteReq":
-		meta.Payload = memprotocol.WriteReq{}
-		return meta
-	default:
-		meta.Payload = memprotocol.ReadReq{}
-		return meta
-	}
-}
-
 func findTransactionByReqID(transactions []transactionState, id uint64) int {
 	for i, t := range transactions {
 		if t.TranslationReqID == id {
@@ -258,6 +248,7 @@ func buildReqToBottom(
 	reqState incomingReqState, translatedReq messaging.Msg,
 ) reqToBottomState {
 	return reqToBottomState{
+		RecvTaskID:      reqState.RecvTaskID,
 		ReqFromTopID:    reqState.ID,
 		ReqFromTopSrc:   reqState.Src,
 		ReqFromTopDst:   reqState.Dst,

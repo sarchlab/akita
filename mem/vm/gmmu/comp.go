@@ -33,6 +33,8 @@ type pageState struct {
 
 // transactionState is the serializable form of a runtime transaction.
 type transactionState struct {
+	SendTaskID uint64 `json:"send_task_id"`
+
 	ReqID      uint64               `json:"req_id"`
 	RecvTaskID uint64               `json:"recv_task_id"`
 	ReqSrc     messaging.RemotePort `json:"req_src"`

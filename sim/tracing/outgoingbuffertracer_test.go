@@ -86,12 +86,12 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		Expect(tracer.starts).To(HaveLen(2))
 		startA := tracer.starts[0]
 		Expect(startA.Kind).To(Equal(OutgoingBufferTaskKind))
-		Expect(startA.ParentID).To(Equal(uint64(7)))
+		Expect(startA.MsgID).To(Equal(uint64(7)))
 		Expect(startA.What).To(Equal("obTestMsg"))
 		Expect(startA.Location).To(Equal("Comp.Bottom.outgoing"))
 		Expect(startA.Time).To(Equal(timing.VTimeInPicoSec(100)))
 		startB := tracer.starts[1]
-		Expect(startB.ParentID).To(Equal(uint64(8)))
+		Expect(startB.MsgID).To(Equal(uint64(8)))
 		Expect(startB.Time).To(Equal(timing.VTimeInPicoSec(110)))
 
 		// A reached the head at send (empty buffer); B has not.
@@ -133,7 +133,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		port.Send(rsp)
 
 		Expect(tracer.starts).To(HaveLen(1))
-		Expect(tracer.starts[0].ParentID).To(Equal(uint64(7)))
+		Expect(tracer.starts[0].MsgID).To(Equal(uint64(9)))
 	})
 
 	It("is a no-op when the owning component is not being traced", func() {

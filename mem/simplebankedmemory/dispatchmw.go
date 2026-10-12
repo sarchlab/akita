@@ -60,7 +60,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 		// covers only the processing that follows.
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: tracing.MsgIDAtIncomingBuffer(msgI, m.comp),
+			TaskID: m.topPort().PeekIncomingTaskID(),
 			Kind:   tracing.MilestoneKindHardwareResource,
 			What:   fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID),
 		})
@@ -72,17 +72,18 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// rather than left as a gap between the buffer task (which ends at
 		// retrieve) and the post-pipeline finalize milestones on req_in. The task
 		// ID rides on the item through the pipeline and is closed at finalize.
-		tracing.TraceReqReceive(m.comp, msg)
+		recvTaskID := tracing.TraceReqReceive(m.comp, msg)
 
 		pipelineTaskID := m.comp.NewID()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pipelineTaskID,
-			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
+			ParentID: recvTaskID,
 			Kind:     tracing.PipelineTaskKind,
 			What:     m.comp.Name() + ".pipeline",
 		})
 
 		item := m.msgToItem(msg)
+		item.RecvTaskID = recvTaskID
 		item.PipelineTaskID = pipelineTaskID
 		pipelineAccept(&next.Banks[bankID], spec, item)
 		madeProgress = true

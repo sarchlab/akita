@@ -65,7 +65,7 @@ func (m *walkMW) parseFromTop() bool {
 	// buffer — is over. The req_in opened at retrieve covers only the walk
 	// processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(reqI, m.comp),
+		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".walk",
 	})
@@ -76,7 +76,6 @@ func (m *walkMW) parseFromTop() bool {
 	case vmprotocol.TranslationReq:
 		req := reqI
 
-		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -90,7 +89,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
+	recvTaskID := tracing.TraceReqReceive(m.comp, req)
 	walkTaskID := m.comp.NewID()
 
 	ts := transactionState{
@@ -200,14 +199,14 @@ func (m *walkMW) processRemoteMemReq(
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 
-	state.RemoteMemReqs[req.ID] = walking
-
-	m.bottomPort().Send(req)
-
 	// Open the downstream req_out as a child task of the original req_in so the
 	// remote walk shows up as a proper subtask; it is finalized in
 	// handleTranslationRsp when the remote response returns.
-	tracing.TraceReqInitiate(m.comp, req, walking.RecvTaskID)
+
+	walking.SendTaskID = tracing.TraceReqInitiate(m.comp, req, walking.RecvTaskID)
+	state.RemoteMemReqs[req.ID] = walking
+
+	m.bottomPort().Send(req)
 
 	// The local walk countdown finished and the page is remote: attribute the
 	// countdown as work on the req_in and close the walk subtask that spanned
@@ -271,11 +270,7 @@ func (m *walkMW) doPageWalkHit(
 	})
 	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
 
-	tracing.TraceReqComplete(
-		m.comp, messaging.Msg{ID: walking.ReqID,
-			Src: walking.ReqSrc,
-			Dst: walking.ReqDst, Payload: vmprotocol.TranslationReq{}},
-	)
+	tracing.TraceReqComplete(m.comp, walking.RecvTaskID)
 
 	return true
 }

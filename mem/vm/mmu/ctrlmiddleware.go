@@ -142,12 +142,11 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 
 // endInflightTasks completes the req_in tracing task and the walk subtask of
 // every page walk still in flight, so a hard Reset that drops
-// WalkingTranslations leaves no started-never-ended task and no leaked
-// receiver-registry entry. The MMU walk is local, so there is no downstream
+// WalkingTranslations leaves no started-never-ended task. The MMU walk is local, so there is no downstream
 // req_out to finalize. Mirrors the completion in translationMW.doPageWalkHit.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tracing.EndReqInOnReset(m.comp, walking.ReqID)
+		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
 		if walking.WalkTaskID != 0 {
 			tracing.EndTaskOnReset(m.comp, walking.WalkTaskID)
 		}

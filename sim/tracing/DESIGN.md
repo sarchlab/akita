@@ -1,5 +1,24 @@
 # Tracing API Refactoring — Design
 
+## Current ownership model (v5, #503)
+
+Request starts return independent task IDs allocated by the domain. Components
+store them in transaction State. Ports store buffer IDs with each message and
+checkpoint the entry. `PeekIncomingTaskID()` exposes the incoming head ID for
+admission milestones. Port hook metadata makes buffer observers stateless.
+
+`RequestTaskParents` is private state of each tracer instance, shared as an
+implementation helper by DBTracer, BackTraceTracer, and custom tracers. It
+resolves message correlation into task parents and forgets each mapping on
+req_out end. A missed sender start leaves parent zero; the helper is never
+checkpointed. The DB schema and Daisen task-parent joins are unchanged.
+
+The historical registry proposal below has been superseded. All three global
+registries and their exported lookup/forget helpers, plus EndReqInOnReset,
+have been removed. Current signatures and lifecycle are in [README.md](README.md).
+
+## Historical design record
+
 > **Status: COMPLETED and shipped.** All phases of this refactor — the struct
 > emit API, the step→tag rename, caller-supplied (then domain-clock) time, the
 > location-interned DB schema, and the daisen reader lockstep — have landed.
@@ -328,7 +347,7 @@ on-disk schema and therefore must ship together with the daisen reader.
 These are explicitly **out of scope** for this plan and parked for their own
 discussions. The current API for both is **kept unchanged**.
 
-### Receiver-ID registry (reference)
+### Receiver-ID registry (removed; historical reference)
 
 `registry.go` exists so a receiver can derive a **stable, unique** task ID for
 an incoming message **without mutating the message**. The scenario:

@@ -19,6 +19,7 @@ func (p *defaultTaskPrinter) Print(task Task) {
 
 // BackTraceTracer can record incomplete tasks.
 type BackTraceTracer struct {
+	parents RequestTaskParents
 	NopTracer
 
 	printer      TaskPrinter
@@ -45,6 +46,8 @@ func (t *BackTraceTracer) StartTask(task TaskStart) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	task = t.parents.ResolveStart(task)
+
 	t.tracingTasks[task.ID] = Task{
 		ID:        task.ID,
 		ParentID:  task.ParentID,
@@ -60,6 +63,8 @@ func (t *BackTraceTracer) StartTask(task TaskStart) {
 func (t *BackTraceTracer) EndTask(task TaskEnd) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+
+	t.parents.End(task.ID)
 
 	delete(t.tracingTasks, task.ID)
 }

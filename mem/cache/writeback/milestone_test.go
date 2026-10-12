@@ -125,7 +125,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			panic(err)
 		}
 
-		// Attach the recorder before driving so MsgIDAtReceiver hands out real
+		// Attach the recorder before driving so request starts allocate real
 		// receiver-side task IDs (it returns 0 when there are no hooks). The
 		// admission milestone lands on the Top-port buffer task, so the test
 		// also needs the incoming-buffer task to exist.

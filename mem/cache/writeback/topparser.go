@@ -54,12 +54,12 @@ func (p *topParser) Tick() bool {
 	// buffer because the directory stage buffer had room. The buffer task is
 	// keyed by the peeked message and ends at RetrieveIncoming below.
 	tracing.AddMilestone(p.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(msg, p.cache.comp),
+		TaskID: p.cache.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   p.cache.comp.Name() + ".dir_stage_buf",
 	})
 
-	tracing.TraceReqReceive(p.cache.comp, msg)
+	next.Transactions[idx].RecvTaskID = tracing.TraceReqReceive(p.cache.comp, msg)
 
 	p.cache.topPort().RetrieveIncoming()
 

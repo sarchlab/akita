@@ -20,7 +20,7 @@ import (
 // open — then issues a Reset without answering the fetch and asserts every
 // task the transaction opened is ended. A mid-flight Reset that drops the
 // transaction table must leave no started-never-ended task (and no leaked
-// receiver-registry entry).
+// task).
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)

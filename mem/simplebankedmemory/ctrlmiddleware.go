@@ -146,7 +146,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // endInflightTasks completes the req_in tracing task and closes the open
 // pipeline subtask of every request still in a bank pipeline or post-pipeline
 // buffer, so a hard Reset that rebuilds the banks leaves no
-// started-never-ended task and no leaked receiver-registry entry. The memory is
+// started-never-ended task. The memory is
 // a leaf, so there is no downstream req_out. Mirrors the completion in
 // tickFinalizeMW.finishPipeline + TraceReqComplete.
 func (m *ctrlMiddleware) endInflightTasks() {
@@ -162,12 +162,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 }
 
 func (m *ctrlMiddleware) endItemTasks(item bankPipelineItemState) {
-	reqMsgID := item.WriteMsg.ID
-	if item.IsRead {
-		reqMsgID = item.ReadMsg.ID
-	}
-
-	tracing.EndReqInOnReset(m.comp, reqMsgID)
+	tracing.EndTaskOnReset(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
 		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)

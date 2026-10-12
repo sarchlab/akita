@@ -296,7 +296,7 @@ case ReadReq:
 
 `Msg` contains `ID`, `Src`, `Dst`, `TrafficClass`, `TrafficBytes`, `RspTo`, and
 `Payload`. `msg.IsRsp()` means `msg.RspTo != 0`. The earlier `MsgMeta` type and
-`Meta()` method are removed. Tracing task IDs remain in tracing's registry.
+`Meta()` method are removed. Tracing task IDs live in component transaction State and port buffer entries; see the tracing migration in [V5 release notes](../release-notes-v5.md#tracing-task-ownership).
 
 Payloads must be registered values, including in examples that never checkpoint.
 Pointer prototypes and pointer/interface/channel/function/unsafe-pointer fields

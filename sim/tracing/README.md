@@ -136,71 +136,92 @@ buffer hooks that append a direction). `StartTask` requires a non-empty `ID`,
 `Kind`, and `What` (and a named domain) or it panics; tag and milestone `ID`s are
 auto-generated when left zero.
 
-### Message Tracing Helpers
+### Message tracing and task ownership
 
-Convenience functions for request/response message tracing:
-
-```go
-tracing.TraceReqInitiate(domain, msg, parentTaskID) // sender starts req
-tracing.TraceReqReceive(domain, msg)                // receiver starts handling
-tracing.TraceReqComplete(domain, msg)               // receiver done
-tracing.TraceReqFinalize(domain, msg)               // sender gets response
-```
-
-The receiver-side task ID is derived from the message without mutating it, via
-`MsgIDAtReceiver(msg, domain)` / `ForgetMsgIDAtReceiver(msgID, domain)`.
-
-### Tearing down in-flight tasks on reset
-
-A component that drops in-flight work on `Reset` (whose responses will never
-arrive) must end the open tasks itself, or they leak as started-never-ended
-tasks (and the receiver registry grows). Two helpers do this, taking the IDs a
-reset path still has on hand:
+Task IDs are independent of message IDs. Start helpers allocate with
+`domain.NewID()` and return the task ID (zero if the domain has no hooks):
 
 ```go
-tracing.EndReqInOnReset(domain, reqMsgID) // ends the req_in + forgets its registry entry
-tracing.EndTaskOnReset(domain, taskID)    // ends any task keyed on its own ID
+sendTaskID := tracing.TraceReqInitiate(domain, msg, parentTaskID)
+recvTaskID := tracing.TraceReqReceive(domain, msg)
+tracing.TraceReqComplete(domain, recvTaskID)
+tracing.TraceReqFinalize(domain, sendTaskID)
 ```
 
-`EndReqInOnReset` mirrors `TraceReqComplete` but resolves the `req_in` task by
-the request's message ID. `EndTaskOnReset` ends any task whose ID is its own ID
-rather than a receiver-registry entry — a forwarded `req_out`, a DRAM
-sub-transaction, a cache transaction, or a pipeline subtask. Both are no-ops
-when there are no hooks or no such task, so a reset path may end every task a
-transaction could hold without tracking which were actually opened.
+The sender and receiver each retain their own returned ID in their transaction
+`State`. Use that ID for milestones, tags, child tasks, completion, and
+`EndTaskOnReset(domain, taskID)`. Zero IDs are ignored by end, tag, and milestone
+helpers. The message is unchanged. There is no registry or lookup/forget step.
+Start a sender task **before** `port.Send(msg)` so observers see the request
+before its outgoing-buffer child.
 
-### Incoming-buffer tracing
+`TaskStart.MsgID` identifies the message handled by a task. `req_in` starts
+have no simulation-supplied parent. `DBTracer` and `BackTraceTracer` each own a
+`RequestTaskParents`, which records `MsgID -> req_out task ID`, resolves parents
+on receive/buffer/message-transport starts, and deletes the mapping on req_out end. Buffer tasks
+for responses resolve using `Detail.(messaging.Msg).RspTo`; their `MsgID` still
+identifies the response itself. NoC `msg_e2e` tasks resolve the same way.
+Explicit parents of other task kinds are
+preserved. Custom tracers that need these links use the same helper:
 
-`CollectIncomingBufferTrace(port)` attaches a port hook that opens an
-`incoming_buffer`-kind task spanning a message's residency in the port's
-incoming buffer — from delivery until the component retrieves (admits) it —
-parented to the message's `req_out` task. It emits a `MilestoneKindQueue`
-"reached head" milestone the instant the message becomes the head of the buffer.
-The owning component hangs its **admission** milestones (the resources that kept
-it from admitting the message) on the same task via
-`MsgIDAtIncomingBuffer(msg, domain)` / `ForgetMsgIDAtIncomingBuffer(msgID,
-domain)`. It is a no-op unless the port's owning component is itself traced via
-`CollectTrace`.
+```go
+// Under the tracer's lock, before filtering or retaining a start:
+task = parents.ResolveStart(task)
+// For every end, including tasks not recorded by the tracer:
+parents.End(task.ID)
+```
 
-The buffer task ends at **retrieve**, and the component's `req_in` processing
-task begins at that same retrieve — the two are adjacent, no gap, no overlap.
-The buffer task carries the admission milestones; `req_in` carries only the
-post-admission processing milestones.
+The helper's zero value is usable. It is observer state, is not checkpointed,
+and never affects simulation decisions. If the observer missed the sender
+start (sender not traced, or request already in flight across restore), the
+receiver/buffer has `ParentID == 0`. Events are not retroactively reparented.
+Share one tracer across the domains whose task trees should be linked; use a
+separate tracer for each simulation.
 
-### Outgoing-buffer tracing
+### Reset and checkpoints
 
-`CollectOutgoingBufferTrace(port)` is the send-side mirror. It opens an
-`outgoing_buffer`-kind task spanning a message's residency in the port's
-**outgoing** buffer — from the moment the owning component sends (enqueues) it
-until the connection retrieves (drains) it onto the link — parented to the
-message's `req_out` task (for a response, the `req_out` it responds to). It is
-located at `<port>.outgoing`. Like the incoming side it emits a
-`MilestoneKindQueue` "reached head" milestone the instant the message becomes the
-head of the buffer: the interval up to it is time spent waiting behind earlier
-messages, and the remaining time at the head is the wait for the link to become
-free. Follow-on state can be hung on the task via
-`MsgIDAtOutgoingBuffer(msg, domain)` / `ForgetMsgIDAtOutgoingBuffer(msgID, domain)`.
-It too is a no-op unless the port's owning component is traced via `CollectTrace`.
+A component that drops work ends every owned task with
+`EndTaskOnReset(domain, taskID)` before discarding its transaction. The same
+helper handles receive, send, pipeline, and other task kinds. An observer
+ignores an end for a task whose start it did not see.
+
+Task IDs in component State and port entries survive checkpoints. Restoring
+emits no new starts: subsequent milestones and ends use the saved IDs. A fresh
+observer cannot reconstruct tasks that began before it attached, but an
+observer retaining the original starts can match the restored ends.
+
+### Port buffer tracing
+
+`CollectIncomingBufferTrace(port)` and `CollectOutgoingBufferTrace(port)` attach
+stateless hooks. `twowaybuffered.Port` stores each buffered message together
+with its task ID and serializes both via the message codec. Its hook events
+keep `messaging.Msg` as `Item` and supply `messaging.PortBufferTrace` in `Detail`:
+`TaskID` is the affected entry and `HeadTaskID` is the entry that just reached
+the head (zero if none). Hooks must not call buffer operations (peek, count, or mutate) while processing
+these events, because the port may hold its buffer lock.
+
+The incoming task spans delivery to retrieval at `<port>.incoming`; outgoing
+spans send to drain at `<port>.outgoing`. Both emit a queue milestone when the
+entry reaches the head. Queue position comes directly from port state, so
+restoring needs no observer-side queue-depth counter.
+
+Components attach admission milestones to the head of the incoming buffer:
+
+```go
+tracing.AddMilestone(domain, tracing.Milestone{
+    TaskID: port.PeekIncomingTaskID(),
+    Kind: tracing.MilestoneKindHardwareResource,
+    What: domain.Name() + ".slots",
+})
+msg, ok := port.RetrieveIncoming()
+```
+
+Read the task ID **before** retrieving. `PeekIncomingTaskID() uint64` returns
+zero for an empty buffer or an entry enqueued without tracing. Peeks do not
+reserve the head; the component remains the sole incoming-buffer consumer.
+The buffer task closes at retrieve, where the component starts its own req_in.
+Old checkpoints with bare message arrays must be recreated for the new entry
+format. Daisen's task/parent schema is unchanged.
 
 ### Pipeline subtasks
 

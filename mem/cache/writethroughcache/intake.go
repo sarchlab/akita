@@ -35,7 +35,7 @@ func (s *intake) Tick() bool {
 	// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 	// covers only the processing that follows.
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(msg, s.cache.comp),
+		TaskID: s.cache.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   s.cache.comp.Name() + ".trans",
 	})
@@ -48,7 +48,7 @@ func (s *intake) Tick() bool {
 	// The directory buffer has room: the at-head wait for a free dirBuf slot is
 	// over (also on the incoming-buffer task).
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(msg, s.cache.comp),
+		TaskID: s.cache.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   s.cache.comp.Name() + ".dir_buf",
 	})
@@ -59,7 +59,7 @@ func (s *intake) Tick() bool {
 
 	s.cache.topPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(s.cache.comp, msg)
+	next.Transactions[transIdx].RecvTaskID = tracing.TraceReqReceive(s.cache.comp, msg)
 
 	return true
 }

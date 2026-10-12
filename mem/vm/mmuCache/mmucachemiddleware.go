@@ -158,7 +158,6 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 
-	m.bottomPort().Send(reqToBottom)
 	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
 
 	// The forwarded walk is on its way downstream: the at-head wait to send on
@@ -166,7 +165,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	// incoming-buffer task; req_in (opened just below, at retrieve) covers only
 	// the processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
@@ -175,20 +174,14 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 	// Open req_in for the original Top request at retrieve, and initiate the
 	// forwarded Bottom request as a req_out parented to it. The Top request's
-	// identity is retained (keyed by the Bottom request ID) so the req_in and
-	// req_out can be completed when the response returns — the completion path
-	// only has message IDs, not the live messages.
-	tracing.TraceReqReceive(m.comp, req)
-	tracing.TraceReqInitiate(m.comp, reqToBottom,
-		tracing.MsgIDAtReceiver(req, m.comp))
+	// task IDs are retained by the Bottom request ID until its response arrives.
+	recvTaskID := tracing.TraceReqReceive(m.comp, req)
+	sendTaskID := tracing.TraceReqInitiate(m.comp, reqToBottom, recvTaskID)
+	m.bottomPort().Send(reqToBottom)
 
 	m.comp.State.InflightReqs[reqToBottom.ID] = inflightReqState{
-		TopReqID:     req.ID,
-		TopReqSrc:    req.Src,
-		TopReqDst:    req.Dst,
-		BottomReqID:  reqToBottom.ID,
-		BottomReqSrc: reqToBottom.Src,
-		BottomReqDst: reqToBottom.Dst,
+		RecvTaskID: recvTaskID,
+		SendTaskID: sendTaskID,
 	}
 
 	return true
@@ -246,10 +239,9 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// until the Top port could accept the upstream response. That at-head
 	// send-wait is over now; attribute it to the Bottom incoming-buffer task.
 	// This must precede RetrieveIncoming: retrieving closes the buffer task and
-	// forgets its registry ID, after which MsgIDAtIncomingBuffer would mint a
-	// fresh, unrelated ID.
+	// removes its entry, after which PeekIncomingTaskID refers to the next head.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(rsp, m.comp),
+		TaskID: m.bottomPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
 	})
@@ -258,26 +250,20 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	delete(next.OutstandingBottomReqs, rsp.RspTo)
 
 	// The upstream response is on its way: finalize the forwarded req_out and
-	// complete the original req_in. The completion path only retains message
-	// IDs, so both messages are reconstructed from the saved identity.
+	// complete the original req_in, using the IDs saved in the transaction.
 	if inflight, ok := next.InflightReqs[rsp.RspTo]; ok {
-		reqToBottom := restoreTransReq(
-			inflight.BottomReqID, inflight.BottomReqSrc, inflight.BottomReqDst)
-		topReq := restoreTransReq(
-			inflight.TopReqID, inflight.TopReqSrc, inflight.TopReqDst)
-		tracing.TraceReqFinalize(m.comp, reqToBottom)
+		tracing.TraceReqFinalize(m.comp, inflight.SendTaskID)
 
 		// The downstream walk-fetch the original Top request waited on has
 		// returned: charge that in-flight wait to the original req_in (this is
-		// the reconstructed original request, not a phantom — its receiver task
-		// is the req_in opened at retrieve in sendReqToBottom).
+		// the req_in opened at retrieve in sendReqToBottom).
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: tracing.MsgIDAtReceiver(topReq, m.comp),
+			TaskID: inflight.RecvTaskID,
 			Kind:   tracing.MilestoneKindTranslation,
 			What:   "translation",
 		})
 
-		tracing.TraceReqComplete(m.comp, topReq)
+		tracing.TraceReqComplete(m.comp, inflight.RecvTaskID)
 		delete(next.InflightReqs, rsp.RspTo)
 	}
 

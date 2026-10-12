@@ -70,8 +70,8 @@ var _ = Describe("DRAM admission milestones", func() {
 
 		topPort = memCtrl.Ports.Top
 
-		// Attach the recorder before driving so MsgIDAtReceiver and
-		// MsgIDAtIncomingBuffer hand out real task IDs (they return 0 with no
+		// Attach the recorder before driving so request and buffer starts
+		// allocate real task IDs (they return 0 with no
 		// hooks). The admission milestone lands on the Top-port buffer task, so
 		// the buffer task must exist.
 		rec = &milestoneRecorder{}

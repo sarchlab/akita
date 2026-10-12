@@ -171,12 +171,12 @@ cd reqtracing && go run main.go
 
 A request travels a memory hierarchy (`Client → L1 → L2 → Memory`); each cache
 misses and forwards downward, parenting the downstream task to the one it is
-handling with `tracing.MsgIDAtReceiver`. A custom tracer attached to every
+handling using the stored ID returned by `tracing.TraceReqReceive`. A custom tracer attached to every
 component prints the resulting task tree. Each component type is in its own
 package (`client`, `cache`, `memory`); `main.go` builds the hierarchy bottom-up
 so each level's `Spec` can name the port of the level below.
 
-**Key concepts**: `tracing.MsgIDAtReceiver`, `parentID` chaining, task trees
+**Key concepts**: task IDs in State, `RequestTaskParents`, `parentID` chaining, task trees
 across components, attaching one tracer to many domains.
 
 ```bash

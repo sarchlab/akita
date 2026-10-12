@@ -162,22 +162,21 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // endInflightTasks completes the req_in tracing task of the in-flight move (when
 // one is active) and finalizes the req_out task of every outstanding downstream
 // read and write, so a hard Reset that wipes the transaction leaves no
-// started-never-ended task and no leaked receiver-registry entry. The pending
-// maps are keyed by the downstream message's own ID, which is the req_out task
-// ID. Mirrors ctrlParseMW (req_in) and dataTransferMW (req_out) completion.
+// started-never-ended task. Each pending entry stores its req_out task ID.
+// Mirrors ctrlParseMW (req_in) and dataTransferMW (req_out) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	trans := &m.comp.State.CurrentTransaction
 
 	if trans.Active {
-		tracing.EndReqInOnReset(m.comp, trans.ReqID)
+		tracing.EndTaskOnReset(m.comp, trans.RecvTaskID)
 	}
 
-	for id := range trans.PendingRead {
-		tracing.EndTaskOnReset(m.comp, id)
+	for _, req := range trans.PendingRead {
+		tracing.EndTaskOnReset(m.comp, req.TaskID)
 	}
 
-	for id := range trans.PendingWrite {
-		tracing.EndTaskOnReset(m.comp, id)
+	for _, req := range trans.PendingWrite {
+		tracing.EndTaskOnReset(m.comp, req.TaskID)
 	}
 }
 

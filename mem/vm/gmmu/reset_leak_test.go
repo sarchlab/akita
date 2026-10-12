@@ -18,8 +18,7 @@ import (
 // issues a remote memory request out the Bottom port — so the original req_in
 // and the downstream req_out tracing tasks are both open — then issues a Reset
 // without ever answering the remote request and asserts both tasks are ended.
-// A mid-flight Reset must leave no started-never-ended task (and no leaked
-// receiver-registry entry).
+// A mid-flight Reset must leave no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	const (
 		deviceID  = uint64(0)

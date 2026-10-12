@@ -125,7 +125,7 @@ func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 		trans.BankPID = pid
 		tracing.StartTask(s.cache.comp, tracing.TaskStart{
 			ID:       pid,
-			ParentID: tracing.MsgIDAtReceiver(trans.reqMeta(), s.cache.comp),
+			ParentID: trans.RecvTaskID,
 			Kind:     tracing.PipelineTaskKind,
 			What:     s.cache.comp.Name() + ".bank",
 		})
@@ -148,7 +148,7 @@ func (s *bankStage) finishBank(trans *transactionState) {
 	}
 
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(trans.reqMeta(), s.cache.comp),
+		TaskID: trans.RecvTaskID,
 		Kind:   tracing.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})
@@ -224,7 +224,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	s.cache.topPort().Send(dataReady)
 
 	s.finishBank(trans)
-	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }
@@ -263,7 +263,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	s.cache.topPort().Send(done)
 
 	s.finishBank(trans)
-	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
+	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }

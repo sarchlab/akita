@@ -72,6 +72,8 @@ type bufferState struct {
 
 // pendingReadState captures the serializable fields of a pending read request.
 type pendingReadState struct {
+	TaskID uint64 `json:"task_id"`
+
 	ID      uint64               `json:"id"`
 	Src     messaging.RemotePort `json:"src"`
 	Dst     messaging.RemotePort `json:"dst"`
@@ -80,6 +82,8 @@ type pendingReadState struct {
 
 // pendingWriteState captures the serializable fields of a pending write request.
 type pendingWriteState struct {
+	TaskID uint64 `json:"task_id"`
+
 	ID      uint64               `json:"id"`
 	Src     messaging.RemotePort `json:"src"`
 	Dst     messaging.RemotePort `json:"dst"`
@@ -90,6 +94,8 @@ type pendingWriteState struct {
 // dataMoverTransactionState is the serializable representation of a
 // dataMoverTransaction.
 type dataMoverTransactionState struct {
+	RecvTaskID uint64 `json:"recv_task_id"`
+
 	ReqID         uint64                       `json:"req_id"`
 	ReqSrc        messaging.RemotePort         `json:"req_src"`
 	ReqDst        messaging.RemotePort         `json:"req_dst"`
@@ -205,22 +211,4 @@ func resolveByteGranularity(spec Spec, side datamoverprotocol.DataMovePort) uint
 		log.Panicf("can't process port side %s", side)
 		return 0
 	}
-}
-
-// transactionAsMsg creates a temporary datamoverprotocol.DataMoveReq for tracing purposes.
-func transactionAsMsg(
-	trans *dataMoverTransactionState,
-) messaging.Msg {
-	req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
-		SrcAddress: trans.SrcAddress,
-		DstAddress: trans.DstAddress,
-		ByteSize:   trans.ByteSize,
-		SrcSide:    datamoverprotocol.DataMovePort(trans.SrcSide),
-		DstSide:    datamoverprotocol.DataMovePort(trans.DstSide),
-	},
-		ID:  trans.ReqID,
-		Src: trans.ReqSrc,
-		Dst: trans.ReqDst}
-
-	return req
 }

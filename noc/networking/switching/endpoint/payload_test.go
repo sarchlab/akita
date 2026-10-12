@@ -12,6 +12,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 func payloadMessage() messaging.Msg {
@@ -38,6 +40,9 @@ func TestOnlyHeadFlitCheckpointsOriginalMessage(t *testing.T) {
 		part := outer.Payload.(packetization.Flit)
 		if part.MsgID != msg.ID || part.Dst != msg.Dst || part.SeqID != i || part.NumFlitInMsg != 3 || part.MsgTaskID != 42 {
 			t.Fatalf("flit %d has incorrect transport header: %+v", i, part)
+		}
+		if part.FlitTaskID == 0 || part.FlitTaskID == outer.ID || part.FlitTaskID == part.MsgTaskID {
+			t.Fatalf("flit %d has no independent task identity: %+v", i, part)
 		}
 		if i == 0 {
 			if !reflect.DeepEqual(part.Msg, msg) {
@@ -166,4 +171,34 @@ func restorePayloadReceiver(t *testing.T, ep *Comp, blocker messaging.Msg) (*Com
 		t.Fatal(err)
 	}
 	return next, network, device
+}
+
+func TestTransportTaskIDsSurviveCheckpoint(t *testing.T) {
+	ep, _, _ := newPayloadReceiver()
+	rec := &tracingtest.LeakRecorder{}
+	tracing.CollectTrace(ep, rec)
+	ep.State.MsgOutBuf = []messaging.Msg{payloadMessage()}
+	if !ep.Middlewares.Outgoing.prepareFlits() {
+		t.Fatal("did not packetize")
+	}
+	if rec.NumStarted() != 1+len(ep.State.FlitsToSend) {
+		t.Fatal("message and flit tasks were not started")
+	}
+	restored, network, _ := restorePayloadReceiver(t, ep, messaging.Msg{ID: 99})
+	tracing.CollectTrace(restored, rec)
+	for _, flit := range restored.State.FlitsToSend {
+		part := flit.Payload.(packetization.Flit)
+		if part.FlitTaskID == 0 || part.FlitTaskID == flit.ID {
+			t.Fatal("flit task identity missing or equal to its message ID")
+		}
+		network.Deliver(flit)
+		restored.Middlewares.Incoming.recv()
+	}
+	if !restored.Middlewares.Incoming.assemble() {
+		t.Fatal("did not reassemble")
+	}
+	if open := rec.OpenTasks(); len(open) != 0 {
+		t.Fatalf("original transport tasks remain open after restore: %v", open)
+	}
+	t.Log("restored flits ended their original independent transport task IDs")
 }

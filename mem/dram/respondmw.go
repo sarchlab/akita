@@ -52,17 +52,18 @@ func (m *respondMW) finalizeTransaction(
 	t *transactionState,
 	i int,
 ) bool {
+	recvTaskID := t.RecvTaskID
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(m.comp, t.WriteMsg)
+			tracing.TraceReqComplete(m.comp, recvTaskID)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(m.comp, t.ReadMsg)
+		tracing.TraceReqComplete(m.comp, recvTaskID)
 	}
 	return done
 }

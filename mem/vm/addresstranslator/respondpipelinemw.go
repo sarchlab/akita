@@ -79,6 +79,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
+	sendTaskID := m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 	m.bottomPort().Send(translatedReq)
 
 	nextTrans = &nextState.Transactions[transIdx]
@@ -86,16 +87,10 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans.Page = rsp.Payload.(vmprotocol.TranslationRsp).Page
 
 	reqToBot := buildReqToBottom(reqState, translatedReq)
+	reqToBot.SendTaskID = sendTaskID
 	nextState.InflightReqToBottom = append(
 		nextState.InflightReqToBottom, reqToBot)
 	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
-
-	// Trace before removeTransaction. traceTranslationComplete reads the
-	// translation identity through nextTrans; removeTransaction's
-	// append-shift would leave nextTrans pointing at a different (or no)
-	// transaction, finalizing the wrong translation req_out and orphaning
-	// the correct one's children.
-	m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 
 	if len(nextTrans.IncomingReqs) == 0 {
 		removeTransaction(nextState, transIdx)
@@ -117,10 +112,8 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	trans *transactionState,
 	reqState incomingReqState,
 	translatedReq messaging.Msg,
-) {
-	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
-		reqState.RspTo, reqState.Type)
-	topTaskID := tracing.MsgIDAtReceiver(fakeFromTop, m.comp)
+) uint64 {
+	topTaskID := reqState.RecvTaskID
 
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: topTaskID,
@@ -138,11 +131,8 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		What:   m.bottomPort().Name(),
 	})
 
-	fakeTransReq := messaging.Msg{ID: trans.TranslationReqID,
-		Src: trans.TranslationReqSrc,
-		Dst: trans.TranslationReqDst, Payload: vmprotocol.TranslationReq{}}
-	tracing.TraceReqFinalize(m.comp, fakeTransReq)
-	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
+	tracing.TraceReqFinalize(m.comp, trans.TranslationTaskID)
+	return tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
 }
 
 //nolint:funlen,gocyclo
@@ -176,14 +166,8 @@ func (m *respondPipelineMW) respond() bool {
 				TrafficClass: "memprotocol.DataReadyRsp", Payload: memprotocol.DataReadyRsp{
 					Data: content.Data,
 				}}
-
-			fakeFromTop := restoreMemMsg(
-				reqFromTopState.ReqFromTopID,
-				reqFromTopState.ReqFromTopSrc,
-				reqFromTopState.ReqFromTopDst,
-				0, reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(m.comp, tracing.Milestone{
-				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tracing.MilestoneKindData,
 				What:   "data",
 			})
@@ -200,14 +184,8 @@ func (m *respondPipelineMW) respond() bool {
 				RspTo:        reqFromTopState.ReqFromTopID,
 				TrafficBytes: 4,
 				TrafficClass: "memprotocol.WriteDoneRsp", Payload: memprotocol.WriteDoneRsp{}}
-
-			fakeFromTop := restoreMemMsg(
-				reqFromTopState.ReqFromTopID,
-				reqFromTopState.ReqFromTopSrc,
-				reqFromTopState.ReqFromTopDst,
-				0, reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(m.comp, tracing.Milestone{
-				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tracing.MilestoneKindSubTask,
 				What:   "subtask",
 			})
@@ -223,14 +201,8 @@ func (m *respondPipelineMW) respond() bool {
 
 		m.topPort().Send(rspToTop)
 
-		fakeFromTop := restoreMemMsg(
-			reqFromTopState.ReqFromTopID,
-			reqFromTopState.ReqFromTopSrc,
-			reqFromTopState.ReqFromTopDst,
-			0, reqFromTopState.ReqFromTopType)
-
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+			TaskID: reqFromTopState.RecvTaskID,
 			Kind:   tracing.MilestoneKindNetworkBusy,
 			What:   m.topPort().Name(),
 		})
@@ -238,13 +210,8 @@ func (m *respondPipelineMW) respond() bool {
 		rspMeta := rspI
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
-		fakeReqToBottom := restoreMemMsg(
-			reqFromTopState.ReqToBottomID,
-			reqFromTopState.ReqToBottomSrc,
-			reqFromTopState.ReqToBottomDst,
-			0, reqFromTopState.ReqToBottomType)
-		tracing.TraceReqFinalize(m.comp, fakeReqToBottom)
-		tracing.TraceReqComplete(m.comp, fakeFromTop)
+		tracing.TraceReqFinalize(m.comp, reqFromTopState.SendTaskID)
+		tracing.TraceReqComplete(m.comp, reqFromTopState.RecvTaskID)
 	}
 
 	m.bottomPort().RetrieveIncoming()

@@ -79,8 +79,10 @@ type migState struct {
 	// MigTaskID and PhaseTaskID are the tracing task IDs for the current
 	// migration and its current phase, so the control sequence shows up as
 	// labeled, nested tasks in Daisen.
-	MigTaskID   uint64 `json:"mig_task_id"`
-	PhaseTaskID uint64 `json:"phase_task_id"`
+	MigTaskID    uint64            `json:"mig_task_id"`
+	PhaseTaskID  uint64            `json:"phase_task_id"`
+	CommandTasks map[uint64]uint64 `json:"command_tasks"`
+	MoveTaskID   uint64            `json:"move_task_id"`
 }
 
 // phaseName is the human-readable label used for a phase's trace task.
@@ -338,6 +340,7 @@ func (m *migMW) enterControlPhase(phase migPhase, n int) {
 	state.Phase = phase
 	state.SendCursor = 0
 	state.PendingAcks = n
+	state.CommandTasks = make(map[uint64]uint64)
 	m.startPhaseTask(phase)
 
 	if *migDebugFlag {
@@ -379,11 +382,10 @@ func (m *migMW) runControlPhase(
 			Dst:          targets[state.SendCursor],
 			TrafficClass: "memcontrolprotocol.Req"}
 
-		m.ctrlPort().Send(req)
-
 		// Open a req_out task under the current phase so the receiver's req_in
-		// task (parented by the message ID) has a parent; closed in processAcks.
-		tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+		// task can be linked by the observer; closed in processAcks.
+		state.CommandTasks[req.ID] = tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+		m.ctrlPort().Send(req)
 
 		state.SendCursor++
 		progress = true
@@ -420,7 +422,8 @@ func (m *migMW) processAcks() bool {
 		}
 
 		// Close the req_out task opened for this command (keyed by request ID).
-		tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: rsp.RspTo})
+		tracing.TraceReqFinalize(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
+		delete(m.ctrl.State.CommandTasks, rsp.RspTo)
 
 		m.ctrl.State.PendingAcks--
 		progress = true
@@ -454,11 +457,10 @@ func (m *migMW) tickCopying() bool {
 		Dst:          m.res.MoverDst,
 		TrafficClass: "datamoverprotocol.DataMoveReq"}
 
-	m.moverPort().Send(req)
-
 	// Open a req_out task under the copy phase so the data mover's req_in task
 	// has a parent; closed in processMoveRsp.
-	tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+	state.MoveTaskID = tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+	m.moverPort().Send(req)
 
 	state.MoveSent = true
 
@@ -479,7 +481,6 @@ func (m *migMW) processMoveRsp() bool {
 		return false
 	}
 	_, ok = msgI.Payload.(datamoverprotocol.DataMoveRsp)
-	rsp := msgI
 	if !ok {
 		log.Panicf("migration: unexpected mover msg %T", msgI.Payload)
 	}
@@ -490,7 +491,8 @@ func (m *migMW) processMoveRsp() bool {
 	}
 
 	// Close the req_out task opened for the data-move request.
-	tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: rsp.RspTo})
+	tracing.TraceReqFinalize(m.ctrl, state.MoveTaskID)
+	state.MoveTaskID = 0
 
 	vAddr := state.CurPage * pageSize
 	pageEntry, found := m.res.Pages.Find(1, vAddr)

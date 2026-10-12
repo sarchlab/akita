@@ -19,7 +19,7 @@ import (
 // the top request and the downstream req_out for the bottom fetch — then issues
 // a Reset and asserts every task is ended. A mid-flight Reset drops the
 // transaction table, so each started task must be ended by endInflightTasks or
-// it leaks (and, for a req_in, leaks a receiver-registry entry too).
+// it leaks.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)

@@ -66,7 +66,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	// at-head admission wait to the buffer task (which the port hook closes at
 	// retrieve), keyed by the peeked message so it matches the hook's key.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		TaskID: m.topPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".transaction",
 	})
@@ -106,7 +106,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(m.comp, req)
+	state.CurrentTransaction.RecvTaskID = tracing.TraceReqReceive(m.comp, req)
 
 	return true
 }
@@ -143,11 +143,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.topPort().Send(rsp)
 
-	// Reconstruct the original request before the transaction is reset. req_in
-	// was opened (in parseFromCP) on the DataMoveReq, keyed by its ID, so it
-	// must be closed on that same request — not on the freshly minted response,
-	// which carries a different ID and would leak the req_in task.
-	reqMsg := transactionAsMsg(trans)
+	tracing.TraceReqComplete(m.comp, trans.RecvTaskID)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{
@@ -158,8 +154,6 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		Offset:      alignAddress(trans.SrcAddress, state.SrcByteGranularity),
 		Granularity: state.SrcByteGranularity,
 	}
-
-	tracing.TraceReqComplete(m.comp, reqMsg)
 
 	return true
 }

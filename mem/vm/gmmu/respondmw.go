@@ -45,10 +45,10 @@ func (m *respondMW) fetchFromBottom() bool {
 
 	// The upstream Top port is free: the at-head wait to forward this
 	// response on it — counted on the incoming-buffer task since the response
-	// reached the head of the Bottom buffer — is over. The req_in opened at
-	// retrieve covers only the processing that follows.
+	// reached the head of the Bottom buffer — is over. The original request
+	// retains its req_in until this response is forwarded.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(rspI, m.comp),
+		TaskID: m.bottomPort().PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
 	})
@@ -59,7 +59,6 @@ func (m *respondMW) fetchFromBottom() bool {
 	case vmprotocol.TranslationRsp:
 		rsp := rspI
 
-		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -101,15 +100,14 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 	// req_in, the dependency wait spent while that remote response was in
 	// flight. RecvTaskID is the original req_in id; do not key this to the
 	// response message.
-	tracing.TraceReqFinalize(
-		m.comp, messaging.Msg{ID: rsp.RspTo, Payload: vmprotocol.TranslationReq{}},
-	)
+	tracing.TraceReqFinalize(m.comp, reqTransaction.SendTaskID)
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: reqTransaction.RecvTaskID,
 		Kind:   tracing.MilestoneKindTranslation,
 		What:   "translation",
 	})
 
+	tracing.TraceReqComplete(m.comp, reqTransaction.RecvTaskID)
 	delete(state.RemoteMemReqs, rsp.RspTo)
 
 	return true

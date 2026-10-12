@@ -118,6 +118,10 @@ const (
 // transactionState is the canonical transaction type for the writethroughcache.
 // All fields are directly JSON-serializable (no pointers to message types).
 type transactionState struct {
+	RecvTaskID  uint64 `json:"recv_task_id"`
+	ReadTaskID  uint64 `json:"read_task_id"`
+	WriteTaskID uint64 `json:"write_task_id"`
+
 	ID uint64 `json:"id"`
 
 	// Read request fields (flattened from memprotocol.ReadReq)

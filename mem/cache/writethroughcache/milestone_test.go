@@ -185,9 +185,7 @@ var _ = Describe("Cache milestones", func() {
 		Expect(rec.hasMilestone(bufStart.ID, "Cache.dir_buf")).To(BeTrue())
 
 		// req_in is the cache's receiver-side task for the read request. Its
-		// ID comes from the recorded task start; recomputing it via
-		// MsgIDAtReceiver post-run would mint a fresh ID, because the registry
-		// entry is released when the request completes.
+		// ID comes from the recorded task start; the transaction is already done.
 		reqInStart, ok := rec.firstStart("req_in")
 		Expect(ok).To(BeTrue())
 		Expect(reqInStart.ID).ToNot(BeZero())

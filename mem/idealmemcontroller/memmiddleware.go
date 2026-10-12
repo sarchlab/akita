@@ -44,7 +44,6 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		}
 
 		msg := msgI
-		tracing.TraceReqReceive(m.comp, msg)
 
 		tx := m.msgToInflightTransaction(msg)
 
@@ -58,7 +57,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
 	spec := m.comp.Spec
-	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
+	recvTaskID := tracing.TraceReqReceive(m.comp, msg)
 
 	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
@@ -153,7 +152,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
+	tracing.TraceReqComplete(m.comp, tx.RecvTaskID)
 
 	return true
 }
@@ -189,12 +188,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		m.comp.Resources.Storage.Write(addr, data)
 	}
 
-	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
+	tracing.TraceReqComplete(m.comp, tx.RecvTaskID)
 
 	return true
-}
-
-func (m *memMiddleware) traceReqComplete(recvTaskID, reqMsgID uint64) {
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: recvTaskID})
-	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

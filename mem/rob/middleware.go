@@ -92,7 +92,7 @@ func (m *middleware) topDown() bool {
 	// to the incoming-buffer task; req_in (opened at retrieve, below) covers
 	// only the processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".buffer",
 	})
@@ -104,30 +104,29 @@ func (m *middleware) topDown() bool {
 		return false
 	}
 
-	m.comp.Ports.Bottom.Send(shadow)
-
 	// The shadow request is on its way downstream: the at-head wait to send on
 	// the Bottom port is over (also on the incoming-buffer task).
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.comp.Ports.Bottom.Name(),
 	})
 
 	// Admit the request: open req_in at retrieve and record the transaction.
-	tracing.TraceReqReceive(m.comp, req)
-	m.tagReadWrite(req)
+	recvTaskID := tracing.TraceReqReceive(m.comp, req)
+	m.tagReadWrite(req, recvTaskID)
+	sendTaskID := tracing.TraceReqInitiate(m.comp, shadow, recvTaskID)
+	m.comp.Ports.Bottom.Send(shadow)
 
 	state.Transactions = append(state.Transactions, transactionState{
+		RecvTaskID:    recvTaskID,
+		SendTaskID:    sendTaskID,
 		ReqFromTopID:  req.ID,
 		ReqFromTopSrc: req.Src,
 		ReqToBottomID: shadow.ID,
 		IsRead:        isRead,
 	})
 	m.comp.Ports.Top.RetrieveIncoming()
-
-	tracing.TraceReqInitiate(m.comp, shadow,
-		tracing.MsgIDAtReceiver(req, m.comp))
 
 	return true
 }
@@ -158,11 +157,11 @@ func (m *middleware) parseBottom() bool {
 		// The bottom unit returned the data this transaction was waiting on.
 
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: m.reqInTaskID(*trans),
+			TaskID: trans.RecvTaskID,
 			Kind:   tracing.MilestoneKindData,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
+		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
 		return true
 	case memprotocol.WriteDoneRsp:
 		dataRsp := msg
@@ -179,11 +178,11 @@ func (m *middleware) parseBottom() bool {
 		// The bottom unit acknowledged the write subtask this transaction
 		// dispatched.
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: m.reqInTaskID(*trans),
+			TaskID: trans.RecvTaskID,
 			Kind:   tracing.MilestoneKindSubTask,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
+		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
 		return true
 	default:
 		m.comp.Ports.Bottom.RetrieveIncoming()
@@ -211,7 +210,7 @@ func (m *middleware) bottomUp() bool {
 	// reason wins a same-tick tie; the (Kind, What) dedup keeps the first
 	// emission across retries and a zero-length head-of-line wait collapses.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.reqInTaskID(head),
+		TaskID: head.RecvTaskID,
 		Kind:   tracing.MilestoneKindDependency,
 		What:   m.comp.Name() + ".reorder",
 	})
@@ -229,12 +228,12 @@ func (m *middleware) bottomUp() bool {
 	// The response is on its way to the requester: the wait to send on the Top
 	// port is over.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.reqInTaskID(head),
+		TaskID: head.RecvTaskID,
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.comp.Ports.Top.Name(),
 	})
 
-	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
+	tracing.TraceReqComplete(m.comp, head.RecvTaskID)
 
 	return true
 }
@@ -316,63 +315,17 @@ func (m *middleware) buildTopRsp(
 	return rsp
 }
 
-// shadowReqTraceMsg reconstructs a minimal request to use as the subject of a
-// trace event for the shadow request the reorder buffer issued.
-func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
-	if trans.IsRead {
-		req := messaging.Msg{Payload: memprotocol.ReadReq{},
-			ID:  trans.ReqToBottomID,
-			Src: m.comp.Ports.Bottom.AsRemote(),
-			Dst: m.comp.Spec.BottomUnit}
-
-		return req
-	}
-	req := messaging.Msg{Payload: memprotocol.WriteReq{},
-		ID:  trans.ReqToBottomID,
-		Src: m.comp.Ports.Bottom.AsRemote(),
-		Dst: m.comp.Spec.BottomUnit}
-
-	return req
-}
-
-// topReqTraceMsg reconstructs a minimal request to use as the subject of a
-// trace event for the original top-side request.
-func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
-	if trans.IsRead {
-		req := messaging.Msg{Payload: memprotocol.ReadReq{},
-			ID:  trans.ReqFromTopID,
-			Src: trans.ReqFromTopSrc,
-			Dst: m.comp.Ports.Top.AsRemote()}
-
-		return req
-	}
-	req := messaging.Msg{Payload: memprotocol.WriteReq{},
-		ID:  trans.ReqFromTopID,
-		Src: trans.ReqFromTopSrc,
-		Dst: m.comp.Ports.Top.AsRemote()}
-
-	return req
-}
-
-// reqInTaskID returns the receiver-side (req_in) task ID for a transaction's
-// original top-side request — the subject of the ROB's processing milestones.
-// The registry entry was created by TraceReqReceive in topDown and lives until
-// TraceReqComplete in bottomUp, so this resolves to the live task throughout.
-func (m *middleware) reqInTaskID(trans transactionState) uint64 {
-	return tracing.MsgIDAtReceiver(m.topReqTraceMsg(trans), m.comp)
-}
-
 // tagReadWrite labels the req_in task as a "read" or a "write" so traces can be
 // filtered by access type. Called once, when the request is admitted (retrieved)
 // and its req_in task opens.
-func (m *middleware) tagReadWrite(req messaging.Msg) {
+func (m *middleware) tagReadWrite(req messaging.Msg, taskID uint64) {
 	what := "write"
 	if _, ok := req.Payload.(memprotocol.ReadReq); ok {
 		what = "read"
 	}
 
 	tracing.AddTaskTag(m.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		TaskID: taskID,
 		What:   what,
 	})
 }
@@ -478,7 +431,7 @@ func (m *middleware) handleEnable(req messaging.Msg) bool {
 // handleReset drops every in-flight transaction, drains stale port
 // traffic, and lands the ROB back in Enabled. The req_in/req_out tracing tasks
 // that topDown opened for each in-flight transaction are ended (and their
-// receiver-registry entries released) so they do not outlive the transactions.
+// owned task IDs discarded) so they do not outlive the transactions.
 func (m *middleware) handleReset(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
@@ -547,15 +500,14 @@ func drainIncoming(p messaging.Port) {
 
 // endInflightTasks completes the top-side req_in tracing task and finalizes the
 // shadow req_out task for each in-flight transaction, so a control path that
-// drops the transaction table leaves no started-never-ended task and no leaked
-// receiver-registry entry. topDown opens both tasks together when it admits a
+// drops the transaction table leaves no started-never-ended task. topDown opens both tasks together when it admits a
 // request, so both are open until the transaction retires; the end is
 // idempotent if the shadow's response already finalized its req_out. Mirrors
 // bottomUp (req_in) and parseBottom (req_out) completion.
 func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tracing.EndReqInOnReset(m.comp, trans.ReqFromTopID)
-		tracing.EndTaskOnReset(m.comp, trans.ReqToBottomID)
+		tracing.EndTaskOnReset(m.comp, trans.RecvTaskID)
+		tracing.EndTaskOnReset(m.comp, trans.SendTaskID)
 	}
 }
 

@@ -127,6 +127,7 @@ func (f *flusher) processFlush() bool {
 
 	trans := transactionState{
 		HasFlush:           true,
+		RecvTaskID:         next.ProcessingFlush.RecvTaskID,
 		FlushMeta:          next.ProcessingFlush.Msg,
 		HasVictim:          true,
 		VictimPID:          vm.PID(block.PID),
@@ -204,7 +205,7 @@ func (f *flusher) startProcessingFlush(msg messaging.Msg) bool {
 	next.CacheState = int(cacheStatePreFlushing)
 	f.ctrlPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(f.pipeline.comp, msg)
+	next.ProcessingFlush.RecvTaskID = tracing.TraceReqReceive(f.pipeline.comp, msg)
 
 	return true
 }
@@ -246,7 +247,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tracing.TraceReqComplete(f.pipeline.comp, next.ProcessingFlush.Msg)
+	tracing.TraceReqComplete(f.pipeline.comp, next.ProcessingFlush.RecvTaskID)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

@@ -29,10 +29,6 @@ func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) flitParentTaskID(flit messaging.Msg) uint64 {
-	return flit.ID
-}
-
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 	state := &m.comp.State
 
@@ -71,7 +67,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 
 			tracing.StartTask(m.comp, tracing.TaskStart{
 				ID:       taskID,
-				ParentID: m.flitParentTaskID(flit),
+				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
 				Kind:     "flit",
 				What:     "flit_inside_sw",
 				Detail:   flit,

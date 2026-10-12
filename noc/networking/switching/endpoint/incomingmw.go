@@ -82,7 +82,7 @@ func (m *incomingMW) recv() bool {
 
 		m.networkPort().RetrieveIncoming()
 
-		m.logFlitE2ETaskFromFlit(flit, true)
+		m.logFlitE2EEnd(flit)
 
 		madeProgress = true
 	}
@@ -165,34 +165,19 @@ func (m *incomingMW) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *incomingMW) logFlitE2ETaskFromFlit(
-	flit messaging.Msg, isEnd bool,
-) {
+func (m *incomingMW) logFlitE2EEnd(flit messaging.Msg) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
-
-	if isEnd {
-		// The flit just arrived after traversing the network; the span since it
-		// was sent is its in-network transfer time (refined by the per-switch
-		// flit subtasks). Last milestone before the task ends.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: flit.ID,
-			Kind:   tracing.MilestoneKindNetworkTransfer,
-			What:   m.comp.Name() + ".NetworkPort",
-		})
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.ID})
-		return
-	}
-
-	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       flit.ID,
-		ParentID: flit.Payload.(packetization.Flit).MsgID,
-		Kind:     "flit_e2e",
-		What:     "flit_e2e",
-		Location: m.comp.Name() + ".FlitBuf",
-		Detail:   flit,
+	taskID := flit.Payload.(packetization.Flit).FlitTaskID
+	// Charge the interval since send to network transfer, refined by the
+	// per-switch subtasks. Finish the ID started by the source endpoint.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: taskID,
+		Kind:   tracing.MilestoneKindNetworkTransfer,
+		What:   m.comp.Name() + ".NetworkPort",
 	})
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
 }
 
 // logMsgE2EEnd closes the per-message msg_e2e task once the message is

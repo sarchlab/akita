@@ -136,8 +136,8 @@ var _ = Describe("DataMover milestones", func() {
 			panic(err)
 		}
 
-		// Attach the recorder before driving so MsgIDAtReceiver and
-		// MsgIDAtIncomingBuffer hand out real task IDs (they return 0 when there
+		// Attach the recorder before driving so request and buffer starts
+		// allocate real task IDs (they return 0 when there
 		// are no hooks). The admission milestone lands on the Top-port buffer
 		// task, so the test also needs that buffer task to exist.
 		rec = &dmTraceRecorder{}

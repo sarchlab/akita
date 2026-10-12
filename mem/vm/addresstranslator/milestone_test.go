@@ -142,7 +142,7 @@ var _ = Describe("Address Translator milestones", func() {
 		ptMW = at.Middlewares.ParseTranslate
 		rpMW = at.Middlewares.RespondPipeline
 
-		// Attach the recorder before driving so MsgIDAtReceiver hands out
+		// Attach the recorder before driving so request starts allocate
 		// real receiver-side task IDs (it returns 0 when there are no hooks).
 		rec = &traceRecorder{}
 		tracing.CollectTrace(at, rec)
@@ -278,6 +278,8 @@ var _ = Describe("Address Translator milestones", func() {
 		// to the surviving transaction shifted into the freed slot.
 		transReq1ID := sim.NewID()
 		transReq2ID := sim.NewID()
+		transTask1ID := sim.NewID()
+		transTask2ID := sim.NewID()
 
 		req := makeRead(0x10040)
 
@@ -285,6 +287,7 @@ var _ = Describe("Address Translator milestones", func() {
 			Transactions: []transactionState{
 				{
 					TranslationReqID:  transReq1ID,
+					TranslationTaskID: transTask1ID,
 					TranslationReqSrc: translationPort.AsRemote(),
 					TranslationReqDst: messaging.RemotePort("TranslationProvider"),
 					IncomingReqs: []incomingReqState{
@@ -292,7 +295,7 @@ var _ = Describe("Address Translator milestones", func() {
 					},
 					TranslationDone: true,
 				},
-				{TranslationReqID: transReq2ID},
+				{TranslationReqID: transReq2ID, TranslationTaskID: transTask2ID},
 			},
 		}
 
@@ -307,7 +310,7 @@ var _ = Describe("Address Translator milestones", func() {
 
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 
-		Expect(rec.endedIDs()).To(ContainElement(transReq1ID))
-		Expect(rec.endedIDs()).NotTo(ContainElement(transReq2ID))
+		Expect(rec.endedIDs()).To(ContainElement(transTask1ID))
+		Expect(rec.endedIDs()).NotTo(ContainElement(transTask2ID))
 	})
 })
