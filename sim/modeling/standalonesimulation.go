@@ -2,7 +2,6 @@ package modeling
 
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -28,7 +27,6 @@ func NewStandaloneSimulation(engine timing.Engine) *StandaloneSimulation {
 		if err := s.setup.Ready(); err != nil {
 			return err
 		}
-		s.taskTracker.FreezeSubscriptions()
 		return nil
 	})
 	return s
@@ -44,9 +42,6 @@ func (s *StandaloneSimulation) RegisterConnection(e naming.Named) { s.setup.Regi
 func (s *StandaloneSimulation) RegisterResource(e naming.Named)   { s.setup.Register(e) }
 func (s *StandaloneSimulation) RegisterPort(e naming.Named) {
 	s.setup.Register(e)
-	if p, ok := e.(messaging.Port); ok {
-		s.taskTracker.RegisterPort(p)
-	}
 }
 
 func (s *StandaloneSimulation) Initialize() error                { return s.setup.Initialize() }
@@ -66,5 +61,5 @@ func (s *StandaloneSimulation) WithTaskTracking() *StandaloneSimulation {
 	return s
 }
 
-// Tasks returns the optional task service.
-func (s *StandaloneSimulation) Tasks() *tasks.Tracker { return s.taskTracker }
+// TaskTracker returns the optional task service.
+func (s *StandaloneSimulation) TaskTracker() *tasks.Tracker { return s.taskTracker }

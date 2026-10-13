@@ -52,11 +52,9 @@ func (p *topParser) Tick() bool {
 
 	// Admission milestone on the incoming-buffer task: the message left the Top
 	// buffer because the directory stage buffer had room. The buffer task is
-	// keyed by the peeked message and ends at RetrieveIncoming below.
-	tasks.AddBufferMilestone(p.cache.comp, p.cache.topPort(), msg, tasks.Milestone{
-		Kind: tasks.MilestoneKindHardwareResource,
-		What: p.cache.comp.Name() + ".dir_stage_buf",
-	})
+	// owned by the port head and ends at RetrieveIncoming below.
+	p.cache.topPort().AddIncomingMilestone(
+		tasks.Reason(tasks.MilestoneKindHardwareResource, p.cache.comp.Name()+".dir_stage_buf"))
 
 	next.Transactions[idx].RecvTaskID = tasks.StartReqIn(p.cache.comp, msg)
 

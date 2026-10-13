@@ -180,8 +180,9 @@ setup rebuilds; put cursors and counters in `State`.
 - **Serial engine only.** `SaveCheckpoint`/`LoadCheckpoint` reject a
   `ParallelEngine`.
 - **Task tracking is checkpointed.** An enabled tracker restores open task
-  identities, buffer identities, and request-parent correlation without allocating
-  replacement IDs. Keep the tracking setting consistent across save and restore
+  identities and request-parent correlation. Ports restore private buffer task
+  IDs and wait boundaries without allocating replacement IDs. Keep the tracking
+  setting consistent across save and restore
   when comparing ID sequences; changing it changes future ID allocation. `Detail`
   and observer history, including earlier tags/milestones, are not restored. Mixed
   tracking settings are supported: off-to-on starts empty, and on-to-off ignores

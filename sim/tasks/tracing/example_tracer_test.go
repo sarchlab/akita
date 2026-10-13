@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type SampleTimeTeller struct {
@@ -102,5 +102,5 @@ func ExampleNewTotalTimeTracer() {
 func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }
 
 func (d *SampleDomain) TaskTracker() *tasks.Tracker {
-	return d.sim.(interface{ Tasks() *tasks.Tracker }).Tasks()
+	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()
 }

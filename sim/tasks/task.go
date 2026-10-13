@@ -61,6 +61,7 @@ const (
 	MilestoneKindNetworkTransfer  MilestoneKind = "network_transfer"
 	MilestoneKindNetworkBusy      MilestoneKind = "network_busy"
 	MilestoneKindQueue            MilestoneKind = "queue"
+	MilestoneKindConsumer         MilestoneKind = "consumer"
 	MilestoneKindData             MilestoneKind = "data"
 	MilestoneKindDependency       MilestoneKind = "dependency"
 	MilestoneKindOther            MilestoneKind = "other"

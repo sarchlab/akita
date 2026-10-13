@@ -2,6 +2,9 @@ package tasks
 
 import (
 	"sync"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/naming"
 )
 
 type subscription struct {
@@ -9,8 +12,9 @@ type subscription struct {
 	owners   map[string]bool
 }
 type entry struct {
-	task  Task
-	owner string
+	task      Task
+	owner     string
+	component string
 }
 
 // Tracker owns the open tasks and message correlation for one simulation.
@@ -21,52 +25,37 @@ type entry struct {
 // Construct a Tracker with NewTracker; its zero value is not ready for use.
 type Tracker struct {
 	mu            sync.Mutex
-	frozen        bool
 	subscriptions []subscription
 	open          map[uint64]*entry
 	parents       requestParents
-	buffers       map[bufferKey]uint64
-	ports         map[string]bool
 }
 
 // NewTracker creates a service for one simulation. Framework assembly passes
-// the same tracker to every owner and registers their ports before running.
+// the same tracker to every owner and its ports.
 // Applications normally enable it with sim.Builder.WithTaskTracking.
 func NewTracker() *Tracker {
-	return &Tracker{open: make(map[uint64]*entry),
-		buffers: make(map[bufferKey]uint64), ports: make(map[string]bool)}
+	return &Tracker{open: make(map[uint64]*entry)}
 }
 
-// Subscribe registers an observer before the first engine run. With no owners
-// it observes the entire simulation. Owner scopes include their port tasks.
-func (t *Tracker) Subscribe(o Observer, owners ...Owner) {
+// Subscribe registers an observer for future events, including the complete end
+// of work already in flight. No starts, tags, or milestones are replayed. With no
+// scopes it observes the entire simulation. A component scope includes its ports;
+// a port scope observes only that port. Every scope must use this tracker.
+func (t *Tracker) Subscribe(o Observer, scopes ...naming.Named) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.frozen {
-		panic("tasks: subscriptions are frozen after the first run")
-	}
 	if o == nil {
 		panic("tasks: nil observer")
 	}
-	scope := make(map[string]bool, len(owners))
-	for _, owner := range owners {
-		if owner == nil || owner.TaskTracker() != t {
-			panic("tasks: subscription owner belongs to another simulation")
+	scope := make(map[string]bool, len(scopes))
+	for _, named := range scopes {
+		owner, ok := named.(Owner)
+		if !ok || owner.TaskTracker() != t {
+			panic("tasks: subscription scope belongs to another simulation or is not a task owner")
 		}
 		scope[owner.Name()] = true
 	}
 	t.subscriptions = append(t.subscriptions, subscription{observer: o, owners: scope})
-}
-
-// FreezeSubscriptions closes observer and port registration before the first
-// engine run. Framework run guards call it; a nil tracker is a no-op.
-func (t *Tracker) FreezeSubscriptions() {
-	if t == nil {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.frozen = true
 }
 
 func (t *Tracker) start(o Owner, info StartInfo) uint64 {
@@ -82,8 +71,14 @@ func (t *Tracker) start(o Owner, info StartInfo) uint64 {
 		panic("tasks: owner allocated zero ID")
 	}
 	task = t.parents.resolveStart(task)
-	t.open[task.ID] = &entry{task: task, owner: o.Name()}
-	t.notify(o.Name(), func(observer Observer) { observer.TaskStarted(task) })
+	e := &entry{task: task, owner: o.Name()}
+	if port, ok := o.(messaging.Port); ok {
+		if component, ok := port.Owner().(Owner); ok {
+			e.component = component.Name()
+		}
+	}
+	t.open[task.ID] = e
+	t.notify(e, func(observer Observer) { observer.TaskStarted(task) })
 	return task.ID
 }
 
@@ -96,7 +91,7 @@ func (t *Tracker) end(o Owner, id uint64) {
 	task.EndTime = o.CurrentTime()
 	delete(t.open, id)
 	t.parents.end(id)
-	t.notify(e.owner, func(observer Observer) { observer.TaskEnded(task) })
+	t.notify(e, func(observer Observer) { observer.TaskEnded(task) })
 }
 
 func (t *Tracker) milestone(o Owner, m Milestone) {
@@ -108,13 +103,13 @@ func (t *Tracker) milestone(o Owner, m Milestone) {
 		m.ID = o.NewID()
 	}
 	m.Time = o.CurrentTime()
-	t.notify(e.owner, func(observer Observer) { observer.MilestoneAdded(m) })
+	t.notify(e, func(observer Observer) { observer.MilestoneAdded(m) })
 }
 
 // notify selects by the starting owner even when another component ends work.
-func (t *Tracker) notify(owner string, callback func(Observer)) {
+func (t *Tracker) notify(e *entry, callback func(Observer)) {
 	for _, sub := range t.subscriptions {
-		if len(sub.owners) == 0 || sub.owners[owner] {
+		if len(sub.owners) == 0 || sub.owners[e.owner] || sub.owners[e.component] {
 			callback(sub.observer)
 		}
 	}

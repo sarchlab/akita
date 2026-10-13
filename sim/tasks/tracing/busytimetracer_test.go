@@ -19,27 +19,27 @@ var _ = Describe("BusyTimeTracer", func() {
 
 	It("should track busy time, one task", func() {
 		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
-		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 1, StartTime: 10, EndTime: 20})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10)))
 	})
 
 	It("should track busy time, two tasks", func() {
 		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
-		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 1, StartTime: 10, EndTime: 20})
 
 		t.TaskStarted(tasks.Task{ID: 2, StartTime: 30})
-		t.TaskEnded(tasks.Task{ID: 2, EndTime: 40})
+		t.TaskEnded(tasks.Task{ID: 2, StartTime: 30, EndTime: 40})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks adjacent", func() {
 		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
-		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 1, StartTime: 10, EndTime: 20})
 
 		t.TaskStarted(tasks.Task{ID: 2, StartTime: 20})
-		t.TaskEnded(tasks.Task{ID: 2, EndTime: 30})
+		t.TaskEnded(tasks.Task{ID: 2, StartTime: 20, EndTime: 30})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
@@ -47,8 +47,8 @@ var _ = Describe("BusyTimeTracer", func() {
 	It("should track busy time, two tasks overlap", func() {
 		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
 		t.TaskStarted(tasks.Task{ID: 2, StartTime: 15})
-		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
-		t.TaskEnded(tasks.Task{ID: 2, EndTime: 25})
+		t.TaskEnded(tasks.Task{ID: 1, StartTime: 10, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 2, StartTime: 15, EndTime: 25})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(15)))
 	})
@@ -56,25 +56,32 @@ var _ = Describe("BusyTimeTracer", func() {
 	It("should track busy time, four tasks", func() {
 		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
 		t.TaskStarted(tasks.Task{ID: 2, StartTime: 11})
-		t.TaskEnded(tasks.Task{ID: 2, EndTime: 12})
+		t.TaskEnded(tasks.Task{ID: 2, StartTime: 11, EndTime: 12})
 		t.TaskStarted(tasks.Task{ID: 3, StartTime: 19})
-		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
-		t.TaskEnded(tasks.Task{ID: 3, EndTime: 21})
+		t.TaskEnded(tasks.Task{ID: 1, StartTime: 10, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 3, StartTime: 19, EndTime: 21})
 		t.TaskStarted(tasks.Task{ID: 4, StartTime: 31})
-		t.TaskEnded(tasks.Task{ID: 4, EndTime: 32})
+		t.TaskEnded(tasks.Task{ID: 4, StartTime: 31, EndTime: 32})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(12)))
 	})
 
-	It("should be able to terminate all the tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
-		t.TaskStarted(tasks.Task{ID: 2, StartTime: 11})
-		t.TaskStarted(tasks.Task{ID: 3, StartTime: 19})
-		t.TaskEnded(tasks.Task{ID: 3, EndTime: 21})
-
-		t.TerminateAllTasks(35)
-
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(25)))
+	It("merges late and out-of-order completions across previously counted gaps", func() {
+		t.TaskEnded(tasks.Task{StartTime: 20, EndTime: 30})
+		t.TaskEnded(tasks.Task{StartTime: 40, EndTime: 50})
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
+		t.TaskEnded(tasks.Task{StartTime: 10, EndTime: 45})
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(40)))
+		t.TaskEnded(tasks.Task{StartTime: 15, EndTime: 25})
+		t.TaskEnded(tasks.Task{StartTime: 50, EndTime: 60})
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(50)))
+	})
+	It("filters the complete end record and ignores unfinished tasks", func() {
+		t = NewBusyTimeTracer(func(task tasks.Task) bool { return task.Kind == "selected" })
+		t.TaskStarted(tasks.Task{ID: 1, Kind: "selected", StartTime: 0})
+		t.TaskEnded(tasks.Task{ID: 2, Kind: "other", StartTime: 0, EndTime: 100})
+		t.TaskEnded(tasks.Task{ID: 3, Kind: "selected", StartTime: 10, EndTime: 30})
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("measure busy time tracer", func() {
@@ -86,7 +93,8 @@ var _ = Describe("BusyTimeTracer", func() {
 				taskID := uint64(i + 1)
 
 				t.TaskStarted(tasks.Task{ID: taskID, StartTime: timing.VTimeInPicoSec(i * 2)})
-				t.TaskEnded(tasks.Task{ID: taskID, EndTime: timing.VTimeInPicoSec(i*2 + 1)})
+				t.TaskEnded(tasks.Task{ID: taskID, StartTime: timing.VTimeInPicoSec(i * 2),
+					EndTime: timing.VTimeInPicoSec(i*2 + 1)})
 			}
 
 			Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10000)))

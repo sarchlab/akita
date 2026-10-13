@@ -69,10 +69,7 @@ func (m *parseTranslateMW) translate() bool {
 	// Translation port — counted on the incoming-buffer task since the request
 	// reached the head of the Top buffer — is over. The req_in opened just below
 	// starts at retrieve and covers only the processing that follows.
-	tasks.AddBufferMilestone(m.comp, m.topPort(), itemI, tasks.Milestone{
-		Kind: tasks.MilestoneKindNetworkBusy,
-		What: m.translationPort().Name(),
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.translationPort().Name()))
 
 	incoming := msgToIncomingReqState(itemI)
 

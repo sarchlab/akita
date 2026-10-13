@@ -47,10 +47,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	// response on it — counted on the incoming-buffer task since the response
 	// reached the head of the Bottom buffer — is over. The original request
 	// retains its req_in until this response is forwarded.
-	tasks.AddBufferMilestone(m.comp, m.bottomPort(), rspI, tasks.Milestone{
-		Kind: tasks.MilestoneKindNetworkBusy,
-		What: m.topPort().Name(),
-	})
+	m.bottomPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.topPort().Name()))
 
 	m.bottomPort().RetrieveIncoming()
 

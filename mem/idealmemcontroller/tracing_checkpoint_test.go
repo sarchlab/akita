@@ -50,7 +50,7 @@ func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*
 	s.Engine().RegisterHandler("Clock", checkpointClock{})
 	require.NoError(t, s.Initialize())
 	if enabled {
-		s.Tasks().Subscribe(rec, c)
+		s.TaskTracker().Subscribe(rec, c)
 	}
 	return s, c
 }
@@ -128,13 +128,8 @@ func checkTaskCheckpoint(t *testing.T, savedOn, restoredOn bool) {
 	tasks.End(restored, tasks.EndInfo{ID: discardedID})
 	require.Empty(t, fresh.ends)
 
-	tasks.AddBufferMilestone(restored, restored.Ports.Top, saved.queued, tasks.Milestone{What: "admission"})
-	if savedOn && restoredOn {
-		require.Len(t, fresh.milestones, 1)
-		require.Equal(t, saved.incomingID, fresh.milestones[0].TaskID)
-	} else {
-		require.Empty(t, fresh.milestones)
-	}
+	restored.Ports.Top.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, "admission"))
+	require.Empty(t, fresh.milestones, "no elapsed time since restored head boundary")
 	_, ok := restored.Ports.Top.RetrieveIncoming()
 	require.True(t, ok)
 	_, ok = restored.Ports.Top.RetrieveOutgoing()

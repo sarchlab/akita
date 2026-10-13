@@ -1,199 +1,63 @@
 package tracing
 
 import (
-	"container/list"
+	"sort"
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-type taskTimeStartEnd struct {
-	start, end timing.VTimeInPicoSec
-	completed  bool
-}
+type taskTimeStartEnd struct{ start, end timing.VTimeInPicoSec }
 
-// BusyTimeTracer traces the time that a domain is processing a kind of task. If
-// the task processing time overlaps, this tracer only considers one instance of
-// the overlapped time.
+// BusyTimeTracer measures the union of complete intervals received at task end.
+// It counts time before subscription/restore when an in-flight task later ends.
+// Open tasks contribute only once they end. Disjoint completed intervals are
+// retained so a later completion can overlap any previously counted interval.
 type BusyTimeTracer struct {
 	tasks.NopObserver
-
-	lock          sync.Mutex
-	filter        TaskFilter
-	inflightTasks map[uint64]*list.Element
-	taskTimes     *list.List
-	busyTime      timing.VTimeInPicoSec
+	lock      sync.Mutex
+	filter    TaskFilter
+	intervals []taskTimeStartEnd // sorted, nonoverlapping
+	busyTime  timing.VTimeInPicoSec
 }
 
-// NewBusyTimeTracer creates a new BusyTimeTracer
+// NewBusyTimeTracer creates a tracer for the selected tasks.
 func NewBusyTimeTracer(filter TaskFilter) *BusyTimeTracer {
-	t := &BusyTimeTracer{
-		filter:        filter,
-		inflightTasks: make(map[uint64]*list.Element),
-		taskTimes:     list.New(),
-	}
-
-	t.taskTimes.Init()
-
-	return t
+	return &BusyTimeTracer{filter: filter}
 }
 
-// BusyTime returns the total time has been spent on a certain type of tasks.
+// BusyTime returns the total time covered by completed, selected tasks.
 func (t *BusyTimeTracer) BusyTime() timing.VTimeInPicoSec {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	return t.busyTime
 }
 
-// TerminateAllTasks will mark all the tasks as completed.
-func (t *BusyTimeTracer) TerminateAllTasks(now timing.VTimeInPicoSec) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
-		task := e.Value.(*taskTimeStartEnd)
-		if !task.completed {
-			task.completed = true
-			task.end = now
-		}
-	}
-
-	t.collapse(now)
-}
-
-func (t *BusyTimeTracer) extendTaskTime(
-	base *taskTimeStartEnd,
-	t2 *taskTimeStartEnd,
-) {
-	if t2.start < base.start {
-		base.start = t2.start
-	}
-
-	if t2.end > base.end {
-		base.end = t2.end
-	}
-}
-
-// TaskStarted records the task start time
-func (t *BusyTimeTracer) TaskStarted(task tasks.Task) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	if t.filter != nil && !t.filter(task) {
-		return
-	}
-
-	taskTime := &taskTimeStartEnd{start: task.StartTime}
-
-	elem := t.taskTimes.PushBack(taskTime)
-	t.inflightTasks[task.ID] = elem
-}
-
-// TaskEnded records the end of the task
+// TaskEnded merges the full interval even when its start was not observed.
 func (t *BusyTimeTracer) TaskEnded(task tasks.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	originalTask, ok := t.inflightTasks[task.ID]
-	if !ok {
+	if (t.filter != nil && !t.filter(task)) || task.EndTime <= task.StartTime {
 		return
 	}
-
-	time := originalTask.Value.(*taskTimeStartEnd)
-	time.end = task.EndTime
-	time.completed = true
-
-	delete(t.inflightTasks, task.ID)
-
-	t.collapse(task.EndTime)
-}
-
-func (t *BusyTimeTracer) collapse(now timing.VTimeInPicoSec) {
-	time, found := t.startTimeOfFirstImcompleteTask()
-	if found && time < now {
-		return
+	interval := taskTimeStartEnd{start: task.StartTime, end: task.EndTime}
+	first := sort.Search(len(t.intervals), func(i int) bool { return t.intervals[i].end >= interval.start })
+	last := first
+	for last < len(t.intervals) && t.intervals[last].start <= interval.end {
+		old := t.intervals[last]
+		interval.start = min(interval.start, old.start)
+		interval.end = max(interval.end, old.end)
+		t.busyTime -= old.end - old.start
+		last++
 	}
-
-	finishedTasks := make([]*taskTimeStartEnd, 0)
-
-	var next *list.Element
-	for e := t.taskTimes.Front(); e != nil; e = next {
-		next = e.Next()
-
-		task := e.Value.(*taskTimeStartEnd)
-		if !task.completed {
-			break
-		}
-
-		if task.completed && task.end <= now {
-			finishedTasks = append(finishedTasks, task)
-
-			t.taskTimes.Remove(e)
-		}
+	t.busyTime += interval.end - interval.start
+	if first == last {
+		t.intervals = append(t.intervals, taskTimeStartEnd{})
+		copy(t.intervals[first+1:], t.intervals[first:])
+	} else {
+		copy(t.intervals[first+1:], t.intervals[last:])
+		t.intervals = t.intervals[:len(t.intervals)-(last-first)+1]
 	}
-
-	t.busyTime += t.taskBusyTime(finishedTasks)
-}
-
-func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
-	timing.VTimeInPicoSec, bool,
-) {
-	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
-		task := e.Value.(*taskTimeStartEnd)
-		if !task.completed {
-			return task.start, true
-		}
-	}
-
-	return 0, false
-}
-
-func (t *BusyTimeTracer) taskBusyTime(
-	tasks []*taskTimeStartEnd,
-) timing.VTimeInPicoSec {
-	busyTime := timing.VTimeInPicoSec(0)
-	coveredMask := make(map[int]bool)
-
-	for i, t1 := range tasks {
-		if _, covered := coveredMask[i]; covered {
-			continue
-		}
-
-		coveredMask[i] = true
-
-		extTime := taskTimeStartEnd{
-			start: t1.start,
-			end:   t1.end,
-		}
-
-		for j, t2 := range tasks {
-			if _, covered := coveredMask[j]; covered {
-				continue
-			}
-
-			if t.taskTimeOverlap(t1, t2) {
-				coveredMask[j] = true
-
-				t.extendTaskTime(&extTime, t2)
-			}
-		}
-
-		busyTime += extTime.end - extTime.start
-	}
-
-	return busyTime
-}
-
-func (t *BusyTimeTracer) taskTimeOverlap(t1, t2 *taskTimeStartEnd) bool {
-	if t1.start <= t2.start && t1.end >= t2.start {
-		return true
-	}
-
-	if t1.start <= t2.end && t1.end >= t2.end {
-		return true
-	}
-
-	if t1.start >= t2.start && t1.end <= t2.end {
-		return true
-	}
-
-	return false
+	t.intervals[first] = interval
 }

@@ -185,17 +185,9 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		Expect(reqInID).ToNot(BeZero())
 		Expect(bufID).ToNot(Equal(reqInID))
 
-		// The buffer task owns the pre-admission story: reached the head of the
-		// Top buffer, then waited for a free reorder slot, then to send the shadow.
-		Expect(rec.kindsOn(bufID)).To(Equal([]tasks.MilestoneKind{
-			tasks.MilestoneKindQueue,
-			tasks.MilestoneKindHardwareResource,
-			tasks.MilestoneKindNetworkBusy,
-		}))
-		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].What).To(Equal(rob.Name() + ".buffer"))
-		Expect(bufMs[2].What).To(Equal(bottomPort.Name()))
+		// This manual round trip stays at one simulation timestamp, so all
+		// buffer waits have zero duration and are suppressed.
+		Expect(rec.milestonesOn(bufID)).To(BeEmpty())
 
 		// req_in owns only the post-admission processing.
 		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{

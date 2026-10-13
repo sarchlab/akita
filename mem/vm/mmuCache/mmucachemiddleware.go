@@ -164,10 +164,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	// the Bottom port is over. This admission wait belongs to the Top
 	// incoming-buffer task; req_in (opened just below, at retrieve) covers only
 	// the processing that follows.
-	tasks.AddBufferMilestone(m.comp, m.topPort(), req, tasks.Milestone{
-		Kind: tasks.MilestoneKindNetworkBusy,
-		What: m.bottomPort().Name(),
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.bottomPort().Name()))
 
 	m.topPort().RetrieveIncoming()
 
@@ -239,10 +236,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// send-wait is over now; attribute it to the Bottom incoming-buffer task.
 	// This must precede RetrieveIncoming: retrieving closes the buffer task and
 	// removes its entry from the tracker.
-	tasks.AddBufferMilestone(m.comp, m.bottomPort(), rsp, tasks.Milestone{
-		Kind: tasks.MilestoneKindNetworkBusy,
-		What: m.topPort().Name(),
-	})
+	m.bottomPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.topPort().Name()))
 
 	m.bottomPort().RetrieveIncoming()
 	delete(next.OutstandingBottomReqs, rsp.RspTo)

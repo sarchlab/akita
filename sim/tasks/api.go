@@ -47,7 +47,7 @@ func AddTag(o Owner, tag Tag) {
 		tag.ID = o.NewID()
 	}
 	tag.Time = o.CurrentTime()
-	t.notify(e.owner, func(observer Observer) { observer.TagAdded(tag) })
+	t.notify(e, func(observer Observer) { observer.TagAdded(tag) })
 }
 
 // AddMilestone records when a blocking condition is resolved for an open task.

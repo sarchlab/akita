@@ -91,7 +91,7 @@ alongside a `datarecording.DataRecorder`:
 ```go
 recorder := datarecording.NewDataRecorder("trace")
 dbTracer := tracing.NewDBTracer(engine, recorder)
-simulation.Tasks().Subscribe(dbTracer, component)
+simulation.TaskTracker().Subscribe(dbTracer, component)
 
 // ... run the simulation ...
 

@@ -59,10 +59,8 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// spent blocked on this bank's resources is over. This admission wait
 		// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 		// covers only the processing that follows.
-		tasks.AddBufferMilestone(m.comp, m.topPort(), msg, tasks.Milestone{
-			Kind: tasks.MilestoneKindHardwareResource,
-			What: fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID),
-		})
+		m.topPort().AddIncomingMilestone(
+			tasks.Reason(tasks.MilestoneKindHardwareResource, fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID)))
 
 		m.topPort().RetrieveIncoming()
 

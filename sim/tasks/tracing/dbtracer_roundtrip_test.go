@@ -134,7 +134,7 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 func (c *roundTripDomain) NewID() uint64 { return c.sim.NewID() }
 
 func (d *roundTripDomain) TaskTracker() *tasks.Tracker {
-	return d.sim.(interface{ Tasks() *tasks.Tracker }).Tasks()
+	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()
 }
 
 func TestDBRecordsCompleteEndWithoutStartOrHistory(t *testing.T) {

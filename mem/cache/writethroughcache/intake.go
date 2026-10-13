@@ -26,7 +26,16 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
+	if next.AdmissionMsgID != msg.ID {
+		next.AdmissionMsgID = msg.ID
+		next.WaitingForDir = false
+	}
 	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
+		if next.WaitingForDir {
+			s.cache.topPort().AddIncomingMilestone(
+				tasks.Reason(tasks.MilestoneKindHardwareResource, s.cache.comp.Name()+".dir_buf"))
+			next.WaitingForDir = false
+		}
 		return false
 	}
 
@@ -34,10 +43,11 @@ func (s *intake) Tick() bool {
 	// request spent at the head of the Top buffer is over. This admission wait
 	// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 	// covers only the processing that follows.
-	tasks.AddBufferMilestone(s.cache.comp, s.cache.topPort(), msg, tasks.Milestone{
-		Kind: tasks.MilestoneKindHardwareResource,
-		What: s.cache.comp.Name() + ".trans",
-	})
+	if !next.WaitingForDir {
+		s.cache.topPort().AddIncomingMilestone(
+			tasks.Reason(tasks.MilestoneKindHardwareResource, s.cache.comp.Name()+".trans"))
+		next.WaitingForDir = true
+	}
 
 	dirBuf := &next.DirBuf
 	if !dirBuf.CanPush() {
@@ -46,16 +56,16 @@ func (s *intake) Tick() bool {
 
 	// The directory buffer has room: the at-head wait for a free dirBuf slot is
 	// over (also on the incoming-buffer task).
-	tasks.AddBufferMilestone(s.cache.comp, s.cache.topPort(), msg, tasks.Milestone{
-		Kind: tasks.MilestoneKindHardwareResource,
-		What: s.cache.comp.Name() + ".dir_buf",
-	})
+	s.cache.topPort().AddIncomingMilestone(
+		tasks.Reason(tasks.MilestoneKindHardwareResource, s.cache.comp.Name()+".dir_buf"))
 
 	transIdx := s.createTransaction(msg)
 
 	dirBuf.Push(transIdx)
 
 	s.cache.topPort().RetrieveIncoming()
+	next.AdmissionMsgID = 0
+	next.WaitingForDir = false
 
 	next.Transactions[transIdx].RecvTaskID = tasks.StartReqIn(s.cache.comp, msg)
 

@@ -10,7 +10,7 @@ s := sim.MakeBuilder().WithTaskTracking().Build()
 latency := tracing.NewAverageTimeTracer(func(t tasks.Task) bool {
     return t.Kind == tasks.KindReqIn
 })
-s.Tasks().Subscribe(latency, component)
+s.TaskTracker().Subscribe(latency, component)
 ```
 
 `TaskStarted(Task)` and `TaskEnded(Task)` carry complete basic records, with
@@ -26,7 +26,7 @@ Use stable task properties (kind, what, location) in a shared filter.
 |---|---|
 | AverageTimeTracer | Mean duration of selected completed tasks |
 | TotalTimeTracer | Sum of selected task durations |
-| BusyTimeTracer | Time covered by selected active tasks |
+| BusyTimeTracer | Union of complete intervals received at task end |
 | TagCountTracer | Event counts and distinct task counts per tag |
 | BackTraceTracer | Retains open tasks for parent-chain printing |
 | DBTracer | Writes task records, tags, milestones, and recording segments |
@@ -67,6 +67,7 @@ Each milestone carries a `MilestoneKind`:
 | `MilestoneKindHardwareResource` | a wait for a hardware resource (buffer slot, bank, MSHR) |
 | `MilestoneKindNetworkTransfer` | a network transfer of the message |
 | `MilestoneKindNetworkBusy` | a wait to send on a busy port |
+| `MilestoneKindConsumer` | an incoming head wait until the owner retrieves it, when no explicit reason was supplied |
 | `MilestoneKindQueue` | a wait behind other messages in a queue/buffer |
 | `MilestoneKindData` | a wait for a data response |
 | `MilestoneKindDependency` | a wait on an ordering/dependency (e.g. in-order commit) |
@@ -102,7 +103,7 @@ The rule of thumb: a **component** disambiguates by *stage* (the request side it
 is on, or the named pipeline stage); a **port** disambiguates by *direction*
 (incoming vs outgoing buffer). This holds for every task: `tasks.Start` derives the
 location from the Kind (see `singleKindLocation`) when a caller leaves `Location`
-empty, the buffer hooks append the direction, and all of these strings are
+empty, ports append the buffer direction, and all of these strings are
 interned into the trace's `location` table.
 
 When you add a new task Kind to a component or port that already emits another

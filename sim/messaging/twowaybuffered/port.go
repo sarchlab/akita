@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // Port implements messaging.Port with independently sized incoming and outgoing buffers.
@@ -21,8 +22,8 @@ type Port struct {
 	owner messaging.PortOwner
 	conn  messaging.Connection
 
-	incomingBuf queueing.Buffer[messaging.Msg]
-	outgoingBuf queueing.Buffer[messaging.Msg]
+	incomingBuf queueing.Buffer[bufferEntry]
+	outgoingBuf queueing.Buffer[bufferEntry]
 }
 
 // AsRemote returns the remote port name.
@@ -117,15 +118,13 @@ func (p *Port) Send(msg messaging.Msg) {
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
-	p.outgoingBuf.Push(msg)
+	p.outgoingBuf.Push(p.startBufferTask(msg, false))
 
 	if p.NumHooks() > 0 {
-		head, present := p.outgoingBuf.Peek()
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgSend,
 			Item:   msg,
-			Detail: messaging.PortBufferChange{Head: head, HasHead: present, HeadChanged: wasEmpty},
 		}
 		p.InvokeHook(hookCtx)
 	}
@@ -162,15 +161,13 @@ func (p *Port) Deliver(msg messaging.Msg) {
 	}
 
 	wasEmpty := (p.incomingBuf.Size() == 0)
-	p.incomingBuf.Push(msg)
+	p.incomingBuf.Push(p.startBufferTask(msg, true))
 
 	if p.NumHooks() > 0 {
-		head, present := p.incomingBuf.Peek()
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRecvd,
 			Item:   msg,
-			Detail: messaging.PortBufferChange{Head: head, HasHead: present, HeadChanged: wasEmpty},
 		}
 		p.InvokeHook(hookCtx)
 	}
@@ -193,24 +190,24 @@ func (p *Port) RetrieveIncoming() (messaging.Msg, bool) {
 		return messaging.Msg{}, false
 	}
 
+	p.endBufferTask(&entry, true)
+	p.headMilestone(&p.incomingBuf, tasks.Reason(tasks.MilestoneKindQueue, p.name))
+
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
 		p.conn.NotifyAvailable(p)
 	}
 
 	if p.NumHooks() > 0 {
-		head, present := p.incomingBuf.Peek()
-		change := messaging.PortBufferChange{Head: head, HasHead: present, HeadChanged: true}
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRetrieveIncoming,
-			Item:   entry,
-			Detail: change,
+			Item:   entry.Message,
 		}
 		p.InvokeHook(hookCtx)
 	}
 
 	p.lock.Unlock()
-	return entry, true
+	return entry.Message, true
 }
 
 // RetrieveOutgoing is used by the connection to take a message from the outgoing
@@ -226,24 +223,24 @@ func (p *Port) RetrieveOutgoing() (messaging.Msg, bool) {
 		return messaging.Msg{}, false
 	}
 
+	p.endBufferTask(&entry, false)
+	p.headMilestone(&p.outgoingBuf, tasks.Reason(tasks.MilestoneKindQueue, p.name))
+
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
 		owner.NotifyPortFree(p)
 	}
 
 	if p.NumHooks() > 0 {
-		head, present := p.outgoingBuf.Peek()
-		change := messaging.PortBufferChange{Head: head, HasHead: present, HeadChanged: true}
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRetrieveOutgoing,
-			Item:   entry,
-			Detail: change,
+			Item:   entry.Message,
 		}
 		p.InvokeHook(hookCtx)
 	}
 
 	p.lock.Unlock()
-	return entry, true
+	return entry.Message, true
 }
 
 // PeekIncoming returns the first message in the incoming buffer without
@@ -252,7 +249,8 @@ func (p *Port) PeekIncoming() (messaging.Msg, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	return p.incomingBuf.Peek()
+	entry, ok := p.incomingBuf.Peek()
+	return entry.Message, ok
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
@@ -261,7 +259,8 @@ func (p *Port) PeekOutgoing() (messaging.Msg, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	return p.outgoingBuf.Peek()
+	entry, ok := p.outgoingBuf.Peek()
+	return entry.Message, ok
 }
 
 // NumIncoming returns the number of messages in the incoming buffer.
@@ -305,8 +304,8 @@ func (p *Port) mustHaveOwner() messaging.PortOwner {
 // BindOwner.
 func NewPort(incomingBufCap, outgoingBufCap int) *Port {
 	p := new(Port)
-	p.incomingBuf = queueing.MakeBuffer[messaging.Msg](incomingBufCap)
-	p.outgoingBuf = queueing.MakeBuffer[messaging.Msg](outgoingBufCap)
+	p.incomingBuf = queueing.MakeBuffer[bufferEntry](incomingBufCap)
+	p.outgoingBuf = queueing.MakeBuffer[bufferEntry](outgoingBufCap)
 	return p
 }
 

@@ -3,7 +3,6 @@ package sim
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
@@ -122,10 +121,6 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
 
-	if taskPort, ok := p.(messaging.Port); ok {
-		s.taskTracker.RegisterPort(taskPort)
-	}
-
 	if s.monitor != nil {
 		s.monitor.RegisterPort(port)
 	}
@@ -185,5 +180,5 @@ func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }
 // RequireNameAvailable validates a name before a binding changes either side.
 func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
 
-// Tasks returns the simulation task service, or nil when tracking is disabled.
-func (s *Simulation) Tasks() *tasks.Tracker { return s.taskTracker }
+// TaskTracker returns the simulation task service, or nil when tracking is disabled.
+func (s *Simulation) TaskTracker() *tasks.Tracker { return s.taskTracker }

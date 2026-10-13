@@ -67,10 +67,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 	// spent blocked on the SubTransQueue is over. This admission wait belongs to
 	// the incoming-buffer task; req_in (opened at admission below) covers only
 	// the processing that follows.
-	tasks.AddBufferMilestone(m.comp, m.topPort(), msgI, tasks.Milestone{
-		Kind: tasks.MilestoneKindQueue,
-		What: m.comp.Name() + ".SubTransQueue",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindQueue, m.comp.Name()+".SubTransQueue"))
 
 	ts.RecvTaskID = tasks.StartReqIn(m.comp, msgI)
 	ts.ArrivalTick = next.TickCount

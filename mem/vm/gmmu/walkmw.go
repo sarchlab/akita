@@ -64,10 +64,7 @@ func (m *walkMW) parseFromTop() bool {
 	// incoming-buffer task since the request reached the head of the Top
 	// buffer — is over. The req_in opened at retrieve covers only the walk
 	// processing that follows.
-	tasks.AddBufferMilestone(m.comp, m.topPort(), reqI, tasks.Milestone{
-		Kind: tasks.MilestoneKindHardwareResource,
-		What: m.comp.Name() + ".walk",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".walk"))
 
 	m.topPort().RetrieveIncoming()
 

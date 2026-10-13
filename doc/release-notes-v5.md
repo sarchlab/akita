@@ -79,8 +79,11 @@ Per-entity checkpoint methods are unchanged.
 
 This pre-v5 change moves component tracing commands and task types to
 `sim/tasks`. Enable `WithTaskTracking` (also implied by monitor and trace-on-start),
-and subscribe observers through `s.Tasks().Subscribe(observer, owners...)`
-before running. With tracking disabled, `s.VisTracer()` is nil and no tracing
+and subscribe observers through `s.TaskTracker().Subscribe(observer, scopes...)`.
+Subscribe before seeding work to see starts,
+or join mid-run for future events. Scopes accept `naming.Named`; components include
+their ports, while port scopes select only that port. All must share the tracker.
+With tracking disabled, `s.VisTracer()` is nil and no tracing
 tables are created. `WithTaskTracking` alone creates and subscribes the tracer;
 call `s.VisTracer().StartTracing()` to begin recording. Components receive the
 service through `TaskTracker()`; tracking is nil when disabled. Built-in observers
@@ -88,7 +91,7 @@ move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
 Task types and their implementation live directly in `sim/tasks`, with private
 state and helpers. Framework assembly uses the exported `NewTracker`,
-`Tracker.RegisterPort`, `Tracker.FreezeSubscriptions`, `Tracker.SaveCheckpoint`,
+`Tracker.SaveCheckpoint`,
 and `Tracker.LoadCheckpoint` APIs. Ordinary applications use the simulation
 builder; checkpoint entity names and optional archive membership stay in `sim`.
 
@@ -99,16 +102,21 @@ builder; checkpoint entity names and optional archive membership stay in `sim`.
   `End(owner, EndInfo{ID: id})`. Reset paths use the same end commands;
   `EndOnReset` is removed because it had no distinct behavior.
 - Use `tasks.Tag`, `tasks.Milestone`, `AddTag`, and `AddMilestone`. Replace buffer
-  task lookups with `AddBufferMilestone(owner, port, msg, milestone)` before
-  retrieval. It drops events for untracked messages without misattribution.
+  task lookups with `port.AddIncomingMilestone(tasks.Reason(kind, what))` at
+  resolved wait-stage boundaries. `AddOutgoingMilestone` is symmetric; both
+  operate on the current head. Retrieve signatures remain unchanged. Empty,
+  untracked, and zero-duration waits are ignored. Retrieval fills only remaining
+  time with consumer/owner (incoming) or network_busy/connection (outgoing).
 - Replace custom Tracer methods with `TaskStarted(Task)`, `TaskEnded(Task)`,
   `TagAdded(Tag)`, and `MilestoneAdded(Milestone)`, optionally embedding
   `tasks.NopObserver`. Both lifecycle notifications carry the basic task record;
   the end includes the original start time. Observers no longer resolve parents.
 - Remove `CollectTrace`, the buffer collector helpers, task hook positions,
   `RequestTaskParents`, `PeekIncomingTaskID`, and `PortBufferTrace`. Custom ports
-  report generic `PortBufferChange` head facts in message-hook Detail. Hooks run
-  under the port lock and must not call buffer operations; Owner/Name are safe.
+  implement the two milestone methods and may use `tasks.Owner` to start/end
+  their buffer tasks directly, retaining task IDs and wait boundaries privately.
+  Generic message hooks carry Msg in Item and nil Detail. Hooks run under the
+  port lock and must not call buffer operations; Owner/Name are safe.
 
 Request helper migration (end commands take the stored task ID):
 
@@ -120,13 +128,14 @@ Request helper migration (end commands take the stored task ID):
 | `TraceReqFinalize` / `FinalizeReq` | `EndReqOut` |
 
 `messaging.Msg` is unchanged. Request/NoC handles remain in component or flit
-State, and the Tracker owns records and buffer identities. DRAM subtransaction
+State, and the Tracker owns records and parent correlation. DRAM subtransaction
 IDs remain simulation identities with separate tracing handles. Port checkpoint
-entries are messages again, without the temporary tracing version/ID fields.
+entries contain messages, buffer task IDs, and last milestone times.
 Pre-v5 checkpoint formats should be recreated after upgrading.
 
-Tracker open records, owner names, buffer identities, and request-parent
-correlation are checkpointed. Restored tasks retain IDs, parents, and original
+Tracker open records, owner/component scope names, and request-parent
+correlation are checkpointed separately from port buffer entries.
+Restored tasks retain IDs, parents, and original
 start times; `Detail` and observer histories are omitted. Rebuild fresh observers.
 An off-to-on restore starts with an empty tracker and ignores unknown handles;
 an on-to-off restore ignores the optional tracker payload. All other entity
@@ -136,6 +145,14 @@ Recording started mid-run drops earlier tags and milestones of tasks already
 in flight. When such a task ends during recording, its original parent and full
 interval are recorded without replaying its history. Open-task snapshots remain
 deferred. Daisen's stored task/parent schema is unchanged, and its frontend ID
-types are numeric. MGPUSim migration follows this Akita change separately.
+types are numeric. Statistical observers count the full interval of each received
+end, including time before subscription or restore. BusyTimeTracer uses interval
+union and no longer exposes `TerminateAllTasks`.
+
+MGPUSim migration follows this Akita change separately: update task/tracing
+imports, retain returned request handles in component State, migrate observer
+subscriptions to `TaskTracker()`, and convert buffer-reason calls to port
+milestones at stage transitions. Existing no-argument retrieve calls stay as-is;
+custom port implementations and mocks need both new milestone methods.
 
 See [tasks](../sim/tasks/README.md) and [observers](../sim/tasks/tracing/README.md).

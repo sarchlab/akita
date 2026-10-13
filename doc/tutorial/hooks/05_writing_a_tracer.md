@@ -18,7 +18,9 @@ func (o *maxDuration) TaskEnded(t tasks.Task) {
 }
 ```
 
-Register it with `s.Tasks().Subscribe(observer, worker)` before the first run.
+Register it with `s.TaskTracker().Subscribe(observer, worker)` before the first run
+to observe starts. Late subscriptions receive future events, including complete
+ends for in-flight tasks, without history replay.
 Omit the owner arguments to observe the whole simulation, including port tasks.
 The tracker supplies resolved parent IDs consistently to every observer.
 

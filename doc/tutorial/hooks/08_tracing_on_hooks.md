@@ -1,21 +1,18 @@
 # Tasks and generic hooks
 
-Task observers subscribe to the simulation's Tracker. Component commands such as
-`tasks.Start` call this typed service directly; they do not emit generic hooks.
-The Tracker owns the open records and parent correlation, then notifies observers
-with `TaskStarted`, `TaskEnded`, `TagAdded`, and `MilestoneAdded`.
+Task observers subscribe to the simulation's Tracker. Components and ports call
+`tasks.Start`, `tasks.End`, and the other typed commands directly. The Tracker
+resolves parent correlation and notifies observers with `TaskStarted`,
+`TaskEnded`, `TagAdded`, and `MilestoneAdded`.
 
-Ports remain generic messaging objects. Their send, receive, and retrieve hooks
-carry the affected message and a `PortBufferChange` describing the actual head.
-When tracking is enabled, the simulation registers the Tracker's port adapter.
-It owns buffer task IDs keyed by port and message, and converts these facts into
-buffer starts/ends and queue milestones.
+`twowaybuffered.Port` is a task owner. It retains buffer task IDs and wait
+boundaries beside its messages and ends tasks on retrieval. Components can call
+`port.AddIncomingMilestone(tasks.Reason(kind, what))` before retrieval or at a
+wait-stage transition; connections have the symmetric `AddOutgoingMilestone`.
+No tracker hook or adapter is needed.
 
-This adapter performs buffer lifecycle work; ordinary task notifications need
-no dispatch wrapper. A custom generic Hook can still observe other component
-or engine events independently of task tracking.
-
-Port hooks execute under the port lock. Read their supplied head facts; do not
-call Peek, Retrieve, Send, or count methods from a callback. The locking order is
-port, tracker, observer. Task observers must not re-enter either earlier layer.
-See [the task guide](../../../sim/tasks/README.md) for concurrency and scope.
+Generic port hooks remain available. They carry the affected message in Item,
+with nil Detail. Hooks execute under the port lock: do not call Peek, Retrieve,
+Send, or count methods from a callback. The locking order is port, tracker,
+observer. Task observers must not re-enter either earlier layer. See the
+[task guide](../../../sim/tasks/README.md) for concurrency and subscription scope.

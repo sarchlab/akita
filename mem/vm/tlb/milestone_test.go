@@ -108,6 +108,15 @@ func (r *tlbMilestoneRecorder) tagsOn(taskID uint64) []string {
 	return ws
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("TLB milestones", func() {
 	const remotePort = messaging.RemotePort("RemotePort")
 
@@ -120,7 +129,7 @@ var _ = Describe("TLB milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
@@ -187,6 +196,7 @@ var _ = Describe("TLB milestones", func() {
 
 		req := makeReq(0x100)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		drive(20)
 
@@ -243,6 +253,7 @@ var _ = Describe("TLB milestones", func() {
 
 		req := makeReq(0x100)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		drive(20)
 
@@ -291,6 +302,8 @@ var _ = Describe("TLB milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		bottomPort.Deliver(rsp)
+
+		engine.(*milestoneClock).now += 1000
 		drive(20)
 
 		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,

@@ -59,7 +59,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// Peek the head before the pipeline-slot gate so the admission milestone
 		// can be attributed to the head message's buffer task on the tick the
 		// slot frees.
-		itemI, ok := m.topPort().PeekIncoming()
+		_, ok := m.topPort().PeekIncoming()
 		if !ok {
 			break
 		}
@@ -72,10 +72,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// the head of the Top buffer is over. This admission wait belongs to the
 		// incoming-buffer task; req_in (opened at retrieve, below) covers only the
 		// processing that follows.
-		tasks.AddBufferMilestone(m.comp, m.topPort(), itemI, tasks.Milestone{
-			Kind: tasks.MilestoneKindHardwareResource,
-			What: m.comp.Name() + ".pipeline",
-		})
+		m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".pipeline"))
 
 		msgI, _ := m.topPort().RetrieveIncoming()
 		msg := msgI

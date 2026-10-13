@@ -9,7 +9,7 @@ s := sim.MakeBuilder().WithTaskTracking().Build()
 latency := tracing.NewAverageTimeTracer(func(t tasks.Task) bool {
     return t.Kind == tasks.KindReqOut
 })
-s.Tasks().Subscribe(latency, client)
+s.TaskTracker().Subscribe(latency, client)
 ```
 
 Start the sender task before sending the message, and keep its returned handle

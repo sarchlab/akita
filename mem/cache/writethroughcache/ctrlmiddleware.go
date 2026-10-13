@@ -155,6 +155,8 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil
+	next.AdmissionMsgID = 0
+	next.WaitingForDir = false
 	next.IsPaused = false
 	next.IsDraining = false
 	next.CurrentCmdID = 0

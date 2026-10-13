@@ -95,7 +95,6 @@ func (b Builder) Build() *Simulation {
 		if err := s.setup.Ready(); err != nil {
 			return err
 		}
-		s.taskTracker.FreezeSubscriptions()
 		return nil
 	})
 	b.createIDGenerator(s)

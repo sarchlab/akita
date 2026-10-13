@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing/tracingtest"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 			routes.DefineDefaultRoute(port.AsRemote())
 			require.NoError(t, s.Initialize())
 			rec := &tracingtest.LeakRecorder{}
-			s.Tasks().Subscribe(rec, sw)
+			s.TaskTracker().Subscribe(rec, sw)
 
 			flit := func() messaging.Msg {
 				return messaging.Msg{ID: s.NewID(), Src: "Source", Dst: port.AsRemote(),

@@ -26,16 +26,16 @@ func TestTrackingEnablementAndRunBoundary(t *testing.T) {
 			s := b.Build()
 			defer s.Terminate()
 			if mode == "disabled" {
-				require.Nil(t, s.Tasks())
+				require.Nil(t, s.TaskTracker())
 				require.Nil(t, s.VisTracer())
 				return
 			}
-			require.NotNil(t, s.Tasks())
+			require.NotNil(t, s.TaskTracker())
 			require.NotNil(t, s.VisTracer())
-			s.Tasks().Subscribe(tasks.NopObserver{})
+			s.TaskTracker().Subscribe(tasks.NopObserver{})
 			require.NoError(t, s.Initialize())
 			require.NoError(t, s.Engine().Run())
-			require.Panics(t, func() { s.Tasks().Subscribe(tasks.NopObserver{}) })
+			require.NotPanics(t, func() { s.TaskTracker().Subscribe(tasks.NopObserver{}) })
 		})
 	}
 }
@@ -94,4 +94,3 @@ type taskRecordingOwner struct {
 
 func (*taskRecordingOwner) Name() string                         { return "Agent" }
 func (o *taskRecordingOwner) CurrentTime() timing.VTimeInPicoSec { return o.now }
-func (o *taskRecordingOwner) TaskTracker() *tasks.Tracker        { return o.Tasks() }

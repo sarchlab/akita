@@ -83,6 +83,15 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("SimpleBankedMemory admission milestones", func() {
 	var (
 		engine  timing.Engine
@@ -93,7 +102,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		storage := mem.NewStorage(4 * mem.GB)
 
@@ -139,6 +148,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		"the buffer task", func() {
 		req := makeRead(0x0)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		spec := memComp.Spec
 		bankID := selectBank(spec, bankSelectionAddress(spec, req.Payload.(memprotocol.ReadReq).Address))
@@ -152,13 +162,11 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		Expect(bufID).ToNot(BeZero())
 
 		bufMs := rec.milestonesOn(bufID)
-		// The buffer task carries the reached-head milestone (from the port
-		// hook) followed by the bank admission milestone.
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
-		Expect(bufMs[1].What).To(Equal(
+		// No queue delay: the buffer task carries only the bank admission milestone.
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
+		Expect(bufMs[0].What).To(Equal(
 			fmt.Sprintf("%s.bank%d", memComp.Name(), bankID)))
 	})
 })
@@ -176,7 +184,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		storage = mem.NewStorage(4 * mem.GB)
 

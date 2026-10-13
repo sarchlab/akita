@@ -52,6 +52,15 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("DRAM admission milestones", func() {
 	var (
 		engine  timing.Engine
@@ -62,7 +71,7 @@ var _ = Describe("DRAM admission milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
@@ -70,10 +79,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 		topPort = memCtrl.Ports.Top
 
-		// Attach the recorder before driving so request and buffer starts
-		// allocate real task IDs (they return 0 with no
-		// hooks). The admission milestone lands on the Top-port buffer task, so
-		// the buffer task must exist.
+		// Subscribe before driving to retain the starts of request and buffer tasks.
 		rec = &milestoneRecorder{}
 		memCtrl.TaskTracker().Subscribe(rec, memCtrl)
 
@@ -92,6 +98,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	It("records a SubTransQueue admission milestone on the buffer task", func() {
 		topPort.Deliver(makeRead(0x40))
+		engine.(*milestoneClock).now += 1000
 
 		// One tick runs parseTop, which admits the request: the buffer task's
 		// queue admission milestone is emitted just before RetrieveIncoming.
@@ -101,20 +108,18 @@ var _ = Describe("DRAM admission milestones", func() {
 		Expect(bufID).ToNot(BeZero())
 
 		bufMs := rec.milestonesOn(bufID)
-		// The buffer task carries the reached-head milestone (from the port
-		// hook) followed by the SubTransQueue admission milestone.
-		Expect(bufMs).To(HaveLen(2))
+		// No queue delay: the buffer task carries only the SubTransQueue admission milestone.
+		Expect(bufMs).To(HaveLen(1))
+
 		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[1].What).To(Equal(memCtrl.Name() + ".SubTransQueue"))
+		Expect(bufMs[0].What).To(Equal(memCtrl.Name() + ".SubTransQueue"))
 	})
 })
 
 var _ = Describe("DRAM refresh-stall attribution", func() {
 	It("charges a refresh milestone to the sub-trans that issues "+
 		"after a refresh window", func() {
-		engine := timing.NewSerialEngine()
+		engine := &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
@@ -139,6 +144,8 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 			TrafficClass: "memprotocol.ReadReq"}
 
 		topPort.Deliver(read)
+
+		engine.now += 1000
 
 		// Tick enough for the refresh window to open and close and the command
 		// to finally issue.

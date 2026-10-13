@@ -8,7 +8,7 @@ builder before component assembly, then subscribe before seeding work or running
 s := sim.MakeBuilder().WithTaskTracking().Build()
 // Build worker with s.
 busy := tracing.NewBusyTimeTracer(func(t tasks.Task) bool { return t.Kind == "job" })
-s.Tasks().Subscribe(busy, worker)
+s.TaskTracker().Subscribe(busy, worker)
 ```
 
 The worker starts a job with `tasks.Start` and stores the returned ID in State:

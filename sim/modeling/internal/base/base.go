@@ -70,8 +70,8 @@ func Init[S, T, R, P, M any](
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
-	if provider, ok := sim.(interface{ Tasks() *tasks.Tracker }); ok {
-		base.taskTracker = provider.Tasks()
+	if provider, ok := sim.(interface{ TaskTracker() *tasks.Tracker }); ok {
+		base.taskTracker = provider.TaskTracker()
 	}
 	base.Spec = cloneSpec(spec)
 	base.Resources = resources

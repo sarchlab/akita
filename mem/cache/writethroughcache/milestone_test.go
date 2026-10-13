@@ -177,12 +177,12 @@ var _ = Describe("Cache milestones", func() {
 		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).
 			To(Equal([]byte{1, 2, 3, 4}))
 
-		// The buffer task exists and carries the two hardware-resource
-		// admission milestones the intake emits before retrieve.
+		// The buffer task records the transaction-slot wait. The directory
+		// slot is ready at that same timestamp, so it adds no interval.
 		bufStart, ok := rec.firstStart(tasks.KindIncomingBuffer)
 		Expect(ok).To(BeTrue())
 		Expect(rec.hasMilestone(bufStart.ID, "Cache.trans")).To(BeTrue())
-		Expect(rec.hasMilestone(bufStart.ID, "Cache.dir_buf")).To(BeTrue())
+		Expect(rec.hasMilestone(bufStart.ID, "Cache.dir_buf")).To(BeFalse())
 
 		// req_in is the cache's receiver-side task for the read request. Its
 		// ID comes from the recorded task start; the transaction is already done.

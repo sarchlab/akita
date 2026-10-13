@@ -63,12 +63,9 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	}
 
 	// The slot is free and this request is being admitted. Attribute the
-	// at-head admission wait to the buffer task (which the port hook closes at
+	// at-head admission wait to the buffer task (which the port closes at
 	// retrieve), using the task ID stored in the port's head entry.
-	tasks.AddBufferMilestone(m.comp, m.topPort(), reqI, tasks.Milestone{
-		Kind: tasks.MilestoneKindHardwareResource,
-		What: m.comp.Name() + ".transaction",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".transaction"))
 
 	m.topPort().RetrieveIncoming()
 

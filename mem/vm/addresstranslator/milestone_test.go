@@ -83,6 +83,15 @@ func (r *traceRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	return ks
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("Address Translator milestones", func() {
 	var (
 		engine          timing.Engine
@@ -97,7 +106,7 @@ var _ = Describe("Address Translator milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
@@ -183,6 +192,7 @@ var _ = Describe("Address Translator milestones", func() {
 		bottomRsp func(rspTo uint64) messaging.Msg,
 	) {
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 		Expect(ptMW.translate()).To(BeTrue())
 
 		transReqID := at.State.Transactions[0].TranslationReqID
@@ -196,12 +206,16 @@ var _ = Describe("Address Translator milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		translationPort.Deliver(transRsp)
+
+		engine.(*milestoneClock).now += 1000
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 
 		bottomReqID := at.State.InflightReqToBottom[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
 		bottomPort.Deliver(bottomRsp(bottomReqID))
+
+		engine.(*milestoneClock).now += 1000
 		Expect(rpMW.respond()).To(BeTrue())
 
 		topPort.RetrieveOutgoing()
@@ -226,12 +240,11 @@ var _ = Describe("Address Translator milestones", func() {
 		// The buffer task owns the pre-admission story: reached the head of the
 		// Top buffer, then waited to send the translation request.
 		Expect(rec.kindsOn(bufID)).To(Equal([]tasks.MilestoneKind{
-			tasks.MilestoneKindQueue,
 			tasks.MilestoneKindNetworkBusy,
 		}))
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].What).To(Equal(translationPort.Name()))
+
+		Expect(bufMs[0].What).To(Equal(translationPort.Name()))
 
 		// req_in owns only the post-admission processing — including the bottom
 		// network-busy milestone (on the top req_in, not a phantom keyed by the
@@ -307,6 +320,8 @@ var _ = Describe("Address Translator milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		translationPort.Deliver(transRsp)
+
+		engine.(*milestoneClock).now += 1000
 
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 

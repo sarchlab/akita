@@ -1,7 +1,7 @@
 # Simulation tasks
 
 Enable tracking explicitly with `sim.MakeBuilder().WithTaskTracking()`.
-`WithVisTracingOnStart` and `WithMonitor` also enable it. `s.Tasks()` and
+`WithVisTracingOnStart` and `WithMonitor` also enable it. `s.TaskTracker()` and
 `s.VisTracer()` are nil otherwise, and no tracing tables are created.
 `WithTaskTracking` alone creates and subscribes the database tracer without
 starting recording; call `s.VisTracer().StartTracing()` to begin. Engine-only
@@ -66,12 +66,18 @@ type Observer interface {
     TagAdded(tasks.Tag)
     MilestoneAdded(tasks.Milestone)
 }
-s.Tasks().Subscribe(observer)             // every component and port
-s.Tasks().Subscribe(observer, component)  // this owner, including its ports
+s.TaskTracker().Subscribe(observer)             // every component and port
+s.TaskTracker().Subscribe(observer, component)  // this owner, including its ports
+s.TaskTracker().Subscribe(observer, port)       // this port only
 ```
 
-Subscribe before the first engine run. Subscribe before seeding work to observe
-its start as well as subsequent notifications.
+Subscribe at any time; scopes accept `naming.Named` values, including
+interface-typed `messaging.Port`, and must use the same tracker. Filtering uses
+actual ownership, not name prefixes. Subscribe before seeding work to see its
+start. A later subscription receives future events, including full end records
+for tasks already in flight, with no replay of earlier events. Average, total,
+and busy-time tracers count the full received intervals, even when they began
+before subscription or restore; busy time takes their union.
 `tasks.NopObserver` supplies optional no-op callbacks. Both lifecycle callbacks
 receive `Task`; at end it contains the original ID, MsgID, ParentID, kind, what,
 location, start time, and end time. There is no `CompletedTask` type. `Detail`
@@ -81,42 +87,52 @@ history embedded in the completed record. Observers decide what to retain.
 Notifications for one task are ordered. Different tasks may notify the same
 observer concurrently; observers must synchronize their state. Callbacks must
 not re-enter the tracker or call port buffer operations. The initial tracker
-uses one mutex; port hooks take the port lock before the tracker lock, followed
-by observer locks. Querying Owner/Name on a port is safe.
+uses one mutex; port task commands take the port lock before the tracker lock,
+followed by observer locks. Querying Owner/Name on a port is safe.
 
 ## Buffer identity
 
-Ports have no tracing methods or task IDs. Their four message hooks carry a
-`messaging.Msg` Item and `messaging.PortBufferChange` Detail. Detail reports the
-actual head after the operation, whether it exists, and whether it changed.
-The tracker converts these into buffer tasks keyed by port name, message ID, and
-direction, and resolves a queue milestone only for the actual new head.
+`twowaybuffered.Port` is a task owner with its own name and the owning
+component's tracker, clock, and ID allocator. Owners without `tasks.Owner` have
+untracked ports. Send/Deliver start a task and store its ID beside the message;
+RetrieveIncoming/Outgoing end that task. No hook or port registration is needed
+for tracking. Generic message hooks remain independent and carry Msg in Item.
 
 ```go
 msg, ok := port.PeekIncoming()
 if ok && canAdmit(msg) {
-    tasks.AddBufferMilestone(comp, port, msg, tasks.Milestone{
-        Kind: tasks.MilestoneKindHardwareResource, What: "slots",
-    })
+    port.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, "slots"))
     port.RetrieveIncoming()
 }
+// Connections can record an outgoing wait phase the same way:
+port.AddOutgoingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, "link"))
 ```
 
-Admission names the message, never a FIFO offset or peeked task ID. An
-untracked head A followed by tracked B cannot cause A's milestones to attach
-to B. Normal retrieval ends the task; it is not a reset.
+Both milestone methods apply to the current head, recording the completed wait
+since its previous milestone (or since it reached the head). They do not remove
+the message. Call at each resolved wait-stage boundary, not on each retry tick;
+multiple phases are supported. `messaging.WaitReason{}` selects the default.
+Empty buffers, untracked messages, and zero-duration waits emit no milestone.
+
+A queued message gets a `queue` milestone with the port name when it becomes
+head, if it waited. Retrieval fills any remaining interval with `consumer` and
+the component name for incoming, or `network_busy` and the connection name for
+outgoing. An explicit milestone immediately before retrieval leaves no interval
+to fill, so no duplicate fallback is emitted. Retrieve methods take no arguments.
+The port privately checkpoints each task ID and last milestone time with its
+message. An untracked restored head cannot be mistaken for a later tracked entry.
 
 ## Scope of this version
 
-There is no public open-task snapshot, history replay, or live subscription
-handoff. Starting DB recording mid-run does not promise to backfill all tasks
+There is no public open-task snapshot or history replay. Starting DB recording mid-run does not promise to backfill all tasks
 already in flight or their earlier tags/milestones. Completed basic records
 remain self-contained, so recording can handle an end without retaining its
 start.
 
 When tracking is enabled, the simulation checkpoints open task records, owner
-names, buffer identities, and request-parent correlation. Loading replaces that
-state; rebuilt port hooks and fresh observers are retained. A restored task's
+and component scope names, and request-parent correlation. Ports checkpoint
+buffer task IDs and milestone boundaries with their messages. Loading replaces
+that state; rebuilt hooks and fresh observers are retained. A restored task's
 end carries its original ID, parent, and start time, even though the observer
 never saw its start. `Detail` is omitted and is nil after restore. Tags,
 milestones, and observer history are not checkpointed or replayed.
@@ -131,15 +147,12 @@ process-global task registry is used.
 ## Framework assembly
 
 Task types, `Owner`, observers, and lifecycle implementations live directly in
-this package. Tracker state, parent maps, port hooks, and checkpoint data
+this package. Tracker state, parent maps, and checkpoint data
 structures are unexported. `Owner` is the small interface consumed by the task
 commands; its clock, ID allocator, and tracker must share one simulation.
 
-Frameworks can construct a tracker with `NewTracker`, register bound ports with
-`Tracker.RegisterPort`, and call `Tracker.FreezeSubscriptions` before the first
-engine run. Port registration and observer subscription are rejected after the
-freeze. Nil trackers make registration and freezing no-ops for disabled setups.
+Frameworks construct a tracker with `NewTracker` and supply it through each
+owner's `TaskTracker()`. Ports need no separate tracker registration.
 `Tracker.SaveCheckpoint` and `Tracker.LoadCheckpoint` operate while execution is
-stopped; load after rebuilding ports and fresh observer subscriptions. These
-are supported exported framework APIs. Ordinary applications use the simulation
-builder, which performs this assembly and owns checkpoint entity registration.
+stopped. These are supported exported framework APIs. Ordinary applications use
+the simulation builder, which owns checkpoint entity registration.

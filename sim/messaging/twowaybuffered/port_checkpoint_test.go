@@ -49,9 +49,9 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 	}
 
 	src := newCkptPort(4, 4)
-	src.incomingBuf.Push(mk(1, 10))
-	src.incomingBuf.Push(mk(2, 20))
-	src.outgoingBuf.Push(mk(3, 30))
+	src.incomingBuf.Push(bufferEntry{Message: mk(1, 10)})
+	src.incomingBuf.Push(bufferEntry{Message: mk(2, 20)})
+	src.outgoingBuf.Push(bufferEntry{Message: mk(3, 30)})
 
 	var buf bytes.Buffer
 	if err := src.SaveCheckpoint(&buf); err != nil {
@@ -67,15 +67,15 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 	if len(in) != 2 {
 		t.Fatalf("incoming size = %d, want 2", len(in))
 	}
-	if m := in[0]; m.Payload.(registryTestMsg).Value != 10 || m.ID != 1 {
+	if m := in[0].Message; m.Payload.(registryTestMsg).Value != 10 || m.ID != 1 {
 		t.Fatalf("incoming[0] = %+v", m)
 	}
-	if m := in[1]; m.Payload.(registryTestMsg).Value != 20 || m.ID != 2 {
+	if m := in[1].Message; m.Payload.(registryTestMsg).Value != 20 || m.ID != 2 {
 		t.Fatalf("incoming[1] = %+v", m)
 	}
 
 	out := dst.outgoingBuf.Elements()
-	if len(out) != 1 || out[0].Payload.(registryTestMsg).Value != 30 {
+	if len(out) != 1 || out[0].Message.Payload.(registryTestMsg).Value != 30 {
 		t.Fatalf("outgoing = %+v", out)
 	}
 }

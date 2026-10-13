@@ -8,18 +8,12 @@ import (
 )
 
 type savedTask struct {
-	Task  Task   `json:"task"`
-	Owner string `json:"owner"`
-}
-type savedBuffer struct {
-	Port     string `json:"port"`
-	MsgID    uint64 `json:"msg_id"`
-	Incoming bool   `json:"incoming"`
-	TaskID   uint64 `json:"task_id"`
+	Task      Task   `json:"task"`
+	Owner     string `json:"owner"`
+	Component string `json:"component,omitempty"`
 }
 type checkpointState struct {
 	Tasks     []savedTask       `json:"tasks"`
-	Buffers   []savedBuffer     `json:"buffers"`
 	ByMessage map[uint64]uint64 `json:"by_message"`
 	ByTask    map[uint64]uint64 `json:"by_task"`
 }
@@ -32,21 +26,14 @@ func (t *Tracker) SaveCheckpoint(w io.Writer) error {
 	defer t.mu.Unlock()
 	state := checkpointState{ByMessage: t.parents.byMessage, ByTask: t.parents.byTask}
 	for _, e := range t.open {
-		state.Tasks = append(state.Tasks, savedTask{Task: e.task, Owner: e.owner})
-	}
-	for key, id := range t.buffers {
-		state.Buffers = append(state.Buffers, savedBuffer{
-			Port: key.port, MsgID: key.msgID, Incoming: key.incoming, TaskID: id,
-		})
+		state.Tasks = append(state.Tasks, savedTask{Task: e.task, Owner: e.owner, Component: e.component})
 	}
 	sort.Slice(state.Tasks, func(i, j int) bool { return state.Tasks[i].Task.ID < state.Tasks[j].Task.ID })
-	sort.Slice(state.Buffers, func(i, j int) bool { return state.Buffers[i].TaskID < state.Buffers[j].TaskID })
 	return json.NewEncoder(w).Encode(state)
 }
 
 // LoadCheckpoint replaces lifecycle state without replaying starts or history.
-// Call while the rebuilt simulation is stopped, after registering its ports
-// and subscribing fresh observers. Existing hooks and subscriptions are kept.
+// Call while the rebuilt simulation is stopped, with fresh observers. Existing subscriptions are kept.
 // An empty object implements a checkpoint saved with tracking disabled.
 func (t *Tracker) LoadCheckpoint(r io.Reader) error {
 	var state checkpointState
@@ -64,20 +51,7 @@ func (t *Tracker) LoadCheckpoint(r io.Reader) error {
 		if open[task.ID] != nil {
 			return fmt.Errorf("tasks: duplicate checkpoint task %d", task.ID)
 		}
-		open[task.ID] = &entry{task: task, owner: saved.Owner}
-	}
-	buffers := make(map[bufferKey]uint64, len(state.Buffers))
-	for _, saved := range state.Buffers {
-		key := bufferKey{saved.Port, saved.MsgID, saved.Incoming}
-		e := open[saved.TaskID]
-		kind := KindOutgoingBuffer
-		if saved.Incoming {
-			kind = KindIncomingBuffer
-		}
-		if !t.ports[saved.Port] || e == nil || e.task.MsgID != saved.MsgID || e.task.Kind != kind || buffers[key] != 0 {
-			return fmt.Errorf("tasks: invalid checkpoint buffer %s message %d", saved.Port, saved.MsgID)
-		}
-		buffers[key] = saved.TaskID
+		open[task.ID] = &entry{task: task, owner: saved.Owner, component: saved.Component}
 	}
 	for id, msgID := range state.ByTask {
 		e := open[id]
@@ -90,7 +64,7 @@ func (t *Tracker) LoadCheckpoint(r io.Reader) error {
 			return fmt.Errorf("tasks: invalid checkpoint message parent %d", msgID)
 		}
 	}
-	t.open, t.buffers = open, buffers
+	t.open = open
 	t.parents = requestParents{byMessage: state.ByMessage, byTask: state.ByTask}
 	return nil
 }

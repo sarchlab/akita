@@ -80,6 +80,15 @@ func (r *milestoneRecorder) taskStart(kind string) (tasks.Task, bool) {
 	return tasks.Task{}, false
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("GMMU milestones", func() {
 	const (
 		agentPort     = messaging.RemotePort("Agent")
@@ -99,7 +108,7 @@ var _ = Describe("GMMU milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		pageTable = vm.NewPageTable(12)
 
@@ -159,6 +168,7 @@ var _ = Describe("GMMU milestones", func() {
 		"when it admits the head request", func() {
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(walk.parseFromTop()).To(BeTrue())
 
@@ -171,11 +181,10 @@ var _ = Describe("GMMU milestones", func() {
 		// The buffer task owns the at-head admission wait: reached the head of
 		// the Top buffer, then waited for a free walk slot.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
-		Expect(bufMs[1].What).To(Equal(gmmuComp.Name() + ".walk"))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
+		Expect(bufMs[0].What).To(Equal(gmmuComp.Name() + ".walk"))
 	})
 
 	It("does not admit (and emits no admission milestone) while servicing "+
@@ -185,14 +194,15 @@ var _ = Describe("GMMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(walk.parseFromTop()).To(BeFalse())
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
+		Expect(bufMs).To(BeEmpty())
+
 	})
 
 	It("emits a network_busy admission milestone on the Bottom buffer task "+
@@ -223,6 +233,8 @@ var _ = Describe("GMMU milestones", func() {
 
 		bottomPort.Deliver(rsp)
 
+		engine.(*milestoneClock).now += 1000
+
 		Expect(respond.fetchFromBottom()).To(BeTrue())
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
@@ -231,11 +243,10 @@ var _ = Describe("GMMU milestones", func() {
 		// The Bottom buffer task owns the at-head admission wait: reached the
 		// head of the Bottom buffer, then waited for the busy Top port to free.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(bottomPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindNetworkBusy))
-		Expect(bufMs[1].What).To(Equal(topPort.Name()))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindNetworkBusy))
+		Expect(bufMs[0].What).To(Equal(topPort.Name()))
 	})
 
 	It("records the local page-walk latency as a work milestone on req_in "+
@@ -251,6 +262,8 @@ var _ = Describe("GMMU milestones", func() {
 		pageTable.Insert(page)
 
 		topPort.Deliver(makeReq(0x1000))
+
+		engine.(*milestoneClock).now += 1000
 
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
@@ -282,6 +295,8 @@ var _ = Describe("GMMU milestones", func() {
 
 		topPort.Deliver(makeReq(0x1000))
 
+		engine.(*milestoneClock).now += 1000
+
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
 		// Tick 3: CycleLeft==0, page is remote, sends downstream req_out.
@@ -312,6 +327,8 @@ var _ = Describe("GMMU milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		bottomPort.Deliver(rsp)
+
+		engine.(*milestoneClock).now += 1000
 
 		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
 		modelingtest.Tick(gmmuComp)

@@ -52,6 +52,15 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("MMU milestones", func() {
 	var (
 		engine    timing.Engine
@@ -64,7 +73,7 @@ var _ = Describe("MMU milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		pageTable = vm.NewPageTable(12)
 
@@ -114,6 +123,7 @@ var _ = Describe("MMU milestones", func() {
 		"when it admits the head request", func() {
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.parseFromTop()).To(BeTrue())
 
@@ -126,11 +136,10 @@ var _ = Describe("MMU milestones", func() {
 		// The buffer task owns the at-head admission wait: reached the head of
 		// the Top buffer, then waited for a free walk slot.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
-		Expect(bufMs[1].What).To(Equal(mmuComp.Name() + ".walk"))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
+		Expect(bufMs[0].What).To(Equal(mmuComp.Name() + ".walk"))
 	})
 
 	It("labels the local page-walk latency as work on the req_in when the "+
@@ -147,6 +156,7 @@ var _ = Describe("MMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		// Admit the request (opens req_in and starts the walk), then drive the
 		// CycleLeft countdown to completion so doPageWalkHit sends the response
@@ -189,6 +199,7 @@ var _ = Describe("MMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.parseFromTop()).To(BeFalse())
 
@@ -197,7 +208,7 @@ var _ = Describe("MMU milestones", func() {
 		// Only the reached-head queue milestone; no admission milestone since the
 		// request was never admitted.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
+		Expect(bufMs).To(BeEmpty())
+
 	})
 })

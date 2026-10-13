@@ -79,8 +79,18 @@ func (r *mmuCacheMilestoneRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind
 	return ks
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("MMUCache milestones", func() {
 	var (
+		engine     timing.Engine
 		comp       *Comp
 		mw         *mmuCacheMiddleware
 		topPort    messaging.Port
@@ -89,7 +99,7 @@ var _ = Describe("MMUCache milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine := timing.NewSerialEngine()
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
@@ -153,6 +163,7 @@ var _ = Describe("MMUCache milestones", func() {
 	driveRoundTrip := func(vAddr uint64) (messaging.Msg, uint64) {
 		req := makeTopReq(vAddr)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.lookup()).To(BeTrue())
 
@@ -175,6 +186,8 @@ var _ = Describe("MMUCache milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		bottomPort.Deliver(rsp)
+
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.handleBottomPort()).To(BeTrue())
 
@@ -226,29 +239,27 @@ var _ = Describe("MMUCache milestones", func() {
 	It("attributes admission waits to the incoming-buffer tasks", func() {
 		driveRoundTrip(0x2000)
 
-		// The Top buffer task: reached the head of the Top buffer, then waited
+		// The Top buffer task has no queue delay and waited
 		// for the Bottom port to be free to forward the walk.
 		topBufID := bufTaskID(topPort.Name())
 		Expect(topBufID).ToNot(BeZero())
 		Expect(rec.kindsOn(topBufID)).To(Equal([]tasks.MilestoneKind{
-			tasks.MilestoneKindQueue,
 			tasks.MilestoneKindNetworkBusy,
 		}))
 		topBufMs := rec.milestonesOn(topBufID)
-		Expect(topBufMs[0].What).To(Equal(topPort.Name()))
-		Expect(topBufMs[1].What).To(Equal(bottomPort.Name()))
 
-		// The Bottom buffer task: reached the head of the Bottom buffer, then
+		Expect(topBufMs[0].What).To(Equal(bottomPort.Name()))
+
+		// The Bottom buffer task has no queue delay and
 		// waited for the Top port to be free to forward the response upstream.
 		bottomBufID := bufTaskID(bottomPort.Name())
 		Expect(bottomBufID).ToNot(BeZero())
 		Expect(rec.kindsOn(bottomBufID)).To(Equal([]tasks.MilestoneKind{
-			tasks.MilestoneKindQueue,
 			tasks.MilestoneKindNetworkBusy,
 		}))
 		bottomBufMs := rec.milestonesOn(bottomBufID)
-		Expect(bottomBufMs[0].What).To(Equal(bottomPort.Name()))
-		Expect(bottomBufMs[1].What).To(Equal(topPort.Name()))
+
+		Expect(bottomBufMs[0].What).To(Equal(topPort.Name()))
 	})
 
 	It("charges the downstream walk-fetch wait to the req_in as a "+
@@ -280,6 +291,7 @@ var _ = Describe("MMUCache milestones", func() {
 		"tasks are left unended", func() {
 		req := makeTopReq(0x2000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 		Expect(mw.lookup()).To(BeTrue())
 		sentValue, _ := bottomPort.RetrieveOutgoing()
 		sent := sentValue

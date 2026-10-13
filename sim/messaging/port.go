@@ -7,7 +7,7 @@ import (
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
 // All four port message hook positions carry the Port as Domain, a Msg as Item,
-// and PortBufferChange as Detail. Hooks must not call buffer operations (peek, count, or mutate): the port
+// and nil Detail. Hooks must not call buffer operations (peek, count, or mutate): the port
 // may hold its buffer lock while notifying them.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
@@ -26,14 +26,12 @@ var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 	Name: "Port Msg Retrieve Outgoing",
 }
 
-// PortBufferChange reports the buffer head after a send, receive, or retrieve.
-// HeadChanged is true when enqueueing into an empty buffer or removing its head.
-// Hooks execute under the port lock; inspect these facts instead of calling
-// buffer methods. Owner and Name are safe to read from a hook.
-type PortBufferChange struct {
-	Head        Msg
-	HasHead     bool
-	HeadChanged bool
+// WaitReason describes why a message waited at the head of a port buffer.
+// An empty Kind selects the port's default reason (consumer for incoming,
+// network_busy for outgoing); What is then supplied by the port as well.
+type WaitReason struct {
+	Kind string
+	What string
 }
 
 // A RemotePort is a string that refers to another port.
@@ -66,6 +64,16 @@ type Port interface {
 	Send(msg Msg)
 	RetrieveIncoming() (Msg, bool)
 	PeekIncoming() (Msg, bool)
+
+	// AddIncomingMilestone records the completed wait since the incoming head's
+	// previous milestone, or since it became the head. It does not remove the
+	// message. Empty buffers, untracked messages, and zero-length waits are no-ops.
+	// Call at a wait-stage transition, not on each unsuccessful polling attempt.
+	AddIncomingMilestone(reason WaitReason)
+
+	// AddOutgoingMilestone is the corresponding operation for the outgoing head.
+	// Retrieve adds the default reason only for time left since the last milestone.
+	AddOutgoingMilestone(reason WaitReason)
 
 	// Buffer counts
 	NumIncoming() int
