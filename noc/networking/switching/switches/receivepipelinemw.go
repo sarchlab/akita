@@ -41,6 +41,14 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
+			// Start work only when admission commits; blocked retries have no task.
+			if pcs.Latency == 0 && !pcs.RouteBuffer.CanPush() {
+				break
+			}
+			if pcs.Latency != 0 && !pcs.Pipeline.CanAccept() {
+				break
+			}
+
 			flit := itemI
 			taskID := tasks.Start(m.comp, tasks.StartInfo{
 				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
@@ -55,14 +63,8 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			if pcs.Latency == 0 {
-				if !pcs.RouteBuffer.CanPush() {
-					break
-				}
 				pcs.RouteBuffer.Push(item)
 			} else {
-				if !pcs.Pipeline.CanAccept() {
-					break
-				}
 				pcs.Pipeline.Accept(item)
 			}
 
