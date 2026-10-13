@@ -205,8 +205,7 @@ var _ = Describe("MMU milestones", func() {
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
-		// Only the reached-head queue milestone; no admission milestone since the
-		// request was never admitted.
+		// No queue delay and no admission milestone: the request is still blocked.
 		bufMs := rec.milestonesOn(bufID)
 		Expect(bufMs).To(BeEmpty())
 

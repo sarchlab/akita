@@ -23,12 +23,7 @@ type StandaloneSimulation struct {
 // useful for isolated tests and engine-only examples.
 func NewStandaloneSimulation(engine timing.Engine) *StandaloneSimulation {
 	s := &StandaloneSimulation{engine: engine, ids: &timing.IDGenerator{}}
-	engine.SetRunGuard(func() error {
-		if err := s.setup.Ready(); err != nil {
-			return err
-		}
-		return nil
-	})
+	engine.SetRunGuard(s.setup.Ready)
 	return s
 }
 
