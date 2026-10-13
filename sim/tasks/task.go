@@ -11,7 +11,8 @@ type EndInfo = taskcore.EndInfo
 
 // Task is the complete basic record delivered at start and end. EndTime is
 // populated at end. Tags and milestones are separate events, not replayed history.
-// Detail is borrowed read-only data; observers must not mutate it.
+// Detail is borrowed read-only data; observers must not mutate it. It is not
+// checkpointed and is nil for restored tasks.
 type Task = taskcore.Task
 
 // Shared task kinds keep trace consumers independent of component packages.

@@ -2,7 +2,7 @@
 
 `sim/tracing` contains observers for the simulation-scoped `sim/tasks` service.
 See [the task API](../tasks/README.md) for component commands, registration,
-concurrency, buffer identity, and checkpoint limits.
+concurrency, buffer identity, and checkpoint behavior.
 
 ```go
 s := sim.MakeBuilder().WithTaskTracking().Build()

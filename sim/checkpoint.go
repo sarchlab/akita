@@ -39,7 +39,8 @@ func (s *Simulation) SaveCheckpoint(path string) error {
 
 // LoadCheckpoint loads a checkpoint archive into this rebuilt simulation. It
 // checks the build identity and that the saved entity set matches the rebuilt
-// one, then hands each entity its payload.
+// one, then hands each entity its payload. Only the task tracker is optional:
+// off->on starts it empty; on->off ignores its payload. Rebuild fresh observers.
 func (s *Simulation) LoadCheckpoint(path string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
@@ -57,8 +58,6 @@ func (s *Simulation) LoadCheckpoint(path string) error {
 		return err
 	}
 
-	taskcore.DiscardOpenTasks(s.taskTracker)
-
 	for _, entity := range s.entities {
 		checkpointable, ok := entity.(Checkpointable)
 		if !ok {
@@ -67,8 +66,12 @@ func (s *Simulation) LoadCheckpoint(path string) error {
 				entity.Name(), entity)
 		}
 
+		data, found := payloads[entity.Name()]
+		if _, optional := entity.(*taskcore.Checkpoint); optional && !found {
+			data = []byte("{}") // Tracking was off when the checkpoint was saved.
+		}
 		if err := checkpointable.LoadCheckpoint(
-			bytes.NewReader(payloads[entity.Name()]),
+			bytes.NewReader(data),
 		); err != nil {
 			return fmt.Errorf("checkpoint: load entity %q: %w", entity.Name(), err)
 		}
@@ -89,7 +92,7 @@ func (s *Simulation) checkpointPreflight() error {
 	return nil
 }
 
-// checkpointCoverage verifies the saved entity set matches the rebuilt one.
+// checkpointCoverage requires an exact match except for the optional task tracker.
 func (s *Simulation) checkpointCoverage(payloads map[string][]byte) error {
 	rebuilt := make(map[string]struct{}, len(s.entities))
 	for _, entity := range s.entities {
@@ -97,12 +100,12 @@ func (s *Simulation) checkpointCoverage(payloads map[string][]byte) error {
 	}
 
 	for name := range payloads {
-		if _, found := rebuilt[name]; !found {
+		if _, found := rebuilt[name]; !found && name != taskcore.CheckpointName {
 			return fmt.Errorf("checkpoint: saved entity %q is not rebuilt", name)
 		}
 	}
 	for name := range rebuilt {
-		if _, found := payloads[name]; !found {
+		if _, found := payloads[name]; !found && name != taskcore.CheckpointName {
 			return fmt.Errorf("checkpoint: rebuilt entity %q is missing from checkpoint",
 				name)
 		}

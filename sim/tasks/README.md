@@ -84,7 +84,7 @@ by observer locks. Querying Owner/Name on a port is safe.
 Ports have no tracing methods or task IDs. Their four message hooks carry a
 `messaging.Msg` Item and `messaging.PortBufferChange` Detail. Detail reports the
 actual head after the operation, whether it exists, and whether it changed.
-The tracker converts these into buffer tasks keyed by port, message ID, and
+The tracker converts these into buffer tasks keyed by port name, message ID, and
 direction, and resolves a queue milestone only for the actual new head.
 
 ```go
@@ -109,10 +109,18 @@ already in flight or their earlier tags/milestones. Completed basic records
 remain self-contained, so recording can handle an end without retaining its
 start.
 
-Task handles in component State may survive a simulation checkpoint, but the
-tracker's records, buffer identities, and observer histories are not restored.
-A simulation load discards existing tracker correlation; unknown old handles
-are ignored while the simulation's messages and transactions complete normally.
-Tracing continuity across checkpoints, including retained observers, is not a
-contract of this implementation. Use a fresh simulation and observers for a
-fresh recording after restoration. No process-global task registry is used.
+When tracking is enabled, the simulation checkpoints open task records, owner
+names, buffer identities, and request-parent correlation. Loading replaces that
+state; rebuilt port hooks and fresh observers are retained. A restored task's
+end carries its original ID, parent, and start time, even though the observer
+never saw its start. `Detail` is omitted and is nil after restore. Tags,
+milestones, and observer history are not checkpointed or replayed.
+
+The tracker payload is optional: a checkpoint saved with tracking disabled and
+restored with it enabled starts with an empty tracker; old unknown handles and
+buffer messages are ignored. With tracking enabled at save and disabled at
+restore, the payload is ignored. Other entities still require exact checkpoint
+coverage. Restore into a rebuilt simulation with fresh observers. No
+process-global task registry is used. Tracker construction, port wiring,
+subscription freezing, and checkpoint serialization are framework internals,
+not public methods on `tasks.Tracker`.

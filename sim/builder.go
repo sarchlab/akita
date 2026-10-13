@@ -200,5 +200,6 @@ func (b Builder) WithTaskTracking() Builder { b.taskTracking = true; return b }
 func (b Builder) createTaskTracker(s *Simulation) {
 	if b.taskTracking || b.visTracingOnStart || b.monitor != nil {
 		s.taskTracker = taskcore.NewTracker()
+		s.registerEntity(&taskcore.Checkpoint{Tracker: s.taskTracker})
 	}
 }

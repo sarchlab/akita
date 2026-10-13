@@ -59,7 +59,9 @@ func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 }
 
 // VisTracer returns the visualization tracer owned by the simulation.
-// The tracer exists even when monitoring and tracing are disabled.
+// The tracer exists even when monitoring and tracing are disabled. To record
+// tasks with manual StartTracing, enable WithTaskTracking during construction
+// (WithMonitor and WithVisTracingOnStart imply it).
 func (s *Simulation) VisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
@@ -80,6 +82,11 @@ func (s *Simulation) Monitor() Monitor {
 // typed Register methods pass the concrete object, which satisfies Entity, so
 // the inventory holds the live entity itself.
 func (s *Simulation) registerEntity(e Entity) {
+	if e.Name() == taskcore.CheckpointName {
+		if _, ok := e.(*taskcore.Checkpoint); !ok {
+			panic("simulation: TaskTracker is a reserved entity name")
+		}
+	}
 	s.setup.Register(e)
 	name := e.Name()
 

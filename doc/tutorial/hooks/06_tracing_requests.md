@@ -39,4 +39,4 @@ and must not re-enter the Tracker or port buffer operations.
 See the runnable [request example](../../../examples/reqtracing),
 [task tree](../../../examples/tasktree), and [custom observer](../../../examples/customtracer).
 The [task API guide](../../../sim/tasks/README.md) covers buffer admission,
-subscription scope, recording windows, and the deferred checkpoint/history work.
+subscription scope, recording windows, and checkpoint restoration and history limits.

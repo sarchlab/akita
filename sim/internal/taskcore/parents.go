@@ -3,7 +3,7 @@ package taskcore
 import "github.com/sarchlab/akita/v5/sim/messaging"
 
 // requestParents resolves shared message links under the tracker lock. Missing
-// sender records leave ParentID zero, including after a checkpoint restore.
+// sender records leave ParentID zero (for example after a tracking-off checkpoint).
 type requestParents struct {
 	byMessage map[uint64]uint64
 	byTask    map[uint64]uint64

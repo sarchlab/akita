@@ -76,7 +76,10 @@ type segmentTableEntry struct {
 
 // DBTracer is a tracer that can store tasks into a database.
 // DBTracers can connect with different backends so that the tasks can be stored
-// in different types of databases (e.g., CSV files, SQL databases, etc.)
+// in different types of databases (e.g., CSV files, SQL databases, etc.).
+// Starting recording mid-run drops earlier tags/milestones of in-flight tasks.
+// Their ends still carry the original parent and full interval. The same applies
+// to restored tasks observed by a fresh tracer; no start or history is replayed.
 type DBTracer struct {
 	mu         sync.Mutex
 	timeTeller timing.TimeTeller

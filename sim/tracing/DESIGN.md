@@ -11,5 +11,7 @@ is no traceHook dispatch wrapper or generic component hook dependency.
 
 See [the API and contracts](../tasks/README.md). This initial implementation
 prioritizes API correctness; sharding, allocation tuning, eager-argument guards,
-and comparative performance measurements are follow-up work. Snapshots,
-history replay, and checkpoint trace continuity are outside its contract.
+and comparative performance measurements are follow-up work. Snapshots
+and history replay are outside its contract. The simulation checkpoints task
+identity and correlation; fresh observers receive full end records for restored
+tasks without earlier tags, milestones, or Detail.

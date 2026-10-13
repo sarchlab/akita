@@ -1,6 +1,7 @@
 package idealmemcontroller
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -11,22 +12,31 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
 type checkpointTrace struct {
 	tasks.NopObserver
-	starts []tasks.Task
-	ends   []tasks.Task
+	starts, ends []tasks.Task
+	milestones   []tasks.Milestone
 }
 
-func (r *checkpointTrace) TaskStarted(task tasks.Task) { r.starts = append(r.starts, task) }
-func (r *checkpointTrace) TaskEnded(task tasks.Task)   { r.ends = append(r.ends, task) }
+func (r *checkpointTrace) TaskStarted(task tasks.Task)      { r.starts = append(r.starts, task) }
+func (r *checkpointTrace) TaskEnded(task tasks.Task)        { r.ends = append(r.ends, task) }
+func (r *checkpointTrace) MilestoneAdded(m tasks.Milestone) { r.milestones = append(r.milestones, m) }
 
-func buildTracingCheckpoint(t *testing.T, name string, rec *checkpointTrace) (*sim.Simulation, *Comp) {
+type checkpointClock struct{}
+
+func (checkpointClock) Handle(timing.Event) {}
+
+func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*sim.Simulation, *Comp) {
 	t.Helper()
-	s := sim.MakeBuilder().WithTaskTracking().WithoutSourceRecording().
-		WithOutputFileName(filepath.Join(t.TempDir(), name)).Build()
+	b := sim.MakeBuilder().WithoutSourceRecording().WithOutputFileName(filepath.Join(t.TempDir(), "trace"))
+	if enabled {
+		b = b.WithTaskTracking()
+	}
+	s := b.Build()
 	t.Cleanup(s.Terminate)
 	spec := Definition.DefaultSpec
 	spec.Latency, spec.Width = 5, 1
@@ -37,54 +47,111 @@ func buildTracingCheckpoint(t *testing.T, name string, rec *checkpointTrace) (*s
 	c.BindPort("Control", twowaybuffered.NewPort(8, 8))
 	(&noopConn{}).BindPort(c.Ports.Top)
 	(&noopConn{}).BindPort(c.Ports.Control)
+	s.Engine().RegisterHandler("Clock", checkpointClock{})
 	require.NoError(t, s.Initialize())
-	c.TaskTracker().Subscribe(rec, c)
+	if enabled {
+		s.Tasks().Subscribe(rec, c)
+	}
 	return s, c
 }
 
-func TestCheckpointRestoresSimulationWithoutTaskHistory(t *testing.T) {
-	rec := &checkpointTrace{}
-	src, c := buildTracingCheckpoint(t, "source", rec)
-	req := messaging.Msg{ID: src.NewID(), Src: "Agent", Dst: c.Ports.Top.AsRemote(),
-		Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4}}
-	c.Ports.Top.Deliver(req)
-	modelingtest.Tick(c)
-	require.Len(t, c.State.InflightTransactions, 1)
-	recvID := c.State.InflightTransactions[0].RecvTaskID
-	require.NotZero(t, recvID)
-	require.NotEqual(t, req.ID, recvID)
-	queued := req
-	queued.ID = src.NewID()
-	c.Ports.Top.Deliver(queued)
-	incomingID := rec.starts[len(rec.starts)-1].ID
-	c.Ports.Top.Send(messaging.Msg{ID: src.NewID(), Src: c.Ports.Top.AsRemote(), Dst: "Agent",
-		RspTo: req.ID, Payload: memprotocol.WriteDoneRsp{}})
-	outgoingID := rec.starts[len(rec.starts)-1].ID
-	require.Equal(t, tasks.KindOutgoingBuffer, rec.starts[len(rec.starts)-1].Kind)
-	checkpoint := filepath.Join(t.TempDir(), "mid-request.tar.gz")
-	require.NoError(t, src.SaveCheckpoint(checkpoint))
-	dst, restored := buildTracingCheckpoint(t, "restored", rec)
-	require.NoError(t, dst.LoadCheckpoint(checkpoint))
-	require.Equal(t, recvID, restored.State.InflightTransactions[0].RecvTaskID)
-	before := len(rec.starts)
-	_, present := restored.Ports.Top.RetrieveOutgoing()
-	require.True(t, present)
-	_, present = restored.Ports.Top.RetrieveIncoming()
-	require.True(t, present)
-	require.Len(t, rec.starts, before, "restoration/retrieval must not recreate buffer tasks")
-	for range 8 {
-		modelingtest.Tick(restored)
+func TestCheckpointTaskContinuity(t *testing.T) {
+	for _, savedOn := range []bool{false, true} {
+		for _, restoredOn := range []bool{false, true} {
+			t.Run(fmt.Sprintf("saved_%t_restored_%t", savedOn, restoredOn), func(t *testing.T) {
+				sourceEvents := &checkpointTrace{}
+				src, c := buildTracingCheckpoint(t, savedOn, sourceEvents)
+				src.Engine().Schedule(timing.MakeEventBase(src.NewID(), 10, "Clock"))
+				require.NoError(t, src.Engine().Run())
+				// Detail cannot be encoded as JSON and must never be checkpointed.
+				root := tasks.Start(c, tasks.StartInfo{Kind: "work", What: "root", Detail: func() {}})
+				req := messaging.Msg{ID: src.NewID(), Src: "Agent", Dst: c.Ports.Top.AsRemote(),
+					Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4}}
+				senderID := tasks.StartReqOut(c, req, root)
+				c.Ports.Top.Deliver(req)
+				modelingtest.Tick(c)
+				require.Len(t, c.State.InflightTransactions, 1)
+				recvID := c.State.InflightTransactions[0].RecvTaskID
+				queued := req
+				queued.ID = src.NewID()
+				c.Ports.Top.Deliver(queued)
+				priorRsp := messaging.Msg{ID: src.NewID(), Src: c.Ports.Top.AsRemote(), Dst: "Agent",
+					RspTo: req.ID, Payload: memprotocol.WriteDoneRsp{}}
+				c.Ports.Top.Send(priorRsp)
+				original := map[uint64]tasks.Task{}
+				var incomingID, outgoingID uint64
+				for _, task := range sourceEvents.starts {
+					task.Detail = nil
+					original[task.ID] = task
+					if task.MsgID == queued.ID {
+						incomingID = task.ID
+					}
+					if task.MsgID == priorRsp.ID {
+						outgoingID = task.ID
+					}
+				}
+				checkpoint := filepath.Join(t.TempDir(), "mid-request.tar.gz")
+				require.NoError(t, src.SaveCheckpoint(checkpoint))
+				fresh := &checkpointTrace{}
+				dst, restored := buildTracingCheckpoint(t, restoredOn, fresh)
+				// Loading must replace any setup-time tracker state, including in off->on mode.
+				for range 100 {
+					dst.NewID()
+				}
+				discardedID := tasks.Start(restored, tasks.StartInfo{Kind: "work", What: "discard-on-load"})
+				require.NoError(t, dst.LoadCheckpoint(checkpoint))
+				require.Equal(t, recvID, restored.State.InflightTransactions[0].RecvTaskID)
+				fresh.starts, fresh.ends, fresh.milestones = nil, nil, nil
+				tasks.End(restored, tasks.EndInfo{ID: discardedID})
+				require.Empty(t, fresh.ends)
+
+				tasks.AddBufferMilestone(restored, restored.Ports.Top, queued, tasks.Milestone{What: "admission"})
+				if savedOn && restoredOn {
+					require.Len(t, fresh.milestones, 1)
+					require.Equal(t, incomingID, fresh.milestones[0].TaskID)
+				} else {
+					require.Empty(t, fresh.milestones)
+				}
+				_, ok := restored.Ports.Top.RetrieveIncoming()
+				require.True(t, ok)
+				_, ok = restored.Ports.Top.RetrieveOutgoing()
+				require.True(t, ok)
+				require.Empty(t, fresh.starts, "restoration/retrieval must not fabricate starts")
+				for range 8 {
+					modelingtest.Tick(restored)
+				}
+				require.Empty(t, restored.State.InflightTransactions)
+				rsp, ok := restored.Ports.Top.RetrieveOutgoing()
+				require.True(t, ok)
+				require.Equal(t, req.ID, rsp.RspTo)
+				require.Equal(t, []byte{0, 0, 0, 0}, rsp.Payload.(memprotocol.DataReadyRsp).Data)
+				if restoredOn {
+					require.Len(t, fresh.starts, 1)
+					expectedParent := uint64(0)
+					if savedOn {
+						expectedParent = senderID
+					}
+					require.Equal(t, expectedParent, fresh.starts[0].ParentID, "response must resolve the saved sender")
+				}
+				tasks.FinalizeReq(restored, senderID)
+				tasks.End(restored, tasks.EndInfo{ID: root})
+				ends := map[uint64]tasks.Task{}
+				for _, task := range fresh.ends {
+					ends[task.ID] = task
+				}
+				for _, id := range []uint64{recvID, incomingID, outgoingID, senderID, root} {
+					if savedOn && restoredOn {
+						want := original[id]
+						want.EndTime = dst.Engine().CurrentTime()
+						require.Equal(t, want, ends[id], "restored complete end for task %d", id)
+						require.Equal(t, timing.VTimeInPicoSec(10), ends[id].StartTime)
+					} else {
+						require.NotContains(t, ends, id)
+					}
+				}
+				t.Logf("tracking %t->%t: restored request returned correct data; original req_in=%d, buffer=%d, sender=%d; observed %d ends",
+					savedOn, restoredOn, recvID, incomingID, senderID, len(ends))
+			})
+		}
 	}
-	require.Empty(t, restored.State.InflightTransactions)
-	for _, end := range rec.ends {
-		require.NotContains(t, []uint64{recvID, incomingID, outgoingID}, end.ID,
-			"restore must not fabricate a completion without its original task record")
-	}
-	rsp, ok := restored.Ports.Top.RetrieveOutgoing()
-	require.True(t, ok)
-	require.Equal(t, req.ID, rsp.RspTo)
-	require.Equal(t, []byte{0, 0, 0, 0}, rsp.Payload.(memprotocol.DataReadyRsp).Data)
-	t.Logf("restored req_in=%d, incoming_buffer=%d, outgoing_buffer=%d; "+
-		"ignored unknown task handles and returned read data",
-		recvID, incomingID, outgoingID)
 }

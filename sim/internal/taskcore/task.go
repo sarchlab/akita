@@ -19,7 +19,8 @@ type EndInfo struct{ ID uint64 }
 
 // Task is the complete basic record delivered at start and end. EndTime is
 // populated at end. Tags and milestones are separate events, not replayed history.
-// Detail is borrowed read-only data; observers must not mutate it.
+// Detail is borrowed read-only data; observers must not mutate it. It is not
+// checkpointed and is nil for restored tasks.
 type Task struct {
 	ID        uint64                `json:"id"`
 	MsgID     uint64                `json:"msg_id"`

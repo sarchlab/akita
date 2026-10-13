@@ -6,7 +6,7 @@ import (
 )
 
 type bufferKey struct {
-	port     messaging.Port
+	port     string
 	msgID    uint64
 	incoming bool
 }
@@ -27,10 +27,10 @@ func RegisterPort(t *Tracker, p messaging.Port) {
 	if t.frozen {
 		panic("tasks: ports must be registered before running")
 	}
-	if t.ports[p] {
+	if t.ports[p.Name()] {
 		return
 	}
-	t.ports[p] = true
+	t.ports[p.Name()] = true
 	p.AcceptHook(&bufferHook{tracker: t})
 }
 
@@ -54,7 +54,7 @@ func (h *bufferHook) Func(ctx hooking.HookCtx) {
 	t := h.tracker
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	key := bufferKey{p, msg.ID, incoming}
+	key := bufferKey{p.Name(), msg.ID, incoming}
 	if enqueue {
 		kind, direction := KindOutgoingBuffer, ".outgoing"
 		if incoming {
@@ -67,7 +67,7 @@ func (h *bufferHook) Func(ctx hooking.HookCtx) {
 		delete(t.buffers, key)
 	}
 	if change.HeadChanged && change.HasHead {
-		id := t.buffers[bufferKey{p, change.Head.ID, incoming}]
+		id := t.buffers[bufferKey{p.Name(), change.Head.ID, incoming}]
 		t.milestone(o, Milestone{TaskID: id, Kind: MilestoneKindQueue, What: p.Name()})
 	}
 }
@@ -82,6 +82,6 @@ func AddBufferMilestone(o Owner, p messaging.Port, msg messaging.Msg, m Mileston
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	m.TaskID = t.buffers[bufferKey{p, msg.ID, true}]
+	m.TaskID = t.buffers[bufferKey{p.Name(), msg.ID, true}]
 	t.milestone(o, m)
 }

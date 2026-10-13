@@ -2,8 +2,6 @@ package taskcore
 
 import (
 	"sync"
-
-	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 type subscription struct {
@@ -16,7 +14,8 @@ type entry struct {
 }
 
 // Tracker owns the open tasks and message correlation for one simulation.
-// It is opt-in, is not checkpointed, and does not retain event history.
+// It is opt-in and does not retain event history. Simulation wiring checkpoints
+// its open records and correlation, excluding Detail and observer state.
 // Its initial implementation serializes notifications under one lock; observers
 // must still support the concurrency contract so storage can be sharded later.
 type Tracker struct {
@@ -26,14 +25,14 @@ type Tracker struct {
 	open          map[uint64]*entry
 	parents       requestParents
 	buffers       map[bufferKey]uint64
-	ports         map[messaging.Port]bool
+	ports         map[string]bool
 }
 
 // NewTracker creates a service for a simulation. Most callers enable it through
 // sim.Builder.WithTaskTracking rather than constructing it themselves.
 func NewTracker() *Tracker {
 	return &Tracker{open: make(map[uint64]*entry),
-		buffers: make(map[bufferKey]uint64), ports: make(map[messaging.Port]bool)}
+		buffers: make(map[bufferKey]uint64), ports: make(map[string]bool)}
 }
 
 // Subscribe registers an observer before the first engine run. With no owners
@@ -65,19 +64,6 @@ func FreezeSubscriptions(t *Tracker) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.frozen = true
-}
-
-// DiscardOpenTasks drops non-checkpointed correlation before loading simulation
-// state. No completion is fabricated and observer history is not reconstructed.
-func DiscardOpenTasks(t *Tracker) {
-	if t == nil {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	clear(t.open)
-	clear(t.buffers)
-	t.parents = requestParents{}
 }
 
 func (t *Tracker) start(o Owner, info StartInfo) uint64 {

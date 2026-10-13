@@ -106,11 +106,17 @@ IDs remain simulation identities with separate tracing handles. Port checkpoint
 entries are messages again, without the temporary tracing version/ID fields.
 Pre-v5 checkpoint formats should be recreated after upgrading.
 
-Tracker state and observer history are not checkpointed. Restored unknown task
-handles are ignored; simulation transactions still complete. Trace continuity,
-snapshots, and historical backfill are deferred. Recording started mid-run can
-consume complete end records but does not promise all in-flight tasks or their
-earlier events. Daisen's stored task/parent schema is unchanged, and its frontend
-ID types are numeric. MGPUSim migration follows this Akita change separately.
+Tracker open records, owner names, buffer identities, and request-parent
+correlation are checkpointed. Restored tasks retain IDs, parents, and original
+start times; `Detail` and observer histories are omitted. Rebuild fresh observers.
+An off-to-on restore starts with an empty tracker and ignores unknown handles;
+an on-to-off restore ignores the optional tracker payload. All other entity
+coverage checks remain strict.
+
+Recording started mid-run drops earlier tags and milestones of tasks already
+in flight. When such a task ends during recording, its original parent and full
+interval are recorded without replaying its history. Open-task snapshots remain
+deferred. Daisen's stored task/parent schema is unchanged, and its frontend ID
+types are numeric. MGPUSim migration follows this Akita change separately.
 
 See [tasks](../sim/tasks/README.md) and [observers](../sim/tracing/README.md).
