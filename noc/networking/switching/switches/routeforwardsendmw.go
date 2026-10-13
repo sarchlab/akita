@@ -169,7 +169,7 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 
 			// The flit has now left the switch; close the in-switch "flit"
 			// task that opened when it entered the receive pipeline.
-			tasks.End(m.comp, tasks.EndInfo{ID: item.TaskID})
+			tasks.EndTask(m.comp, tasks.EndInfo{ID: item.TaskID})
 
 			madeProgress = true
 		}

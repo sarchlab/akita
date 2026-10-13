@@ -139,7 +139,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
 	tasks.EndReqIn(m.comp, walking.RecvTaskID)
 
@@ -201,7 +201,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 	// Open the walk subtask spanning the page-table-walk latency, a child of the
 	// req_in, so the ".walk" work milestone emitted at walk completion has a
 	// corresponding bar (no bare work interval).
-	ts.WalkTaskID = tasks.Start(m.comp, tasks.StartInfo{
+	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",

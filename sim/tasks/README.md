@@ -23,17 +23,17 @@ needed. The returned Tracker must belong to the same simulation as the clock
 and ID allocator.
 
 ```go
-id := tasks.Start(comp, tasks.StartInfo{
+id := tasks.StartTask(comp, tasks.StartInfo{
     ParentID: parent, Kind: tasks.KindPipeline, What: comp.Name() + ".bank",
 })
 tasks.AddTag(comp, tasks.Tag{TaskID: id, What: "read-hit"})
 tasks.AddMilestone(comp, tasks.Milestone{
     TaskID: id, Kind: tasks.MilestoneKindWork, What: "bank",
 })
-tasks.End(comp, tasks.EndInfo{ID: id})
+tasks.EndTask(comp, tasks.EndInfo{ID: id})
 ```
 
-`Start` allocates the ID and returns it; callers store it in component State.
+`StartTask` allocates the ID and returns it; callers store it in component State.
 `EndInfo` currently contains only `ID`, leaving room for optional fields.
 Times are always stamped from the owner. Zero means untracked. Zero or unknown
 IDs on end/tag/milestone are ignored, including after checkpoint restoration.
@@ -51,7 +51,7 @@ tasks.EndReqOut(comp, sendID)
 
 Retain each returned handle for milestones, children, and completion. On reset,
 close request tasks with `EndReqIn` / `EndReqOut` and other work with
-`End(owner, EndInfo{ID: id})`; zero and unknown handles are harmless.
+`EndTask(owner, EndInfo{ID: id})`; zero and unknown handles are harmless.
 Messages are unchanged. The tracker resolves request, response
 buffer, and NoC transport parents once, before any observer filtering. Unknown
 parents are zero; they are not filled in retroactively. A task can start at one

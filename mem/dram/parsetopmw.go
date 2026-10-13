@@ -77,7 +77,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 
 	for i := range ts.SubTransactions {
 		st := &ts.SubTransactions[i]
-		st.TaskID = tasks.Start(m.comp, tasks.StartInfo{
+		st.TaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 			ParentID: ts.RecvTaskID,
 			Kind:     "sub-trans",
 			What:     "sub-trans",

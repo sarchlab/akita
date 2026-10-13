@@ -60,7 +60,7 @@ func (s *bankStage) extractFromBuf() bool {
 	// pipeline, so its bank read/write gets its own child bar under the req_in,
 	// mirroring the directory pipeline subtask. The bank latency then shows as
 	// real work rather than an unexplained gap before completion.
-	trans.BankTaskID = tasks.Start(s.cache.comp, tasks.StartInfo{
+	trans.BankTaskID = tasks.StartTask(s.cache.comp, tasks.StartInfo{
 		ParentID: trans.RecvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     s.cache.comp.Name() + ".bank",
@@ -239,5 +239,5 @@ func (s *bankStage) finishBank(trans *transactionState) {
 		Kind:   tasks.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})
-	tasks.End(s.cache.comp, tasks.EndInfo{ID: trans.BankTaskID})
+	tasks.EndTask(s.cache.comp, tasks.EndInfo{ID: trans.BankTaskID})
 }

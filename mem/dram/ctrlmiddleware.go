@@ -190,7 +190,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 		for _, sub := range t.SubTransactions {
 			if !sub.Completed {
-				tasks.End(m.comp, tasks.EndInfo{ID: sub.TaskID})
+				tasks.EndTask(m.comp, tasks.EndInfo{ID: sub.TaskID})
 			}
 		}
 	}

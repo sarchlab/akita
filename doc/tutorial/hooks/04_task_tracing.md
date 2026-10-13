@@ -11,12 +11,12 @@ busy := tracing.NewBusyTimeTracer(func(t tasks.Task) bool { return t.Kind == "jo
 s.TaskTracker().Subscribe(busy, worker)
 ```
 
-The worker starts a job with `tasks.Start` and stores the returned ID in State:
+The worker starts a job with `tasks.StartTask` and stores the returned ID in State:
 
 ```go
-state.CurTaskID = tasks.Start(comp, tasks.StartInfo{Kind: "job", What: "compute"})
+state.CurTaskID = tasks.StartTask(comp, tasks.StartInfo{Kind: "job", What: "compute"})
 // Later, after doing the work:
-tasks.End(comp, tasks.EndInfo{ID: state.CurTaskID})
+tasks.EndTask(comp, tasks.EndInfo{ID: state.CurTaskID})
 ```
 
 The helper allocates an independent task ID and stamps simulated time. It returns

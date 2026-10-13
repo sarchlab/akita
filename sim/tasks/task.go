@@ -3,7 +3,7 @@ package tasks
 
 import "github.com/sarchlab/akita/v5/sim/timing"
 
-// StartInfo describes work to begin. Start allocates the ID and stamps the time.
+// StartInfo describes work to begin. StartTask allocates the ID and stamps the time.
 type StartInfo struct {
 	MsgID    uint64
 	ParentID uint64
@@ -13,7 +13,7 @@ type StartInfo struct {
 	Detail   any
 }
 
-// EndInfo identifies work to complete. End stamps the time from the owner.
+// EndInfo identifies work to complete. EndTask stamps the time from the owner.
 type EndInfo struct{ ID uint64 }
 
 // Task is the complete basic record delivered at start and end. EndTime is

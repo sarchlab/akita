@@ -177,7 +177,7 @@ func (m *incomingMW) logFlitE2EEnd(flit messaging.Msg) {
 		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tasks.End(m.comp, tasks.EndInfo{ID: taskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: taskID})
 }
 
 // logMsgE2EEnd closes the per-message msg_e2e task once the message is
@@ -194,5 +194,5 @@ func (m *incomingMW) logMsgE2EEnd(msgTaskID uint64) {
 		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tasks.End(m.comp, tasks.EndInfo{ID: msgTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: msgTaskID})
 }

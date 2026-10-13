@@ -202,11 +202,11 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		}
 
 		if trans.DirPipelineTaskID != 0 {
-			tasks.End(comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
+			tasks.EndTask(comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
 		}
 
 		if trans.BankTaskID != 0 {
-			tasks.End(comp, tasks.EndInfo{ID: trans.BankTaskID})
+			tasks.EndTask(comp, tasks.EndInfo{ID: trans.BankTaskID})
 		}
 	}
 }

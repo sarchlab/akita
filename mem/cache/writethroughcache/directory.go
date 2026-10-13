@@ -41,7 +41,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 
 		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		trans.DirPipelineTaskID = tasks.Start(d.cache.comp, tasks.StartInfo{
+		trans.DirPipelineTaskID = tasks.StartTask(d.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     d.cache.comp.Name() + ".dir_pipeline",
@@ -90,7 +90,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 			break
 		}
 
-		tasks.End(d.cache.comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
+		tasks.EndTask(d.cache.comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
 		madeProgress = true
 	}
 

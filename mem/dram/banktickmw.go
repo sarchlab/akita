@@ -136,6 +136,6 @@ func (m *bankTickMW) endSubTransTasks(ids []uint64) {
 		return
 	}
 	for _, id := range ids {
-		tasks.End(m.comp, tasks.EndInfo{ID: id})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: id})
 	}
 }

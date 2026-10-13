@@ -78,7 +78,7 @@ func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 			what = typ.String()
 		}
 	}
-	entry.TaskID = tasks.Start(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
+	entry.TaskID = tasks.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
 		What: what, Location: p.name + direction, Detail: msg})
 	entry.LastMilestoneTime = p.CurrentTime()
 	return entry
@@ -129,5 +129,5 @@ func (p *Port) endBufferTask(entry *bufferEntry, incoming bool) {
 		return
 	}
 	p.bufferMilestone(entry, p.waitReason(messaging.WaitReason{}, incoming))
-	tasks.End(p, tasks.EndInfo{ID: entry.TaskID})
+	tasks.EndTask(p, tasks.EndInfo{ID: entry.TaskID})
 }

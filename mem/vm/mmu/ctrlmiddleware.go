@@ -148,7 +148,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
 		tasks.EndReqIn(m.comp, walking.RecvTaskID)
 		if walking.WalkTaskID != 0 {
-			tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+			tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 		}
 	}
 }

@@ -651,7 +651,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 func (ds *directoryStage) startDirPipeline(transIdx int) {
 	trans := &ds.cache.comp.State.Transactions[transIdx]
 
-	trans.DirPipelinePID = tasks.Start(ds.cache.comp, tasks.StartInfo{
+	trans.DirPipelinePID = tasks.StartTask(ds.cache.comp, tasks.StartInfo{
 		ParentID: trans.RecvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     ds.cache.comp.Name() + ".dir_pipeline",
@@ -669,7 +669,7 @@ func (ds *directoryStage) popDirPostBuf() {
 	idx, _ := next.DirPostPipelineBuf.Peek()
 	trans := &next.Transactions[idx]
 	if trans.DirPipelinePID != 0 {
-		tasks.End(ds.cache.comp, tasks.EndInfo{ID: trans.DirPipelinePID})
+		tasks.EndTask(ds.cache.comp, tasks.EndInfo{ID: trans.DirPipelinePID})
 		trans.DirPipelinePID = 0
 	}
 

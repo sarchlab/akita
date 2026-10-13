@@ -13,8 +13,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Spec is the worker's configuration.
@@ -75,7 +75,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 		// Start a new job and open a tracing task for it.
 		s.NextID++
-		s.CurTaskID = tasks.Start(m.comp, tasks.StartInfo{
+		s.CurTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 			Kind: "job",
 			What: fmt.Sprintf("job-%d", s.NextID),
 		})
@@ -90,7 +90,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 	// Working: count down, and close the task when the job finishes.
 	s.CountDown--
 	if s.CountDown == 0 {
-		tasks.End(m.comp, tasks.EndInfo{ID: s.CurTaskID})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: s.CurTaskID})
 		s.Working = false
 	}
 

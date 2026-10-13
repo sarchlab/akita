@@ -71,7 +71,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// ID rides on the item through the pipeline and is closed at finalize.
 		recvTaskID := tasks.StartReqIn(m.comp, msg)
 
-		pipelineTaskID := tasks.Start(m.comp, tasks.StartInfo{
+		pipelineTaskID := tasks.StartTask(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",

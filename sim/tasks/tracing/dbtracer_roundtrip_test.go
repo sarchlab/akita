@@ -65,12 +65,12 @@ func writeRoundTripTrace(t *testing.T) string {
 	tracer.StartTracing()
 
 	domain.now = 10
-	tasks.Start(domain, tasks.StartInfo{Kind: "req_in", What: "ReadReq"})
+	tasks.StartTask(domain, tasks.StartInfo{Kind: "req_in", What: "ReadReq"})
 	domain.now = 12
 	tasks.AddTag(domain, tasks.Tag{TaskID: 1, What: "read-hit"})
 	tasks.AddMilestone(domain, tasks.Milestone{TaskID: 1, Kind: tasks.MilestoneKindQueue, What: "queued"})
 	domain.now = 20
-	tasks.End(domain, tasks.EndInfo{ID: 1})
+	tasks.EndTask(domain, tasks.EndInfo{ID: 1})
 
 	tracer.StopTracing()
 	tracer.Terminate()

@@ -121,7 +121,7 @@ func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		trans.BankPID = tasks.Start(s.cache.comp, tasks.StartInfo{
+		trans.BankPID = tasks.StartTask(s.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     s.cache.comp.Name() + ".bank",
@@ -150,7 +150,7 @@ func (s *bankStage) finishBank(trans *transactionState) {
 		What:   s.cache.comp.Name() + ".bank",
 	})
 	if trans.BankPID != 0 {
-		tasks.End(s.cache.comp, tasks.EndInfo{ID: trans.BankPID})
+		tasks.EndTask(s.cache.comp, tasks.EndInfo{ID: trans.BankPID})
 		trans.BankPID = 0
 	}
 }

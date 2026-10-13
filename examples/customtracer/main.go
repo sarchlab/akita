@@ -73,7 +73,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 		}
 
 		s.NextID++
-		s.CurTaskID = tasks.Start(m.comp, tasks.StartInfo{
+		s.CurTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 			Kind: "job",
 			What: fmt.Sprintf("job-%d", s.NextID),
 		})
@@ -88,7 +88,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 	s.CountDown--
 	if s.CountDown == 0 {
-		tasks.End(m.comp, tasks.EndInfo{ID: s.CurTaskID})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: s.CurTaskID})
 		s.Working = false
 	}
 

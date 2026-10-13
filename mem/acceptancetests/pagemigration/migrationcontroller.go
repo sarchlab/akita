@@ -301,7 +301,7 @@ func (m *migMW) beginMigration() {
 
 	// Open a parent task spanning the whole migration so the control phases nest
 	// under it in the trace.
-	state.MigTaskID = tasks.Start(m.ctrl, tasks.StartInfo{
+	state.MigTaskID = tasks.StartTask(m.ctrl, tasks.StartInfo{
 		Kind:     "migration",
 		What:     "migration",
 		Location: m.ctrl.Name(),
@@ -317,11 +317,11 @@ func (m *migMW) startPhaseTask(phase migPhase) {
 	state := &m.ctrl.State
 
 	if state.PhaseTaskID != 0 {
-		tasks.End(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
+		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
 	}
 
 	name := phaseName(phase)
-	state.PhaseTaskID = tasks.Start(m.ctrl, tasks.StartInfo{
+	state.PhaseTaskID = tasks.StartTask(m.ctrl, tasks.StartInfo{
 		ParentID: state.MigTaskID,
 		Kind:     "migration_step",
 		What:     name,
@@ -511,11 +511,11 @@ func (m *migMW) finishMigration() {
 
 	// Close the final phase task and the parent migration task.
 	if state.PhaseTaskID != 0 {
-		tasks.End(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
+		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
 		state.PhaseTaskID = 0
 	}
 	if state.MigTaskID != 0 {
-		tasks.End(m.ctrl, tasks.EndInfo{ID: state.MigTaskID})
+		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.MigTaskID})
 		state.MigTaskID = 0
 	}
 

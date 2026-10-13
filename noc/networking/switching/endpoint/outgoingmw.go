@@ -194,7 +194,7 @@ func (m *outgoingMW) prepareFlits() bool {
 // closes once the message is reassembled. It is the parent of the message's
 // flit_e2e tasks.
 func (m *outgoingMW) logMsgE2EStart(meta messaging.Msg) uint64 {
-	return tasks.Start(m.comp, tasks.StartInfo{
+	return tasks.StartTask(m.comp, tasks.StartInfo{
 		MsgID:  meta.ID,
 		Kind:   tasks.KindMsgTransport,
 		What:   "msg_e2e",
@@ -207,7 +207,7 @@ func (m *outgoingMW) logFlitE2EStart(flit *messaging.Msg) {
 		return
 	}
 	part := flit.Payload.(packetization.Flit)
-	part.FlitTaskID = tasks.Start(m.comp, tasks.StartInfo{
+	part.FlitTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		MsgID:    flit.ID,
 		ParentID: part.MsgTaskID,
 		Kind:     tasks.KindFlitTransport,

@@ -163,7 +163,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		// still open. (Remote walks in RemoteMemReqs already closed theirs in
 		// processRemoteMemReq.)
 		if walking.WalkTaskID != 0 {
-			tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+			tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 		}
 	}
 

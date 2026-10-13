@@ -170,7 +170,7 @@ func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {
 	})
 
 	if pipelineTaskID != 0 {
-		tasks.End(m.comp, tasks.EndInfo{ID: pipelineTaskID})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: pipelineTaskID})
 	}
 }
 

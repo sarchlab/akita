@@ -6,10 +6,10 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
-// Start begins work and returns an independent task ID to retain in component
+// StartTask begins work and returns an independent task ID to retain in component
 // State. Disabled tracking returns zero without consulting the clock or ID
 // generator. Simulation behavior must not depend on numeric ID values.
-func Start(o Owner, info StartInfo) uint64 {
+func StartTask(o Owner, info StartInfo) uint64 {
 	t := o.TaskTracker()
 	if t == nil {
 		return 0
@@ -19,9 +19,9 @@ func Start(o Owner, info StartInfo) uint64 {
 	return t.start(o, info)
 }
 
-// End completes a task, including one started by another owner in the same
+// EndTask completes a task, including one started by another owner in the same
 // simulation. Zero and unknown IDs are ignored (for example after restore).
-func End(o Owner, info EndInfo) {
+func EndTask(o Owner, info EndInfo) {
 	t := o.TaskTracker()
 	if t == nil || info.ID == 0 {
 		return
@@ -67,7 +67,7 @@ func StartReqOut(o Owner, msg messaging.Msg, parent uint64) uint64 {
 	if o.TaskTracker() == nil {
 		return 0
 	}
-	return Start(o, StartInfo{MsgID: msg.ID, ParentID: parent, Kind: KindReqOut, What: msgTypeName(msg), Detail: msg})
+	return StartTask(o, StartInfo{MsgID: msg.ID, ParentID: parent, Kind: KindReqOut, What: msgTypeName(msg), Detail: msg})
 }
 
 // StartReqIn begins the receiver's handling task; retain its ID until EndReqIn.
@@ -75,16 +75,16 @@ func StartReqIn(o Owner, msg messaging.Msg) uint64 {
 	if o.TaskTracker() == nil {
 		return 0
 	}
-	return Start(o, StartInfo{MsgID: msg.ID, Kind: KindReqIn, What: msgTypeName(msg), Detail: msg})
+	return StartTask(o, StartInfo{MsgID: msg.ID, Kind: KindReqIn, What: msgTypeName(msg), Detail: msg})
 }
 
 // EndReqIn ends receiver work using the ID returned by StartReqIn.
 // Zero and unknown IDs are ignored, including repeated ends during reset.
-func EndReqIn(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
+func EndReqIn(o Owner, id uint64) { EndTask(o, EndInfo{ID: id}) }
 
 // EndReqOut ends sender work using the ID returned by StartReqOut.
 // Zero and unknown IDs are ignored, including repeated ends during reset.
-func EndReqOut(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
+func EndReqOut(o Owner, id uint64) { EndTask(o, EndInfo{ID: id}) }
 
 func msgTypeName(msg messaging.Msg) string {
 	t := reflect.TypeOf(msg.Payload)

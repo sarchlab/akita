@@ -89,17 +89,19 @@ call `s.VisTracer().StartTracing()` to begin recording. Components receive the
 service through `TaskTracker()`; tracking is nil when disabled. Built-in observers
 move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
+The shared `LeakRecorder` test helper lives in module-root `internal/tracingtest`;
+it is not part of the public v5 API.
 Task types and their implementation live directly in `sim/tasks`, with private
 state and helpers. Framework assembly uses the exported `NewTracker`,
 `Tracker.SaveCheckpoint`,
 and `Tracker.LoadCheckpoint` APIs. Ordinary applications use the simulation
 builder; checkpoint entity names and optional archive membership stay in `sim`.
 
-- Replace `StartTask` with `id := tasks.Start(owner, tasks.StartInfo{...})`.
+- Replace `tracing.StartTask` with `id := tasks.StartTask(owner, tasks.StartInfo{...})`.
   It allocates an independent task ID; do not pass a caller-generated ID.
 - Use `StartReqOut` before `port.Send`, and `StartReqIn` on admission. Store each
   returned handle in State. End with `EndReqOut`, `EndReqIn`, or
-  `End(owner, EndInfo{ID: id})`. Reset paths use the same end commands;
+  `EndTask(owner, EndInfo{ID: id})`. Reset paths use the same end commands;
   `EndOnReset` is removed because it had no distinct behavior.
 - Use `tasks.Tag`, `tasks.Milestone`, `AddTag`, and `AddMilestone`. Replace buffer
   task lookups with `port.AddIncomingMilestone(tasks.Reason(kind, what))` at
@@ -118,10 +120,12 @@ builder; checkpoint entity names and optional archive membership stay in `sim`.
   Generic message hooks carry Msg in Item and nil Detail. Hooks run under the
   port lock and must not call buffer operations; Owner/Name are safe.
 
-Request helper migration (end commands take the stored task ID):
+Task helper migration (end commands take the stored task ID):
 
 | Previous helper | New helper |
 |---|---|
+| `tracing.StartTask` / `tasks.Start` | `tasks.StartTask` |
+| `tracing.EndTask` / `tasks.End` | `tasks.EndTask` |
 | `TraceReqReceive` | `StartReqIn` |
 | `TraceReqComplete` / `CompleteReq` | `EndReqIn` |
 | `TraceReqInitiate` | `StartReqOut` |

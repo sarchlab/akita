@@ -50,7 +50,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			flit := itemI
-			taskID := tasks.Start(m.comp, tasks.StartInfo{
+			taskID := tasks.StartTask(m.comp, tasks.StartInfo{
 				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
 				Kind:     "flit",
 				What:     "flit_inside_sw",

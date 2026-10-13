@@ -125,7 +125,7 @@ cd customhook && go run main.go
 ### tracing — Measuring Work with Tracing Tasks
 
 A single worker component wraps each job in a tracing task
-(`tasks.Start` / `tasks.End`). A `BusyTimeTracer` and an
+(`tasks.StartTask` / `tasks.EndTask`). A `BusyTimeTracer` and an
 `AverageTimeTracer`, attached with `Tracker.Subscribe`, report how long
 the worker was busy and how long an average job took.
 

@@ -102,7 +102,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 	// req_in, so the ".walk" work milestone has a corresponding bar. It is closed
 	// on the local-hit (doPageWalkHit) and remote-fetch (processRemoteMemReq)
 	// exits.
-	ts.WalkTaskID = tasks.Start(m.comp, tasks.StartInfo{
+	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",
@@ -209,7 +209,7 @@ func (m *walkMW) processRemoteMemReq(
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
@@ -261,7 +261,7 @@ func (m *walkMW) doPageWalkHit(
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
 	tasks.EndReqIn(m.comp, walking.RecvTaskID)
 

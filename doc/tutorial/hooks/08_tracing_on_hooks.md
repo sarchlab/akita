@@ -1,7 +1,7 @@
 # Tasks and generic hooks
 
 Task observers subscribe to the simulation's Tracker. Components and ports call
-`tasks.Start`, `tasks.End`, and the other typed commands directly. The Tracker
+`tasks.StartTask`, `tasks.EndTask`, and the other typed commands directly. The Tracker
 resolves parent correlation and notifies observers with `TaskStarted`,
 `TaskEnded`, `TagAdded`, and `MilestoneAdded`.
 

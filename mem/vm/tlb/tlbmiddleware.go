@@ -82,7 +82,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// milestones.
 		recvTaskID := tasks.StartReqIn(m.comp, msg)
 
-		pid := tasks.Start(m.comp, tasks.StartInfo{
+		pid := tasks.StartTask(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",
@@ -127,7 +127,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			next.BufferItems.Pop()
 			// The request has left the pipeline (it is now being looked up):
 			// close the pipeline subtask opened at admission.
-			tasks.End(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
+			tasks.EndTask(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
 			madeProgress = true
 		} else {
 			break

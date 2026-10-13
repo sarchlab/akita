@@ -287,7 +287,7 @@ func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
 	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tasks.End(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
 	}
 }
 

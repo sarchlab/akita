@@ -65,10 +65,10 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 
 	s.VisTracer().StartTracing()
 	owner := &taskRecordingOwner{Simulation: s, now: 10}
-	id := tasks.Start(owner, tasks.StartInfo{Kind: tasks.KindReqIn, What: "manual"})
+	id := tasks.StartTask(owner, tasks.StartInfo{Kind: tasks.KindReqIn, What: "manual"})
 	require.NotZero(t, id)
 	owner.now = 20
-	tasks.End(owner, tasks.EndInfo{ID: id})
+	tasks.EndTask(owner, tasks.EndInfo{ID: id})
 	s.VisTracer().StopTracing()
 	s.DataRecorder().Flush()
 

@@ -93,10 +93,10 @@ func port(o *owner) *twowaybuffered.Port {
 func TestDisabledDoesNotAllocateOrReadClock(t *testing.T) {
 	// nil IDs would panic if any helper attempted an allocation.
 	o := newOwner("Off", nil, nil)
-	require.Zero(t, tasks.Start(o, tasks.StartInfo{}))
+	require.Zero(t, tasks.StartTask(o, tasks.StartInfo{}))
 	require.Zero(t, tasks.StartReqOut(o, messaging.Msg{}, 0))
 	require.Zero(t, tasks.StartReqIn(o, messaging.Msg{}))
-	tasks.End(o, tasks.EndInfo{ID: 1})
+	tasks.EndTask(o, tasks.EndInfo{ID: 1})
 	tasks.EndReqIn(o, 1)
 	tasks.EndReqOut(o, 1)
 	tasks.AddTag(o, tasks.Tag{TaskID: 1})
@@ -129,7 +129,7 @@ func TestFullEndAndSharedParentResolution(t *testing.T) {
 	require.Equal(t, all.starts[1], scoped.starts[0])
 	// Cross-component end is legal; original scope, identity and clock survive.
 	sender.now = 30
-	tasks.End(sender, tasks.EndInfo{ID: recv})
+	tasks.EndTask(sender, tasks.EndInfo{ID: recv})
 	want := scoped.starts[0]
 	want.EndTime = 30
 	require.Equal(t, want, scoped.ends[0])
@@ -202,15 +202,15 @@ func TestSubscriptionScopes(t *testing.T) {
 	require.Panics(t, func() { tr.Subscribe(&recorder{}, newOwner("Foreign", other, ids)) })
 	require.Panics(t, func() { tr.Subscribe(&recorder{}, port(newOwner("Foreign", other, ids))) })
 	require.Panics(t, func() { tr.Subscribe(&recorder{}, nil) })
-	id := tasks.Start(o, tasks.StartInfo{Kind: "work", What: "component"})
-	tasks.Start(foreign, tasks.StartInfo{Kind: "work", What: "unrelated"})
+	id := tasks.StartTask(o, tasks.StartInfo{Kind: "work", What: "component"})
+	tasks.StartTask(foreign, tasks.StartInfo{Kind: "work", What: "unrelated"})
 	p.Deliver(messaging.Msg{ID: o.NewID()})
 	sibling.Deliver(messaging.Msg{ID: o.NewID()})
 	o.now = 10
 	p.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindData, "data"))
 	p.RetrieveIncoming()
 	sibling.RetrieveIncoming()
-	tasks.End(o, tasks.EndInfo{ID: id})
+	tasks.EndTask(o, tasks.EndInfo{ID: id})
 	require.Len(t, all.starts, 4)
 	require.Len(t, component.starts, 3)
 	require.Len(t, component.ends, 3)
@@ -334,12 +334,12 @@ func TestParentKindsAndSimulationIsolation(t *testing.T) {
 	send := tasks.StartReqOut(o, msg, 0)
 	rsp := messaging.Msg{ID: o.NewID(), RspTo: msg.ID}
 	for _, kind := range []string{tasks.KindIncomingBuffer, tasks.KindOutgoingBuffer, tasks.KindMsgTransport} {
-		tasks.Start(o, tasks.StartInfo{MsgID: rsp.ID, Kind: kind, What: "response", Detail: rsp})
+		tasks.StartTask(o, tasks.StartInfo{MsgID: rsp.ID, Kind: kind, What: "response", Detail: rsp})
 		require.Equal(t, send, r.starts[len(r.starts)-1].ParentID)
 	}
 	flit := messaging.Msg{ID: o.NewID()}
-	transport := tasks.Start(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindFlitTransport, What: "flit"})
-	tasks.Start(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindIncomingBuffer, What: "flit"})
+	transport := tasks.StartTask(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindFlitTransport, What: "flit"})
+	tasks.StartTask(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindIncomingBuffer, What: "flit"})
 	require.Equal(t, transport, r.starts[len(r.starts)-1].ParentID)
 	separate := tasks.NewTracker()
 	other := newOwner("owner", separate, &atomic.Uint64{})
@@ -353,12 +353,12 @@ func TestSubscribeBeforeRunCanObserveCompleteEnd(t *testing.T) {
 	tr := tasks.NewTracker()
 	o := newOwner("Owner", tr, &atomic.Uint64{})
 	o.now = 10
-	id := tasks.Start(o, tasks.StartInfo{Kind: "work", What: "seeded"})
+	id := tasks.StartTask(o, tasks.StartInfo{Kind: "work", What: "seeded"})
 	r := &recorder{}
 	r.order = map[uint64]string{}
 	tr.Subscribe(r, o)
 	o.now = 20
-	tasks.End(o, tasks.EndInfo{ID: id})
+	tasks.EndTask(o, tasks.EndInfo{ID: id})
 	require.Empty(t, r.starts)
 	require.Len(t, r.ends, 1)
 	require.Equal(t, timing.VTimeInPicoSec(10), r.ends[0].StartTime)
@@ -478,7 +478,7 @@ func TestLateSubscribersCountFullIntervals(t *testing.T) {
 	tr := tasks.NewTracker()
 	o := newOwner("Owner", tr, &atomic.Uint64{})
 	o.now = 10
-	id := tasks.Start(o, tasks.StartInfo{Kind: "work", What: "inflight"})
+	id := tasks.StartTask(o, tasks.StartInfo{Kind: "work", What: "inflight"})
 	tasks.AddTag(o, tasks.Tag{TaskID: id, What: "earlier"})
 	tasks.AddMilestone(o, tasks.Milestone{TaskID: id, Kind: tasks.MilestoneKindData, What: "earlier"})
 	o.now = 20
@@ -489,7 +489,7 @@ func TestLateSubscribersCountFullIntervals(t *testing.T) {
 	tr.Subscribe(avg, o)
 	tr.Subscribe(total, o)
 	o.now = 30
-	tasks.End(o, tasks.EndInfo{ID: id})
+	tasks.EndTask(o, tasks.EndInfo{ID: id})
 	require.Empty(t, events.starts)
 	require.Empty(t, events.tags)
 	require.Empty(t, events.milestones)

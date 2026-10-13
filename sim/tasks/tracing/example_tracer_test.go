@@ -38,7 +38,7 @@ func (d *SampleDomain) CurrentTime() timing.VTimeInPicoSec {
 func (d *SampleDomain) Start() {
 	d.nextID++
 
-	id := tasks.Start(d, tasks.StartInfo{
+	id := tasks.StartTask(d, tasks.StartInfo{
 		Kind: "sampleTaskKind",
 		What: "something",
 	})
@@ -47,7 +47,7 @@ func (d *SampleDomain) Start() {
 }
 
 func (d *SampleDomain) End() {
-	tasks.End(d, tasks.EndInfo{
+	tasks.EndTask(d, tasks.EndInfo{
 		ID: d.taskIDs[0],
 	})
 
