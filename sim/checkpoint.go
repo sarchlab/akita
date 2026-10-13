@@ -3,7 +3,6 @@ package sim
 import (
 	"bytes"
 	"fmt"
-	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -67,7 +66,7 @@ func (s *Simulation) LoadCheckpoint(path string) error {
 		}
 
 		data, found := payloads[entity.Name()]
-		if _, optional := entity.(*taskcore.Checkpoint); optional && !found {
+		if _, optional := entity.(*taskTrackerCheckpoint); optional && !found {
 			data = []byte("{}") // Tracking was off when the checkpoint was saved.
 		}
 		if err := checkpointable.LoadCheckpoint(
@@ -100,12 +99,12 @@ func (s *Simulation) checkpointCoverage(payloads map[string][]byte) error {
 	}
 
 	for name := range payloads {
-		if _, found := rebuilt[name]; !found && name != taskcore.CheckpointName {
+		if _, found := rebuilt[name]; !found && name != taskTrackerCheckpointName {
 			return fmt.Errorf("checkpoint: saved entity %q is not rebuilt", name)
 		}
 	}
 	for name := range rebuilt {
-		if _, found := payloads[name]; !found && name != taskcore.CheckpointName {
+		if _, found := payloads[name]; !found && name != taskTrackerCheckpointName {
 			return fmt.Errorf("checkpoint: rebuilt entity %q is missing from checkpoint",
 				name)
 		}

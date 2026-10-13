@@ -124,6 +124,20 @@ restored with it enabled starts with an empty tracker; old unknown handles and
 buffer messages are ignored. With tracking enabled at save and disabled at
 restore, the payload is ignored. Other entities still require exact checkpoint
 coverage. Restore into a rebuilt simulation with fresh observers. No
-process-global task registry is used. Tracker construction, port wiring,
-subscription freezing, and checkpoint serialization are framework internals,
-not public methods on `tasks.Tracker`.
+process-global task registry is used.
+
+## Framework assembly
+
+Task types, `Owner`, observers, and lifecycle implementations live directly in
+this package. Tracker state, parent maps, port hooks, and checkpoint data
+structures are unexported. `Owner` is the small interface consumed by the task
+commands; its clock, ID allocator, and tracker must share one simulation.
+
+Frameworks can construct a tracker with `NewTracker`, register bound ports with
+`Tracker.RegisterPort`, and call `Tracker.FreezeSubscriptions` before the first
+engine run. Port registration and observer subscription are rejected after the
+freeze. Nil trackers make registration and freezing no-ops for disabled setups.
+`Tracker.SaveCheckpoint` and `Tracker.LoadCheckpoint` operate while execution is
+stopped; load after rebuilding ports and fresh observer subscriptions. These
+are supported exported framework APIs. Ordinary applications use the simulation
+builder, which performs this assembly and owns checkpoint entity registration.

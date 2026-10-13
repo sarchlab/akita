@@ -3,7 +3,6 @@ package sim
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -82,8 +81,8 @@ func (s *Simulation) Monitor() Monitor {
 // typed Register methods pass the concrete object, which satisfies Entity, so
 // the inventory holds the live entity itself.
 func (s *Simulation) registerEntity(e Entity) {
-	if e.Name() == taskcore.CheckpointName {
-		if _, ok := e.(*taskcore.Checkpoint); !ok {
+	if e.Name() == taskTrackerCheckpointName {
+		if _, ok := e.(*taskTrackerCheckpoint); !ok {
 			panic("simulation: TaskTracker is a reserved entity name")
 		}
 	}
@@ -124,7 +123,7 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 	s.ports = append(s.ports, port)
 
 	if taskPort, ok := p.(messaging.Port); ok {
-		taskcore.RegisterPort(s.taskTracker, taskPort)
+		s.taskTracker.RegisterPort(taskPort)
 	}
 
 	if s.monitor != nil {

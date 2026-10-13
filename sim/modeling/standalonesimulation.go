@@ -2,7 +2,6 @@ package modeling
 
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
-	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -29,7 +28,7 @@ func NewStandaloneSimulation(engine timing.Engine) *StandaloneSimulation {
 		if err := s.setup.Ready(); err != nil {
 			return err
 		}
-		taskcore.FreezeSubscriptions(s.taskTracker)
+		s.taskTracker.FreezeSubscriptions()
 		return nil
 	})
 	return s
@@ -46,7 +45,7 @@ func (s *StandaloneSimulation) RegisterResource(e naming.Named)   { s.setup.Regi
 func (s *StandaloneSimulation) RegisterPort(e naming.Named) {
 	s.setup.Register(e)
 	if p, ok := e.(messaging.Port); ok {
-		taskcore.RegisterPort(s.taskTracker, p)
+		s.taskTracker.RegisterPort(p)
 	}
 }
 
@@ -62,7 +61,7 @@ func (s *StandaloneSimulation) WithTaskTracking() *StandaloneSimulation {
 		if s.componentsBuilt {
 			panic("modeling: enable task tracking before building components")
 		}
-		s.taskTracker = taskcore.NewTracker()
+		s.taskTracker = tasks.NewTracker()
 	}
 	return s
 }

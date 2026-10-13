@@ -1,4 +1,4 @@
-package taskcore
+package tasks
 
 import "github.com/sarchlab/akita/v5/sim/messaging"
 
@@ -9,9 +9,9 @@ type requestParents struct {
 	byTask    map[uint64]uint64
 }
 
-// ResolveStart records req_out/flit_e2e identity or resolves a task parent.
+// resolveStart records req_out/flit_e2e identity or resolves a task parent.
 // Call for every start before filtering or retaining the event.
-func (p *requestParents) ResolveStart(task Task) Task {
+func (p *requestParents) resolveStart(task Task) Task {
 	if task.MsgID == 0 {
 		return task
 	}
@@ -35,9 +35,9 @@ func (p *requestParents) ResolveStart(task Task) Task {
 	return task
 }
 
-// End forgets a completed req_out or flit_e2e. Call for every end, including tasks
+// end forgets a completed req_out or flit_e2e. Call for every end, including tasks
 // omitted by the observer's recording filter.
-func (p *requestParents) End(taskID uint64) {
+func (p *requestParents) end(taskID uint64) {
 	msgID, ok := p.byTask[taskID]
 	if !ok {
 		return

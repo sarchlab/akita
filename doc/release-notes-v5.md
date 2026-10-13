@@ -85,8 +85,11 @@ tables are created. `WithTaskTracking` alone creates and subscribes the tracer;
 call `s.VisTracer().StartTracing()` to begin recording. Components receive the
 service through `TaskTracker()`; tracking is nil when disabled. Built-in observers move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
-Tracker construction, port registration, freezing, and persistence are internal
-framework operations; only `Subscribe` is public on `tasks.Tracker`.
+Task types and their implementation live directly in `sim/tasks`, with private
+state and helpers. Framework assembly uses the exported `NewTracker`,
+`Tracker.RegisterPort`, `Tracker.FreezeSubscriptions`, `Tracker.SaveCheckpoint`,
+and `Tracker.LoadCheckpoint` APIs. Ordinary applications use the simulation
+builder; checkpoint entity names and optional archive membership stay in `sim`.
 
 - Replace `StartTask` with `id := tasks.Start(owner, tasks.StartInfo{...})`.
   It allocates an independent task ID; do not pass a caller-generated ID.

@@ -1,4 +1,4 @@
-package taskcore
+package tasks
 
 import (
 	"encoding/json"
@@ -6,15 +6,6 @@ import (
 	"io"
 	"sort"
 )
-
-// CheckpointName is reserved for the optional task service's archive payload.
-const CheckpointName = "TaskTracker"
-
-// Checkpoint exposes persistence only to simulation wiring, not on tasks.Tracker.
-// Rebuilt subscriptions and port hooks are retained; observer state is not saved.
-type Checkpoint struct{ Tracker *Tracker }
-
-func (*Checkpoint) Name() string { return CheckpointName }
 
 type savedTask struct {
 	Task  Task   `json:"task"`
@@ -36,8 +27,7 @@ type checkpointState struct {
 // SaveCheckpoint records identity and correlation while the simulation is stopped.
 // Task.Detail is deliberately excluded by its JSON tag; tags/milestones belong
 // to observers and are not retained by the tracker.
-func (c *Checkpoint) SaveCheckpoint(w io.Writer) error {
-	t := c.Tracker
+func (t *Tracker) SaveCheckpoint(w io.Writer) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	state := checkpointState{ByMessage: t.parents.byMessage, ByTask: t.parents.byTask}
@@ -55,13 +45,14 @@ func (c *Checkpoint) SaveCheckpoint(w io.Writer) error {
 }
 
 // LoadCheckpoint replaces lifecycle state without replaying starts or history.
+// Call while the rebuilt simulation is stopped, after registering its ports
+// and subscribing fresh observers. Existing hooks and subscriptions are kept.
 // An empty object implements a checkpoint saved with tracking disabled.
-func (c *Checkpoint) LoadCheckpoint(r io.Reader) error {
+func (t *Tracker) LoadCheckpoint(r io.Reader) error {
 	var state checkpointState
 	if err := json.NewDecoder(r).Decode(&state); err != nil {
 		return err
 	}
-	t := c.Tracker
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	open := make(map[uint64]*entry, len(state.Tasks))
