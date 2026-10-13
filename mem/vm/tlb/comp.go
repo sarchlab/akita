@@ -99,11 +99,10 @@ type mshrEntryState struct {
 	Page           vm.Page               `json:"page"`
 }
 
-// GetPID returns the PID of the MSHR entry.
-func (e mshrEntryState) GetPID() uint32 { return e.PID }
-
-// GetAddress returns the virtual address of the MSHR entry.
-func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
+// Matches reports whether the MSHR entry has the given PID and virtual address.
+func (e mshrEntryState) Matches(pid vm.PID, addr uint64) bool {
+	return vm.PID(e.PID) == pid && e.VAddr == addr
+}
 
 // pipelineTLBReqState is a serializable pipeline item. PipelineTaskID is the ID
 // of the tracing pipeline subtask opened (as a child of req_in) when the request

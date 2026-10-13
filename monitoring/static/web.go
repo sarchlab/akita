@@ -9,7 +9,8 @@ import (
 //go:embed dist
 var assets embed.FS
 
-func GetAssets() http.FileSystem {
+// Assets returns the static assets.
+func Assets() http.FileSystem {
 	sub, err := fs.Sub(assets, "dist")
 	if err != nil {
 		panic(err)

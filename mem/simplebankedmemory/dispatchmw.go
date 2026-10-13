@@ -46,7 +46,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		bankID := selectBank(spec, bankSelectionAddress(spec, msg.Payload.(memprotocol.AccessReq).GetAddress()))
+		bankID := selectBank(spec, bankSelectionAddress(spec, msg.Payload.(memprotocol.AccessReq).AccessAddress()))
 		if bankID < 0 || bankID >= spec.NumBanks {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}

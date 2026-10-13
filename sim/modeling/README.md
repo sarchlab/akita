@@ -75,7 +75,7 @@ handle. The models differ only in which events arrive:
 
 | Model | Events that arrive | Example |
 |---|---|---|
-| `modeling/ticking` | a `ticking.TickEvent` every cycle while any middleware makes progress; port activity restarts ticking | `mem/rob` |
+| `modeling/ticking` | a `ticking.Event` every cycle while any middleware makes progress; port activity restarts ticking | `mem/rob` |
 | `modeling/wakeup` | a data-less `wakeup.Event` on port activity or at a time the component asked for (`WakeAt`); it runs again at once while any middleware makes progress | `examples/ping` |
 | `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events, with their data, that the component schedules for itself | the `modeling/event` example |
 

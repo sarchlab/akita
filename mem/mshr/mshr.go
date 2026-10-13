@@ -7,15 +7,15 @@ import "github.com/sarchlab/akita/v5/mem/vm"
 // Entry is the interface that any MSHR entry must implement for use with the
 // generic MSHR operations.
 type Entry interface {
-	GetPID() uint32
-	GetAddress() uint64
+	// Matches reports whether the entry has the given PID and address.
+	Matches(pid vm.PID, addr uint64) bool
 }
 
 // Find returns the index and true if an entry with the given pid and addr
 // exists in entries, or (-1, false) otherwise.
 func Find[E Entry](entries []E, pid vm.PID, addr uint64) (int, bool) {
 	for i, e := range entries {
-		if vm.PID(e.GetPID()) == pid && e.GetAddress() == addr {
+		if e.Matches(pid, addr) {
 			return i, true
 		}
 	}
@@ -43,7 +43,7 @@ func IsEmpty[E Entry](entries []E) bool {
 // updated slice. Panics if no matching entry exists.
 func Remove[E Entry](entries []E, pid vm.PID, addr uint64) []E {
 	for i, e := range entries {
-		if vm.PID(e.GetPID()) == pid && e.GetAddress() == addr {
+		if e.Matches(pid, addr) {
 			return append(entries[:i], entries[i+1:]...)
 		}
 	}

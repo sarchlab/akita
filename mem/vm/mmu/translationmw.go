@@ -20,7 +20,7 @@ type pageTable interface {
 	Find(pid vm.PID, Addr uint64) (vm.Page, bool)
 	Update(page vm.Page)
 	ReverseLookup(pAddr uint64) (vm.Page, bool)
-	GetLog2PageSize() uint64
+	Log2PageSize() uint64
 }
 
 // translationMW handles translation requests: parsing from top,

@@ -12,8 +12,7 @@ Any type used as an MSHR entry must implement the `Entry` interface:
 
 ```go
 type Entry interface {
-    GetPID() uint32
-    GetAddress() uint64
+    Matches(pid vm.PID, addr uint64) bool
 }
 ```
 
@@ -50,8 +49,9 @@ type myMSHREntry struct {
     // ... additional fields (waiting transactions, fetched data, etc.)
 }
 
-func (e myMSHREntry) GetPID() uint32     { return e.pid }
-func (e myMSHREntry) GetAddress() uint64 { return e.addr }
+func (e myMSHREntry) Matches(pid vm.PID, addr uint64) bool {
+    return vm.PID(e.pid) == pid && e.addr == addr
+}
 
 // Check capacity before adding
 entries := []myMSHREntry{}

@@ -55,7 +55,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 				component.State.Values[0] = 30
 				component.State.Values[1] = 40
 			}))
-			e.Schedule(timing.EventBase{Time_: 1, HandlerID_: "model"})
+			e.Schedule(timing.EventBase{At: 1, Handler: "model"})
 			if err := e.Pause(); err != nil {
 				t.Fatal(err)
 			}

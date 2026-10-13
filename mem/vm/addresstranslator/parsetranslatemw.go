@@ -47,12 +47,12 @@ func (m *parseTranslateMW) translate() bool {
 	}
 
 	item := itemI
-	vAddr := item.Payload.(memprotocol.AccessReq).GetAddress()
+	vAddr := item.Payload.(memprotocol.AccessReq).AccessAddress()
 	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
-		PID:      item.Payload.(memprotocol.AccessReq).GetPID(),
+		PID:      item.Payload.(memprotocol.AccessReq).AccessPID(),
 		VAddr:    vPageID,
 		DeviceID: spec.DeviceID},
 		ID:  m.comp.NewID(),

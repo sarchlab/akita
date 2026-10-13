@@ -57,10 +57,10 @@ func TestCheckpointSpecMismatch(t *testing.T) {
 	}
 }
 
-// TestCheckpointRestoresSchedulerGuard shows that the scheduler's dedup guard
+// TestCheckpointRestoresPendingEventGuard shows that the scheduler's dedup guard
 // round-trips: after restoring a pending tick, asking for the same tick again
 // schedules nothing, since the engine's restored queue already holds it.
-func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
+func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	newScheduler := func() (*ticking.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
 		engine.RegisterHandler("C", handlerFunc(func(timing.Event) {}))
@@ -78,6 +78,9 @@ func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
 	var buf bytes.Buffer
 	if err := modeling.WriteCheckpoint(&buf, ckptSpec{}, ckptState{}, src); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"pending_event_guard":{"scheduled":true,"at":1000}`) {
+		t.Fatalf("checkpoint is missing the pending-event guard: %s", buf.String())
 	}
 
 	dst, engine := newScheduler()

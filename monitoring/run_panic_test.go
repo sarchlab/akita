@@ -22,7 +22,7 @@ func (c runLog) Write(p []byte) (int, error) { c <- string(p); return len(p), ni
 func TestMonitorReportsRunFailureWithoutRepanicking(t *testing.T) {
 	e := timing.NewSerialEngine()
 	e.RegisterHandler("model", runPanicHandler{})
-	e.Schedule(timing.EventBase{Time_: 1, HandlerID_: "model"})
+	e.Schedule(timing.EventBase{At: 1, Handler: "model"})
 	s := modeling.NewStandaloneSimulation(e)
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)

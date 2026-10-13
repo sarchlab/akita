@@ -24,7 +24,7 @@ func TestStoragePreconditionPanicBecomesRunError(t *testing.T) {
 					storage.Write(16, []byte{1})
 				}
 			}))
-			e.Schedule(timing.EventBase{Time_: 1, HandlerID_: "memory"})
+			e.Schedule(timing.EventBase{At: 1, Handler: "memory"})
 			var failure *timing.PanicError
 			if err := e.Run(); !errors.As(err, &failure) || failure.Handler != "memory" || failure.Time != 1 {
 				t.Fatalf("storage panic escaped its owning engine: %v", err)

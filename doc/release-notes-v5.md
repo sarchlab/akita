@@ -160,3 +160,32 @@ milestones at stage transitions. Existing no-argument retrieve calls stay as-is;
 custom port implementations and mocks need both new milestone methods.
 
 See [tasks](../sim/tasks/README.md) and [observers](../sim/tasks/tracing/README.md).
+
+## Event and accessor naming
+
+The v5 Go API uses the following names. Update downstream callers and interface
+implementations; the old names are removed.
+
+- `timing.EventBase.Time_` → `At` and `HandlerID_` → `Handler`.
+  `Time()`, `HandlerID()`, and `IsSecondary()` are unchanged.
+- `ticking.TickEvent` → `ticking.Event`.
+- `ticking.MakeTickEvent(id, handlerID, time)` →
+  `ticking.MakeEvent(id, time, handlerID)`, matching `timing.MakeEventBase`.
+- `modeling.Scheduler` → `modeling.PendingEventGuard`. Its `Snapshot` and
+  `Restore` methods are unchanged; it records whether the component's own tick
+  or wakeup is pending and when, so restore does not schedule a duplicate.
+- Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
+- The page table implementation and MMU's page-size interface use
+  `Log2PageSize()` instead of `GetLog2PageSize()`.
+- `monitoring/static.GetAssets()` and `daisen/static.GetAssets()` → `Assets()`.
+- `mshr.Entry.GetPID()` / `GetAddress()` →
+  `Matches(pid vm.PID, addr uint64) bool`; cache and TLB entries compare both.
+- `memprotocol.AccessReq.GetAddress()` / `GetPID()` → `AccessAddress()` /
+  `AccessPID()`, including `ReadReq` and `WriteReq`. Their fields are unchanged.
+
+Simulation behavior and the event field keys `time` and `handler_id` are
+unchanged. Tick checkpoint type tags now use `ticking.Event`, derived from the
+Go type. The component checkpoint guard is named `pending_event_guard` instead
+of `scheduler`, with `scheduled` and `at` fields. Saved checkpoints from before
+this cleanup are not supported; no legacy type-tag alias or schema migration
+is provided.

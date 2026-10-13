@@ -67,7 +67,7 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
-		tick := ticking.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := ticking.MakeEvent(sim.NewID(), timing.VTimeInPicoSec(10000), connection.Name())
 
 		msg1 := newTestMsg(sim)
 		msg1.Src = port1.AsRemote()
@@ -91,7 +91,7 @@ var _ = Describe("DirectConnection", func() {
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
-			Do(func(evt ticking.TickEvent) {
+			Do(func(evt ticking.Event) {
 				Expect(evt.Time()).To(Equal(timing.VTimeInPicoSec(11000)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
@@ -100,7 +100,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := ticking.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := ticking.MakeEvent(sim.NewID(), timing.VTimeInPicoSec(10000), connection.Name())
 
 		msg := newTestMsg(sim)
 		msg.Src = port1.AsRemote()

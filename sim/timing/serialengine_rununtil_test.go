@@ -7,9 +7,9 @@ import (
 
 func mkRunUntilEvent(time VTimeInPicoSec, id uint64) queueTestEvent {
 	e := queueTestEvent{}
-	e.Time_ = time
+	e.At = time
 	e.ID = id
-	e.HandlerID_ = "h"
+	e.Handler = "h"
 	return e
 }
 
@@ -66,8 +66,8 @@ func (h *rescheduleHandler) Handle(e Event) {
 	next := now + h.step
 	if next <= h.until {
 		ev := queueTestEvent{}
-		ev.Time_ = next
-		ev.HandlerID_ = "h"
+		ev.At = next
+		ev.Handler = "h"
 		h.engine.Schedule(ev)
 	}
 }

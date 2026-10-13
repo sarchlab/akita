@@ -21,7 +21,7 @@ type Controllable interface {
 // callback. Build functions passed to RunContract return a *Harness.
 type Harness struct {
 	// Comp is the component under test. RunContract drives it by handing
-	// it a TickEvent at a time, as the engine does.
+	// it a ticking.Event at a time, as the engine does.
 	Comp Controllable
 
 	// Sim is the simulation the component belongs to. RunContract allocates
@@ -337,11 +337,11 @@ func newControlReq(h *Harness, cmd Command) messaging.Msg {
 	return req
 }
 
-// tick hands the component a TickEvent at the current time, as the engine
+// tick hands the component a ticking.Event at the current time, as the engine
 // does on every cycle.
 func (h *Harness) tick() {
-	h.Comp.Handle(ticking.MakeTickEvent(
-		h.Sim.NewID(), h.Comp.Name(), h.Sim.Engine().CurrentTime()))
+	h.Comp.Handle(ticking.MakeEvent(
+		h.Sim.NewID(), h.Sim.Engine().CurrentTime(), h.Comp.Name()))
 }
 
 // drainForRsp ticks the component up to budget times waiting for a

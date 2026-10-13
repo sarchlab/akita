@@ -331,7 +331,7 @@ msg := messaging.Msg{ID: component.NewID(), Payload: ReadReq{}} // same counter
 
 Event factories now take the allocated ID explicitly:
 `timing.MakeEventBase(sim.NewID(), time, handlerID)` and
-`ticking.MakeTickEvent(sim.NewID(), handlerID, time)`.
+`ticking.MakeEvent(sim.NewID(), time, handlerID)`.
 
 Separate simulations may reuse numeric IDs. Tracing associations are keyed by
 the component itself and the message ID, so simulations that reuse IDs stay
@@ -528,10 +528,10 @@ type Event interface {
 }
 
 type EventBase struct {
-    ID         uint64     `json:"id"`
-    Time_      VTimeInPicoSec `json:"time"`
-    HandlerID_ string     `json:"handler_id"`
-    Secondary  bool       `json:"secondary"`
+    ID        uint64         `json:"id"`
+    At        VTimeInPicoSec `json:"time"`
+    Handler   string         `json:"handler_id"`
+    Secondary bool           `json:"secondary"`
 }
 ```
 
@@ -705,7 +705,7 @@ in which events reach the middlewares:
 
 | Model | Events that reach the middlewares | Use it for |
 |-------|-----------------------------------|------------|
-| `modeling/ticking` | a `ticking.TickEvent` every cycle while any middleware makes progress; port activity restarts ticking (`TickLater` starts it) | work that advances cycle by cycle: pipelines, caches, switches. The default, and the usual target for a V4 ticking component. |
+| `modeling/ticking` | a `ticking.Event` every cycle while any middleware makes progress; port activity restarts ticking (`TickLater` starts it) | work that advances cycle by cycle: pipelines, caches, switches. The default, and the usual target for a V4 ticking component. |
 | `modeling/wakeup` | a data-less `wakeup.Event` on port activity, or at a time a middleware asked for with `WakeAt` | a component that is idle most of the time and knows when it next has work |
 | `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events the component schedules for itself with `Schedule` | behavior that is a set of distinct happenings, each with its own data and time |
 

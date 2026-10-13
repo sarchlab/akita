@@ -6,27 +6,21 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// TickEvent is the event a ticking component receives every cycle while it
+// Event is the event a ticking component receives every cycle while it
 // makes progress. It carries no data.
-type TickEvent struct {
+type Event struct {
 	timing.EventBase
 }
 
-// MakeTickEvent creates a new TickEvent
-func MakeTickEvent(id uint64, handlerID string, time timing.VTimeInPicoSec) TickEvent {
-	evt := TickEvent{}
-	evt.ID = id
-	evt.HandlerID_ = handlerID
-	evt.Time_ = time
-	evt.Secondary = false
-
-	return evt
+// MakeEvent creates a new Event.
+func MakeEvent(id uint64, time timing.VTimeInPicoSec, handlerID string) Event {
+	return Event{EventBase: timing.MakeEventBase(id, time, handlerID)}
 }
 
-// init registers TickEvent so the engine's event queue can be checkpointed
+// init registers Event so the engine's event queue can be checkpointed
 // while a tick is pending. Ticks are scheduled by value.
 func init() {
-	timing.RegisterEvent(TickEvent{})
+	timing.RegisterEvent(Event{})
 }
 
 // Scheduler schedules the tick events of a handler. Its dedup guard remembers
@@ -92,7 +86,7 @@ func (t *Scheduler) TickNow() {
 
 	t.nextTickTime = t.freq.ThisTick(time)
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.simulation.NewID(), t.handlerID, t.nextTickTime)
+	tick := MakeEvent(t.simulation.NewID(), t.nextTickTime, t.handlerID)
 
 	if t.secondary {
 		tick.Secondary = true
@@ -114,7 +108,7 @@ func (t *Scheduler) TickLater() {
 
 	t.nextTickTime = time
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.simulation.NewID(), t.handlerID, t.nextTickTime)
+	tick := MakeEvent(t.simulation.NewID(), t.nextTickTime, t.handlerID)
 
 	if t.secondary {
 		tick.Secondary = true

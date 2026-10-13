@@ -26,9 +26,9 @@ func TestSerialEngineQueueRoundTrip(t *testing.T) {
 
 	mk := func(time VTimeInPicoSec, id uint64) queueTestEvent {
 		e := queueTestEvent{}
-		e.Time_ = time
+		e.At = time
 		e.ID = id
-		e.HandlerID_ = "h"
+		e.Handler = "h"
 		return e
 	}
 
@@ -74,8 +74,8 @@ func TestSerialEngineLoadRejectsUnknownHandler(t *testing.T) {
 	a := NewSerialEngine()
 	a.RegisterHandler("missing", &idRecordingHandler{})
 	e := queueTestEvent{}
-	e.Time_ = 1
-	e.HandlerID_ = "missing"
+	e.At = 1
+	e.Handler = "missing"
 	a.Schedule(e)
 
 	var buf bytes.Buffer
