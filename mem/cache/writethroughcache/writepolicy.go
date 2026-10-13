@@ -2,7 +2,7 @@ package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // writeTransIsReady reports whether a write transaction has met every
@@ -114,7 +114,7 @@ func (d *directory) writearoundWriteHit(
 
 	bankBuf.Push(postCoalesceIdx)
 
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
@@ -130,7 +130,7 @@ func (d *directory) writearoundWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		tasks.AddTag(d.cache.comp, tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
@@ -173,7 +173,7 @@ func (d *directory) writeevictWriteHit(
 	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	nextBlock.IsValid = false
 
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
@@ -189,7 +189,7 @@ func (d *directory) writeevictWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		tasks.AddTag(d.cache.comp, tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
@@ -215,7 +215,7 @@ func (d *directory) writethroughWriteHit(
 		return false
 	}
 
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "write-hit",
 	})
@@ -287,7 +287,7 @@ func (d *directory) writethroughWriteMiss(
 
 	ok := d.writethroughFullLineWriteMiss(trans, postCoalesceIdx)
 	if ok {
-		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		tasks.AddTag(d.cache.comp, tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
@@ -356,7 +356,7 @@ func (d *directory) writethroughPartialWriteMiss(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "write-miss",
 	})

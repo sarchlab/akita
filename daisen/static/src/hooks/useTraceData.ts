@@ -14,10 +14,6 @@ export interface TraceQuery {
   endTime?: number;
 }
 
-function normalizeTask(task: Task): Task {
-  return { ...task, id: String(task.id), parent_id: task.parent_id === 0 ? "" : String(task.parent_id) };
-}
-
 export function useTraceData(query: TraceQuery) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +43,7 @@ export function useTraceData(query: TraceQuery) {
       })
       .then((data: Task | Task[]) => {
         const list = Array.isArray(data) ? data : [data];
-        setTasks(list.filter(Boolean).map(normalizeTask));
+        setTasks(list.filter(Boolean));
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;

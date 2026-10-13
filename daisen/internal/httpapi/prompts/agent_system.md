@@ -181,7 +181,7 @@ Where things live in the Akita source (a starting map — `code_ls` to browse an
   page tables.
 - **Interconnect** — `noc/` for networks and `sim/messaging/direct` for ideal direct connections.
 - **Ports, buffers, messages** — `sim/messaging/`, `sim/queueing/`.
-- **Task / trace / milestone model** — `sim/tracing/`.
+- **Task / milestone model** — `sim/tasks/`; built-in observers are in `sim/tasks/tracing/`.
 - **Engine, components, time** — `sim/`, `sim/modeling/`, `sim/timing/`.
 
 ### `screenshot_current_view` / `daisen_view` — see the visualizations

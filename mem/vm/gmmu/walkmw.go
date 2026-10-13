@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // walkMW handles the top→page-table walk path:
@@ -64,11 +64,7 @@ func (m *walkMW) parseFromTop() bool {
 	// incoming-buffer task since the request reached the head of the Top
 	// buffer — is over. The req_in opened at retrieve covers only the walk
 	// processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   m.comp.Name() + ".walk",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".walk"))
 
 	m.topPort().RetrieveIncoming()
 
@@ -89,8 +85,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
-	walkTaskID := m.comp.NewID()
+	recvTaskID := tasks.StartReqIn(m.comp, req)
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -101,17 +96,15 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 		VAddr:      req.Payload.(vmprotocol.TranslationReq).VAddr,
 		DeviceID:   req.Payload.(vmprotocol.TranslationReq).DeviceID,
 		CycleLeft:  spec.Latency,
-		WalkTaskID: walkTaskID,
 	}
 
 	// Open the walk subtask spanning the page-table-walk latency, a child of the
 	// req_in, so the ".walk" work milestone has a corresponding bar. It is closed
 	// on the local-hit (doPageWalkHit) and remote-fetch (processRemoteMemReq)
 	// exits.
-	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       walkTaskID,
+	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
-		Kind:     tracing.PipelineTaskKind,
+		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",
 	})
 
@@ -203,7 +196,7 @@ func (m *walkMW) processRemoteMemReq(
 	// remote walk shows up as a proper subtask; it is finalized in
 	// handleTranslationRsp when the remote response returns.
 
-	walking.SendTaskID = tracing.TraceReqInitiate(m.comp, req, walking.RecvTaskID)
+	walking.SendTaskID = tasks.StartReqOut(m.comp, req, walking.RecvTaskID)
 	state.RemoteMemReqs[req.ID] = walking
 
 	m.bottomPort().Send(req)
@@ -211,12 +204,12 @@ func (m *walkMW) processRemoteMemReq(
 	// The local walk countdown finished and the page is remote: attribute the
 	// countdown as work on the req_in and close the walk subtask that spanned
 	// it. The downstream req_out (opened above) then covers the remote fetch.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: walking.RecvTaskID,
-		Kind:   tracing.MilestoneKindWork,
+		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
@@ -263,14 +256,14 @@ func (m *walkMW) doPageWalkHit(
 	// The local page walk counted down CycleLeft before reaching here; record
 	// that processing latency as work on the original req_in and close the walk
 	// subtask that spanned it, so the work milestone has a corresponding bar.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: walking.RecvTaskID,
-		Kind:   tracing.MilestoneKindWork,
+		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
-	tracing.TraceReqComplete(m.comp, walking.RecvTaskID)
+	tasks.EndReqIn(m.comp, walking.RecvTaskID)
 
 	return true
 }

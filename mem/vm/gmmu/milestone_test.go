@@ -9,29 +9,29 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts and milestones the GMMU emits, in
 // emission order and without the DBTracer's dedup, so a test can assert which
 // task (incoming-buffer vs req_in) each admission milestone is attributed to.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) EndTask(e tracing.TaskEnd) {
+func (r *milestoneRecorder) TaskEnded(e tasks.Task) {
 	r.ends = append(r.ends, e)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
@@ -46,8 +46,8 @@ func (r *milestoneRecorder) taskID(kind string) uint64 {
 	return 0
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -58,7 +58,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 }
 
 func (r *milestoneRecorder) hasMilestone(
-	taskID uint64, kind tracing.MilestoneKind, what string,
+	taskID uint64, kind tasks.MilestoneKind, what string,
 ) bool {
 	for _, m := range r.milestonesOn(taskID) {
 		if m.Kind == kind && m.What == what {
@@ -70,15 +70,24 @@ func (r *milestoneRecorder) hasMilestone(
 }
 
 // taskStart returns the first recorded task start of the given kind.
-func (r *milestoneRecorder) taskStart(kind string) (tracing.TaskStart, bool) {
+func (r *milestoneRecorder) taskStart(kind string) (tasks.Task, bool) {
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			return s, true
 		}
 	}
 
-	return tracing.TaskStart{}, false
+	return tasks.Task{}, false
 }
+
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
 var _ = Describe("GMMU milestones", func() {
 	const (
@@ -99,8 +108,8 @@ var _ = Describe("GMMU milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		pageTable = vm.NewPageTable(12)
 
 		spec := Definition.DefaultSpec
@@ -134,12 +143,11 @@ var _ = Describe("GMMU milestones", func() {
 		// Attach the recorder before driving so buffer enqueue allocates
 		// real task IDs (it returns 0 when there are no hooks).
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(gmmuComp, rec)
+		gmmuComp.TaskTracker().Subscribe(rec, gmmuComp)
 		// The Top-port admission milestone lands on the Top-port buffer task and
 		// the Bottom-port admission milestone on the Bottom-port buffer task, so
 		// the test needs both buffer tasks to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
-		tracing.CollectIncomingBufferTrace(bottomPort)
+
 	})
 
 	makeReq := func(vAddr uint64) messaging.Msg {
@@ -160,10 +168,11 @@ var _ = Describe("GMMU milestones", func() {
 		"when it admits the head request", func() {
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(walk.parseFromTop()).To(BeTrue())
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
@@ -172,11 +181,10 @@ var _ = Describe("GMMU milestones", func() {
 		// The buffer task owns the at-head admission wait: reached the head of
 		// the Top buffer, then waited for a free walk slot.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindHardwareResource))
-		Expect(bufMs[1].What).To(Equal(gmmuComp.Name() + ".walk"))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
+		Expect(bufMs[0].What).To(Equal(gmmuComp.Name() + ".walk"))
 	})
 
 	It("does not admit (and emits no admission milestone) while servicing "+
@@ -186,14 +194,15 @@ var _ = Describe("GMMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(walk.parseFromTop()).To(BeFalse())
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
+		Expect(bufMs).To(BeEmpty())
+
 	})
 
 	It("emits a network_busy admission milestone on the Bottom buffer task "+
@@ -224,19 +233,20 @@ var _ = Describe("GMMU milestones", func() {
 
 		bottomPort.Deliver(rsp)
 
+		engine.(*milestoneClock).now += 1000
+
 		Expect(respond.fetchFromBottom()).To(BeTrue())
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
 
 		// The Bottom buffer task owns the at-head admission wait: reached the
 		// head of the Bottom buffer, then waited for the busy Top port to free.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(bottomPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindNetworkBusy))
-		Expect(bufMs[1].What).To(Equal(topPort.Name()))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindNetworkBusy))
+		Expect(bufMs[0].What).To(Equal(topPort.Name()))
 	})
 
 	It("records the local page-walk latency as a work milestone on req_in "+
@@ -253,6 +263,8 @@ var _ = Describe("GMMU milestones", func() {
 
 		topPort.Deliver(makeReq(0x1000))
 
+		engine.(*milestoneClock).now += 1000
+
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
 		// Tick 3: CycleLeft==0, local hit completes and responds upstream.
@@ -264,7 +276,7 @@ var _ = Describe("GMMU milestones", func() {
 		Expect(reqInID).ToNot(BeZero())
 
 		// The local walk's processing latency is recorded as work on req_in.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
 			gmmuComp.Name()+".walk")).To(BeTrue())
 	})
 
@@ -282,6 +294,8 @@ var _ = Describe("GMMU milestones", func() {
 		pageTable.Insert(page)
 
 		topPort.Deliver(makeReq(0x1000))
+
+		engine.(*milestoneClock).now += 1000
 
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
@@ -314,6 +328,8 @@ var _ = Describe("GMMU milestones", func() {
 
 		bottomPort.Deliver(rsp)
 
+		engine.(*milestoneClock).now += 1000
+
 		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
 		modelingtest.Tick(gmmuComp)
 
@@ -322,7 +338,7 @@ var _ = Describe("GMMU milestones", func() {
 
 		// (b) The remote-walk in-flight wait is recorded as a translation
 		// milestone on the ORIGINAL req_in.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindTranslation,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
 			"translation")).To(BeTrue())
 
 		// (c) The downstream req_out subtask is finalized when the response

@@ -3,6 +3,7 @@ package idealmemcontroller
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -10,8 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a read into the ideal memory
@@ -22,7 +21,7 @@ import (
 // controller is a leaf, so the only open task per access is its req_in.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	storage := mem.NewStorage(1 * mem.MB)
 
@@ -52,7 +51,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// Admit a read: takeNewReqs opens the req_in task and parks the access in
 	// InflightTransactions; the access never completes within the ticks below.

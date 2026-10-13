@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type receivePipelineMW struct {
@@ -41,8 +41,21 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
+			// Start work only when admission commits; blocked retries have no task.
+			if pcs.Latency == 0 && !pcs.RouteBuffer.CanPush() {
+				break
+			}
+			if pcs.Latency != 0 && !pcs.Pipeline.CanAccept() {
+				break
+			}
+
 			flit := itemI
-			taskID := m.comp.NewID()
+			taskID := tasks.StartTask(m.comp, tasks.StartInfo{
+				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
+				Kind:     "flit",
+				What:     "flit_inside_sw",
+				Detail:   flit,
+			})
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,
@@ -50,28 +63,14 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			if pcs.Latency == 0 {
-				if !pcs.RouteBuffer.CanPush() {
-					break
-				}
 				pcs.RouteBuffer.Push(item)
 			} else {
-				if !pcs.Pipeline.CanAccept() {
-					break
-				}
 				pcs.Pipeline.Accept(item)
 			}
 
 			port.RetrieveIncoming()
 
 			madeProgress = true
-
-			tracing.StartTask(m.comp, tracing.TaskStart{
-				ID:       taskID,
-				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
-				Kind:     "flit",
-				What:     "flit_inside_sw",
-				Detail:   flit,
-			})
 		}
 	}
 

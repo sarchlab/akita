@@ -7,7 +7,7 @@ import (
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
 // All four port message hook positions carry the Port as Domain, a Msg as Item,
-// and PortBufferTrace as Detail. Hooks must not call buffer operations (peek, count, or mutate): the port
+// and nil Detail. Hooks must not call buffer operations (peek, count, or mutate): the port
 // may hold its buffer lock while notifying them.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
@@ -26,12 +26,12 @@ var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 	Name: "Port Msg Retrieve Outgoing",
 }
 
-// PortBufferTrace describes the buffer task affected by a port hook. TaskID is
-// the enqueued or removed entry's task. HeadTaskID is the task that just reached
-// the head (zero if none). These IDs are stored in the port checkpoint.
-type PortBufferTrace struct {
-	TaskID     uint64
-	HeadTaskID uint64
+// WaitReason describes why a message waited at the head of a port buffer.
+// An empty Kind selects the port's default reason (consumer for incoming,
+// network_busy for outgoing); What is then supplied by the port as well.
+type WaitReason struct {
+	Kind string
+	What string
 }
 
 // A RemotePort is a string that refers to another port.
@@ -65,9 +65,15 @@ type Port interface {
 	RetrieveIncoming() (Msg, bool)
 	PeekIncoming() (Msg, bool)
 
-	// PeekIncomingTaskID returns the head entry's buffer task ID, or zero
-	// when empty or untraced. Read it before RetrieveIncoming.
-	PeekIncomingTaskID() uint64
+	// AddIncomingMilestone records the completed wait since the incoming head's
+	// previous milestone, or since it became the head. It does not remove the
+	// message. Empty buffers, untracked messages, and zero-length waits are no-ops.
+	// Call at a wait-stage transition, not on each unsuccessful polling attempt.
+	AddIncomingMilestone(reason WaitReason)
+
+	// AddOutgoingMilestone is the corresponding operation for the outgoing head.
+	// Retrieve adds the default reason only for time left since the last milestone.
+	AddOutgoingMilestone(reason WaitReason)
 
 	// Buffer counts
 	NumIncoming() int

@@ -3,34 +3,58 @@ package modeling
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// standaloneSimulation provides a simulation context without monitoring or recording.
+// StandaloneSimulation provides a simulation context without monitoring or recording.
 // All elements in a standalone setup must
 // share one instance, just as they would share a full simulation.
-type standaloneSimulation struct {
-	setup  assembly.Setup
-	engine timing.Engine
-	ids    *timing.IDGenerator
+type StandaloneSimulation struct {
+	setup           assembly.Setup
+	engine          timing.Engine
+	ids             *timing.IDGenerator
+	taskTracker     *tasks.Tracker
+	componentsBuilt bool
 }
 
 // NewStandaloneSimulation creates a lightweight simulation around an engine.
 // Construct it once and pass it to every builder in that simulation. This is
 // useful for isolated tests and engine-only examples.
-func NewStandaloneSimulation(engine timing.Engine) timing.Simulation {
-	s := &standaloneSimulation{engine: engine, ids: &timing.IDGenerator{}}
+func NewStandaloneSimulation(engine timing.Engine) *StandaloneSimulation {
+	s := &StandaloneSimulation{engine: engine, ids: &timing.IDGenerator{}}
 	engine.SetRunGuard(s.setup.Ready)
 	return s
 }
 
-func (s *standaloneSimulation) Engine() timing.Engine             { return s.engine }
-func (s *standaloneSimulation) NewID() uint64                     { return s.ids.NewID() }
-func (s *standaloneSimulation) RegisterComponent(e naming.Named)  { s.setup.Register(e) }
-func (s *standaloneSimulation) RegisterConnection(e naming.Named) { s.setup.Register(e) }
-func (s *standaloneSimulation) RegisterResource(e naming.Named)   { s.setup.Register(e) }
-func (s *standaloneSimulation) RegisterPort(e naming.Named)       { s.setup.Register(e) }
+func (s *StandaloneSimulation) Engine() timing.Engine { return s.engine }
+func (s *StandaloneSimulation) NewID() uint64         { return s.ids.NewID() }
+func (s *StandaloneSimulation) RegisterComponent(e naming.Named) {
+	s.setup.Register(e)
+	s.componentsBuilt = true
+}
+func (s *StandaloneSimulation) RegisterConnection(e naming.Named) { s.setup.Register(e) }
+func (s *StandaloneSimulation) RegisterResource(e naming.Named)   { s.setup.Register(e) }
+func (s *StandaloneSimulation) RegisterPort(e naming.Named) {
+	s.setup.Register(e)
+}
 
-func (s *standaloneSimulation) Initialize() error                { return s.setup.Initialize() }
-func (s *standaloneSimulation) RequireSetup()                    { s.setup.RequireSetup() }
-func (s *standaloneSimulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
+func (s *StandaloneSimulation) Initialize() error                { return s.setup.Initialize() }
+func (s *StandaloneSimulation) RequireSetup()                    { s.setup.RequireSetup() }
+func (s *StandaloneSimulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
+
+// WithTaskTracking enables typed task observations for an engine-only setup.
+// Call before building components so each owner receives the same tracker.
+func (s *StandaloneSimulation) WithTaskTracking() *StandaloneSimulation {
+	s.setup.RequireSetup()
+	if s.taskTracker == nil {
+		if s.componentsBuilt {
+			panic("modeling: enable task tracking before building components")
+		}
+		s.taskTracker = tasks.NewTracker()
+	}
+	return s
+}
+
+// TaskTracker returns the optional task service.
+func (s *StandaloneSimulation) TaskTracker() *tasks.Tracker { return s.taskTracker }

@@ -3,10 +3,10 @@ package sim
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/tasks"
+	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type Simulation struct {
@@ -18,6 +18,7 @@ type Simulation struct {
 	idGenerator      *timing.IDGenerator
 	dataRecorder     datarecording.DataRecorder
 	visTracer        *tracing.DBTracer
+	taskTracker      *tasks.Tracker
 	metaRecorder     *metaRecorder
 	topologyRecorder *topologyRecorder
 	monitor          Monitor
@@ -56,7 +57,9 @@ func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 }
 
 // VisTracer returns the visualization tracer owned by the simulation.
-// The tracer exists even when monitoring and tracing are disabled.
+// It returns nil when task tracking is disabled. Enable WithTaskTracking during
+// construction to record tasks with manual StartTracing. WithMonitor and
+// WithVisTracingOnStart also enable task tracking and create the tracer.
 func (s *Simulation) VisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
@@ -77,6 +80,11 @@ func (s *Simulation) Monitor() Monitor {
 // typed Register methods pass the concrete object, which satisfies Entity, so
 // the inventory holds the live entity itself.
 func (s *Simulation) registerEntity(e Entity) {
+	if e.Name() == taskTrackerCheckpointName {
+		if _, ok := e.(*taskTrackerCheckpoint); !ok {
+			panic("simulation: TaskTracker is a reserved entity name")
+		}
+	}
 	s.setup.Register(e)
 	name := e.Name()
 
@@ -95,13 +103,6 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 	s.registerEntity(c)
 	s.components = append(s.components, c)
 
-	if hookable, ok := c.(interface {
-		naming.Named
-		hooking.Hookable
-	}); ok {
-		tracing.CollectTrace(hookable, s.visTracer)
-	}
-
 	if s.monitor != nil {
 		s.monitor.RegisterComponent(c)
 	}
@@ -119,13 +120,6 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
-
-	// Attach incoming- and outgoing-buffer tracing, mirroring how
-	// RegisterComponent attaches CollectTrace. The resulting tasks flow to the
-	// component tracer, so they only materialize for components that are
-	// themselves traced.
-	tracing.CollectIncomingBufferTrace(p)
-	tracing.CollectOutgoingBufferTrace(p)
 
 	if s.monitor != nil {
 		s.monitor.RegisterPort(port)
@@ -185,3 +179,6 @@ func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }
 
 // RequireNameAvailable validates a name before a binding changes either side.
 func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
+
+// TaskTracker returns the simulation task service, or nil when tracking is disabled.
+func (s *Simulation) TaskTracker() *tasks.Tracker { return s.taskTracker }

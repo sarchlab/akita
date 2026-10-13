@@ -1,3 +1,7 @@
+> Historical implementation notes. The current v5 API and ownership contracts
+> are documented in [sim/tasks](sim/tasks/README.md); names below describe the
+> earlier instrumentation work.
+
 # Tracing Instrumentation Plan
 
 This plan captures the tracing/instrumentation work for the Akita simulator: the

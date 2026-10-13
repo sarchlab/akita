@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ctrlParseMW handles control port parsing and transaction completion.
@@ -63,13 +63,9 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	}
 
 	// The slot is free and this request is being admitted. Attribute the
-	// at-head admission wait to the buffer task (which the port hook closes at
+	// at-head admission wait to the buffer task (which the port closes at
 	// retrieve), using the task ID stored in the port's head entry.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   m.comp.Name() + ".transaction",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".transaction"))
 
 	m.topPort().RetrieveIncoming()
 
@@ -106,7 +102,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	state.CurrentTransaction.RecvTaskID = tracing.TraceReqReceive(m.comp, req)
+	state.CurrentTransaction.RecvTaskID = tasks.StartReqIn(m.comp, req)
 
 	return true
 }
@@ -143,7 +139,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, trans.RecvTaskID)
+	tasks.EndReqIn(m.comp, trans.RecvTaskID)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{

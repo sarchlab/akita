@@ -4,13 +4,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // cmdTracer is a Tracer that counts the command-issue milestones recorded on
 // sub-transaction tasks. It only observes — it must not change results.
 type cmdTracer struct {
-	tracing.NopTracer
+	tasks.NopObserver
 	count    int
 	byKind   map[string]int
 	subTasks int
@@ -20,13 +20,13 @@ func newCmdTracer() *cmdTracer {
 	return &cmdTracer{byKind: map[string]int{}}
 }
 
-func (t *cmdTracer) StartTask(ts tracing.TaskStart) {
+func (t *cmdTracer) TaskStarted(ts tasks.Task) {
 	if ts.Kind == "sub-trans" {
 		t.subTasks++
 	}
 }
 
-func (t *cmdTracer) AddMilestone(m tracing.Milestone) {
+func (t *cmdTracer) MilestoneAdded(m tasks.Milestone) {
 	t.count++
 	t.byKind[m.What]++
 }

@@ -1,0 +1,109 @@
+package tasks
+
+import (
+	"reflect"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
+)
+
+// StartTask begins work and returns an independent task ID to retain in component
+// State. Disabled tracking returns zero without consulting the clock or ID
+// generator. Simulation behavior must not depend on numeric ID values.
+func StartTask(o Owner, info StartInfo) uint64 {
+	t := o.TaskTracker()
+	if t == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.start(o, info)
+}
+
+// EndTask completes a task, including one started by another owner in the same
+// simulation. Zero and unknown IDs are ignored (for example after restore).
+func EndTask(o Owner, info EndInfo) {
+	t := o.TaskTracker()
+	if t == nil || info.ID == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.end(o, info.ID)
+}
+
+// AddTag forwards a categorical label for an open task.
+func AddTag(o Owner, tag Tag) {
+	t := o.TaskTracker()
+	if t == nil || tag.TaskID == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	e := t.open[tag.TaskID]
+	if e == nil {
+		return
+	}
+	if tag.ID == 0 {
+		tag.ID = o.NewID()
+	}
+	tag.Time = o.CurrentTime()
+	t.notify(e, func(observer Observer) { observer.TagAdded(tag) })
+}
+
+// AddMilestone records when a blocking condition is resolved for an open task.
+func AddMilestone(o Owner, m Milestone) {
+	t := o.TaskTracker()
+	if t == nil || m.TaskID == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.milestone(o, m)
+}
+
+// StartReqOut begins a sender task. Call before port.Send so child buffer tasks
+// can resolve their parent, and retain the returned ID until EndReqOut.
+func StartReqOut(o Owner, msg messaging.Msg, parent uint64) uint64 {
+	if o.TaskTracker() == nil {
+		return 0
+	}
+	return StartTask(o, StartInfo{MsgID: msg.ID, ParentID: parent, Kind: KindReqOut, What: msgTypeName(msg), Detail: msg})
+}
+
+// StartReqIn begins the receiver's handling task; retain its ID until EndReqIn.
+func StartReqIn(o Owner, msg messaging.Msg) uint64 {
+	if o.TaskTracker() == nil {
+		return 0
+	}
+	return StartTask(o, StartInfo{MsgID: msg.ID, Kind: KindReqIn, What: msgTypeName(msg), Detail: msg})
+}
+
+// EndReqIn ends receiver work using the ID returned by StartReqIn.
+// Zero and unknown IDs are ignored, including repeated ends during reset.
+func EndReqIn(o Owner, id uint64) { EndTask(o, EndInfo{ID: id}) }
+
+// EndReqOut ends sender work using the ID returned by StartReqOut.
+// Zero and unknown IDs are ignored, including repeated ends during reset.
+func EndReqOut(o Owner, id uint64) { EndTask(o, EndInfo{ID: id}) }
+
+func msgTypeName(msg messaging.Msg) string {
+	t := reflect.TypeOf(msg.Payload)
+	if t == nil {
+		return "metadata"
+	}
+	if name := t.Name(); name != "" {
+		return name
+	}
+	return t.String()
+}
+
+func singleKindLocation(name, kind, what string) string {
+	switch kind {
+	case KindReqIn, KindReqOut:
+		return name + "." + kind
+	case KindPipeline:
+		return what
+	default:
+		return name
+	}
+}

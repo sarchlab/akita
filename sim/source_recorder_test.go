@@ -84,7 +84,7 @@ func TestRecordSourceArchives_RecordsAkitaFromDisk(t *testing.T) {
 
 	files := decodeArchive(t, b64)
 	// Stable files that define trace vocabulary the agent reads.
-	for _, want := range []string{"sim/tracing/tracer.go", "mem/mshr/mshr.go"} {
+	for _, want := range []string{"sim/tasks/observer.go", "mem/mshr/mshr.go"} {
 		if _, ok := files[want]; !ok {
 			t.Errorf("recorded Akita source missing %q (have %d files)", want, len(files))
 		}

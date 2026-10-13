@@ -3,6 +3,7 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -10,8 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation lookup into the TLB so
@@ -22,7 +21,7 @@ import (
 // started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	remotePort := messaging.RemotePort("MMU")
 
@@ -49,7 +48,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	controlPort := tlbComp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(tlbComp, rec)
+	tlbComp.TaskTracker().Subscribe(rec, tlbComp)
 
 	// Deliver a lookup that misses (fresh TLB), so it is staged into the lookup
 	// pipeline (opening req_in + a pipeline subtask) and, once it reaches the

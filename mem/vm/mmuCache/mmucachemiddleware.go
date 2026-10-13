@@ -6,8 +6,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type mmuCacheMiddleware struct {
@@ -164,19 +164,15 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	// the Bottom port is over. This admission wait belongs to the Top
 	// incoming-buffer task; req_in (opened just below, at retrieve) covers only
 	// the processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.bottomPort().Name(),
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.bottomPort().Name()))
 
 	m.topPort().RetrieveIncoming()
 
 	// Open req_in for the original Top request at retrieve, and initiate the
 	// forwarded Bottom request as a req_out parented to it. The Top request's
 	// task IDs are retained by the Bottom request ID until its response arrives.
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
-	sendTaskID := tracing.TraceReqInitiate(m.comp, reqToBottom, recvTaskID)
+	recvTaskID := tasks.StartReqIn(m.comp, req)
+	sendTaskID := tasks.StartReqOut(m.comp, reqToBottom, recvTaskID)
 	m.bottomPort().Send(reqToBottom)
 
 	m.comp.State.InflightReqs[reqToBottom.ID] = inflightReqState{
@@ -238,13 +234,8 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// The response had reached the head of the Bottom buffer and was held there
 	// until the Top port could accept the upstream response. That at-head
 	// send-wait is over now; attribute it to the Bottom incoming-buffer task.
-	// This must precede RetrieveIncoming: retrieving closes the buffer task and
-	// removes its entry, after which PeekIncomingTaskID refers to the next head.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.bottomPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.topPort().Name(),
-	})
+	// This must precede RetrieveIncoming, which ends the port-owned buffer task.
+	m.bottomPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.topPort().Name()))
 
 	m.bottomPort().RetrieveIncoming()
 	delete(next.OutstandingBottomReqs, rsp.RspTo)
@@ -252,18 +243,18 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// The upstream response is on its way: finalize the forwarded req_out and
 	// complete the original req_in, using the IDs saved in the transaction.
 	if inflight, ok := next.InflightReqs[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(m.comp, inflight.SendTaskID)
+		tasks.EndReqOut(m.comp, inflight.SendTaskID)
 
 		// The downstream walk-fetch the original Top request waited on has
 		// returned: charge that in-flight wait to the original req_in (this is
 		// the req_in opened at retrieve in sendReqToBottom).
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: inflight.RecvTaskID,
-			Kind:   tracing.MilestoneKindTranslation,
+			Kind:   tasks.MilestoneKindTranslation,
 			What:   "translation",
 		})
 
-		tracing.TraceReqComplete(m.comp, inflight.RecvTaskID)
+		tasks.EndReqIn(m.comp, inflight.RecvTaskID)
 		delete(next.InflightReqs, rsp.RspTo)
 	}
 

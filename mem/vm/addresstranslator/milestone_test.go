@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // traceRecorder captures the full trace event stream the address translator
@@ -19,26 +19,26 @@ import (
 // without the DBTracer's dedup, so a test can assert the exact ordered set of
 // milestones and which req_out tasks are finalized.
 type traceRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
-	tags       []tracing.TaskTag
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
+	tags       []tasks.Tag
 }
 
-func (r *traceRecorder) StartTask(t tracing.TaskStart) {
+func (r *traceRecorder) TaskStarted(t tasks.Task) {
 	r.starts = append(r.starts, t)
 }
 
-func (r *traceRecorder) EndTask(t tracing.TaskEnd) {
+func (r *traceRecorder) TaskEnded(t tasks.Task) {
 	r.ends = append(r.ends, t)
 }
 
-func (r *traceRecorder) AddMilestone(m tracing.Milestone) {
+func (r *traceRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *traceRecorder) AddTaskTag(t tracing.TaskTag) {
+func (r *traceRecorder) TagAdded(t tasks.Tag) {
 	r.tags = append(r.tags, t)
 }
 
@@ -62,8 +62,8 @@ func (r *traceRecorder) taskID(kind string) uint64 {
 	return 0
 }
 
-func (r *traceRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *traceRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -73,15 +73,24 @@ func (r *traceRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 	return ms
 }
 
-func (r *traceRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
+func (r *traceRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	ms := r.milestonesOn(taskID)
-	ks := make([]tracing.MilestoneKind, len(ms))
+	ks := make([]tasks.MilestoneKind, len(ms))
 	for i, m := range ms {
 		ks[i] = m.Kind
 	}
 
 	return ks
 }
+
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
 var _ = Describe("Address Translator milestones", func() {
 	var (
@@ -97,8 +106,8 @@ var _ = Describe("Address Translator milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
 		spec.Log2PageSize = 12
@@ -145,10 +154,10 @@ var _ = Describe("Address Translator milestones", func() {
 		// Attach the recorder before driving so request starts allocate
 		// real receiver-side task IDs (it returns 0 when there are no hooks).
 		rec = &traceRecorder{}
-		tracing.CollectTrace(at, rec)
+		at.TaskTracker().Subscribe(rec, at)
 		// The translation-send admission milestone lands on the Top-port buffer
 		// task, so the test needs the buffer task to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
+
 	})
 
 	makeRead := func(addr uint64) messaging.Msg {
@@ -183,6 +192,7 @@ var _ = Describe("Address Translator milestones", func() {
 		bottomRsp func(rspTo uint64) messaging.Msg,
 	) {
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 		Expect(ptMW.translate()).To(BeTrue())
 
 		transReqID := at.State.Transactions[0].TranslationReqID
@@ -196,12 +206,16 @@ var _ = Describe("Address Translator milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		translationPort.Deliver(transRsp)
+
+		engine.(*milestoneClock).now += 1000
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 
 		bottomReqID := at.State.InflightReqToBottom[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
 		bottomPort.Deliver(bottomRsp(bottomReqID))
+
+		engine.(*milestoneClock).now += 1000
 		Expect(rpMW.respond()).To(BeTrue())
 
 		topPort.RetrieveOutgoing()
@@ -217,7 +231,7 @@ var _ = Describe("Address Translator milestones", func() {
 			return rsp
 		})
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
@@ -225,22 +239,21 @@ var _ = Describe("Address Translator milestones", func() {
 
 		// The buffer task owns the pre-admission story: reached the head of the
 		// Top buffer, then waited to send the translation request.
-		Expect(rec.kindsOn(bufID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindQueue,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(bufID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].What).To(Equal(translationPort.Name()))
+
+		Expect(bufMs[0].What).To(Equal(translationPort.Name()))
 
 		// req_in owns only the post-admission processing — including the bottom
 		// network-busy milestone (on the top req_in, not a phantom keyed by the
 		// downstream request's receiver ID).
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindTranslation,
-			tracing.MilestoneKindNetworkBusy,
-			tracing.MilestoneKindData,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindTranslation,
+			tasks.MilestoneKindNetworkBusy,
+			tasks.MilestoneKindData,
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		reqMs := rec.milestonesOn(reqInID)
 		Expect(reqMs[0].What).To(Equal("translation"))
@@ -263,11 +276,11 @@ var _ = Describe("Address Translator milestones", func() {
 		)
 
 		reqInID := rec.taskID("req_in")
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindTranslation,
-			tracing.MilestoneKindNetworkBusy,
-			tracing.MilestoneKindSubTask,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindTranslation,
+			tasks.MilestoneKindNetworkBusy,
+			tasks.MilestoneKindSubTask,
+			tasks.MilestoneKindNetworkBusy,
 		}))
 	})
 
@@ -278,8 +291,8 @@ var _ = Describe("Address Translator milestones", func() {
 		// to the surviving transaction shifted into the freed slot.
 		transReq1ID := sim.NewID()
 		transReq2ID := sim.NewID()
-		transTask1ID := sim.NewID()
-		transTask2ID := sim.NewID()
+		transTask1ID := tasks.StartReqOut(at, messaging.Msg{ID: transReq1ID}, 0)
+		transTask2ID := tasks.StartReqOut(at, messaging.Msg{ID: transReq2ID}, 0)
 
 		req := makeRead(0x10040)
 
@@ -307,6 +320,8 @@ var _ = Describe("Address Translator milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		translationPort.Deliver(transRsp)
+
+		engine.(*milestoneClock).now += 1000
 
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 

@@ -125,12 +125,12 @@ cd customhook && go run main.go
 ### tracing — Measuring Work with Tracing Tasks
 
 A single worker component wraps each job in a tracing task
-(`tracing.StartTask` / `EndTask`). A `BusyTimeTracer` and an
-`AverageTimeTracer`, attached with `tracing.CollectTrace`, report how long
+(`tasks.StartTask` / `tasks.EndTask`). A `BusyTimeTracer` and an
+`AverageTimeTracer`, attached with `Tracker.Subscribe`, report how long
 the worker was busy and how long an average job took.
 
-**Key concepts**: tracing tasks, `tracing.CollectTrace`, `BusyTimeTracer`,
-`AverageTimeTracer`, `TaskFilter` — tracing built on hooks.
+**Key concepts**: tracing tasks, `Tracker.Subscribe`, `BusyTimeTracer`,
+`AverageTimeTracer`, `TaskFilter` — typed task observations.
 
 ```bash
 cd tracing && go run main.go
@@ -139,13 +139,13 @@ cd tracing && go run main.go
 ### customtracer — Writing Your Own Tracer
 
 A worker plus a hand-written `maxDurationTracer` that implements the
-`tracing.Tracer` interface (real `StartTask`/`EndTask`, no-op
-`AddTaskTag`/`AddMilestone` via the embedded `tracing.NopTracer`) and reports
+`tasks.Observer` interface (`TaskEnded` plus no-op callbacks from
+`tasks.NopObserver`) and reports
 the longest job. Attached the same way as a built-in tracer, with
-`tracing.CollectTrace`.
+`Tracker.Subscribe`.
 
-**Key concepts**: the `tracing.Tracer` interface, holding state across
-`StartTask`/`EndTask`, reading a `timing.TimeTeller`.
+**Key concepts**: the `tasks.Observer` interface, complete end records,
+synchronized aggregation.
 
 ```bash
 cd customtracer && go run main.go
@@ -154,13 +154,13 @@ cd customtracer && go run main.go
 ### reqtracing — Tracing the Request Lifecycle
 
 A client and server exchange request/response over a direct connection,
-annotated with the four request helpers (`TraceReqInitiate`, `TraceReqReceive`,
-`TraceReqComplete`, `TraceReqFinalize`). Two `AverageTimeTracer`s — filtering
+annotated with the four request helpers (`StartReqOut`, `StartReqIn`,
+`EndReqIn`, `EndReqOut`). Two `AverageTimeTracer`s — filtering
 `req_out` and `req_in` — report round-trip latency and server handling time
 from the same run. Each component type is in its own package (`client`,
 `server`); `main.go` wires them together.
 
-**Key concepts**: nested `req_out`/`req_in` tasks, the four `TraceReq*`
+**Key concepts**: nested `req_out`/`req_in` tasks, the four `request-task`
 helpers, selecting tasks by `Kind` with a `TaskFilter`.
 
 ```bash
@@ -171,12 +171,12 @@ cd reqtracing && go run main.go
 
 A request travels a memory hierarchy (`Client → L1 → L2 → Memory`); each cache
 misses and forwards downward, parenting the downstream task to the one it is
-handling using the stored ID returned by `tracing.TraceReqReceive`. A custom tracer attached to every
+handling using the stored ID returned by `tasks.StartReqIn`. A custom tracer attached to every
 component prints the resulting task tree. Each component type is in its own
 package (`client`, `cache`, `memory`); `main.go` builds the hierarchy bottom-up
 so each level's `Spec` can name the port of the level below.
 
-**Key concepts**: task IDs in State, `RequestTaskParents`, `parentID` chaining, task trees
+**Key concepts**: task IDs in State, shared tracker parent resolution, `parentID` chaining, task trees
 across components, attaching one tracer to many domains.
 
 ```bash

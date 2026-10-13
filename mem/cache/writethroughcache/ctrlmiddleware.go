@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ctrlMiddleware owns every control verb: the universal verbs (Pause,
@@ -155,6 +155,8 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil
+	next.AdmissionMsgID = 0
+	next.WaitingForDir = false
 	next.IsPaused = false
 	next.IsDraining = false
 	next.CurrentCmdID = 0
@@ -188,23 +190,23 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
+			tasks.EndReqIn(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasReadToBottom {
-			tracing.EndTaskOnReset(comp, trans.ReadTaskID)
+			tasks.EndReqOut(comp, trans.ReadTaskID)
 		}
 
 		if trans.HasWriteToBottom {
-			tracing.EndTaskOnReset(comp, trans.WriteTaskID)
+			tasks.EndReqOut(comp, trans.WriteTaskID)
 		}
 
 		if trans.DirPipelineTaskID != 0 {
-			tracing.EndTaskOnReset(comp, trans.DirPipelineTaskID)
+			tasks.EndTask(comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
 		}
 
 		if trans.BankTaskID != 0 {
-			tracing.EndTaskOnReset(comp, trans.BankTaskID)
+			tasks.EndTask(comp, tasks.EndInfo{ID: trans.BankTaskID})
 		}
 	}
 }

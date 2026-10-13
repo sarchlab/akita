@@ -3,6 +3,7 @@ package mmu
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -10,8 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation request into the MMU
@@ -21,7 +20,7 @@ import (
 // leaf page walk (no downstream req_out), so a single req_in is open per walk.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	pageTable := vm.NewPageTable(12)
 
@@ -48,7 +47,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// Insert a mapped page so the walk resolves locally once its countdown
 	// elapses (no panic, no migration path), then admit the translation request.

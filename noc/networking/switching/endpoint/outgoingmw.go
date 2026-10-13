@@ -5,8 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
@@ -42,7 +42,6 @@ func msgToFlits(
 				MsgID:        msg.ID,
 				Dst:          msg.Dst,
 				MsgTaskID:    msgTaskID,
-				FlitTaskID:   newID(),
 				Msg:          carried,
 			}}
 	}
@@ -96,10 +95,10 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 		// The flit waited in FlitsToSend until the outgoing network port could
 		// accept it; charge that span to the flit_e2e task.
-		if m.comp.NumHooks() > 0 {
-			tracing.AddMilestone(m.comp, tracing.Milestone{
+		if m.comp.TaskTracker() != nil {
+			tasks.AddMilestone(m.comp, tasks.Milestone{
 				TaskID: flit.Payload.(packetization.Flit).FlitTaskID,
-				Kind:   tracing.MilestoneKindNetworkBusy,
+				Kind:   tasks.MilestoneKindNetworkBusy,
 				What:   m.comp.Name() + ".NetworkPort",
 			})
 		}
@@ -177,17 +176,15 @@ func (m *outgoingMW) prepareFlits() bool {
 
 		// The transport tasks carry their IDs in checkpointed flit state.
 		// Observers resolve msg_e2e under req_out using the original MsgID.
-		msgTaskID := m.comp.NewID()
+		msgTaskID := m.logMsgE2EStart(meta)
 		flits := msgToFlits(
 			m.comp.NewID,
 			meta, spec, networkPortRemote, m.comp.Spec.DefaultSwitchDst, msgTaskID)
 
-		state.FlitsToSend = append(state.FlitsToSend, flits...)
-
-		m.logMsgE2EStart(meta, msgTaskID)
-		for _, fs := range flits {
-			m.logFlitE2EStart(fs)
+		for i := range flits {
+			m.logFlitE2EStart(&flits[i])
 		}
+		state.FlitsToSend = append(state.FlitsToSend, flits...)
 
 		madeProgress = true
 	}
@@ -196,32 +193,27 @@ func (m *outgoingMW) prepareFlits() bool {
 // logMsgE2EStart opens the per-message msg_e2e task that the receiving endpoint
 // closes once the message is reassembled. It is the parent of the message's
 // flit_e2e tasks.
-func (m *outgoingMW) logMsgE2EStart(meta messaging.Msg, msgTaskID uint64) {
-	if m.comp.NumHooks() == 0 {
-		return
-	}
-
-	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:     msgTaskID,
+func (m *outgoingMW) logMsgE2EStart(meta messaging.Msg) uint64 {
+	return tasks.StartTask(m.comp, tasks.StartInfo{
 		MsgID:  meta.ID,
-		Kind:   "msg_e2e",
+		Kind:   tasks.KindMsgTransport,
 		What:   "msg_e2e",
 		Detail: meta,
 	})
 }
 
-func (m *outgoingMW) logFlitE2EStart(flit messaging.Msg) {
-	if m.comp.NumHooks() == 0 {
+func (m *outgoingMW) logFlitE2EStart(flit *messaging.Msg) {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 	part := flit.Payload.(packetization.Flit)
-	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       part.FlitTaskID,
+	part.FlitTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		MsgID:    flit.ID,
 		ParentID: part.MsgTaskID,
-		Kind:     "flit_e2e",
+		Kind:     tasks.KindFlitTransport,
 		What:     "flit_e2e",
 		Location: m.comp.Name() + ".FlitBuf",
-		Detail:   flit,
+		Detail:   *flit,
 	})
+	flit.Payload = part
 }

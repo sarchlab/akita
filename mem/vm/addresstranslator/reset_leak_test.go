@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -11,8 +12,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a read into the address translator so
@@ -21,7 +20,7 @@ import (
 // mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	spec := Definition.DefaultSpec
 	spec.Log2PageSize = 12
@@ -64,7 +63,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(at, rec)
+	at.TaskTracker().Subscribe(rec, at)
 
 	// Admit a read: translate opens the top req_in and the translation req_out,
 	// then awaits the translation response (which never comes — the request is in

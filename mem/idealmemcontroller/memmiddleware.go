@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type memMiddleware struct {
@@ -57,7 +57,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
 	spec := m.comp.Spec
-	recvTaskID := tracing.TraceReqReceive(m.comp, msg)
+	recvTaskID := tasks.StartReqIn(m.comp, msg)
 
 	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
@@ -152,7 +152,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, tx.RecvTaskID)
+	tasks.EndReqIn(m.comp, tx.RecvTaskID)
 
 	return true
 }
@@ -188,7 +188,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		m.comp.Resources.Storage.Write(addr, data)
 	}
 
-	tracing.TraceReqComplete(m.comp, tx.RecvTaskID)
+	tasks.EndReqIn(m.comp, tx.RecvTaskID)
 
 	return true
 }

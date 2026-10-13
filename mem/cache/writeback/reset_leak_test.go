@@ -3,15 +3,15 @@ package writeback
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a read MISS into the writeback cache
@@ -22,7 +22,7 @@ import (
 // transaction table must leave no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 	storage := mem.NewStorage(1 * mem.MB)
 
 	spec := Definition.DefaultSpec
@@ -58,7 +58,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	ctrlPort := comp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// Deliver a read that MISSES: the cache opens a transaction and forwards a
 	// fetch ReadReq out the Bottom port. We never answer it, so req_in, the
@@ -126,11 +126,11 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 }
 
 type resetEndCounter struct {
-	tracing.NopTracer
+	tasks.NopObserver
 	ends map[uint64]int
 }
 
-func (r *resetEndCounter) EndTask(task tracing.TaskEnd) { r.ends[task.ID]++ }
+func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 
 func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 	comp := buildStageTestComp(stageTestSpec(), Resources{
@@ -138,12 +138,12 @@ func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 		AddressToPortMapper: &mem.SinglePortMapper{Port: "Lower"},
 	}, makePorts("Cache", 8))
 	rec := &resetEndCounter{ends: make(map[uint64]int)}
-	tracing.CollectTrace(comp, rec)
-	completed := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
-	active := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
-	flush := tracing.TraceReqReceive(comp, messaging.Msg{ID: comp.NewID()})
-	eviction := tracing.TraceReqInitiate(comp, messaging.Msg{ID: comp.NewID()}, completed)
-	tracing.TraceReqComplete(comp, completed)
+	comp.TaskTracker().Subscribe(rec, comp)
+	completed := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	active := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	flush := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	eviction := tasks.StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	tasks.EndReqIn(comp, completed)
 	comp.State.HasProcessingFlush = true
 	comp.State.ProcessingFlush = flushReqState{RecvTaskID: flush}
 	comp.State.Transactions = []transactionState{

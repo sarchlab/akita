@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // respondMW handles the bottom→top response path:
@@ -47,11 +47,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	// response on it — counted on the incoming-buffer task since the response
 	// reached the head of the Bottom buffer — is over. The original request
 	// retains its req_in until this response is forwarded.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.bottomPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.topPort().Name(),
-	})
+	m.bottomPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.topPort().Name()))
 
 	m.bottomPort().RetrieveIncoming()
 
@@ -100,14 +96,14 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 	// req_in, the dependency wait spent while that remote response was in
 	// flight. RecvTaskID is the original req_in id; do not key this to the
 	// response message.
-	tracing.TraceReqFinalize(m.comp, reqTransaction.SendTaskID)
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.EndReqOut(m.comp, reqTransaction.SendTaskID)
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: reqTransaction.RecvTaskID,
-		Kind:   tracing.MilestoneKindTranslation,
+		Kind:   tasks.MilestoneKindTranslation,
 		What:   "translation",
 	})
 
-	tracing.TraceReqComplete(m.comp, reqTransaction.RecvTaskID)
+	tasks.EndReqIn(m.comp, reqTransaction.RecvTaskID)
 	delete(state.RemoteMemReqs, rsp.RspTo)
 
 	return true

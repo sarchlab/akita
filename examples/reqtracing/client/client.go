@@ -1,7 +1,7 @@
 // Package client is the requesting side of the reqtracing example: a ticking
 // component that sends NumReqs requests to Dst, one at a time. It traces each
-// round trip as a req_out task, opened with TraceReqInitiate and closed with
-// TraceReqFinalize.
+// round trip as a req_out task, opened with StartReqOut and closed with
+// EndReqOut.
 package client
 
 import (
@@ -9,8 +9,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // Spec is the client's configuration.
@@ -91,7 +91,7 @@ func (m *requestMW) send() bool {
 		}}
 
 	// Store the returned task ID, separately from the request ID.
-	taskID := tracing.TraceReqInitiate(m.comp, req, 0)
+	taskID := tasks.StartReqOut(m.comp, req, 0)
 	port.Send(req)
 
 	s.InFlight[req.ID] = taskID
@@ -112,7 +112,7 @@ func (m *requestMW) receive() bool {
 	_ = msg.Payload.(server.ReadRsp)
 	rsp := msg
 	if taskID, ok := s.InFlight[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(m.comp, taskID)
+		tasks.EndReqOut(m.comp, taskID)
 		delete(s.InFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()

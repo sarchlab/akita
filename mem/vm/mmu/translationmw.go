@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // pageTable aggregates all the methods of the page table that are used in the
@@ -134,14 +134,14 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	// walk subtask that spanned it, so the work milestone has a corresponding
 	// child bar instead of an unattributed gap. walking.RecvTaskID is the
 	// req_in id.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: walking.RecvTaskID,
-		Kind:   tracing.MilestoneKindWork,
+		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
-	tracing.TraceReqComplete(m.comp, walking.RecvTaskID)
+	tasks.EndReqIn(m.comp, walking.RecvTaskID)
 
 	return true
 }
@@ -163,11 +163,7 @@ func (m *translationMW) parseFromTop() bool {
 	// incoming-buffer task since the request reached the head of the Top
 	// buffer — is over. The req_in opened at retrieve covers only the walk
 	// processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   m.comp.Name() + ".walk",
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".walk"))
 
 	m.topPort().RetrieveIncoming()
 
@@ -188,8 +184,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
-	walkTaskID := m.comp.NewID()
+	recvTaskID := tasks.StartReqIn(m.comp, req)
 
 	ts := transactionState{
 		ReqID:        req.ID,
@@ -201,16 +196,14 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 		DeviceID:     req.Payload.(vmprotocol.TranslationReq).DeviceID,
 		TransLatency: req.Payload.(vmprotocol.TranslationReq).TransLatency,
 		CycleLeft:    spec.Latency,
-		WalkTaskID:   walkTaskID,
 	}
 
 	// Open the walk subtask spanning the page-table-walk latency, a child of the
 	// req_in, so the ".walk" work milestone emitted at walk completion has a
 	// corresponding bar (no bare work interval).
-	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       walkTaskID,
+	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
-		Kind:     tracing.PipelineTaskKind,
+		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",
 	})
 

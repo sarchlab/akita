@@ -3,6 +3,7 @@ package gmmu
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -10,8 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation into the GMMU until it
@@ -28,7 +27,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	)
 
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 	pageTable := vm.NewPageTable(12)
 
 	spec := Definition.DefaultSpec
@@ -57,7 +56,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	ctrlPort := comp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// The page lives on a different device, so the walk cannot resolve locally:
 	// it must send a remote memory request out the Bottom port and wait for a
@@ -91,7 +90,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	if len(comp.State.RemoteMemReqs) == 0 {
 		t.Fatalf("expected a remote memory request in flight, got none")
 	}
-	// req_in (TraceReqReceive in parseFromTop) and req_out (TraceReqInitiate in
+	// req_in (StartReqIn in parseFromTop) and req_out (StartReqOut in
 	// processRemoteMemReq) should both be open.
 	if rec.NumStarted() < 2 {
 		t.Fatalf("expected req_in and req_out to be opened, got %d task starts",

@@ -2,7 +2,7 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type topParser struct {
@@ -52,14 +52,11 @@ func (p *topParser) Tick() bool {
 
 	// Admission milestone on the incoming-buffer task: the message left the Top
 	// buffer because the directory stage buffer had room. The buffer task is
-	// keyed by the peeked message and ends at RetrieveIncoming below.
-	tracing.AddMilestone(p.cache.comp, tracing.Milestone{
-		TaskID: p.cache.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   p.cache.comp.Name() + ".dir_stage_buf",
-	})
+	// owned by the port head and ends at RetrieveIncoming below.
+	p.cache.topPort().AddIncomingMilestone(
+		tasks.Reason(tasks.MilestoneKindHardwareResource, p.cache.comp.Name()+".dir_stage_buf"))
 
-	next.Transactions[idx].RecvTaskID = tracing.TraceReqReceive(p.cache.comp, msg)
+	next.Transactions[idx].RecvTaskID = tasks.StartReqIn(p.cache.comp, msg)
 
 	p.cache.topPort().RetrieveIncoming()
 

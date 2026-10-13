@@ -340,6 +340,7 @@ type subTransRef struct {
 
 // subTransState is a serializable representation of a SubTransaction.
 type subTransState struct {
+	TaskID    uint64 `json:"task_id"`
 	ID        uint64 `json:"id"`
 	Address   uint64 `json:"address"`
 	Completed bool   `json:"completed"`

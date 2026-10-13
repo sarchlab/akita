@@ -67,7 +67,7 @@ func markSubTransCompleted(state *state, ref subTransRef) (uint64, bool) {
 	if ref.SubIndex >= 0 && ref.SubIndex < len(t.SubTransactions) {
 		sub := &t.SubTransactions[ref.SubIndex]
 		sub.Completed = true
-		return sub.ID, true
+		return sub.TaskID, true
 	}
 	return 0, false
 }

@@ -4,8 +4,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type tickFinalizeMW struct {
@@ -80,7 +80,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	// The item has just left the bank pipeline (it is at the head of
 	// PostPipelineBuf and about to be dequeued). Attribute the pipeline
 	// traversal as work on req_in before the response send and before
-	// TraceReqComplete, so the same-tick complete does not absorb it via the
+	// EndReqIn, so the same-tick complete does not absorb it via the
 	// same-time dedup.
 	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
@@ -96,7 +96,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -135,7 +135,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	}
 
 	// See finalizeRead: attribute the bank-pipeline traversal as work on
-	// req_in at pipeline exit, before the response send and TraceReqComplete.
+	// req_in at pipeline exit, before the response send and EndReqIn.
 	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
 	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
@@ -148,7 +148,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -159,18 +159,18 @@ func (m *tickFinalizeMW) finalizeWrite(
 // task at pipeline exit. It emits a work milestone (the must-have: it marks the
 // pipeline interval as productive work rather than a blocking gap) and closes
 // the PipelineTaskKind subtask opened at dispatch. Call it before the response
-// send and before TraceReqComplete so the same-tick complete does not shadow the
+// send and before EndReqIn so the same-tick complete does not shadow the
 // work milestone via the dedup. Both task IDs are retained in the pipeline
 // entry from dispatch through completion.
 func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: recvTaskID,
-		Kind:   tracing.MilestoneKindWork,
+		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".pipeline",
 	})
 
 	if pipelineTaskID != 0 {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: pipelineTaskID})
+		tasks.EndTask(m.comp, tasks.EndInfo{ID: pipelineTaskID})
 	}
 }
 

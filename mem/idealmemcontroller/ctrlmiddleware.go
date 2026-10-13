@@ -3,8 +3,8 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -152,7 +152,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // Mirrors the completion in memMiddleware.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, tx := range m.comp.State.InflightTransactions {
-		tracing.EndTaskOnReset(m.comp, tx.RecvTaskID)
+		tasks.EndReqIn(m.comp, tx.RecvTaskID)
 	}
 }
 

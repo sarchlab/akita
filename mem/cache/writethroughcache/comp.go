@@ -87,6 +87,10 @@ type middlewares struct {
 
 // state contains mutable runtime data for the writethroughcache.
 type state struct {
+	// Admission stage belongs to the current message, not its private port task ID.
+	AdmissionMsgID uint64 `json:"admission_msg_id"`
+	WaitingForDir  bool   `json:"waiting_for_dir"`
+
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 

@@ -6,8 +6,9 @@ import (
 
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/tasks"
+	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // Builder can be used to build a simulation.
@@ -16,6 +17,7 @@ type Builder struct {
 	monitor           Monitor
 	outputFileName    string
 	visTracingOnStart bool
+	taskTracking      bool
 	recordSource      bool
 	sourceFSes        map[string]fs.FS
 }
@@ -94,6 +96,7 @@ func (b Builder) Build() *Simulation {
 	b.createMetaRecorder(s)
 	b.createSourceRecorder(s)
 	b.createTopologyRecorder(s)
+	b.createTaskTracker(s)
 	b.createVisTracer(s)
 	b.startMonitor(s)
 
@@ -165,7 +168,12 @@ func (b Builder) createMetaRecorder(s *Simulation) {
 }
 
 func (b Builder) createVisTracer(s *Simulation) {
+	if s.taskTracker == nil {
+		return
+	}
+
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
+	s.taskTracker.Subscribe(s.visTracer)
 
 	if b.visTracingOnStart {
 		s.visTracer.StartTracing()
@@ -179,4 +187,15 @@ func (b Builder) startMonitor(s *Simulation) {
 
 	s.monitor = b.monitor
 	s.monitor.Start(s)
+}
+
+// WithTaskTracking enables task bookkeeping and observer subscriptions. It is
+// also implied by WithVisTracingOnStart and WithMonitor.
+func (b Builder) WithTaskTracking() Builder { b.taskTracking = true; return b }
+
+func (b Builder) createTaskTracker(s *Simulation) {
+	if b.taskTracking || b.visTracingOnStart || b.monitor != nil {
+		s.taskTracker = tasks.NewTracker()
+		s.registerEntity(&taskTrackerCheckpoint{Tracker: s.taskTracker})
+	}
 }

@@ -57,6 +57,10 @@ type transactionState struct {
 
 // state contains mutable runtime data for a reorder buffer.
 type state struct {
+	// Admission stage belongs to the current message, not its private port task ID.
+	AdmissionMsgID   uint64 `json:"admission_msg_id"`
+	WaitingForBottom bool   `json:"waiting_for_bottom"`
+
 	Transactions  []transactionState       `json:"transactions"`
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`

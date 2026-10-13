@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type middleware struct {
@@ -62,11 +62,8 @@ func (m *middleware) runPipeline() bool {
 // bottom, and records the transaction in FIFO order. Skipped while not
 // Enabled so Drain and Pause stop accepting new traffic.
 //
-// The req_in task opens when the request first reaches the head of the Top
-// buffer (the earliest the ROB can act on it), not when it is admitted: the
-// peek happens before the buffer-slot and bottom-port checks, so the time
-// spent blocked on those resources is counted as part of the request's
-// processing rather than hidden in the upstream queue.
+// Admission waits belong to the incoming-buffer task. The request task starts
+// only once both a transaction slot and the downstream port are available.
 func (m *middleware) topDown() bool {
 	state := &m.comp.State
 	if state.ControlState != memcontrolprotocol.StateEnabled {
@@ -83,6 +80,10 @@ func (m *middleware) topDown() bool {
 		panic("rob: unsupported top-port message type")
 	}
 
+	if state.AdmissionMsgID != msg.ID {
+		state.AdmissionMsgID = msg.ID
+		state.WaitingForBottom = false
+	}
 	if len(state.Transactions) >= m.comp.Spec.BufferSize {
 		return false
 	}
@@ -91,11 +92,10 @@ func (m *middleware) topDown() bool {
 	// spent at the head of the Top buffer is over. This admission wait belongs
 	// to the incoming-buffer task; req_in (opened at retrieve, below) covers
 	// only the processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   m.comp.Name() + ".buffer",
-	})
+	if !state.WaitingForBottom {
+		m.comp.Ports.Top.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".buffer"))
+		state.WaitingForBottom = true
+	}
 
 	shadow, isRead := m.buildShadowReq(
 		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec.BottomUnit)
@@ -106,16 +106,12 @@ func (m *middleware) topDown() bool {
 
 	// The shadow request is on its way downstream: the at-head wait to send on
 	// the Bottom port is over (also on the incoming-buffer task).
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.comp.Ports.Bottom.Name(),
-	})
+	m.comp.Ports.Top.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.comp.Ports.Bottom.Name()))
 
 	// Admit the request: open req_in at retrieve and record the transaction.
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
+	recvTaskID := tasks.StartReqIn(m.comp, req)
 	m.tagReadWrite(req, recvTaskID)
-	sendTaskID := tracing.TraceReqInitiate(m.comp, shadow, recvTaskID)
+	sendTaskID := tasks.StartReqOut(m.comp, shadow, recvTaskID)
 	m.comp.Ports.Bottom.Send(shadow)
 
 	state.Transactions = append(state.Transactions, transactionState{
@@ -127,6 +123,8 @@ func (m *middleware) topDown() bool {
 		IsRead:        isRead,
 	})
 	m.comp.Ports.Top.RetrieveIncoming()
+	state.AdmissionMsgID = 0
+	state.WaitingForBottom = false
 
 	return true
 }
@@ -156,12 +154,12 @@ func (m *middleware) parseBottom() bool {
 		trans.RspData = content.Data
 		// The bottom unit returned the data this transaction was waiting on.
 
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: trans.RecvTaskID,
-			Kind:   tracing.MilestoneKindData,
+			Kind:   tasks.MilestoneKindData,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 		return true
 	case memprotocol.WriteDoneRsp:
 		dataRsp := msg
@@ -177,12 +175,12 @@ func (m *middleware) parseBottom() bool {
 		trans.HasRsp = true
 		// The bottom unit acknowledged the write subtask this transaction
 		// dispatched.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: trans.RecvTaskID,
-			Kind:   tracing.MilestoneKindSubTask,
+			Kind:   tasks.MilestoneKindSubTask,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 		return true
 	default:
 		m.comp.Ports.Bottom.RetrieveIncoming()
@@ -209,9 +207,9 @@ func (m *middleware) bottomUp() bool {
 	// CanSend retry and the response-sent milestone so this more meaningful
 	// reason wins a same-tick tie; the (Kind, What) dedup keeps the first
 	// emission across retries and a zero-length head-of-line wait collapses.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: head.RecvTaskID,
-		Kind:   tracing.MilestoneKindDependency,
+		Kind:   tasks.MilestoneKindDependency,
 		What:   m.comp.Name() + ".reorder",
 	})
 
@@ -227,13 +225,13 @@ func (m *middleware) bottomUp() bool {
 
 	// The response is on its way to the requester: the wait to send on the Top
 	// port is over.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: head.RecvTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.comp.Ports.Top.Name(),
 	})
 
-	tracing.TraceReqComplete(m.comp, head.RecvTaskID)
+	tasks.EndReqIn(m.comp, head.RecvTaskID)
 
 	return true
 }
@@ -324,7 +322,7 @@ func (m *middleware) tagReadWrite(req messaging.Msg, taskID uint64) {
 		what = "read"
 	}
 
-	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+	tasks.AddTag(m.comp, tasks.Tag{
 		TaskID: taskID,
 		What:   what,
 	})
@@ -443,13 +441,14 @@ func (m *middleware) handleReset(req messaging.Msg) bool {
 	state := &m.comp.State
 	m.endInflightTasks()
 	state.Transactions = state.Transactions[:0]
+	state.AdmissionMsgID = 0
+	state.WaitingForBottom = false
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled
 
 	// Buffer tasks for messages still queued on the Top/Bottom ports are closed
-	// by the drains below: each RetrieveIncoming fires the retrieve hook, which
-	// ends the buffer task. No pre-admission req_in exists to clean up — req_in
+	// by the drains below: each RetrieveIncoming ends the buffer task. No pre-admission req_in exists to clean up — req_in
 	// now opens only at retrieve.
 	drainIncoming(m.comp.Ports.Top)
 	drainIncoming(m.comp.Ports.Bottom)
@@ -506,8 +505,8 @@ func drainIncoming(p messaging.Port) {
 // bottomUp (req_in) and parseBottom (req_out) completion.
 func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tracing.EndTaskOnReset(m.comp, trans.RecvTaskID)
-		tracing.EndTaskOnReset(m.comp, trans.SendTaskID)
+		tasks.EndReqIn(m.comp, trans.RecvTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 	}
 }
 

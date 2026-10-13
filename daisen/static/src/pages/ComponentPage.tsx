@@ -48,6 +48,7 @@ import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingReasonKeyAt, milestonesOf } from "../utils/milestoneViz";
 import { formatSI } from "../utils/siFormat";
+import { computeSiblingGroups } from "../utils/siblingGroups.mjs";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
 
@@ -148,8 +149,8 @@ function cloneTasks(tasks: Task[]): LayoutTask[] {
 
 function buildTaskTree(tasks: LayoutTask[]) {
   const root: LayoutTask = {
-    id: "__root__",
-    parent_id: "",
+    id: 0,
+    parent_id: 0,
     kind: "",
     what: "",
     location: "",
@@ -158,7 +159,7 @@ function buildTaskTree(tasks: LayoutTask[]) {
     subTasks: [],
     level: 0,
   };
-  const taskById = new Map<string | number, LayoutTask>();
+  const taskById = new Map<number, LayoutTask>();
 
   for (const task of tasks) {
     task.subTasks = [];
@@ -546,35 +547,6 @@ interface DepArrow {
   sy: number;
   tx: number;
   ty: number;
-}
-
-// Two tasks in this component that share a parent living OUTSIDE the component
-// are the same request's phases (e.g. a port's incoming_buffer + req_in under
-// one requester). buildTaskTree cannot nest them here (the parent is in another
-// component), so group them by that parent id for packing and a dependency
-// arrow. Parents that are in-component already nest their children, so they are
-// skipped; only a parent with >= 2 in-component children forms a group, so a
-// lone child never pays for an extra grouping row.
-function computeSiblingGroups(tasks: LayoutTask[]): Map<string, string> {
-  const inComponent = new Set(tasks.map((task) => String(task.id)));
-  const byParent = new Map<string, string[]>();
-  for (const task of tasks) {
-    const pid = String(task.parent_id ?? "");
-    if (!pid || inComponent.has(pid)) continue;
-    let ids = byParent.get(pid);
-    if (!ids) {
-      ids = [];
-      byParent.set(pid, ids);
-    }
-    ids.push(String(task.id));
-  }
-
-  const groupOf = new Map<string, string>();
-  for (const [pid, ids] of byParent) {
-    if (ids.length < 2) continue;
-    for (const id of ids) groupOf.set(id, pid);
-  }
-  return groupOf;
 }
 
 // One arrow per consecutive pair within each group, in time order, linking the

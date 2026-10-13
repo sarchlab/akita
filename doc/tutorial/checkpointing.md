@@ -215,8 +215,14 @@ each of them.
   is not saved. This is *not* caught automatically — follow the golden rule.
 - **Serial engine only.** `SaveCheckpoint`/`LoadCheckpoint` reject a
   `ParallelEngine`.
-- **Run with tracing off for a deterministic resume.** The tracing task-ID side
-  table consumes the global ID generator, perturbing the checkpointed ID counter.
+- **Task tracking is checkpointed.** An enabled tracker restores open task
+  identities and request-parent correlation. Ports restore private buffer task
+  IDs and wait boundaries without allocating replacement IDs. Keep the tracking
+  setting consistent across save and restore
+  when comparing ID sequences; changing it changes future ID allocation. `Detail`
+  and observer history, including earlier tags/milestones, are not restored. Mixed
+  tracking settings are supported: off-to-on starts empty, and on-to-off ignores
+  the optional tracker payload. See [task tracking](../../sim/tasks/README.md).
 - **Take mid-transaction checkpoints with `SerialEngine.RunUntil(t)`**, which
   stops at a reproducible boundary (every event with time ≤ `t`), unlike `Run`
   (drains everything) or `Pause` (stops at a non-reproducible point).

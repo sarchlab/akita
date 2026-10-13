@@ -5,8 +5,8 @@ export interface TaskStep {
 }
 
 export interface Task {
-  id: string | number;
-  parent_id: string | number;
+  id: number;
+  parent_id: number;
   kind: string;
   what: string;
   location: string;

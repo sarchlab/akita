@@ -3,6 +3,7 @@ package datamover
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -11,8 +12,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a move into flight (req_in open, the
@@ -21,7 +20,7 @@ import (
 // leaving no started-never-ended tracing leak.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 2048
@@ -60,7 +59,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Attach the leak tracker BEFORE any traffic is driven so every task start
 	// and end is observed.
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(dataMover, rec)
+	dataMover.TaskTracker().Subscribe(rec, dataMover)
 
 	makeMove := func() messaging.Msg {
 		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{

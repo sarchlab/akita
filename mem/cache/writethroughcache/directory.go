@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type directory struct {
@@ -41,12 +41,9 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 
 		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		pid := d.cache.comp.NewID()
-		trans.DirPipelineTaskID = pid
-		tracing.StartTask(d.cache.comp, tracing.TaskStart{
-			ID:       pid,
+		trans.DirPipelineTaskID = tasks.StartTask(d.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
-			Kind:     tracing.PipelineTaskKind,
+			Kind:     tasks.KindPipeline,
 			What:     d.cache.comp.Name() + ".dir_pipeline",
 		})
 
@@ -76,9 +73,9 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 		transIdx, _ := dirPostBuf.Peek()
 		trans := &next.Transactions[transIdx]
 
-		tracing.AddMilestone(d.cache.comp, tracing.Milestone{
+		tasks.AddMilestone(d.cache.comp, tasks.Milestone{
 			TaskID: trans.RecvTaskID,
-			Kind:   tracing.MilestoneKindWork,
+			Kind:   tasks.MilestoneKindWork,
 			What:   d.cache.comp.Name() + ".dir_pipeline",
 		})
 
@@ -93,7 +90,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 			break
 		}
 
-		tracing.EndTask(d.cache.comp, tracing.TaskEnd{ID: trans.DirPipelineTaskID})
+		tasks.EndTask(d.cache.comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
 		madeProgress = true
 	}
 
@@ -136,12 +133,12 @@ func (d *directory) processMSHRHit(
 			transIdx)
 
 	if trans.HasRead {
-		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		tasks.AddTag(d.cache.comp, tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "read-mshr-hit",
 		})
 	} else {
-		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		tasks.AddTag(d.cache.comp, tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-mshr-hit",
 		})
@@ -182,7 +179,7 @@ func (d *directory) processReadHit(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-hit",
 	})
@@ -214,7 +211,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+	tasks.AddTag(d.cache.comp, tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-miss",
 	})
@@ -286,7 +283,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 		return false
 	}
 
-	trans.WriteTaskID = tracing.TraceReqInitiate(d.cache.comp, writeToBottom, trans.RecvTaskID)
+	trans.WriteTaskID = tasks.StartReqOut(d.cache.comp, writeToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
@@ -326,7 +323,7 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
-	trans.ReadTaskID = tracing.TraceReqInitiate(d.cache.comp, readToBottom, trans.RecvTaskID)
+	trans.ReadTaskID = tasks.StartReqOut(d.cache.comp, readToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(readToBottom)
 
 	trans.HasReadToBottom = true

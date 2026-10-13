@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type writeBufferStage struct {
@@ -149,7 +149,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		TrafficBytes: 12,
 		TrafficClass: "memprotocol.ReadReq"}
 
-	trans.FetchTaskID = tracing.TraceReqInitiate(wb.cache.comp, read, trans.RecvTaskID)
+	trans.FetchTaskID = tasks.StartReqOut(wb.cache.comp, read, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(read)
 
 	trans.HasFetchReadReq = true
@@ -254,7 +254,7 @@ func (wb *writeBufferStage) write() bool {
 		TrafficBytes: len(trans.EvictingData) + 12,
 		TrafficClass: "memprotocol.WriteReq"}
 
-	trans.EvictionTaskID = tracing.TraceReqInitiate(wb.cache.comp, write, trans.RecvTaskID)
+	trans.EvictionTaskID = tasks.StartReqOut(wb.cache.comp, write, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(write)
 
 	trans.HasEvictionWriteReq = true
@@ -331,9 +331,9 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	// coalesced both get their data-arrival point marked.
 	for _, coalescedIdx := range trans.MSHRTransactionIndices {
 		coalesced := &next.Transactions[coalescedIdx]
-		tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
+		tasks.AddMilestone(wb.cache.comp, tasks.Milestone{
 			TaskID: coalesced.RecvTaskID,
-			Kind:   tracing.MilestoneKindData,
+			Kind:   tasks.MilestoneKindData,
 			What:   wb.cache.comp.Name() + ".Bottom",
 		})
 	}
@@ -346,7 +346,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort().RetrieveIncoming()
 
-	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchTaskID)
+	tasks.EndReqOut(wb.cache.comp, trans.FetchTaskID)
 	trans.FetchTaskID = 0
 
 	return true
@@ -444,14 +444,14 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			// request was blocked behind is done. Charge a dependency-class
 			// milestone on the request's req_in (keyed to the original request,
 			// not the WriteDoneRsp) so the eviction wait is marked resolved.
-			tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
+			tasks.AddMilestone(wb.cache.comp, tasks.Milestone{
 				TaskID: e.RecvTaskID,
-				Kind:   tracing.MilestoneKindData,
+				Kind:   tasks.MilestoneKindData,
 				What:   wb.cache.comp.Name() + ".evict",
 			})
 
 			wb.cache.bottomPort().RetrieveIncoming()
-			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionTaskID)
+			tasks.EndReqOut(wb.cache.comp, e.EvictionTaskID)
 			e.EvictionTaskID = 0
 
 			return true

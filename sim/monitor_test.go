@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/naming"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type lifecycleMonitor struct {
@@ -94,8 +94,9 @@ func TestHeadlessSimulationPreservesTracing(t *testing.T) {
 	if s.Monitor() != nil || !s.VisTracer().IsTracing() {
 		t.Fatal("headless simulation must preserve tracing")
 	}
-	s.VisTracer().StartTask(tracing.TaskStart{ID: 1, Kind: "test", What: "headless", Location: "Agent.test", Time: 1})
-	s.VisTracer().EndTask(tracing.TaskEnd{ID: 1, Time: 2})
+	s.VisTracer().TaskStarted(tasks.Task{ID: 1, Kind: "test", What: "headless", Location: "Agent.test", StartTime: 1})
+	s.VisTracer().TaskEnded(tasks.Task{ID: 1, Kind: "test", What: "headless",
+		Location: "Agent.test", StartTime: 1, EndTime: 2})
 	s.Terminate()
 	db, err := sql.Open("sqlite", s.TraceDBPath())
 	if err != nil {

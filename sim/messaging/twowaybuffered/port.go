@@ -10,13 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
-
-// bufferEntry keeps tracing identity with the message through checkpointing.
-type bufferEntry struct {
-	Msg    messaging.Msg `json:"msg"`
-	TaskID uint64        `json:"task_id"`
-}
 
 // Port implements messaging.Port with independently sized incoming and outgoing buffers.
 type Port struct {
@@ -123,15 +118,13 @@ func (p *Port) Send(msg messaging.Msg) {
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
-	entry := p.newBufferEntry(msg)
-	p.outgoingBuf.Push(entry)
+	p.outgoingBuf.Push(p.startBufferTask(msg, false))
 
 	if p.NumHooks() > 0 {
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgSend,
 			Item:   msg,
-			Detail: bufferTrace(entry, wasEmpty),
 		}
 		p.InvokeHook(hookCtx)
 	}
@@ -168,19 +161,17 @@ func (p *Port) Deliver(msg messaging.Msg) {
 	}
 
 	wasEmpty := (p.incomingBuf.Size() == 0)
-	entry := p.newBufferEntry(msg)
+	p.incomingBuf.Push(p.startBufferTask(msg, true))
 
 	if p.NumHooks() > 0 {
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRecvd,
 			Item:   msg,
-			Detail: bufferTrace(entry, wasEmpty),
 		}
 		p.InvokeHook(hookCtx)
 	}
 
-	p.incomingBuf.Push(entry)
 	p.lock.Unlock()
 
 	if wasEmpty {
@@ -199,27 +190,24 @@ func (p *Port) RetrieveIncoming() (messaging.Msg, bool) {
 		return messaging.Msg{}, false
 	}
 
+	p.endBufferTask(&entry, true)
+	p.headMilestone(&p.incomingBuf, tasks.Reason(tasks.MilestoneKindQueue, p.name))
+
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
 		p.conn.NotifyAvailable(p)
-	}
-
-	trace := messaging.PortBufferTrace{TaskID: entry.TaskID}
-	if head, present := p.incomingBuf.Peek(); present {
-		trace.HeadTaskID = head.TaskID
 	}
 
 	if p.NumHooks() > 0 {
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRetrieveIncoming,
-			Item:   entry.Msg,
-			Detail: trace,
+			Item:   entry.Message,
 		}
 		p.InvokeHook(hookCtx)
 	}
 
 	p.lock.Unlock()
-	return entry.Msg, true
+	return entry.Message, true
 }
 
 // RetrieveOutgoing is used by the connection to take a message from the outgoing
@@ -235,27 +223,24 @@ func (p *Port) RetrieveOutgoing() (messaging.Msg, bool) {
 		return messaging.Msg{}, false
 	}
 
+	p.endBufferTask(&entry, false)
+	p.headMilestone(&p.outgoingBuf, tasks.Reason(tasks.MilestoneKindQueue, p.name))
+
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
 		owner.NotifyPortFree(p)
-	}
-
-	trace := messaging.PortBufferTrace{TaskID: entry.TaskID}
-	if head, present := p.outgoingBuf.Peek(); present {
-		trace.HeadTaskID = head.TaskID
 	}
 
 	if p.NumHooks() > 0 {
 		hookCtx := hooking.HookCtx{
 			Domain: p,
 			Pos:    messaging.HookPosPortMsgRetrieveOutgoing,
-			Item:   entry.Msg,
-			Detail: trace,
+			Item:   entry.Message,
 		}
 		p.InvokeHook(hookCtx)
 	}
 
 	p.lock.Unlock()
-	return entry.Msg, true
+	return entry.Message, true
 }
 
 // PeekIncoming returns the first message in the incoming buffer without
@@ -265,7 +250,7 @@ func (p *Port) PeekIncoming() (messaging.Msg, bool) {
 	defer p.lock.Unlock()
 
 	entry, ok := p.incomingBuf.Peek()
-	return entry.Msg, ok
+	return entry.Message, ok
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
@@ -275,7 +260,7 @@ func (p *Port) PeekOutgoing() (messaging.Msg, bool) {
 	defer p.lock.Unlock()
 
 	entry, ok := p.outgoingBuf.Peek()
-	return entry.Msg, ok
+	return entry.Message, ok
 }
 
 // NumIncoming returns the number of messages in the incoming buffer.
@@ -349,32 +334,4 @@ func srcDstMustNotBeTheSame(msg messaging.Msg) {
 	if msg.Src == msg.Dst {
 		panic("sending back to src")
 	}
-}
-
-// PeekIncomingTaskID returns the head entry's checkpointed buffer task ID.
-// Zero means the buffer is empty or the entry was enqueued without tracing.
-func (p *Port) PeekIncomingTaskID() uint64 {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	entry, _ := p.incomingBuf.Peek()
-	return entry.TaskID
-}
-
-func (p *Port) newBufferEntry(msg messaging.Msg) bufferEntry {
-	entry := bufferEntry{Msg: msg}
-	if owner, ok := p.owner.(interface {
-		NewID() uint64
-		NumHooks() int
-	}); ok && p.NumHooks() > 0 && owner.NumHooks() > 0 {
-		entry.TaskID = owner.NewID()
-	}
-	return entry
-}
-
-func bufferTrace(entry bufferEntry, atHead bool) messaging.PortBufferTrace {
-	trace := messaging.PortBufferTrace{TaskID: entry.TaskID}
-	if atHead {
-		trace.HeadTaskID = entry.TaskID
-	}
-	return trace
 }

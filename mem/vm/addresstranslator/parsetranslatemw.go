@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // parseTranslateMW handles incoming requests from topPort and initiates
@@ -69,18 +69,14 @@ func (m *parseTranslateMW) translate() bool {
 	// Translation port — counted on the incoming-buffer task since the request
 	// reached the head of the Top buffer — is over. The req_in opened just below
 	// starts at retrieve and covers only the processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.translationPort().Name(),
-	})
+	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.translationPort().Name()))
 
 	incoming := msgToIncomingReqState(itemI)
 
 	nextState := &m.comp.State
 
-	incoming.RecvTaskID = tracing.TraceReqReceive(m.comp, itemI)
-	translationTaskID := tracing.TraceReqInitiate(
+	incoming.RecvTaskID = tasks.StartReqIn(m.comp, itemI)
+	translationTaskID := tasks.StartReqOut(
 		m.comp,
 		transReq,
 		incoming.RecvTaskID,

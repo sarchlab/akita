@@ -258,8 +258,8 @@ hash, and serialize. V5 uses monotonically increasing `uint64` values.
 | `MsgMeta.ID string` | `Msg.ID uint64` |
 | `MsgMeta.RspTo string` | `Msg.RspTo uint64` |
 | `IDGenerator.Generate() string` | `IDGenerator.Generate() uint64` |
-| `tracing.Task.ID string` | `tracing.Task.ID uint64` |
-| `tracing.Task.ParentID string` | `tracing.Task.ParentID uint64` |
+| `tracing.Task.ID string` | `tasks.Task.ID uint64` |
+| `tracing.Task.ParentID string` | `tasks.Task.ParentID uint64` |
 | Empty/nil sentinel: `""` | Empty/nil sentinel: `0` |
 
 ### Message envelopes and value payloads (V5)

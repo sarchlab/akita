@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type routeForwardSendMW struct {
@@ -56,10 +56,10 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 
 			// The flit waited in the route buffer until a forward-buffer slot
 			// opened (behind other flits / for downstream credit).
-			if m.comp.NumHooks() > 0 {
-				tracing.AddMilestone(m.comp, tracing.Milestone{
+			if m.comp.TaskTracker() != nil {
+				tasks.AddMilestone(m.comp, tasks.Milestone{
 					TaskID: item.TaskID,
-					Kind:   tracing.MilestoneKindQueue,
+					Kind:   tasks.MilestoneKindQueue,
 					What:   m.comp.Name() + ".RouteBuffer",
 				})
 			}
@@ -116,10 +116,10 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 
 			// The flit waited in the forward buffer for the output port to win
 			// arbitration and for a send-buffer slot downstream.
-			if m.comp.NumHooks() > 0 {
-				tracing.AddMilestone(m.comp, tracing.Milestone{
+			if m.comp.TaskTracker() != nil {
+				tasks.AddMilestone(m.comp, tasks.Milestone{
 					TaskID: item.TaskID,
-					Kind:   tracing.MilestoneKindNetworkBusy,
+					Kind:   tasks.MilestoneKindNetworkBusy,
 					What:   m.comp.Name() + ".ForwardBuffer",
 				})
 			}
@@ -159,17 +159,17 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 
 			// The flit waited in the send-out buffer for the output link to be
 			// free; this is the last milestone before the task ends.
-			if m.comp.NumHooks() > 0 {
-				tracing.AddMilestone(m.comp, tracing.Milestone{
+			if m.comp.TaskTracker() != nil {
+				tasks.AddMilestone(m.comp, tasks.Milestone{
 					TaskID: item.TaskID,
-					Kind:   tracing.MilestoneKindNetworkBusy,
+					Kind:   tasks.MilestoneKindNetworkBusy,
 					What:   port.Name(),
 				})
 			}
 
 			// The flit has now left the switch; close the in-switch "flit"
 			// task that opened when it entered the receive pipeline.
-			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
+			tasks.EndTask(m.comp, tasks.EndInfo{ID: item.TaskID})
 
 			madeProgress = true
 		}

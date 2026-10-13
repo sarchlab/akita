@@ -4,7 +4,7 @@
 // A Client sends one request down a memory hierarchy: Client -> L1 -> L2 ->
 // Memory. Each cache "misses" and forwards the request one level down. The
 // trick is the parent task id: when a cache initiates its downstream request,
-// it passes the ID returned by tracing.TraceReqReceive as the parent — the ID
+// it passes the ID returned by tasks.StartReqIn as the parent — the ID
 // of the req_in task it is currently handling. That makes every downstream
 // task a child of the task that caused it, so the whole hierarchy forms one
 // task tree. A custom tracer attached to every component prints that tree.
@@ -25,8 +25,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // --- A custom tracer that prints the task tree ---
@@ -38,22 +38,21 @@ type taskNode struct {
 }
 
 type treeTracer struct {
-	tracing.NopTracer
-	parents tracing.RequestTaskParents
-	order   []uint64
-	nodes   map[uint64]taskNode
+	tasks.NopObserver
+	order []uint64
+	nodes map[uint64]taskNode
 }
 
-func (t *treeTracer) StartTask(task tracing.TaskStart) {
-	task = t.parents.ResolveStart(task)
+func (t *treeTracer) TaskStarted(task tasks.Task) {
+	if task.Kind != tasks.KindReqIn && task.Kind != tasks.KindReqOut {
+		return
+	}
 	if _, seen := t.nodes[task.ID]; seen {
 		return
 	}
 	t.nodes[task.ID] = taskNode{parent: task.ParentID, kind: task.Kind, loc: task.Location}
 	t.order = append(t.order, task.ID)
 }
-
-func (t *treeTracer) EndTask(task tracing.TaskEnd) { t.parents.End(task.ID) }
 
 func (t *treeTracer) print() {
 	children := make(map[uint64][]uint64)
@@ -97,7 +96,7 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 
 func main() {
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	// Build bottom-up, so each level's Spec can name the port of the level
 	// below it.
@@ -132,8 +131,8 @@ func main() {
 	}
 
 	tracer := &treeTracer{nodes: map[uint64]taskNode{}}
-	for _, c := range []tracing.NamedHookable{cli, l1, l2, mem} {
-		tracing.CollectTrace(c, tracer)
+	for _, c := range []tasks.Owner{cli, l1, l2, mem} {
+		c.TaskTracker().Subscribe(tracer, c)
 	}
 
 	cli.TickLater()

@@ -44,7 +44,7 @@ func makePorts(name string, bufSize int) Ports {
 func buildStageTestCache(
 	spec Spec, res Resources, ports Ports, state state,
 ) *pipelineMW {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking()
 	comp := Definition.Builder().
 		WithSimulation(setupSim1).
 		WithSpec(spec).

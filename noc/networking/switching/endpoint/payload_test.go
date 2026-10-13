@@ -6,14 +6,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
 func payloadMessage() messaging.Msg {
@@ -41,8 +40,8 @@ func TestOnlyHeadFlitCheckpointsOriginalMessage(t *testing.T) {
 		if part.MsgID != msg.ID || part.Dst != msg.Dst || part.SeqID != i || part.NumFlitInMsg != 3 || part.MsgTaskID != 42 {
 			t.Fatalf("flit %d has incorrect transport header: %+v", i, part)
 		}
-		if part.FlitTaskID == 0 || part.FlitTaskID == outer.ID || part.FlitTaskID == part.MsgTaskID {
-			t.Fatalf("flit %d has no independent task identity: %+v", i, part)
+		if part.FlitTaskID != 0 {
+			t.Fatal("packetization must not allocate tracing IDs")
 		}
 		if i == 0 {
 			if !reflect.DeepEqual(part.Msg, msg) {
@@ -77,7 +76,7 @@ func (payloadOwner) NotifyRecv(messaging.Port)     {}
 func (payloadOwner) NotifyPortFree(messaging.Port) {}
 
 func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
-	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking()
 	device := twowaybuffered.NewPort(1, 1)
 	device.BindOwner(payloadOwner{"Receiver"}, "Receiver.Port")
 	network := twowaybuffered.NewPort(8, 8)
@@ -176,7 +175,7 @@ func restorePayloadReceiver(t *testing.T, ep *Comp, blocker messaging.Msg) (*Com
 func TestTransportTaskIDsSurviveCheckpoint(t *testing.T) {
 	ep, _, _ := newPayloadReceiver()
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(ep, rec)
+	ep.TaskTracker().Subscribe(rec, ep)
 	ep.State.MsgOutBuf = []messaging.Msg{payloadMessage()}
 	if !ep.Middlewares.Outgoing.prepareFlits() {
 		t.Fatal("did not packetize")
@@ -185,7 +184,7 @@ func TestTransportTaskIDsSurviveCheckpoint(t *testing.T) {
 		t.Fatal("message and flit tasks were not started")
 	}
 	restored, network, _ := restorePayloadReceiver(t, ep, messaging.Msg{ID: 99})
-	tracing.CollectTrace(restored, rec)
+	restored.TaskTracker().Subscribe(&tracingtest.LeakRecorder{}, restored)
 	for _, flit := range restored.State.FlitsToSend {
 		part := flit.Payload.(packetization.Flit)
 		if part.FlitTaskID == 0 || part.FlitTaskID == flit.ID {
@@ -197,8 +196,8 @@ func TestTransportTaskIDsSurviveCheckpoint(t *testing.T) {
 	if !restored.Middlewares.Incoming.assemble() {
 		t.Fatal("did not reassemble")
 	}
-	if open := rec.OpenTasks(); len(open) != 0 {
-		t.Fatalf("original transport tasks remain open after restore: %v", open)
+	if len(rec.OpenTasks()) != 1+len(ep.State.FlitsToSend) {
+		t.Fatal("restore must not fabricate old transport completions")
 	}
-	t.Log("restored flits ended their original independent transport task IDs")
+	t.Log("restored flits retained handles and reassembled without requiring task history")
 }

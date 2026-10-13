@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // mmuCacheMilestoneRecorder captures the task starts, ends, and milestones the
@@ -19,33 +19,33 @@ import (
 // time dedup, so a test can assert the full ordered set of blocking reasons and
 // the task (buffer vs req_in/req_out) each one is attributed to.
 type mmuCacheMilestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *mmuCacheMilestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *mmuCacheMilestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *mmuCacheMilestoneRecorder) EndTask(e tracing.TaskEnd) {
+func (r *mmuCacheMilestoneRecorder) TaskEnded(e tasks.Task) {
 	r.ends = append(r.ends, e)
 }
 
-func (r *mmuCacheMilestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *mmuCacheMilestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
 // firstStart returns the first recorded task start of the given kind.
-func (r *mmuCacheMilestoneRecorder) firstStart(kind string) (tracing.TaskStart, bool) {
+func (r *mmuCacheMilestoneRecorder) firstStart(kind string) (tasks.Task, bool) {
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			return s, true
 		}
 	}
 
-	return tracing.TaskStart{}, false
+	return tasks.Task{}, false
 }
 
 func (r *mmuCacheMilestoneRecorder) hasEnd(id uint64) bool {
@@ -58,8 +58,8 @@ func (r *mmuCacheMilestoneRecorder) hasEnd(id uint64) bool {
 	return false
 }
 
-func (r *mmuCacheMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *mmuCacheMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -69,9 +69,9 @@ func (r *mmuCacheMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milest
 	return ms
 }
 
-func (r *mmuCacheMilestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
+func (r *mmuCacheMilestoneRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	ms := r.milestonesOn(taskID)
-	ks := make([]tracing.MilestoneKind, len(ms))
+	ks := make([]tasks.MilestoneKind, len(ms))
 	for i, m := range ms {
 		ks[i] = m.Kind
 	}
@@ -79,8 +79,18 @@ func (r *mmuCacheMilestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKi
 	return ks
 }
 
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
+
 var _ = Describe("MMUCache milestones", func() {
 	var (
+		engine     timing.Engine
 		comp       *Comp
 		mw         *mmuCacheMiddleware
 		topPort    messaging.Port
@@ -89,8 +99,8 @@ var _ = Describe("MMUCache milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
 		spec.NumBlocks = 4
@@ -126,11 +136,10 @@ var _ = Describe("MMUCache milestones", func() {
 		mw = comp.Middlewares.Cache
 
 		rec = &mmuCacheMilestoneRecorder{}
-		tracing.CollectTrace(comp, rec)
+		comp.TaskTracker().Subscribe(rec, comp)
 		// The admission milestones land on the Top/Bottom incoming-buffer tasks,
 		// so the test needs those buffer tasks to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
-		tracing.CollectIncomingBufferTrace(bottomPort)
+
 	})
 
 	makeTopReq := func(vAddr uint64) messaging.Msg {
@@ -154,6 +163,7 @@ var _ = Describe("MMUCache milestones", func() {
 	driveRoundTrip := func(vAddr uint64) (messaging.Msg, uint64) {
 		req := makeTopReq(vAddr)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.lookup()).To(BeTrue())
 
@@ -176,6 +186,8 @@ var _ = Describe("MMUCache milestones", func() {
 			TrafficClass: "vmprotocol.TranslationRsp"}
 
 		bottomPort.Deliver(rsp)
+
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.handleBottomPort()).To(BeTrue())
 
@@ -216,7 +228,7 @@ var _ = Describe("MMUCache milestones", func() {
 	// retrieve has already removed their port entries.
 	bufTaskID := func(portName string) uint64 {
 		for _, s := range rec.starts {
-			if s.Kind == tracing.IncomingBufferTaskKind &&
+			if s.Kind == tasks.KindIncomingBuffer &&
 				s.Location == portName+".incoming" {
 				return s.ID
 			}
@@ -227,29 +239,27 @@ var _ = Describe("MMUCache milestones", func() {
 	It("attributes admission waits to the incoming-buffer tasks", func() {
 		driveRoundTrip(0x2000)
 
-		// The Top buffer task: reached the head of the Top buffer, then waited
+		// The Top buffer task has no queue delay and waited
 		// for the Bottom port to be free to forward the walk.
 		topBufID := bufTaskID(topPort.Name())
 		Expect(topBufID).ToNot(BeZero())
-		Expect(rec.kindsOn(topBufID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindQueue,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(topBufID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		topBufMs := rec.milestonesOn(topBufID)
-		Expect(topBufMs[0].What).To(Equal(topPort.Name()))
-		Expect(topBufMs[1].What).To(Equal(bottomPort.Name()))
 
-		// The Bottom buffer task: reached the head of the Bottom buffer, then
+		Expect(topBufMs[0].What).To(Equal(bottomPort.Name()))
+
+		// The Bottom buffer task has no queue delay and
 		// waited for the Top port to be free to forward the response upstream.
 		bottomBufID := bufTaskID(bottomPort.Name())
 		Expect(bottomBufID).ToNot(BeZero())
-		Expect(rec.kindsOn(bottomBufID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindQueue,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(bottomBufID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		bottomBufMs := rec.milestonesOn(bottomBufID)
-		Expect(bottomBufMs[0].What).To(Equal(bottomPort.Name()))
-		Expect(bottomBufMs[1].What).To(Equal(topPort.Name()))
+
+		Expect(bottomBufMs[0].What).To(Equal(topPort.Name()))
 	})
 
 	It("charges the downstream walk-fetch wait to the req_in as a "+
@@ -266,9 +276,9 @@ var _ = Describe("MMUCache milestones", func() {
 		reqInMs := rec.milestonesOn(reqInStart.ID)
 		Expect(reqInMs).ToNot(BeEmpty())
 
-		var translationMs *tracing.Milestone
+		var translationMs *tasks.Milestone
 		for i := range reqInMs {
-			if reqInMs[i].Kind == tracing.MilestoneKindTranslation {
+			if reqInMs[i].Kind == tasks.MilestoneKindTranslation {
 				translationMs = &reqInMs[i]
 				break
 			}
@@ -281,6 +291,7 @@ var _ = Describe("MMUCache milestones", func() {
 		"tasks are left unended", func() {
 		req := makeTopReq(0x2000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 		Expect(mw.lookup()).To(BeTrue())
 		sentValue, _ := bottomPort.RetrieveOutgoing()
 		sent := sentValue

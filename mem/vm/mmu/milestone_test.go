@@ -9,24 +9,24 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts and milestones the MMU emits, in
 // emission order and without the DBTracer's dedup, so a test can assert which
 // task (incoming-buffer vs req_in) each admission milestone is attributed to.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
@@ -41,8 +41,8 @@ func (r *milestoneRecorder) taskID(kind string) uint64 {
 	return 0
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -51,6 +51,15 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 
 	return ms
 }
+
+// milestoneClock lets manual middleware ticks observe nonzero waits without
+// running the event queue, which would also admit or retire test traffic.
+type milestoneClock struct {
+	timing.Engine
+	now timing.VTimeInPicoSec
+}
+
+func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
 var _ = Describe("MMU milestones", func() {
 	var (
@@ -64,8 +73,8 @@ var _ = Describe("MMU milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		pageTable = vm.NewPageTable(12)
 
 		mmuComp = Definition.Builder().
@@ -90,10 +99,10 @@ var _ = Describe("MMU milestones", func() {
 		// Attach the recorder before driving so buffer enqueue allocates
 		// real task IDs (it returns 0 when there are no hooks).
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(mmuComp, rec)
+		mmuComp.TaskTracker().Subscribe(rec, mmuComp)
 		// The admission milestone lands on the Top-port buffer task, so the test
 		// needs the buffer task to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
+
 	})
 
 	makeReq := func(vAddr uint64) messaging.Msg {
@@ -114,10 +123,11 @@ var _ = Describe("MMU milestones", func() {
 		"when it admits the head request", func() {
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.parseFromTop()).To(BeTrue())
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
@@ -126,11 +136,10 @@ var _ = Describe("MMU milestones", func() {
 		// The buffer task owns the at-head admission wait: reached the head of
 		// the Top buffer, then waited for a free walk slot.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindHardwareResource))
-		Expect(bufMs[1].What).To(Equal(mmuComp.Name() + ".walk"))
+		Expect(bufMs).To(HaveLen(1))
+
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
+		Expect(bufMs[0].What).To(Equal(mmuComp.Name() + ".walk"))
 	})
 
 	It("labels the local page-walk latency as work on the req_in when the "+
@@ -147,6 +156,7 @@ var _ = Describe("MMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		// Admit the request (opens req_in and starts the walk), then drive the
 		// CycleLeft countdown to completion so doPageWalkHit sends the response
@@ -170,9 +180,9 @@ var _ = Describe("MMU milestones", func() {
 		Expect(reqInID).ToNot(BeZero())
 
 		reqInMs := rec.milestonesOn(reqInID)
-		var workMs *tracing.Milestone
+		var workMs *tasks.Milestone
 		for i := range reqInMs {
-			if reqInMs[i].Kind == tracing.MilestoneKindWork {
+			if reqInMs[i].Kind == tasks.MilestoneKindWork {
 				workMs = &reqInMs[i]
 				break
 			}
@@ -189,15 +199,15 @@ var _ = Describe("MMU milestones", func() {
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
+		engine.(*milestoneClock).now += 1000
 
 		Expect(mw.parseFromTop()).To(BeFalse())
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
-		// Only the reached-head queue milestone; no admission milestone since the
-		// request was never admitted.
+		// No queue delay and no admission milestone: the request is still blocked.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
+		Expect(bufMs).To(BeEmpty())
+
 	})
 })

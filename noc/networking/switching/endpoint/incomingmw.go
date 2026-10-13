@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
@@ -166,18 +166,18 @@ func (m *incomingMW) tryDeliver() bool {
 }
 
 func (m *incomingMW) logFlitE2EEnd(flit messaging.Msg) {
-	if m.comp.NumHooks() == 0 {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 	taskID := flit.Payload.(packetization.Flit).FlitTaskID
 	// Charge the interval since send to network transfer, refined by the
 	// per-switch subtasks. Finish the ID started by the source endpoint.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: taskID,
-		Kind:   tracing.MilestoneKindNetworkTransfer,
+		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: taskID})
 }
 
 // logMsgE2EEnd closes the per-message msg_e2e task once the message is
@@ -185,14 +185,14 @@ func (m *incomingMW) logFlitE2EEnd(flit messaging.Msg) {
 // The task was opened by the sending endpoint (logMsgE2EStart) and is keyed by
 // the MsgTaskID carried in every flit.
 func (m *incomingMW) logMsgE2EEnd(msgTaskID uint64) {
-	if m.comp.NumHooks() == 0 {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: msgTaskID,
-		Kind:   tracing.MilestoneKindNetworkTransfer,
+		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tracing.EndTask(m.comp, tracing.TaskEnd{ID: msgTaskID})
+	tasks.EndTask(m.comp, tasks.EndInfo{ID: msgTaskID})
 }

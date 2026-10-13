@@ -10,7 +10,8 @@ import (
 
 // bufferCheckpoint is the serialized form of one port buffer: its capacity (a
 // shape check — compared on load, never restored) together with its in-flight
-// messages, encoded through the message codec so their concrete types survive.
+// entries, including task IDs and wait boundaries. Messages use the message
+// codec so their concrete types survive.
 // Bundling capacity with the contents keeps each buffer one self-contained
 // element, reflecting that the capacity is the buffer's own immutable config.
 type bufferCheckpoint struct {
@@ -22,7 +23,6 @@ type bufferCheckpoint struct {
 // buffer. Hooks and the owning component/connection are rebuilt by setup and not
 // serialized.
 type portCheckpoint struct {
-	Version  int              `json:"version"`
 	Incoming bufferCheckpoint `json:"incoming"`
 	Outgoing bufferCheckpoint `json:"outgoing"`
 }
@@ -43,7 +43,6 @@ func (p *Port) SaveCheckpoint(w io.Writer) error {
 	}
 
 	return json.NewEncoder(w).Encode(portCheckpoint{
-		Version:  1,
 		Incoming: incoming,
 		Outgoing: outgoing,
 	})
@@ -56,11 +55,6 @@ func (p *Port) LoadCheckpoint(r io.Reader) error {
 	var dto portCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
 		return err
-	}
-
-	if dto.Version != 1 {
-		return fmt.Errorf("twowaybuffered: unsupported checkpoint version %d; "+
-			"recreate pre-v5 tracing checkpoints", dto.Version)
 	}
 
 	p.lock.Lock()
