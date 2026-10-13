@@ -99,10 +99,8 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	c.State.WaitingForDir = false
 	c.State.AdmissionMsgID = 0
 	require.NoError(t, c.LoadCheckpoint(&saved))
-	c.State.Transactions = []transactionState{{}}
 	clock.now = 30
 	require.False(t, tick())
-	c.State.Transactions = nil
 	clock.now = 35
 	require.False(t, tick())
 	c.State.DirBuf.Pop()
@@ -111,17 +109,17 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	require.Len(t, c.State.Transactions, 1)
 	require.Zero(t, c.Ports.Top.NumIncoming())
 	ms := rec.milestonesOn(bufferID)
-	require.Len(t, ms, 4)
+	require.Len(t, ms, 2)
 	for i, want := range []struct {
 		what string
 		time timing.VTimeInPicoSec
 	}{
-		{"Cache.trans", 20}, {"Cache.dir_buf", 30}, {"Cache.trans", 35}, {"Cache.dir_buf", 40},
+		{"Cache.trans", 20}, {"Cache.dir_buf", 40},
 	} {
 		require.Equal(t, tasks.MilestoneKindHardwareResource, ms[i].Kind)
 		require.Equal(t, want.what, ms[i].What)
 		require.Equal(t, want.time, ms[i].Time)
 	}
-	t.Log("Cache preserved transaction/directory wait transitions at 20/30/35/40 across checkpoint; " +
+	t.Log("Cache preserved transaction/directory wait transitions at 20/40 across checkpoint; " +
 		"no polling duplicates or early admission")
 }

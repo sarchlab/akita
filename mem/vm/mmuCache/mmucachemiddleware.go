@@ -234,8 +234,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// The response had reached the head of the Bottom buffer and was held there
 	// until the Top port could accept the upstream response. That at-head
 	// send-wait is over now; attribute it to the Bottom incoming-buffer task.
-	// This must precede RetrieveIncoming: retrieving closes the buffer task and
-	// removes its entry from the tracker.
+	// This must precede RetrieveIncoming, which ends the port-owned buffer task.
 	m.bottomPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.topPort().Name()))
 
 	m.bottomPort().RetrieveIncoming()

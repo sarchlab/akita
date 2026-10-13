@@ -85,10 +85,6 @@ func (m *middleware) topDown() bool {
 		state.WaitingForBottom = false
 	}
 	if len(state.Transactions) >= m.comp.Spec.BufferSize {
-		if state.WaitingForBottom {
-			m.comp.Ports.Top.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.comp.Ports.Bottom.Name()))
-			state.WaitingForBottom = false
-		}
 		return false
 	}
 

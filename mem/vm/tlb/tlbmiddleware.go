@@ -56,9 +56,8 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		// Peek the head before the pipeline-slot gate so the admission milestone
-		// can be attributed to the head message's buffer task on the tick the
-		// slot frees.
+		// Check for a head message before testing pipeline capacity. The port
+		// attributes the admission milestone to its own head task.
 		_, ok := m.topPort().PeekIncoming()
 		if !ok {
 			break

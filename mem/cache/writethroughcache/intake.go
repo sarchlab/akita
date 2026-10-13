@@ -31,11 +31,6 @@ func (s *intake) Tick() bool {
 		next.WaitingForDir = false
 	}
 	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
-		if next.WaitingForDir {
-			s.cache.topPort().AddIncomingMilestone(
-				tasks.Reason(tasks.MilestoneKindHardwareResource, s.cache.comp.Name()+".dir_buf"))
-			next.WaitingForDir = false
-		}
 		return false
 	}
 

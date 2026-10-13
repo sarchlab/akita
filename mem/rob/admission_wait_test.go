@@ -61,10 +61,8 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	c.State.WaitingForBottom = false
 	c.State.AdmissionMsgID = 0
 	require.NoError(t, c.LoadCheckpoint(&saved))
-	c.State.Transactions = []transactionState{{}}
 	clock.now = 30
 	require.False(t, c.Middlewares.Pipeline.topDown())
-	c.State.Transactions = nil
 	clock.now = 35
 	require.False(t, c.Middlewares.Pipeline.topDown())
 	c.Ports.Bottom.RetrieveOutgoing()
@@ -73,21 +71,19 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	require.Len(t, c.State.Transactions, 1)
 	require.Zero(t, c.Ports.Top.NumIncoming())
 	ms := rec.milestonesOn(bufferID)
-	require.Len(t, ms, 4)
+	require.Len(t, ms, 2)
 	for i, want := range []struct {
 		kind tasks.MilestoneKind
 		what string
 		time timing.VTimeInPicoSec
 	}{
 		{tasks.MilestoneKindHardwareResource, "Rob.buffer", 20},
-		{tasks.MilestoneKindNetworkBusy, "Rob.Bottom", 30},
-		{tasks.MilestoneKindHardwareResource, "Rob.buffer", 35},
 		{tasks.MilestoneKindNetworkBusy, "Rob.Bottom", 40},
 	} {
 		require.Equal(t, want.kind, ms[i].Kind)
 		require.Equal(t, want.what, ms[i].What)
 		require.Equal(t, want.time, ms[i].Time)
 	}
-	t.Log("ROB preserved slot/network wait transitions at 20/30/35/40 across checkpoint; " +
+	t.Log("ROB preserved slot/network wait transitions at 20/40 across checkpoint; " +
 		"no polling duplicates or early admission")
 }
