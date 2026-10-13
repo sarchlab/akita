@@ -2,6 +2,7 @@ package tasks_test
 
 import (
 	"fmt"
+	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 	"runtime"
 	"sync"
 	"testing"
@@ -102,7 +103,7 @@ func TestDisabledDoesNotAllocateOrReadClock(t *testing.T) {
 }
 
 func TestFullEndAndSharedParentResolution(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	sender := newOwner("Sender", tr, ids)
 	receiver := newOwner("Receiver", tr, ids)
@@ -138,7 +139,7 @@ func TestFullEndAndSharedParentResolution(t *testing.T) {
 func TestBufferIdentityWithPreexistingHead(t *testing.T) {
 	for _, incoming := range []bool{true, false} {
 		t.Run(fmt.Sprint(incoming), func(t *testing.T) {
-			tr := tasks.NewTracker()
+			tr := taskcore.NewTracker()
 			ids := &atomic.Uint64{}
 			o := newOwner("Owner", tr, ids)
 			p := port(o)
@@ -154,7 +155,7 @@ func TestBufferIdentityWithPreexistingHead(t *testing.T) {
 			b := a
 			b.ID = o.NewID()
 			enqueue(a) // Equivalent to a restored, untracked buffered message.
-			tr.RegisterPort(p)
+			taskcore.RegisterPort(tr, p)
 			enqueue(b)
 			require.Len(t, r.starts, 1)
 			require.Empty(t, r.milestones)
@@ -178,16 +179,16 @@ func TestBufferIdentityWithPreexistingHead(t *testing.T) {
 }
 
 func TestSubscriptionScopeAndFreeze(t *testing.T) {
-	tr := tasks.NewTracker()
-	other := tasks.NewTracker()
+	tr := taskcore.NewTracker()
+	other := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	require.Panics(t, func() { tr.Subscribe(&recorder{}, newOwner("foreign", other, ids)) })
-	tr.FreezeSubscriptions()
+	taskcore.FreezeSubscriptions(tr)
 	require.Panics(t, func() { tr.Subscribe(&recorder{}) })
 }
 
 func TestConcurrentDeliveryAndAdmission(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	r := &recorder{}
 	tr.Subscribe(r)
@@ -195,7 +196,7 @@ func TestConcurrentDeliveryAndAdmission(t *testing.T) {
 	for i := range 8 {
 		o := newOwner(fmt.Sprintf("Owner%d", i), tr, ids)
 		p := port(o)
-		tr.RegisterPort(p)
+		taskcore.RegisterPort(tr, p)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -233,7 +234,7 @@ func (h taskHandler) Handle(timing.Event) {
 }
 
 func TestParallelEngineTaskLifecycles(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	r := &recorder{}
 	tr.Subscribe(r)
@@ -242,7 +243,7 @@ func TestParallelEngineTaskLifecycles(t *testing.T) {
 		o := newOwner(fmt.Sprintf("Owner%d", i), tr, ids)
 		o.now = 10
 		p := port(o)
-		tr.RegisterPort(p)
+		taskcore.RegisterPort(tr, p)
 		engine.RegisterHandler(o.name, taskHandler{o, p})
 		engine.Schedule(timing.MakeEventBase(o.NewID(), 10, o.name))
 	}
@@ -256,13 +257,13 @@ func TestParallelEngineTaskLifecycles(t *testing.T) {
 }
 
 func TestSamePortConcurrentProducerConsumer(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	o := newOwner("Shared", tr, ids)
 	p := port(o)
 	r := &recorder{}
 	tr.Subscribe(r)
-	tr.RegisterPort(p)
+	taskcore.RegisterPort(tr, p)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -295,7 +296,7 @@ func TestSamePortConcurrentProducerConsumer(t *testing.T) {
 }
 
 func TestParentKindsAndSimulationIsolation(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	ids := &atomic.Uint64{}
 	o := newOwner("owner", tr, ids)
 	r := &recorder{}
@@ -311,7 +312,7 @@ func TestParentKindsAndSimulationIsolation(t *testing.T) {
 	transport := tasks.Start(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindFlitTransport, What: "flit"})
 	tasks.Start(o, tasks.StartInfo{MsgID: flit.ID, Kind: tasks.KindIncomingBuffer, What: "flit"})
 	require.Equal(t, transport, r.starts[len(r.starts)-1].ParentID)
-	separate := tasks.NewTracker()
+	separate := taskcore.NewTracker()
 	other := newOwner("owner", separate, &atomic.Uint64{})
 	second := &recorder{}
 	separate.Subscribe(second)
@@ -320,7 +321,7 @@ func TestParentKindsAndSimulationIsolation(t *testing.T) {
 }
 
 func TestSubscribeBeforeRunCanObserveCompleteEnd(t *testing.T) {
-	tr := tasks.NewTracker()
+	tr := taskcore.NewTracker()
 	o := newOwner("Owner", tr, &atomic.Uint64{})
 	o.now = 10
 	id := tasks.Start(o, tasks.StartInfo{Kind: "work", What: "seeded"})

@@ -1,4 +1,4 @@
-package tasks
+package taskcore
 
 import "github.com/sarchlab/akita/v5/sim/messaging"
 

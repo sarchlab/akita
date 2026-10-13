@@ -1,12 +1,12 @@
 package sim
 
 import (
+	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 	"io/fs"
 	"maps"
 
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
@@ -95,7 +95,7 @@ func (b Builder) Build() *Simulation {
 		if err := s.setup.Ready(); err != nil {
 			return err
 		}
-		s.taskTracker.FreezeSubscriptions()
+		taskcore.FreezeSubscriptions(s.taskTracker)
 		return nil
 	})
 	b.createIDGenerator(s)
@@ -199,6 +199,6 @@ func (b Builder) WithTaskTracking() Builder { b.taskTracking = true; return b }
 
 func (b Builder) createTaskTracker(s *Simulation) {
 	if b.taskTracking || b.visTracingOnStart || b.monitor != nil {
-		s.taskTracker = tasks.NewTracker()
+		s.taskTracker = taskcore.NewTracker()
 	}
 }

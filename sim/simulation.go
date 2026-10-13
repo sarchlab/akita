@@ -3,6 +3,7 @@ package sim
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -116,7 +117,7 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 	s.ports = append(s.ports, port)
 
 	if taskPort, ok := p.(messaging.Port); ok {
-		s.taskTracker.RegisterPort(taskPort)
+		taskcore.RegisterPort(s.taskTracker, taskPort)
 	}
 
 	if s.monitor != nil {

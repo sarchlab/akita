@@ -3,6 +3,7 @@ package sim
 import (
 	"bytes"
 	"fmt"
+	"github.com/sarchlab/akita/v5/sim/internal/taskcore"
 
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -56,7 +57,7 @@ func (s *Simulation) LoadCheckpoint(path string) error {
 		return err
 	}
 
-	s.taskTracker.DiscardOpenTasks()
+	taskcore.DiscardOpenTasks(s.taskTracker)
 
 	for _, entity := range s.entities {
 		checkpointable, ok := entity.(Checkpointable)
