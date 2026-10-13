@@ -40,7 +40,7 @@ type Component[S, T, R, P, M any] struct {
 	handling sync.Mutex
 }
 
-// Handle passes the event, a TickEvent, to every middleware, in the
+// Handle passes the event, an Event, to every middleware, in the
 // declaration order of Middlewares, and schedules the next tick if any of them
 // made progress. The instance handles one event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {

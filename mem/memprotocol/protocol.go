@@ -27,8 +27,8 @@ var (
 // AccessReq abstracts read and write requests sent to cache modules or memory
 // controllers.
 type AccessReq interface {
-	GetAddress() uint64
-	GetPID() vm.PID
+	AccessAddress() uint64
+	AccessPID() vm.PID
 }
 
 // ReadReq is a read request sent to a memory controller.
@@ -39,13 +39,13 @@ type ReadReq struct {
 	CanWaitForCoalesce bool
 }
 
-// GetAddress returns the address that the request is accessing.
-func (r ReadReq) GetAddress() uint64 {
+// AccessAddress returns the address that the request is accessing.
+func (r ReadReq) AccessAddress() uint64 {
 	return r.Address
 }
 
-// GetPID returns the process ID that the request is working on.
-func (r ReadReq) GetPID() vm.PID {
+// AccessPID returns the process ID that the request is working on.
+func (r ReadReq) AccessPID() vm.PID {
 	return r.PID
 }
 
@@ -58,13 +58,13 @@ type WriteReq struct {
 	CanWaitForCoalesce bool
 }
 
-// GetAddress returns the address that the request is accessing.
-func (r WriteReq) GetAddress() uint64 {
+// AccessAddress returns the address that the request is accessing.
+func (r WriteReq) AccessAddress() uint64 {
 	return r.Address
 }
 
-// GetPID returns the PID of the read address.
-func (r WriteReq) GetPID() vm.PID {
+// AccessPID returns the PID of the read address.
+func (r WriteReq) AccessPID() vm.PID {
 	return r.PID
 }
 

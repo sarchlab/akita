@@ -9,16 +9,16 @@ var eventCodec = codec.NewRegistry[Event]("event")
 
 // init registers the built-in EventBase so a checkpoint can round-trip a plain
 // event scheduled via MakeEventBase. Concrete events that embed EventBase
-// register their own outer type (e.g. ticking.TickEvent) separately.
+// register their own outer type (e.g. ticking.Event) separately.
 func init() {
 	RegisterEvent(EventBase{})
 }
 
 // RegisterEvent registers a concrete event type so a checkpoint that captured it
 // in the engine queue can be decoded. Call it from an init() with a zero value
-// of each event type. Events may be value types (e.g. ticking.TickEvent) or
-// pointers; the tag is derived from the Go type either way. Registering the same
-// type twice is harmless.
+// of each event type. Events may be value types (e.g. ticking.Event) or
+// pointers; tags are derived from Go types, with legacy tags retained for renamed
+// built-in types. Registering the same type twice is harmless.
 //
 // A forgotten registration fails loudly at load time: decoding a checkpoint that
 // holds an unregistered event reports an unknown-event-type error.

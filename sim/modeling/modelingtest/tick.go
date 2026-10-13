@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 )
 
-// Tick hands a TickEvent at the current time to each middleware of c, in
+// Tick hands a ticking.Event at the current time to each middleware of c, in
 // field order, as c does on every cycle, and reports whether any of them made
 // progress. Unlike c.Handle, it does not schedule the next tick, so a test
 // can step the component one cycle at a time.
@@ -14,10 +14,10 @@ func Tick[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M]) bool {
 		base.OrderedMiddlewares(&c.Middlewares), TickEvent(c))
 }
 
-// TickEvent returns a TickEvent for c at the current time, for a test that
+// TickEvent returns a ticking.Event for c at the current time, for a test that
 // hands it to a single middleware.
 func TickEvent[S, T, R, P, M any](
 	c *ticking.Component[S, T, R, P, M],
-) ticking.TickEvent {
-	return ticking.MakeTickEvent(c.NewID(), c.Name(), c.CurrentTime())
+) ticking.Event {
+	return ticking.MakeEvent(c.NewID(), c.CurrentTime(), c.Name())
 }

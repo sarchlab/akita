@@ -11,7 +11,7 @@ func (h *dispatchBenchHandler) Handle(evt Event) {
 	h.left--
 	if h.left > 0 {
 		next := evt.Time() + 1
-		h.engine.Schedule(EventBase{ID: uint64(next), Time_: next, HandlerID_: "bench"})
+		h.engine.Schedule(EventBase{ID: uint64(next), At: next, Handler: "bench"})
 	}
 }
 func BenchmarkSerialEngineEvents(b *testing.B) {
@@ -23,7 +23,7 @@ func BenchmarkSerialEngineEvents(b *testing.B) {
 	for b.Loop() {
 		h.left = perRun
 		next := e.CurrentTime() + 1
-		e.Schedule(EventBase{ID: uint64(next), Time_: next, HandlerID_: "bench"})
+		e.Schedule(EventBase{ID: uint64(next), At: next, Handler: "bench"})
 		if err := e.Run(); err != nil {
 			b.Fatal(err)
 		}

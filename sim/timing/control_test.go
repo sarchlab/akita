@@ -100,8 +100,8 @@ func TestPauseAcknowledgesAfterHooksAndServesInspection(t *testing.T) {
 				<-releaseHook
 			}
 		}))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
-		e.Schedule(EventBase{Time_: 2, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
+		e.Schedule(EventBase{At: 2, Handler: "model"})
 		done := startControlRun(e)
 		receiveControl(t, entered)
 		pause := e.RequestPause()
@@ -150,8 +150,8 @@ func TestHandlerCanRequestPause(t *testing.T) {
 				ticket <- e.RequestPause()
 			}
 		}))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
-		e.Schedule(EventBase{Time_: 2, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
+		e.Schedule(EventBase{At: 2, Handler: "model"})
 		done := startControlRun(e)
 		if err := receiveControl(t, ticket).Wait(controlContext(t)); err != nil {
 			t.Fatal(err)
@@ -179,7 +179,7 @@ func TestInspectionWaitsForConsistentState(t *testing.T) {
 			<-release
 			right = 1
 		}))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
 		done := startControlRun(e)
 		receiveControl(t, entered)
 		inspected := make(chan error, 1)
@@ -213,7 +213,7 @@ func TestFailedRunSettlesPendingControls(t *testing.T) {
 		entered, release := make(chan struct{}), make(chan struct{})
 		cause := errors.New("model failure during pause request")
 		e.RegisterHandler("model", panicHandler(func(Event) { close(entered); <-release; panic(cause) }))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
 		done := startControlRun(e)
 		receiveControl(t, entered)
 		pause := e.RequestPause()
@@ -240,7 +240,7 @@ func TestCancelledInspectionAndPauseWait(t *testing.T) {
 		t.Helper()
 		entered, release := make(chan struct{}), make(chan struct{})
 		e.RegisterHandler("model", panicHandler(func(Event) { close(entered); <-release }))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
 		done := startControlRun(e)
 		receiveControl(t, entered)
 		ctx, cancel := context.WithCancel(controlContext(t))
@@ -282,7 +282,7 @@ func TestIdleInspectionExcludesRunAndContainsCallbackPanic(t *testing.T) {
 				t.Error("Run overlapped idle inspection")
 			}
 		}))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
 		inspection := make(chan error, 1)
 		go func() {
 			inspection <- e.Inspect(ctx, func() error {
@@ -316,8 +316,8 @@ func TestRunUntilSettlesControlsAtLimit(t *testing.T) {
 	e := NewSerialEngine()
 	var ticket PauseRequest
 	e.RegisterHandler("model", panicHandler(func(Event) { ticket = e.RequestPause() }))
-	e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
-	e.Schedule(EventBase{Time_: 2, HandlerID_: "model"})
+	e.Schedule(EventBase{At: 1, Handler: "model"})
+	e.Schedule(EventBase{At: 2, Handler: "model"})
 	if err := e.RunUntil(1); err != nil {
 		t.Fatal(err)
 	}
@@ -347,9 +347,9 @@ func TestParallelPauseWaitsForEveryWorker(t *testing.T) {
 			ticket <- e.RequestPause()
 		}
 	}))
-	e.Schedule(EventBase{ID: 1, Time_: 1, HandlerID_: "slow"})
-	e.Schedule(EventBase{ID: 2, Time_: 1, HandlerID_: "pause"})
-	e.Schedule(EventBase{ID: 3, Time_: 2, HandlerID_: "pause"})
+	e.Schedule(EventBase{ID: 1, At: 1, Handler: "slow"})
+	e.Schedule(EventBase{ID: 2, At: 1, Handler: "pause"})
+	e.Schedule(EventBase{ID: 3, At: 2, Handler: "pause"})
 	done := startControlRun(e)
 	receiveControl(t, slowEntered)
 	pause := receiveControl(t, ticket)
@@ -378,7 +378,7 @@ func TestControlsRaceWithRunStartAndCompletion(t *testing.T) {
 		var handled int
 		e.RegisterHandler("model", panicHandler(func(Event) { handled++ }))
 		for i := 1; i <= 100; i++ {
-			e.Schedule(EventBase{Time_: VTimeInPicoSec(i), HandlerID_: "model"})
+			e.Schedule(EventBase{At: VTimeInPicoSec(i), Handler: "model"})
 			done := startControlRun(e)
 			if err := e.RequestPause().Wait(ctx); err != nil {
 				t.Fatal(err)
@@ -433,7 +433,7 @@ func TestEngineReportsQueuedTransitionsInOrder(t *testing.T) {
 		entered, release := make(chan struct{}), make(chan struct{})
 		inspecting, releaseInspection := make(chan struct{}), make(chan struct{})
 		e.RegisterHandler("model", panicHandler(func(Event) { close(entered); <-release }))
-		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 1, Handler: "model"})
 		done := startControlRun(e)
 		receiveControl(t, entered)
 		pause := e.RequestPause()

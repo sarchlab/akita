@@ -12,16 +12,17 @@ type testEntry struct {
 	addr uint64
 }
 
-func (e testEntry) GetPID() uint32     { return e.pid }
-func (e testEntry) GetAddress() uint64 { return e.addr }
+func (e testEntry) Matches(pid vm.PID, addr uint64) bool {
+	return vm.PID(e.pid) == pid && e.addr == addr
+}
 
 func TestFind_ExistingEntry(t *testing.T) {
 	entries := []testEntry{
 		{pid: 1, addr: 0x100},
-		{pid: 2, addr: 0x200},
+		{pid: 2, addr: 0x100},
 	}
 
-	idx, found := mshr.Find(entries, vm.PID(2), 0x200)
+	idx, found := mshr.Find(entries, vm.PID(2), 0x100)
 	if !found || idx != 1 {
 		t.Errorf("expected (1, true), got (%d, %v)", idx, found)
 	}
@@ -54,6 +55,10 @@ func TestIsPresent(t *testing.T) {
 
 	if !mshr.IsPresent(entries, vm.PID(1), 0x100) {
 		t.Error("expected present")
+	}
+
+	if mshr.IsPresent(entries, vm.PID(2), 0x100) {
+		t.Error("expected same address in a different process not to match")
 	}
 
 	if mshr.IsPresent(entries, vm.PID(1), 0x200) {
@@ -90,9 +95,9 @@ func TestIsEmpty(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	entries := []testEntry{
-		{pid: 1, addr: 0x100},
+		{pid: 1, addr: 0x200},
 		{pid: 2, addr: 0x200},
-		{pid: 3, addr: 0x300},
+		{pid: 3, addr: 0x200},
 	}
 
 	result := mshr.Remove(entries, vm.PID(2), 0x200)

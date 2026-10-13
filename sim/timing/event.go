@@ -18,30 +18,30 @@ type Event interface {
 
 // EventBase provides the basic fields and getters for other events.
 type EventBase struct {
-	ID         uint64         `json:"id"`
-	Time_      VTimeInPicoSec `json:"time"`
-	HandlerID_ string         `json:"handler_id"`
-	Secondary  bool           `json:"secondary"`
+	ID        uint64         `json:"id"`
+	At        VTimeInPicoSec `json:"time"`
+	Handler   string         `json:"handler_id"`
+	Secondary bool           `json:"secondary"`
 }
 
 // MakeEventBase creates a new EventBase as a value.
 func MakeEventBase(id uint64, t VTimeInPicoSec, handlerID string) EventBase {
 	return EventBase{
-		ID:         id,
-		Time_:      t,
-		HandlerID_: handlerID,
-		Secondary:  false,
+		ID:        id,
+		At:        t,
+		Handler:   handlerID,
+		Secondary: false,
 	}
 }
 
 // Time returns the time that the event is going to happen.
 func (e EventBase) Time() VTimeInPicoSec {
-	return e.Time_
+	return e.At
 }
 
 // HandlerID returns the handler ID to handle the event.
 func (e EventBase) HandlerID() string {
-	return e.HandlerID_
+	return e.Handler
 }
 
 // IsSecondary returns true if the event is a secondary event.

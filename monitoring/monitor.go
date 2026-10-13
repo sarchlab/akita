@@ -32,8 +32,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/naming"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/shirou/gopsutil/v4/process"
 	"github.com/syifan/goseth"
 )
@@ -67,7 +67,7 @@ type Monitor struct {
 // listener until Start is called, normally by sim.Builder.WithMonitor.
 func NewMonitor() *Monitor {
 	return &Monitor{
-		fs:           static.GetAssets(),
+		fs:           static.Assets(),
 		progressBars: []*ProgressBar{},
 	}
 }

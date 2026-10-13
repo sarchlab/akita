@@ -28,10 +28,9 @@ type schedulerCheckpoint struct {
 	At        timing.VTimeInPicoSec `json:"at"`
 }
 
-// A Scheduler schedules a component's own tick or wakeup events and keeps a
-// dedup guard that checkpoints save, such as a *ticking.Scheduler or the
-// wakeup model's scheduler.
-type Scheduler interface {
+// PendingEventGuard records whether the component's own tick or wakeup is
+// pending and when, so restore does not schedule a duplicate.
+type PendingEventGuard interface {
 	// Snapshot returns the guard: whether an event is pending and at what time.
 	Snapshot() (at timing.VTimeInPicoSec, scheduled bool)
 
@@ -43,7 +42,7 @@ type Scheduler interface {
 // as JSON. Component models use it to implement SaveCheckpoint; s is nil for a
 // component without its own scheduler.
 func WriteCheckpoint[S, T any](
-	w io.Writer, spec S, state T, s Scheduler,
+	w io.Writer, spec S, state T, s PendingEventGuard,
 ) error {
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -65,7 +64,7 @@ func WriteCheckpoint[S, T any](
 // ReadCheckpoint restores a component's State and scheduler guard after
 // verifying that the saved spec hash matches spec, the rebuilt component's.
 func ReadCheckpoint[S, T any](
-	r io.Reader, spec S, state *T, s Scheduler,
+	r io.Reader, spec S, state *T, s PendingEventGuard,
 ) error {
 	var dto componentCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {

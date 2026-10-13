@@ -50,7 +50,7 @@ func NewReplayServer(sqliteFile, addr string) *Server {
 	return &Server{
 		addr:        addr,
 		traceReader: reader,
-		fs:          static.GetAssets(),
+		fs:          static.Assets(),
 		codeSource:  loadCodeSource(reader),
 	}
 }

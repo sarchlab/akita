@@ -60,6 +60,7 @@ func NewRegistry[T any](label string) *Registry[T] {
 // the full import path plus the type name (e.g.
 // "github.com/sarchlab/akita/v5/mem/memprotocol.ReadReq"), with a "*" prefix
 // for pointer forms, so same-named types in different packages cannot collide.
+// Renamed built-in types retain their original checkpoint tags.
 // Exposed so audits can compute the tag a value would be stored under.
 func Tag(v any) string {
 	t := reflect.TypeOf(v)
@@ -83,7 +84,13 @@ func tagOf(t reflect.Type) string {
 		return t.String()
 	}
 
-	return t.PkgPath() + "." + t.Name()
+	tag := t.PkgPath() + "." + t.Name()
+	// Keep the checkpoint wire identity when the public ticking type is renamed.
+	if tag == "github.com/sarchlab/akita/v5/sim/modeling/ticking.Event" {
+		return "github.com/sarchlab/akita/v5/sim/modeling/ticking.TickEvent"
+	}
+
+	return tag
 }
 
 // Register records a concrete type so it can be decoded later. Pass a zero value

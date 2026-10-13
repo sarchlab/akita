@@ -23,8 +23,8 @@ All protocol payloads travel inside `messaging.Msg`, whose routing fields are
 `Src`, `Dst`, `ID`, and `RspTo`. Payload types contain only protocol fields.
 
 The `AccessReq` interface (also in `mem/memprotocol`) unifies read/write
-requests with `GetAddress()` and `GetPID()`. The Get prefix keeps the methods
-from clashing with the `Address` and `PID` fields they return.
+requests with `AccessAddress()` and `AccessPID()`. The Access prefix keeps the
+methods from clashing with the `Address` and `PID` fields they return.
 
 ### Control Messages
 

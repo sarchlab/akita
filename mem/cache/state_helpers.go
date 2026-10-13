@@ -1,6 +1,9 @@
 package cache
 
-import "github.com/sarchlab/akita/v5/sim/messaging"
+import (
+	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+)
 
 // BlockState is a serializable representation of a cache Block.
 type BlockState struct {
@@ -42,11 +45,10 @@ type MSHREntryState struct {
 	Data               []byte        `json:"data"`
 }
 
-// GetPID returns the PID of the MSHR entry.
-func (e MSHREntryState) GetPID() uint32 { return e.PID }
-
-// GetAddress returns the address of the MSHR entry.
-func (e MSHREntryState) GetAddress() uint64 { return e.Address }
+// Matches reports whether the MSHR entry has the given PID and address.
+func (e MSHREntryState) Matches(pid vm.PID, addr uint64) bool {
+	return vm.PID(e.PID) == pid && e.Address == addr
+}
 
 // MSHRState is a serializable representation of an mshrImpl.
 type MSHRState struct {

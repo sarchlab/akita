@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// valueEvent is a value-type event (like ticking.TickEvent).
+// valueEvent is a value-type event (like ticking.Event).
 type valueEvent struct {
 	EventBase
 	Payload int `json:"payload"`
@@ -22,8 +22,8 @@ func TestEventRegistryValueRoundTrip(t *testing.T) {
 	RegisterEvent(valueEvent{})
 
 	e := valueEvent{Payload: 42}
-	e.Time_ = 10
-	e.HandlerID_ = "h"
+	e.At = 10
+	e.Handler = "h"
 
 	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (value): %v", err)
@@ -34,7 +34,7 @@ func TestEventRegistryPointerRoundTrip(t *testing.T) {
 	RegisterEvent(&pointerEvent{})
 
 	e := &pointerEvent{Tag: "x"}
-	e.Time_ = 20
+	e.At = 20
 
 	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (pointer): %v", err)
@@ -58,5 +58,23 @@ func TestEventBaseRegisteredByDefault(t *testing.T) {
 
 	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (is EventBase registered by default?): %v", err)
+	}
+}
+
+func TestEventBaseLegacyJSON(t *testing.T) {
+	const legacy = `{"id":7,"time":42,"handler_id":"h","secondary":true}`
+	var event EventBase
+	if err := json.Unmarshal([]byte(legacy), &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.ID != 7 || event.Time() != 42 || event.HandlerID() != "h" || !event.IsSecondary() {
+		t.Fatalf("legacy event fields changed: %+v", event)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != legacy {
+		t.Fatalf("event JSON = %s, want %s", encoded, legacy)
 	}
 }

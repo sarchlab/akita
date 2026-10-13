@@ -10,8 +10,8 @@ import (
 //go:embed dist/*
 var staticAssets embed.FS
 
-// GetAssets returns the static assets
-func GetAssets() http.FileSystem {
+// Assets returns the static assets
+func Assets() http.FileSystem {
 	subFS, err := fs.Sub(staticAssets, "dist")
 	if err != nil {
 		panic(err)

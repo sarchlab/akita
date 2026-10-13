@@ -39,7 +39,7 @@ func newMiddlewares(c *Comp) middlewares {
 // consistent with the MMU's log2PageSize configuration.
 func validatePageTablePageSize(pt vm.PageTable, log2PageSize uint64) {
 	if pageTableInterface, ok := pt.(pageTable); ok {
-		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
+		pageTableLog2PageSize := pageTableInterface.Log2PageSize()
 		if pageTableLog2PageSize != log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}

@@ -73,9 +73,9 @@ func (pt *pageTableImpl) alignToPage(addr uint64) uint64 {
 	return (addr >> pt.log2PageSize) << pt.log2PageSize
 }
 
-// GetLog2PageSize returns the log2 page size for this page table.
+// Log2PageSize returns the log2 page size for this page table.
 // This method allows the MMU to validate page size consistency.
-func (pt *pageTableImpl) GetLog2PageSize() uint64 {
+func (pt *pageTableImpl) Log2PageSize() uint64 {
 	return pt.log2PageSize
 }
 

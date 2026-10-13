@@ -132,9 +132,9 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 		t.Errorf("NewState was not applied: Count = %d, want 2", c.State.Count)
 	}
 
-	c.Handle(ticking.MakeTickEvent(1, "C", 0))
+	c.Handle(ticking.MakeEvent(1, 0, "C"))
 
-	want := []string{"first ticking.TickEvent", "second ticking.TickEvent"}
+	want := []string{"first ticking.Event", "second ticking.Event"}
 	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
 	}
@@ -170,7 +170,7 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 func TestHandlePassesEveryEventToTheMiddlewares(t *testing.T) {
 	c := build(Ports{In: newPort("C.In")})
 
-	c.Handle(pokeEvent{timing.EventBase{HandlerID_: "C"}})
+	c.Handle(pokeEvent{timing.EventBase{Handler: "C"}})
 
 	want := []string{"first ticking_test.pokeEvent", "second ticking_test.pokeEvent"}
 	if !reflect.DeepEqual(c.State.Log, want) {

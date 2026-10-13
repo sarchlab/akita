@@ -79,6 +79,9 @@ func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
 	if err := modeling.WriteCheckpoint(&buf, ckptSpec{}, ckptState{}, src); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
+	if !strings.Contains(buf.String(), `"scheduler":{"scheduled":true,"at":1000}`) {
+		t.Fatalf("pending-event guard changed checkpoint format: %s", buf.String())
+	}
 
 	dst, engine := newScheduler()
 	var state ckptState

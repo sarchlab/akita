@@ -49,8 +49,8 @@ func (m *pipelineMW) createInternalStages() {
 	m.writeBuffer = &writeBufferStage{cache: m}
 }
 
-// GetSpec returns the immutable specification.
-func (m *pipelineMW) GetSpec() Spec {
+// Spec returns the immutable specification.
+func (m *pipelineMW) Spec() Spec {
 	return m.comp.Spec
 }
 

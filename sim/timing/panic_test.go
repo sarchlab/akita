@@ -86,8 +86,8 @@ func checkEnginePanic(t *testing.T, build func() testEngine, phase string, cause
 	}))
 	good.RegisterHandler("model", panicHandler(func(Event) { goodEvents.Add(1) }))
 	for i := 1; i <= 100; i++ {
-		bad.Schedule(EventBase{ID: uint64(i), Time_: VTimeInPicoSec(i), HandlerID_: "model"})
-		good.Schedule(EventBase{ID: uint64(i), Time_: VTimeInPicoSec(i), HandlerID_: "model"})
+		bad.Schedule(EventBase{ID: uint64(i), At: VTimeInPicoSec(i), Handler: "model"})
+		good.Schedule(EventBase{ID: uint64(i), At: VTimeInPicoSec(i), Handler: "model"})
 	}
 	goodDone := make(chan error, 1)
 	go func() { goodDone <- good.Run() }()
@@ -112,14 +112,14 @@ func checkEnginePanic(t *testing.T, build func() testEngine, phase string, cause
 	if bad.Run() != err {
 		t.Fatal("failed engine accepted another run or lost its first failure")
 	}
-	catchPanic(t, func() { bad.Schedule(EventBase{Time_: 200, HandlerID_: "model"}) })
+	catchPanic(t, func() { bad.Schedule(EventBase{At: 200, Handler: "model"}) })
 	t.Logf("%s panic (%T) contained at time 1; independent engine completed 100 events at time 100", phase, cause)
 }
 
 func TestRunUntilContainsPanicAndRejectsReuse(t *testing.T) {
 	e := NewSerialEngine()
 	e.RegisterHandler("model", panicHandler(func(Event) { panic("broken model") }))
-	e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+	e.Schedule(EventBase{At: 1, Handler: "model"})
 	err := finishRun(t, func() error { return e.RunUntil(1) })
 	if err == nil || e.RunUntil(2) != err {
 		t.Fatal("RunUntil did not preserve terminal failure")
@@ -160,10 +160,10 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 	e.RegisterHandler("model", panicHandler(func(Event) {
 		defer joined.Store(true)
 		close(attempted)
-		e.Schedule(EventBase{Time_: 2, HandlerID_: "model"})
+		e.Schedule(EventBase{At: 2, Handler: "model"})
 	}))
 	q := &panicDispatchQueue{events: []Event{
-		EventBase{Time_: 1, HandlerID_: "model"},
+		EventBase{At: 1, Handler: "model"},
 		panicTimeEvent{attempted: attempted},
 	}}
 	e.queues = []eventQueue{q}
@@ -183,7 +183,7 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 func TestEventQueueReleasesExistingLockOnPanic(t *testing.T) {
 	q := newEventQueue()
 	catchPanic(t, func() {
-		q.Push(EventBase{Time_: 1})
+		q.Push(EventBase{At: 1})
 		ready := make(chan struct{})
 		close(ready)
 		q.Push(panicTimeEvent{attempted: ready})
