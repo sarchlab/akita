@@ -90,7 +90,8 @@ defer s.Terminate()
 | `WithParallelEngine()` | Use `ParallelEngine` instead of `SerialEngine` |
 | `WithMonitor(monitor)` | Attach an optional monitor; omitted by default |
 | `WithOutputFileName(name)` | Custom SQLite output file name |
-| `WithVisTracingOnStart()` | Enable visual tracing from time 0 |
+| `WithVisTracingOnStart()` | Enable task tracking and visual tracing from time 0 |
+| `WithTaskTracking()` | Enable task tracking and prepare the tracer for manual recording |
 
 ### Optional monitoring
 
@@ -101,7 +102,10 @@ above. After creating the engine, tracer, and recorder, the runner calls
 registrations and stops the monitor before closing those resources in `Terminate`.
 Each monitor belongs to one simulation and must not be reused.
 
-The visualization tracer is always constructed; tracing is enabled separately.
+The visualization tracer is constructed only when task tracking is enabled by
+`WithTaskTracking`, `WithMonitor`, or `WithVisTracingOnStart`. Otherwise,
+`VisTracer()` returns nil and no tracing tables are created. Recording starts
+with `WithVisTracingOnStart` or a later `VisTracer().StartTracing()` call.
 Monitors can access runtime services through `Engine()`, `DataRecorder()`,
 `VisTracer()`, and `TraceDBPath()` without changing their lifecycle interface.
 

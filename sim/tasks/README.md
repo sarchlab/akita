@@ -1,8 +1,11 @@
 # Simulation tasks
 
 Enable tracking explicitly with `sim.MakeBuilder().WithTaskTracking()`.
-`WithVisTracingOnStart` and `WithMonitor` also enable it. `s.Tasks()` is nil
-otherwise. Engine-only examples can use
+`WithVisTracingOnStart` and `WithMonitor` also enable it. `s.Tasks()` and
+`s.VisTracer()` are nil otherwise, and no tracing tables are created.
+`WithTaskTracking` alone creates and subscribes the database tracer without
+starting recording; call `s.VisTracer().StartTracing()` to begin. Engine-only
+examples can use
 `modeling.NewStandaloneSimulation(engine).WithTaskTracking()` before assembly.
 
 Tracking, subscribing, and database recording are separate. An enabled Tracker

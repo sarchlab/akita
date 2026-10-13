@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type Simulation struct {
@@ -59,9 +59,9 @@ func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 }
 
 // VisTracer returns the visualization tracer owned by the simulation.
-// The tracer exists even when monitoring and tracing are disabled. To record
-// tasks with manual StartTracing, enable WithTaskTracking during construction
-// (WithMonitor and WithVisTracingOnStart imply it).
+// It returns nil when task tracking is disabled. Enable WithTaskTracking during
+// construction to record tasks with manual StartTracing. WithMonitor and
+// WithVisTracingOnStart also enable task tracking and create the tracer.
 func (s *Simulation) VisTracer() *tracing.DBTracer {
 	return s.visTracer
 }

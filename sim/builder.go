@@ -7,8 +7,8 @@ import (
 
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Builder can be used to build a simulation.
@@ -174,10 +174,12 @@ func (b Builder) createMetaRecorder(s *Simulation) {
 }
 
 func (b Builder) createVisTracer(s *Simulation) {
-	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
-	if s.taskTracker != nil {
-		s.taskTracker.Subscribe(s.visTracer)
+	if s.taskTracker == nil {
+		return
 	}
+
+	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
+	s.taskTracker.Subscribe(s.visTracer)
 
 	if b.visTracingOnStart {
 		s.visTracer.StartTracing()

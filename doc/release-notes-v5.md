@@ -80,8 +80,10 @@ Per-entity checkpoint methods are unchanged.
 This pre-v5 change moves component tracing commands and task types to
 `sim/tasks`. Enable `WithTaskTracking` (also implied by monitor and trace-on-start),
 and subscribe observers through `s.Tasks().Subscribe(observer, owners...)`
-before running. Components receive the service through `TaskTracker()`;
-tracking is nil when disabled. Built-in observers move from `sim/tracing` to
+before running. With tracking disabled, `s.VisTracer()` is nil and no tracing
+tables are created. `WithTaskTracking` alone creates and subscribes the tracer;
+call `s.VisTracer().StartTracing()` to begin recording. Components receive the
+service through `TaskTracker()`; tracking is nil when disabled. Built-in observers move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
 Tracker construction, port registration, freezing, and persistence are internal
 framework operations; only `Subscribe` is public on `tasks.Tracker`.
