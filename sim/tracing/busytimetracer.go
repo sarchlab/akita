@@ -2,7 +2,9 @@ package tracing
 
 import (
 	"container/list"
+	"sync"
 
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -15,8 +17,9 @@ type taskTimeStartEnd struct {
 // the task processing time overlaps, this tracer only considers one instance of
 // the overlapped time.
 type BusyTimeTracer struct {
-	NopTracer
+	tasks.NopObserver
 
+	lock          sync.Mutex
 	filter        TaskFilter
 	inflightTasks map[uint64]*list.Element
 	taskTimes     *list.List
@@ -38,11 +41,15 @@ func NewBusyTimeTracer(filter TaskFilter) *BusyTimeTracer {
 
 // BusyTime returns the total time has been spent on a certain type of tasks.
 func (t *BusyTimeTracer) BusyTime() timing.VTimeInPicoSec {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	return t.busyTime
 }
 
 // TerminateAllTasks will mark all the tasks as completed.
 func (t *BusyTimeTracer) TerminateAllTasks(now timing.VTimeInPicoSec) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*taskTimeStartEnd)
 		if !task.completed {
@@ -67,32 +74,36 @@ func (t *BusyTimeTracer) extendTaskTime(
 	}
 }
 
-// StartTask records the task start time
-func (t *BusyTimeTracer) StartTask(task TaskStart) {
+// TaskStarted records the task start time
+func (t *BusyTimeTracer) TaskStarted(task tasks.Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	if t.filter != nil && !t.filter(task) {
 		return
 	}
 
-	taskTime := &taskTimeStartEnd{start: task.Time}
+	taskTime := &taskTimeStartEnd{start: task.StartTime}
 
 	elem := t.taskTimes.PushBack(taskTime)
 	t.inflightTasks[task.ID] = elem
 }
 
-// EndTask records the end of the task
-func (t *BusyTimeTracer) EndTask(task TaskEnd) {
+// TaskEnded records the end of the task
+func (t *BusyTimeTracer) TaskEnded(task tasks.Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	originalTask, ok := t.inflightTasks[task.ID]
 	if !ok {
 		return
 	}
 
 	time := originalTask.Value.(*taskTimeStartEnd)
-	time.end = task.Time
+	time.end = task.EndTime
 	time.completed = true
 
 	delete(t.inflightTasks, task.ID)
 
-	t.collapse(task.Time)
+	t.collapse(task.EndTime)
 }
 
 func (t *BusyTimeTracer) collapse(now timing.VTimeInPicoSec) {

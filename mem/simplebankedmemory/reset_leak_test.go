@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
@@ -19,7 +18,7 @@ import (
 // the banks leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 	storage := mem.NewStorage(1 * mem.MB)
 
 	comp := Definition.Builder().
@@ -40,10 +39,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// Admit one read. A single Tick lets dispatchMW route it into the bank
-	// pipeline, opening req_in (TraceReqReceive) and the pipeline subtask. The
+	// pipeline, opening req_in (StartReqIn) and the pipeline subtask. The
 	// pipeline latency (BankPipelineDepth*StageLatency = 10) far exceeds one
 	// tick, so the item is still in flight: it has not reached PostPipelineBuf
 	// and so has not been finalized/completed. The memory is a leaf, so there is

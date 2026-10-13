@@ -9,8 +9,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // wbMilestoneRecorder captures the task starts, milestones, and tags the
@@ -18,21 +18,21 @@ import (
 // same-key/same-time dedup, so a test can assert the buffer-vs-req_in/pipeline
 // task each milestone and tag is attributed to.
 type wbMilestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	milestones []tracing.Milestone
-	tags       []tracing.TaskTag
+	tasks.NopObserver
+	starts     []tasks.Task
+	milestones []tasks.Milestone
+	tags       []tasks.Tag
 }
 
-func (r *wbMilestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *wbMilestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *wbMilestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *wbMilestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *wbMilestoneRecorder) AddTaskTag(t tracing.TaskTag) {
+func (r *wbMilestoneRecorder) TagAdded(t tasks.Tag) {
 	r.tags = append(r.tags, t)
 }
 
@@ -48,8 +48,8 @@ func (r *wbMilestoneRecorder) taskID(kind string) uint64 {
 }
 
 // startsOfKind returns every recorded task start of the given kind.
-func (r *wbMilestoneRecorder) startsOfKind(kind string) []tracing.TaskStart {
-	var out []tracing.TaskStart
+func (r *wbMilestoneRecorder) startsOfKind(kind string) []tasks.Task {
+	var out []tasks.Task
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			out = append(out, s)
@@ -59,8 +59,8 @@ func (r *wbMilestoneRecorder) startsOfKind(kind string) []tracing.TaskStart {
 	return out
 }
 
-func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -85,7 +85,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		agentPort = newDriverPort("Agent.Top", 8)
 
@@ -130,8 +130,8 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		// admission milestone lands on the Top-port buffer task, so the test
 		// also needs the incoming-buffer task to exist.
 		rec = &wbMilestoneRecorder{}
-		tracing.CollectTrace(cacheComp, rec)
-		tracing.CollectIncomingBufferTrace(topPort)
+		cacheComp.TaskTracker().Subscribe(rec, cacheComp)
+
 	})
 
 	It("records the dir-stage-buf admission milestone on the buffer task "+
@@ -167,7 +167,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(dr.RspTo).To(Equal(read.ID))
 
-			bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+			bufID := rec.taskID(tasks.KindIncomingBuffer)
 			reqInID := rec.taskID("req_in")
 			Expect(bufID).ToNot(BeZero())
 			Expect(reqInID).ToNot(BeZero())
@@ -178,7 +178,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			// queue reached-head milestone the port hook emits.
 			found := false
 			for _, m := range rec.milestonesOn(bufID) {
-				if m.Kind == tracing.MilestoneKindHardwareResource {
+				if m.Kind == tasks.MilestoneKindHardwareResource {
 					Expect(m.What).To(Equal(cacheComp.Name() + ".dir_stage_buf"))
 					found = true
 				}
@@ -188,7 +188,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 			// A directory-pipeline subtask exists and is parented to the
 			// request's req_in task, closing the retrieve->directory gap.
-			pipeStarts := rec.startsOfKind(tracing.PipelineTaskKind)
+			pipeStarts := rec.startsOfKind(tasks.KindPipeline)
 			Expect(pipeStarts).ToNot(BeEmpty())
 			Expect(pipeStarts[0].ParentID).To(Equal(reqInID))
 			Expect(pipeStarts[0].What).To(Equal(cacheComp.Name() + ".dir_pipeline"))
@@ -238,7 +238,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			// marking the post-pipeline processing interval as work.
 			haveWork := false
 			for _, m := range ms {
-				if m.Kind == tracing.MilestoneKindWork &&
+				if m.Kind == tasks.MilestoneKindWork &&
 					m.What == cacheComp.Name()+".dir_pipeline" {
 					haveWork = true
 				}
@@ -250,7 +250,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			// req_in, marking the data-wait resolved at fetch-response arrival.
 			haveData := false
 			for _, m := range ms {
-				if m.Kind == tracing.MilestoneKindData &&
+				if m.Kind == tasks.MilestoneKindData &&
 					m.What == cacheComp.Name()+".Bottom" {
 					haveData = true
 				}

@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // p0Harness wires a DRAM controller to a source port through a direct
@@ -20,13 +20,13 @@ type p0Harness struct {
 	top    messaging.Port
 }
 
-func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
+func newP0Harness(spec Spec, tracers ...tasks.Observer) *p0Harness {
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	dramComp := buildDRAM(sim, spec, "P0DRAM", 1024)
 	for _, t := range tracers {
-		tracing.CollectTrace(dramComp, t)
+		dramComp.TaskTracker().Subscribe(t, dramComp)
 	}
 
 	top := dramComp.Ports.Top
@@ -217,7 +217,7 @@ var _ = Describe("P0: channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
 			engine := timing.NewSerialEngine()
-			sim := modeling.NewStandaloneSimulation(engine)
+			sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 			spec := Definition.DefaultSpec
 			spec.NumChannel = numChannel

@@ -10,7 +10,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
@@ -21,7 +20,7 @@ import (
 // started-never-ended task. DRAM is a leaf, so there is no downstream req_out.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	comp := Definition.Builder().
 		WithSimulation(sim).
@@ -40,10 +39,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Attach the leak tracer BEFORE any traffic, so it sees every task start.
-	// Deliberately not CollectIncomingBufferTrace: those buffer tasks are ended
+	// The leak recorder ignores buffer tasks: those tasks are ended
 	// by the port retrieve hook, not the component.
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(comp, rec)
+	comp.TaskTracker().Subscribe(rec, comp)
 
 	// Admit a read: parseTop opens the req_in task and one sub-trans task per
 	// sub-transaction, then enqueues commands whose data return is many cycles

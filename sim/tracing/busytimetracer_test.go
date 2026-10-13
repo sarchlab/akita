@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -17,59 +18,59 @@ var _ = Describe("BusyTimeTracer", func() {
 	})
 
 	It("should track busy time, one task", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.EndTask(TaskEnd{ID: 1, Time: 20})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10)))
 	})
 
 	It("should track busy time, two tasks", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.EndTask(TaskEnd{ID: 1, Time: 20})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
 
-		t.StartTask(TaskStart{ID: 2, Time: 30})
-		t.EndTask(TaskEnd{ID: 2, Time: 40})
+		t.TaskStarted(tasks.Task{ID: 2, StartTime: 30})
+		t.TaskEnded(tasks.Task{ID: 2, EndTime: 40})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks adjacent", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.EndTask(TaskEnd{ID: 1, Time: 20})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
 
-		t.StartTask(TaskStart{ID: 2, Time: 20})
-		t.EndTask(TaskEnd{ID: 2, Time: 30})
+		t.TaskStarted(tasks.Task{ID: 2, StartTime: 20})
+		t.TaskEnded(tasks.Task{ID: 2, EndTime: 30})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks overlap", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.StartTask(TaskStart{ID: 2, Time: 15})
-		t.EndTask(TaskEnd{ID: 1, Time: 20})
-		t.EndTask(TaskEnd{ID: 2, Time: 25})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskStarted(tasks.Task{ID: 2, StartTime: 15})
+		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 2, EndTime: 25})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(15)))
 	})
 
 	It("should track busy time, four tasks", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.StartTask(TaskStart{ID: 2, Time: 11})
-		t.EndTask(TaskEnd{ID: 2, Time: 12})
-		t.StartTask(TaskStart{ID: 3, Time: 19})
-		t.EndTask(TaskEnd{ID: 1, Time: 20})
-		t.EndTask(TaskEnd{ID: 3, Time: 21})
-		t.StartTask(TaskStart{ID: 4, Time: 31})
-		t.EndTask(TaskEnd{ID: 4, Time: 32})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskStarted(tasks.Task{ID: 2, StartTime: 11})
+		t.TaskEnded(tasks.Task{ID: 2, EndTime: 12})
+		t.TaskStarted(tasks.Task{ID: 3, StartTime: 19})
+		t.TaskEnded(tasks.Task{ID: 1, EndTime: 20})
+		t.TaskEnded(tasks.Task{ID: 3, EndTime: 21})
+		t.TaskStarted(tasks.Task{ID: 4, StartTime: 31})
+		t.TaskEnded(tasks.Task{ID: 4, EndTime: 32})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(12)))
 	})
 
 	It("should be able to terminate all the tasks", func() {
-		t.StartTask(TaskStart{ID: 1, Time: 10})
-		t.StartTask(TaskStart{ID: 2, Time: 11})
-		t.StartTask(TaskStart{ID: 3, Time: 19})
-		t.EndTask(TaskEnd{ID: 3, Time: 21})
+		t.TaskStarted(tasks.Task{ID: 1, StartTime: 10})
+		t.TaskStarted(tasks.Task{ID: 2, StartTime: 11})
+		t.TaskStarted(tasks.Task{ID: 3, StartTime: 19})
+		t.TaskEnded(tasks.Task{ID: 3, EndTime: 21})
 
 		t.TerminateAllTasks(35)
 
@@ -84,8 +85,8 @@ var _ = Describe("BusyTimeTracer", func() {
 			for i := 0; i < 10000; i++ {
 				taskID := uint64(i + 1)
 
-				t.StartTask(TaskStart{ID: taskID, Time: timing.VTimeInPicoSec(i * 2)})
-				t.EndTask(TaskEnd{ID: taskID, Time: timing.VTimeInPicoSec(i*2 + 1)})
+				t.TaskStarted(tasks.Task{ID: taskID, StartTime: timing.VTimeInPicoSec(i * 2)})
+				t.TaskEnded(tasks.Task{ID: taskID, EndTime: timing.VTimeInPicoSec(i*2 + 1)})
 			}
 
 			Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10000)))

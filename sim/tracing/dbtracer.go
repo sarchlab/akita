@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -19,9 +20,8 @@ const (
 )
 
 type runningTask struct {
-	Task
-
-	toRecord bool
+	Tags       []tasks.Tag
+	Milestones []tasks.Milestone
 }
 
 // No secondary indexes are declared on the trace/milestone/tag/segment columns
@@ -78,7 +78,6 @@ type segmentTableEntry struct {
 // DBTracers can connect with different backends so that the tasks can be stored
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
 type DBTracer struct {
-	parents    RequestTaskParents
 	mu         sync.Mutex
 	timeTeller timing.TimeTeller
 	backend    datarecording.DataRecorder
@@ -99,76 +98,44 @@ func (t *DBTracer) IsTracing() bool {
 	return t.isTracing
 }
 
-// StartTask marks the start of a task.
-func (t *DBTracer) StartTask(task TaskStart) {
+// TaskStarted marks work that overlaps an active recording window.
+func (t *DBTracer) TaskStarted(task tasks.Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	task = t.parents.ResolveStart(task)
-
-	t.startingTaskMustBeValid(task)
-
-	// A task may first be mentioned by a tag or a milestone.
-	rt, found := t.tracingTasks[task.ID]
-	if !found {
-		rt = &runningTask{}
-		t.tracingTasks[task.ID] = rt
+	if t.terminated || !t.isTracing {
+		return
 	}
-
-	rt.ID = task.ID
-	rt.ParentID = task.ParentID
-	rt.Kind = task.Kind
-	rt.What = task.What
-	rt.Location = task.Location
-	rt.StartTime = task.Time
-
-	if t.isTracing {
-		rt.toRecord = true
-	}
+	t.tracingTasks[task.ID] = &runningTask{}
 }
 
-func (t *DBTracer) startingTaskMustBeValid(task TaskStart) {
-	if task.ID == 0 {
-		panic("task ID must be set")
-	}
-
-	if task.Kind == "" {
-		panic("task kind must be set")
-	}
-
-	if task.What == "" {
-		panic("task what must be set")
-	}
-
-	if task.Location == "" {
-		panic("task location must be set")
-	}
-}
-
-// AddTaskTag records a tag on a task.
-func (t *DBTracer) AddTaskTag(tag TaskTag) {
+// TagAdded records a tag on a task.
+func (t *DBTracer) TagAdded(tag tasks.Tag) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	task, found := t.tracingTasks[tag.TaskID]
 	if !found {
+		if !t.isTracing || t.terminated {
+			return
+		}
 		task = &runningTask{}
-		task.ID = tag.TaskID
 		t.tracingTasks[tag.TaskID] = task
 	}
 
 	task.Tags = append(task.Tags, tag)
 }
 
-// AddMilestone adds a milestone.
-func (t *DBTracer) AddMilestone(milestone Milestone) {
+// MilestoneAdded adds a milestone.
+func (t *DBTracer) MilestoneAdded(milestone tasks.Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	task, found := t.tracingTasks[milestone.TaskID]
 	if !found {
+		if !t.isTracing || t.terminated {
+			return
+		}
 		task = &runningTask{}
-		task.ID = milestone.TaskID
 		t.tracingTasks[milestone.TaskID] = task
 	}
 
@@ -187,34 +154,32 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 	task.Milestones = append(task.Milestones, milestone)
 }
 
-// EndTask marks the end of a task.
-func (t *DBTracer) EndTask(task TaskEnd) {
+// TaskEnded marks the end of a task.
+func (t *DBTracer) TaskEnded(task tasks.Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.parents.End(task.ID)
-
-	originalTask, ok := t.tracingTasks[task.ID]
-	if !ok {
+	if t.terminated {
 		return
 	}
-
-	originalTask.EndTime = task.Time
+	originalTask, ok := t.tracingTasks[task.ID]
 	delete(t.tracingTasks, task.ID)
-
-	if !originalTask.toRecord {
-		return
+	if !ok {
+		if !t.isTracing {
+			return
+		}
+		originalTask = &runningTask{}
 	}
 
 	// Write task to the trace table
 	entry := taskTableEntry{
-		ID:        originalTask.ID,
-		ParentID:  originalTask.ParentID,
-		Kind:      originalTask.Kind,
-		What:      originalTask.What,
-		Location:  originalTask.Location,
-		StartTime: float64(originalTask.StartTime),
-		EndTime:   float64(originalTask.EndTime),
+		ID:        task.ID,
+		ParentID:  task.ParentID,
+		Kind:      task.Kind,
+		What:      task.What,
+		Location:  task.Location,
+		StartTime: float64(task.StartTime),
+		EndTime:   float64(task.EndTime),
 	}
 	t.backend.InsertData(traceTableName, entry)
 
@@ -272,7 +237,6 @@ func (t *DBTracer) Terminate() {
 	defer t.mu.Unlock()
 
 	t.tracingTasks = nil
-	t.parents = RequestTaskParents{}
 	t.backend.Flush()
 }
 
@@ -283,19 +247,14 @@ func captureBacktrace() string {
 }
 
 // StartTracing manually enables tracing.
-// All ongoing tasks are marked for recording since their time range overlaps
-// with the tracing period.
+// Completed tasks carry full timing/identity even when their start was not recorded.
+// Earlier tags and milestones are not replayed or backfilled.
 func (t *DBTracer) StartTracing() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	t.isTracing = true
 	t.tracingStartTime = t.timeTeller.CurrentTime()
-
-	// Mark all ongoing tasks for recording
-	for _, task := range t.tracingTasks {
-		task.toRecord = true
-	}
 }
 
 // StopTracing stops tracing and finalizes tasks.

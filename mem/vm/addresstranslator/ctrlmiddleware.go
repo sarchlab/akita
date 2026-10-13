@@ -3,8 +3,8 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -165,14 +165,14 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
 		for _, inc := range trans.IncomingReqs {
-			tracing.EndTaskOnReset(m.comp, inc.RecvTaskID)
+			tasks.EndOnReset(m.comp, inc.RecvTaskID)
 		}
-		tracing.EndTaskOnReset(m.comp, trans.TranslationTaskID)
+		tasks.EndOnReset(m.comp, trans.TranslationTaskID)
 	}
 
 	for _, r := range m.comp.State.InflightReqToBottom {
-		tracing.EndTaskOnReset(m.comp, r.RecvTaskID)
-		tracing.EndTaskOnReset(m.comp, r.SendTaskID)
+		tasks.EndOnReset(m.comp, r.RecvTaskID)
+		tasks.EndOnReset(m.comp, r.SendTaskID)
 	}
 }
 

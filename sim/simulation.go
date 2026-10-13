@@ -3,8 +3,9 @@ package sim
 import (
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
@@ -18,6 +19,7 @@ type Simulation struct {
 	idGenerator      *timing.IDGenerator
 	dataRecorder     datarecording.DataRecorder
 	visTracer        *tracing.DBTracer
+	taskTracker      *tasks.Tracker
 	metaRecorder     *metaRecorder
 	topologyRecorder *topologyRecorder
 	monitor          Monitor
@@ -95,13 +97,6 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 	s.registerEntity(c)
 	s.components = append(s.components, c)
 
-	if hookable, ok := c.(interface {
-		naming.Named
-		hooking.Hookable
-	}); ok {
-		tracing.CollectTrace(hookable, s.visTracer)
-	}
-
 	if s.monitor != nil {
 		s.monitor.RegisterComponent(c)
 	}
@@ -120,12 +115,9 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
 
-	// Attach incoming- and outgoing-buffer tracing, mirroring how
-	// RegisterComponent attaches CollectTrace. The resulting tasks flow to the
-	// component tracer, so they only materialize for components that are
-	// themselves traced.
-	tracing.CollectIncomingBufferTrace(p)
-	tracing.CollectOutgoingBufferTrace(p)
+	if taskPort, ok := p.(messaging.Port); ok {
+		s.taskTracker.RegisterPort(taskPort)
+	}
 
 	if s.monitor != nil {
 		s.monitor.RegisterPort(port)
@@ -185,3 +177,6 @@ func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }
 
 // RequireNameAvailable validates a name before a binding changes either side.
 func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
+
+// Tasks returns the simulation task service, or nil when tracking is disabled.
+func (s *Simulation) Tasks() *tasks.Tracker { return s.taskTracker }

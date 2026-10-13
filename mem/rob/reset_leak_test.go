@@ -10,7 +10,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
 )
 
@@ -19,7 +18,7 @@ import (
 // are ended — i.e. a mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 4
@@ -50,7 +49,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	rec := &tracingtest.LeakRecorder{}
-	tracing.CollectTrace(rob, rec)
+	rob.TaskTracker().Subscribe(rec, rob)
 
 	// Admit a read: topDown opens the top req_in and the shadow req_out, then
 	// waits on the bottom response (which never comes — the request is in flight).

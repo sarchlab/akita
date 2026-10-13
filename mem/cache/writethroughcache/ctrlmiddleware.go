@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ctrlMiddleware owns every control verb: the universal verbs (Pause,
@@ -188,23 +188,23 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
+			tasks.EndOnReset(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasReadToBottom {
-			tracing.EndTaskOnReset(comp, trans.ReadTaskID)
+			tasks.EndOnReset(comp, trans.ReadTaskID)
 		}
 
 		if trans.HasWriteToBottom {
-			tracing.EndTaskOnReset(comp, trans.WriteTaskID)
+			tasks.EndOnReset(comp, trans.WriteTaskID)
 		}
 
 		if trans.DirPipelineTaskID != 0 {
-			tracing.EndTaskOnReset(comp, trans.DirPipelineTaskID)
+			tasks.EndOnReset(comp, trans.DirPipelineTaskID)
 		}
 
 		if trans.BankTaskID != 0 {
-			tracing.EndTaskOnReset(comp, trans.BankTaskID)
+			tasks.EndOnReset(comp, trans.BankTaskID)
 		}
 	}
 }

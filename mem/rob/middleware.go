@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type middleware struct {
@@ -91,10 +91,9 @@ func (m *middleware) topDown() bool {
 	// spent at the head of the Top buffer is over. This admission wait belongs
 	// to the incoming-buffer task; req_in (opened at retrieve, below) covers
 	// only the processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   m.comp.Name() + ".buffer",
+	tasks.AddBufferMilestone(m.comp, m.comp.Ports.Top, msg, tasks.Milestone{
+		Kind: tasks.MilestoneKindHardwareResource,
+		What: m.comp.Name() + ".buffer",
 	})
 
 	shadow, isRead := m.buildShadowReq(
@@ -106,16 +105,15 @@ func (m *middleware) topDown() bool {
 
 	// The shadow request is on its way downstream: the at-head wait to send on
 	// the Bottom port is over (also on the incoming-buffer task).
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.comp.Ports.Top.PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.comp.Ports.Bottom.Name(),
+	tasks.AddBufferMilestone(m.comp, m.comp.Ports.Top, msg, tasks.Milestone{
+		Kind: tasks.MilestoneKindNetworkBusy,
+		What: m.comp.Ports.Bottom.Name(),
 	})
 
 	// Admit the request: open req_in at retrieve and record the transaction.
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
+	recvTaskID := tasks.StartReqIn(m.comp, req)
 	m.tagReadWrite(req, recvTaskID)
-	sendTaskID := tracing.TraceReqInitiate(m.comp, shadow, recvTaskID)
+	sendTaskID := tasks.StartReqOut(m.comp, shadow, recvTaskID)
 	m.comp.Ports.Bottom.Send(shadow)
 
 	state.Transactions = append(state.Transactions, transactionState{
@@ -156,12 +154,12 @@ func (m *middleware) parseBottom() bool {
 		trans.RspData = content.Data
 		// The bottom unit returned the data this transaction was waiting on.
 
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: trans.RecvTaskID,
-			Kind:   tracing.MilestoneKindData,
+			Kind:   tasks.MilestoneKindData,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
+		tasks.FinalizeReq(m.comp, trans.SendTaskID)
 		return true
 	case memprotocol.WriteDoneRsp:
 		dataRsp := msg
@@ -177,12 +175,12 @@ func (m *middleware) parseBottom() bool {
 		trans.HasRsp = true
 		// The bottom unit acknowledged the write subtask this transaction
 		// dispatched.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: trans.RecvTaskID,
-			Kind:   tracing.MilestoneKindSubTask,
+			Kind:   tasks.MilestoneKindSubTask,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tracing.TraceReqFinalize(m.comp, trans.SendTaskID)
+		tasks.FinalizeReq(m.comp, trans.SendTaskID)
 		return true
 	default:
 		m.comp.Ports.Bottom.RetrieveIncoming()
@@ -209,9 +207,9 @@ func (m *middleware) bottomUp() bool {
 	// CanSend retry and the response-sent milestone so this more meaningful
 	// reason wins a same-tick tie; the (Kind, What) dedup keeps the first
 	// emission across retries and a zero-length head-of-line wait collapses.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: head.RecvTaskID,
-		Kind:   tracing.MilestoneKindDependency,
+		Kind:   tasks.MilestoneKindDependency,
 		What:   m.comp.Name() + ".reorder",
 	})
 
@@ -227,13 +225,13 @@ func (m *middleware) bottomUp() bool {
 
 	// The response is on its way to the requester: the wait to send on the Top
 	// port is over.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: head.RecvTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.comp.Ports.Top.Name(),
 	})
 
-	tracing.TraceReqComplete(m.comp, head.RecvTaskID)
+	tasks.CompleteReq(m.comp, head.RecvTaskID)
 
 	return true
 }
@@ -324,7 +322,7 @@ func (m *middleware) tagReadWrite(req messaging.Msg, taskID uint64) {
 		what = "read"
 	}
 
-	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+	tasks.AddTag(m.comp, tasks.Tag{
 		TaskID: taskID,
 		What:   what,
 	})
@@ -506,8 +504,8 @@ func drainIncoming(p messaging.Port) {
 // bottomUp (req_in) and parseBottom (req_out) completion.
 func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tracing.EndTaskOnReset(m.comp, trans.RecvTaskID)
-		tracing.EndTaskOnReset(m.comp, trans.SendTaskID)
+		tasks.EndOnReset(m.comp, trans.RecvTaskID)
+		tasks.EndOnReset(m.comp, trans.SendTaskID)
 	}
 }
 

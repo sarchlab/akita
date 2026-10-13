@@ -127,8 +127,8 @@ func TestArchiveDirReadsRealSourceAndFilters(t *testing.T) {
 		t.Fatalf("ReadArchive: %v", err)
 	}
 
-	if _, ok := files["sim/tracing/tracer.go"]; !ok {
-		t.Errorf("archived source missing sim/tracing/tracer.go (have %d files)", len(files))
+	if _, ok := files["sim/tasks/observer.go"]; !ok {
+		t.Errorf("archived source missing sim/tasks/observer.go (have %d files)", len(files))
 	}
 
 	for p := range files {

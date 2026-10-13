@@ -3,8 +3,8 @@ package gmmu
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -158,18 +158,18 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // req_in) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
+		tasks.EndOnReset(m.comp, walking.RecvTaskID)
 		// These walks have not yet reached an exit, so their walk subtask is
 		// still open. (Remote walks in RemoteMemReqs already closed theirs in
 		// processRemoteMemReq.)
 		if walking.WalkTaskID != 0 {
-			tracing.EndTaskOnReset(m.comp, walking.WalkTaskID)
+			tasks.EndOnReset(m.comp, walking.WalkTaskID)
 		}
 	}
 
 	for _, walking := range m.comp.State.RemoteMemReqs {
-		tracing.EndTaskOnReset(m.comp, walking.SendTaskID)
-		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
+		tasks.EndOnReset(m.comp, walking.SendTaskID)
+		tasks.EndOnReset(m.comp, walking.RecvTaskID)
 	}
 }
 

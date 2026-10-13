@@ -148,8 +148,8 @@ function cloneTasks(tasks: Task[]): LayoutTask[] {
 
 function buildTaskTree(tasks: LayoutTask[]) {
   const root: LayoutTask = {
-    id: "__root__",
-    parent_id: "",
+    id: 0,
+    parent_id: 0,
     kind: "",
     what: "",
     location: "",
@@ -158,7 +158,7 @@ function buildTaskTree(tasks: LayoutTask[]) {
     subTasks: [],
     level: 0,
   };
-  const taskById = new Map<string | number, LayoutTask>();
+  const taskById = new Map<number, LayoutTask>();
 
   for (const task of tasks) {
     task.subTasks = [];

@@ -15,30 +15,30 @@ answer many different questions.
 Every measuring tracer takes a `TaskFilter`:
 
 ```go
-type TaskFilter func(t TaskStart) bool
+type TaskFilter func(t tasks.Task) bool
 ```
 
 The tracer calls it when a task **starts**; it only measures tasks for which
 the filter returns `true`. There are no special helpers — it is an ordinary
-function, so you select on whatever field of the `TaskStart` matters:
+function, so you select on whatever field of the `tasks.Task` matters:
 
 ```go
 // By kind — the most common choice.
-func(t tracing.TaskStart) bool { return t.Kind == "req_in" }
+func(t tasks.Task) bool { return t.Kind == "req_in" }
 
 // By the message/operation name.
-func(t tracing.TaskStart) bool { return t.What == "readReq" }
+func(t tasks.Task) bool { return t.What == "readReq" }
 
 // By where the task ran (the component, or a network location).
-func(t tracing.TaskStart) bool { return t.Location == "L1Cache" }
+func(t tasks.Task) bool { return t.Location == "L1Cache" }
 
 // Combine freely.
-func(t tracing.TaskStart) bool {
+func(t tasks.Task) bool {
     return t.Kind == "req_in" && t.What == "readReq"
 }
 
 // Everything (when the domain only emits what you want).
-func(t tracing.TaskStart) bool { return true }
+func(t tasks.Task) bool { return true }
 ```
 
 This is why the request example could read two different numbers from one
@@ -48,8 +48,7 @@ only its kind — `req_out` for the round trip, `req_in` for handling.
 ## The Time Tracers
 
 Three tracers measure time and differ only in how they combine tasks. Each
-takes a filter **only** — they read the clock from the domain they are
-attached to, so there is no `TimeTeller` argument:
+takes a filter **only** — they read timestamps from the task records they receive, so there is no `TimeTeller` argument:
 
 - **`NewAverageTimeTracer(filter)`** — the mean duration of matching tasks.
   Read it with `AverageTime()`; `TotalCount()` gives how many finished. Use it
@@ -92,7 +91,7 @@ alongside a `datarecording.DataRecorder`:
 ```go
 recorder := datarecording.NewDataRecorder("trace")
 dbTracer := tracing.NewDBTracer(engine, recorder)
-tracing.CollectTrace(component, dbTracer)
+simulation.Tasks().Subscribe(dbTracer, component)
 
 // ... run the simulation ...
 
@@ -121,16 +120,18 @@ tasks behind your question.
 
 ## Key Concepts
 
-- **The filter selects; the tracer measures.** A `func(TaskStart) bool` over
-  `Kind` / `What` / `Location` picks the tasks at start; the tracer turns them
+- **The filter selects; the tracer measures.** A `func(tasks.Task) bool` over
+  `Kind` / `What` / `Location` selects task records; the tracer turns them
   into a number.
 - **Time tracers differ by overlap handling** — average, busy (union), and
   total (sum) answer different questions. They take a filter only and read the
-  clock from their domain.
+  timestamps from task records.
 - **`TagCountTracer` counts tags; `BackTraceTracer` finds stuck tasks;
   `DBTracer` records everything** to SQLite for offline analysis.
 
 ## Where to Next
 
-The final chapter is an advanced look under the hood: how the whole tracing
-system is just the hook mechanism from the start of this section.
+The final chapter is an advanced look under the hood: how typed task notifications relate to generic port hooks.
+
+Enable task tracking before assembly. Recording is separate from tracking; see
+[recording windows and history limits](../../../sim/tracing/README.md).

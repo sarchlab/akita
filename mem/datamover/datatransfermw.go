@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // dataTransferMW handles data read/write operations between source and
@@ -148,7 +148,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		return false
 	}
 
-	taskID := tracing.TraceReqInitiate(m.comp, req, trans.RecvTaskID)
+	taskID := tasks.StartReqOut(m.comp, req, trans.RecvTaskID)
 	srcP.Send(req)
 
 	trans.NextReadAddr += state.SrcByteGranularity
@@ -199,13 +199,13 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 
 	// Charge the in-flight src-read wait to the req_in opened for this move
 	// transaction (the stored receive ID also parents the read req_out), so the dominant latency of a move is attributed.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindData,
+		Kind:   tasks.MilestoneKindData,
 		What:   m.srcPort().Name(),
 	})
 
-	tracing.TraceReqFinalize(m.comp, originalReq.TaskID)
+	tasks.FinalizeReq(m.comp, originalReq.TaskID)
 
 	return true
 }
@@ -244,7 +244,7 @@ func (m *dataTransferMW) writeToDst() bool {
 		return false
 	}
 
-	taskID := tracing.TraceReqInitiate(m.comp, req, trans.RecvTaskID)
+	taskID := tasks.StartReqOut(m.comp, req, trans.RecvTaskID)
 	dstP.Send(req)
 
 	trans.NextWriteAddr += state.DstByteGranularity
@@ -293,13 +293,13 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 
 	// Charge the in-flight dst-write wait to the req_in opened for this move
 	// transaction (the stored receive ID also parents the write req_out), so the dominant latency of a move is attributed.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindSubTask,
+		Kind:   tasks.MilestoneKindSubTask,
 		What:   m.dstPort().Name(),
 	})
 
-	tracing.TraceReqFinalize(m.comp, originalReq.TaskID)
+	tasks.FinalizeReq(m.comp, originalReq.TaskID)
 
 	// Processing a write ack is real progress: the component must tick again
 	// so the remaining acks drain and the transaction can finish (which now

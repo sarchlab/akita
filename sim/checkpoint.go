@@ -56,6 +56,8 @@ func (s *Simulation) LoadCheckpoint(path string) error {
 		return err
 	}
 
+	s.taskTracker.DiscardOpenTasks()
+
 	for _, entity := range s.entities {
 		checkpointable, ok := entity.(Checkpointable)
 		if !ok {

@@ -1,33 +1,31 @@
-package tracing
+package tasks
 
 import "github.com/sarchlab/akita/v5/sim/messaging"
 
-// RequestTaskParents resolves request, buffer, and message-transport parents for one tracer. Its
-// zero value is ready for use. The caller must serialize access (normally with
-// the tracer lock). It is never checkpointed or consulted by simulation code. A missing
-// sender (untraced or already in flight at restore) leaves ParentID zero.
-type RequestTaskParents struct {
+// requestParents resolves shared message links under the tracker lock. Missing
+// sender records leave ParentID zero, including after a checkpoint restore.
+type requestParents struct {
 	byMessage map[uint64]uint64
 	byTask    map[uint64]uint64
 }
 
 // ResolveStart records req_out/flit_e2e identity or resolves a task parent.
 // Call for every start before filtering or retaining the event.
-func (p *RequestTaskParents) ResolveStart(task TaskStart) TaskStart {
+func (p *requestParents) ResolveStart(task Task) Task {
 	if task.MsgID == 0 {
 		return task
 	}
 	switch task.Kind {
-	case ReqOutTaskKind, "flit_e2e":
+	case KindReqOut, KindFlitTransport:
 		if p.byMessage == nil {
 			p.byMessage = make(map[uint64]uint64)
 			p.byTask = make(map[uint64]uint64)
 		}
 		p.byMessage[task.MsgID] = task.ID
 		p.byTask[task.ID] = task.MsgID
-	case ReqInTaskKind:
+	case KindReqIn:
 		task.ParentID = p.byMessage[task.MsgID]
-	case IncomingBufferTaskKind, OutgoingBufferTaskKind, "msg_e2e":
+	case KindIncomingBuffer, KindOutgoingBuffer, KindMsgTransport:
 		msgID := task.MsgID
 		if msg, ok := task.Detail.(messaging.Msg); ok && msg.IsRsp() {
 			msgID = msg.RspTo
@@ -39,7 +37,7 @@ func (p *RequestTaskParents) ResolveStart(task TaskStart) TaskStart {
 
 // End forgets a completed req_out or flit_e2e. Call for every end, including tasks
 // omitted by the observer's recording filter.
-func (p *RequestTaskParents) End(taskID uint64) {
+func (p *requestParents) End(taskID uint64) {
 	msgID, ok := p.byTask[taskID]
 	if !ok {
 		return

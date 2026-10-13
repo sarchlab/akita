@@ -12,6 +12,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
@@ -74,11 +75,9 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 		// Start a new job and open a tracing task for it.
 		s.NextID++
-		s.CurTaskID = s.NextID
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:   s.CurTaskID,
+		s.CurTaskID = tasks.Start(m.comp, tasks.StartInfo{
 			Kind: "job",
-			What: fmt.Sprintf("job-%d", s.CurTaskID),
+			What: fmt.Sprintf("job-%d", s.NextID),
 		})
 
 		s.Working = true
@@ -91,7 +90,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 	// Working: count down, and close the task when the job finishes.
 	s.CountDown--
 	if s.CountDown == 0 {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
+		tasks.End(m.comp, tasks.EndInfo{ID: s.CurTaskID})
 		s.Working = false
 	}
 
@@ -100,7 +99,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	worker := Definition.Builder().
 		WithSimulation(sim).
@@ -110,13 +109,13 @@ func main() {
 	}
 
 	// A tracer only cares about tasks whose Kind matches this filter.
-	onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }
+	onlyJobs := func(t tasks.Task) bool { return t.Kind == "job" }
 
 	busy := tracing.NewBusyTimeTracer(onlyJobs)
 	avg := tracing.NewAverageTimeTracer(onlyJobs)
 
-	tracing.CollectTrace(worker, busy)
-	tracing.CollectTrace(worker, avg)
+	worker.TaskTracker().Subscribe(busy, worker)
+	worker.TaskTracker().Subscribe(avg, worker)
 
 	worker.TickLater()
 

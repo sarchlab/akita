@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -303,8 +303,8 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 // close. Mirrors the completion path in handleRsp.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		tracing.EndTaskOnReset(m.comp, inflight.SendTaskID)
-		tracing.EndTaskOnReset(m.comp, inflight.RecvTaskID)
+		tasks.EndOnReset(m.comp, inflight.SendTaskID)
+		tasks.EndOnReset(m.comp, inflight.RecvTaskID)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/portwalk"
 	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -51,6 +52,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 	name        string
 	owner       modeling.Component
 	simulation  timing.Simulation
+	taskTracker *tasks.Tracker
 	initialize  func()
 	initialized bool
 }
@@ -68,6 +70,9 @@ func Init[S, T, R, P, M any](
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
+	if provider, ok := sim.(interface{ Tasks() *tasks.Tracker }); ok {
+		base.taskTracker = provider.Tasks()
+	}
 	base.Spec = cloneSpec(spec)
 	base.Resources = resources
 }
@@ -283,3 +288,6 @@ func cloneSpec[S any](spec S) S {
 
 	return spec
 }
+
+// TaskTracker returns this component's optional simulation task service.
+func (c *ComponentBase[S, T, R, P, M]) TaskTracker() *tasks.Tracker { return c.taskTracker }

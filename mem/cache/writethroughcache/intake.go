@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type intake struct {
@@ -34,10 +34,9 @@ func (s *intake) Tick() bool {
 	// request spent at the head of the Top buffer is over. This admission wait
 	// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 	// covers only the processing that follows.
-	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: s.cache.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   s.cache.comp.Name() + ".trans",
+	tasks.AddBufferMilestone(s.cache.comp, s.cache.topPort(), msg, tasks.Milestone{
+		Kind: tasks.MilestoneKindHardwareResource,
+		What: s.cache.comp.Name() + ".trans",
 	})
 
 	dirBuf := &next.DirBuf
@@ -47,10 +46,9 @@ func (s *intake) Tick() bool {
 
 	// The directory buffer has room: the at-head wait for a free dirBuf slot is
 	// over (also on the incoming-buffer task).
-	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: s.cache.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindHardwareResource,
-		What:   s.cache.comp.Name() + ".dir_buf",
+	tasks.AddBufferMilestone(s.cache.comp, s.cache.topPort(), msg, tasks.Milestone{
+		Kind: tasks.MilestoneKindHardwareResource,
+		What: s.cache.comp.Name() + ".dir_buf",
 	})
 
 	transIdx := s.createTransaction(msg)
@@ -59,7 +57,7 @@ func (s *intake) Tick() bool {
 
 	s.cache.topPort().RetrieveIncoming()
 
-	next.Transactions[transIdx].RecvTaskID = tracing.TraceReqReceive(s.cache.comp, msg)
+	next.Transactions[transIdx].RecvTaskID = tasks.StartReqIn(s.cache.comp, msg)
 
 	return true
 }

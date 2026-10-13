@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type dispatchMW struct {
@@ -59,10 +59,9 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// spent blocked on this bank's resources is over. This admission wait
 		// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
 		// covers only the processing that follows.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: m.topPort().PeekIncomingTaskID(),
-			Kind:   tracing.MilestoneKindHardwareResource,
-			What:   fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID),
+		tasks.AddBufferMilestone(m.comp, m.topPort(), msg, tasks.Milestone{
+			Kind: tasks.MilestoneKindHardwareResource,
+			What: fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID),
 		})
 
 		m.topPort().RetrieveIncoming()
@@ -72,13 +71,11 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// rather than left as a gap between the buffer task (which ends at
 		// retrieve) and the post-pipeline finalize milestones on req_in. The task
 		// ID rides on the item through the pipeline and is closed at finalize.
-		recvTaskID := tracing.TraceReqReceive(m.comp, msg)
+		recvTaskID := tasks.StartReqIn(m.comp, msg)
 
-		pipelineTaskID := m.comp.NewID()
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:       pipelineTaskID,
+		pipelineTaskID := tasks.Start(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
-			Kind:     tracing.PipelineTaskKind,
+			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",
 		})
 

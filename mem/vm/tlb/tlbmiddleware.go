@@ -4,8 +4,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type tlbMiddleware struct {
@@ -59,7 +59,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// Peek the head before the pipeline-slot gate so the admission milestone
 		// can be attributed to the head message's buffer task on the tick the
 		// slot frees.
-		_, ok := m.topPort().PeekIncoming()
+		itemI, ok := m.topPort().PeekIncoming()
 		if !ok {
 			break
 		}
@@ -72,10 +72,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// the head of the Top buffer is over. This admission wait belongs to the
 		// incoming-buffer task; req_in (opened at retrieve, below) covers only the
 		// processing that follows.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: m.topPort().PeekIncomingTaskID(),
-			Kind:   tracing.MilestoneKindHardwareResource,
-			What:   m.comp.Name() + ".pipeline",
+		tasks.AddBufferMilestone(m.comp, m.topPort(), itemI, tasks.Milestone{
+			Kind: tasks.MilestoneKindHardwareResource,
+			What: m.comp.Name() + ".pipeline",
 		})
 
 		msgI, _ := m.topPort().RetrieveIncoming()
@@ -85,13 +84,11 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// subtask as a child of req_in so the pipeline latency is attributed
 		// rather than left as a gap between the buffer task and the post-lookup
 		// milestones.
-		recvTaskID := tracing.TraceReqReceive(m.comp, msg)
+		recvTaskID := tasks.StartReqIn(m.comp, msg)
 
-		pid := m.comp.NewID()
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:       pid,
+		pid := tasks.Start(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
-			Kind:     tracing.PipelineTaskKind,
+			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",
 		})
 
@@ -123,9 +120,9 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		// it is not absorbed by a same-tick MSHR/hit milestone emitted inside
 		// lookup. Re-emitted on lookup retries; the (Kind, What) dedup keeps the
 		// first.
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: item.RecvTaskID,
-			Kind:   tracing.MilestoneKindWork,
+			Kind:   tasks.MilestoneKindWork,
 			What:   m.comp.Name() + ".pipeline",
 		})
 
@@ -134,7 +131,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			next.BufferItems.Pop()
 			// The request has left the pipeline (it is now being looked up):
 			// close the pipeline subtask opened at admission.
-			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.PipelineTaskID})
+			tasks.End(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
 			madeProgress = true
 		} else {
 			break
@@ -220,9 +217,9 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 
 	m.topPort().Send(rspToTop)
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: req.RecvTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
 	})
 
@@ -231,7 +228,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 	}
 
-	tracing.TraceReqComplete(m.comp, req.RecvTaskID)
+	tasks.CompleteReq(m.comp, req.RecvTaskID)
 
 	return true
 }
@@ -270,17 +267,17 @@ func (m *tlbMiddleware) handleTranslationHit(
 	next := &m.comp.State
 	setVisit(&next.Sets[setID], wayID)
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: item.RecvTaskID,
-		Kind:   tracing.MilestoneKindData,
+		Kind:   tasks.MilestoneKindData,
 		What:   m.comp.Name() + ".Sets",
 	})
 
-	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+	tasks.AddTag(m.comp, tasks.Tag{
 		TaskID: item.RecvTaskID,
 		What:   "hit",
 	})
-	tracing.TraceReqComplete(m.comp, item.RecvTaskID)
+	tasks.CompleteReq(m.comp, item.RecvTaskID)
 
 	return true
 }
@@ -293,15 +290,15 @@ func (m *tlbMiddleware) handleTranslationMiss(item pipelineTLBReqState) bool {
 		return false
 	}
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: item.RecvTaskID,
-		Kind:   tracing.MilestoneKindHardwareResource,
+		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".MSHR",
 	})
 
 	fetched := m.fetchBottom(item)
 	if fetched {
-		tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		tasks.AddTag(m.comp, tasks.Tag{
 			TaskID: item.RecvTaskID,
 			What:   "miss",
 		})
@@ -334,9 +331,9 @@ func (m *tlbMiddleware) sendRspToTop(
 	}
 
 	m.topPort().Send(rsp)
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: item.RecvTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
 	})
 	return true
@@ -355,7 +352,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	}
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, item)
 
-	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+	tasks.AddTag(m.comp, tasks.Tag{
 		TaskID: item.RecvTaskID,
 		What:   "mshr-hit",
 	})
@@ -384,12 +381,12 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 		return false
 	}
 
-	sendTaskID := tracing.TraceReqInitiate(m.comp, fetchBottom, item.RecvTaskID)
+	sendTaskID := tasks.StartReqOut(m.comp, fetchBottom, item.RecvTaskID)
 	m.bottomPort().Send(fetchBottom)
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: item.RecvTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
 
@@ -434,9 +431,9 @@ func (m *tlbMiddleware) parseBottom() bool {
 	// flight) is over for each req_in. network_busy is charged only later, when
 	// the response is actually sent upstream in respondMSHREntry.
 	for _, req := range next.MSHREntries[mshrIdx].Requests {
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: req.RecvTaskID,
-			Kind:   tracing.MilestoneKindTranslation,
+			Kind:   tasks.MilestoneKindTranslation,
 			What:   "translation",
 		})
 	}
@@ -462,7 +459,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tracing.TraceReqFinalize(m.comp, sendTaskID)
+		tasks.FinalizeReq(m.comp, sendTaskID)
 	}
 
 	return true

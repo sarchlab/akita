@@ -11,8 +11,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts and milestones the memory emits, in
@@ -20,21 +20,21 @@ import (
 // can assert the blocking reason and the task (buffer vs req_in) it is
 // attributed to.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) EndTask(e tracing.TaskEnd) {
+func (r *milestoneRecorder) TaskEnded(e tasks.Task) {
 	r.ends = append(r.ends, e)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
@@ -51,14 +51,14 @@ func (r *milestoneRecorder) taskID(kind string) uint64 {
 
 // taskStart returns the first recorded task start of the given kind and whether
 // one was found.
-func (r *milestoneRecorder) taskStart(kind string) (tracing.TaskStart, bool) {
+func (r *milestoneRecorder) taskStart(kind string) (tasks.Task, bool) {
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			return s, true
 		}
 	}
 
-	return tracing.TaskStart{}, false
+	return tasks.Task{}, false
 }
 
 // ended reports whether a task with the given ID was ended.
@@ -72,8 +72,8 @@ func (r *milestoneRecorder) ended(taskID uint64) bool {
 	return false
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -94,7 +94,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		storage := mem.NewStorage(4 * mem.GB)
 
 		spec := Definition.DefaultSpec
@@ -120,8 +120,8 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		// milestone lands on the Top-port buffer task, so the buffer task must
 		// exist.
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(memComp, rec)
-		tracing.CollectIncomingBufferTrace(topPort)
+		memComp.TaskTracker().Subscribe(rec, memComp)
+
 	})
 
 	makeRead := func(addr uint64) messaging.Msg {
@@ -148,16 +148,16 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		// RetrieveIncoming.
 		modelingtest.Tick(memComp)
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
 
 		bufMs := rec.milestonesOn(bufID)
 		// The buffer task carries the reached-head milestone (from the port
 		// hook) followed by the bank admission milestone.
 		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
 		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindHardwareResource))
+		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
 		Expect(bufMs[1].What).To(Equal(
 			fmt.Sprintf("%s.bank%d", memComp.Name(), bankID)))
 	})
@@ -177,7 +177,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		storage = mem.NewStorage(4 * mem.GB)
 
 		spec := Definition.DefaultSpec
@@ -205,7 +205,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		// Attach the recorder before driving so the receiver-side task IDs are
 		// real (request starts return 0 with no hooks).
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(memComp, rec)
+		memComp.TaskTracker().Subscribe(rec, memComp)
 	})
 
 	// drive ticks the memory and shuttles messages over the loopback until the
@@ -246,12 +246,12 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		// bank-pipeline traversal, named "<comp>.pipeline".
 		reqInMs := rec.milestonesOn(reqInID)
 		Expect(reqInMs).To(ContainElement(SatisfyAll(
-			HaveField("Kind", tracing.MilestoneKindWork),
+			HaveField("Kind", tasks.MilestoneKindWork),
 			HaveField("What", memComp.Name()+".pipeline"),
 		)))
 
 		// The pipeline subtask is a child of req_in and is closed at exit.
-		pipeStart, found := rec.taskStart(tracing.PipelineTaskKind)
+		pipeStart, found := rec.taskStart(tasks.KindPipeline)
 		Expect(found).To(BeTrue())
 		Expect(pipeStart.ParentID).To(Equal(reqInID))
 		Expect(pipeStart.What).To(Equal(memComp.Name() + ".pipeline"))
@@ -284,11 +284,11 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 
 		reqInMs := rec.milestonesOn(reqInID)
 		Expect(reqInMs).To(ContainElement(SatisfyAll(
-			HaveField("Kind", tracing.MilestoneKindWork),
+			HaveField("Kind", tasks.MilestoneKindWork),
 			HaveField("What", memComp.Name()+".pipeline"),
 		)))
 
-		pipeStart, found := rec.taskStart(tracing.PipelineTaskKind)
+		pipeStart, found := rec.taskStart(tasks.KindPipeline)
 		Expect(found).To(BeTrue())
 		Expect(pipeStart.ParentID).To(Equal(reqInID))
 		Expect(rec.ended(pipeStart.ID)).To(BeTrue())

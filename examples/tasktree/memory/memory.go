@@ -9,8 +9,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ReadReq asks the level below for a read.
@@ -78,9 +78,9 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	_ = msg.Payload.(ReadReq)
 	req := msg
 
-	taskID := tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
+	taskID := tasks.StartReqIn(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
-	tracing.TraceReqComplete(m.comp, taskID)
+	tasks.CompleteReq(m.comp, taskID)
 	port.RetrieveIncoming()
 	return true
 }

@@ -6,8 +6,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type agentMiddleware struct {
@@ -67,7 +67,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tracing.TraceReqFinalize(m.comp, req.TaskID)
+		tasks.FinalizeReq(m.comp, req.TaskID)
 		delete(state.PendingWriteReq, msg.RspTo)
 
 		if m.writeProgressBar != nil {
@@ -87,7 +87,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		m.checkReadResult(req.Msg, msg, state)
 
-		tracing.TraceReqFinalize(m.comp, req.TaskID)
+		tasks.FinalizeReq(m.comp, req.TaskID)
 		delete(state.PendingReadReq, msg.RspTo)
 
 		if m.readProgressBar != nil {
@@ -187,7 +187,7 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
-	taskID := tracing.TraceReqInitiate(m.comp, readReq, 0)
+	taskID := tasks.StartReqOut(m.comp, readReq, 0)
 	m.memPort().Send(readReq)
 
 	state.PendingReadReq[readReq.ID] = pendingRequest{Msg: readReq, TaskID: taskID}
@@ -270,7 +270,7 @@ func (m *agentMiddleware) doWrite() bool {
 		return false
 	}
 
-	taskID := tracing.TraceReqInitiate(m.comp, writeReq, 0)
+	taskID := tasks.StartReqOut(m.comp, writeReq, 0)
 	m.memPort().Send(writeReq)
 
 	state.WriteLeft--

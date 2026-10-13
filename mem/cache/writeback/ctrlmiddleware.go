@@ -5,8 +5,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ctrlMiddleware owns every control verb except CmdFlush, which is
@@ -275,29 +275,29 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // owns that task and ends it once, independently of how many blocks it evicts.
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
-	tracing.EndTaskOnReset(comp, comp.State.ProcessingFlush.RecvTaskID)
+	tasks.EndOnReset(comp, comp.State.ProcessingFlush.RecvTaskID)
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tracing.EndTaskOnReset(comp, trans.RecvTaskID)
+			tasks.EndOnReset(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasFetchReadReq {
-			tracing.EndTaskOnReset(comp, trans.FetchTaskID)
+			tasks.EndOnReset(comp, trans.FetchTaskID)
 		}
 
 		if trans.HasEvictionWriteReq {
-			tracing.EndTaskOnReset(comp, trans.EvictionTaskID)
+			tasks.EndOnReset(comp, trans.EvictionTaskID)
 		}
 
 		if trans.DirPipelinePID != 0 {
-			tracing.EndTaskOnReset(comp, trans.DirPipelinePID)
+			tasks.EndOnReset(comp, trans.DirPipelinePID)
 		}
 
 		if trans.BankPID != 0 {
-			tracing.EndTaskOnReset(comp, trans.BankPID)
+			tasks.EndOnReset(comp, trans.BankPID)
 		}
 	}
 }

@@ -3,26 +3,25 @@ package tracing
 import (
 	"sync"
 
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // AverageTimeTracer can collect the average time of executing a certain type of
 // task.
 type AverageTimeTracer struct {
-	NopTracer
+	tasks.NopObserver
 
-	filter        TaskFilter
-	lock          sync.Mutex
-	averageTime   timing.VTimeInPicoSec
-	inflightTasks map[uint64]timing.VTimeInPicoSec
-	taskCount     uint64
+	filter      TaskFilter
+	lock        sync.Mutex
+	averageTime timing.VTimeInPicoSec
+	taskCount   uint64
 }
 
 // NewAverageTimeTracer creates a new AverageTimeTracer
 func NewAverageTimeTracer(filter TaskFilter) *AverageTimeTracer {
 	return &AverageTimeTracer{
-		filter:        filter,
-		inflightTasks: make(map[uint64]timing.VTimeInPicoSec),
+		filter: filter,
 	}
 }
 
@@ -42,32 +41,14 @@ func (t *AverageTimeTracer) TotalCount() uint64 {
 	return t.taskCount
 }
 
-// StartTask records the task start time
-func (t *AverageTimeTracer) StartTask(task TaskStart) {
-	if !t.filter(task) {
-		return
-	}
-
-	t.lock.Lock()
-	t.inflightTasks[task.ID] = task.Time
-	t.lock.Unlock()
-}
-
-// EndTask records the end of the task
-func (t *AverageTimeTracer) EndTask(task TaskEnd) {
+// TaskEnded accounts for a completed task using its full timing record.
+func (t *AverageTimeTracer) TaskEnded(task tasks.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
-	startTime, ok := t.inflightTasks[task.ID]
-	if !ok {
+	if t.filter != nil && !t.filter(task) {
 		return
 	}
-
-	taskTime := task.Time - startTime
-	t.averageTime = (t.averageTime*timing.VTimeInPicoSec(t.taskCount) + taskTime) /
-		timing.VTimeInPicoSec(t.taskCount+1)
-
-	delete(t.inflightTasks, task.ID)
-
+	taskTime := task.EndTime - task.StartTime
+	t.averageTime = (t.averageTime*timing.VTimeInPicoSec(t.taskCount) + taskTime) / timing.VTimeInPicoSec(t.taskCount+1)
 	t.taskCount++
 }

@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type parseTopMW struct {
@@ -67,21 +67,20 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 	// spent blocked on the SubTransQueue is over. This admission wait belongs to
 	// the incoming-buffer task; req_in (opened at admission below) covers only
 	// the processing that follows.
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topPort().PeekIncomingTaskID(),
-		Kind:   tracing.MilestoneKindQueue,
-		What:   m.comp.Name() + ".SubTransQueue",
+	tasks.AddBufferMilestone(m.comp, m.topPort(), msgI, tasks.Milestone{
+		Kind: tasks.MilestoneKindQueue,
+		What: m.comp.Name() + ".SubTransQueue",
 	})
 
-	ts.RecvTaskID = tracing.TraceReqReceive(m.comp, msgI)
+	ts.RecvTaskID = tasks.StartReqIn(m.comp, msgI)
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)
 	m.topPort().RetrieveIncoming()
 
-	for _, st := range ts.SubTransactions {
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:       st.ID,
+	for i := range ts.SubTransactions {
+		st := &ts.SubTransactions[i]
+		st.TaskID = tasks.Start(m.comp, tasks.StartInfo{
 			ParentID: ts.RecvTaskID,
 			Kind:     "sub-trans",
 			What:     "sub-trans",

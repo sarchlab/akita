@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts, milestones, and tags the ROB
@@ -17,21 +17,21 @@ import (
 // so a test can assert the full ordered set of blocking reasons and the task
 // (buffer vs req_in) each one is attributed to.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	milestones []tracing.Milestone
-	tags       []tracing.TaskTag
+	tasks.NopObserver
+	starts     []tasks.Task
+	milestones []tasks.Milestone
+	tags       []tasks.Tag
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *milestoneRecorder) AddTaskTag(t tracing.TaskTag) {
+func (r *milestoneRecorder) TagAdded(t tasks.Tag) {
 	r.tags = append(r.tags, t)
 }
 
@@ -46,8 +46,8 @@ func (r *milestoneRecorder) taskID(kind string) uint64 {
 	return 0
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -57,9 +57,9 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 	return ms
 }
 
-func (r *milestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
+func (r *milestoneRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	ms := r.milestonesOn(taskID)
-	ks := make([]tracing.MilestoneKind, len(ms))
+	ks := make([]tasks.MilestoneKind, len(ms))
 	for i, m := range ms {
 		ks[i] = m.Kind
 	}
@@ -82,7 +82,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
 		spec.BufferSize = 4
@@ -115,10 +115,10 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		}
 
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(rob, rec)
+		rob.TaskTracker().Subscribe(rec, rob)
 		// The admission milestones now land on the Top-port buffer task, so the
 		// test needs the buffer task to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
+
 	})
 
 	makeRead := func(addr uint64) messaging.Msg {
@@ -179,7 +179,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 		driveRoundTrip(makeRead(0), rsp)
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
@@ -187,10 +187,10 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 		// The buffer task owns the pre-admission story: reached the head of the
 		// Top buffer, then waited for a free reorder slot, then to send the shadow.
-		Expect(rec.kindsOn(bufID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindQueue,
-			tracing.MilestoneKindHardwareResource,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(bufID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindQueue,
+			tasks.MilestoneKindHardwareResource,
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		bufMs := rec.milestonesOn(bufID)
 		Expect(bufMs[0].What).To(Equal(topPort.Name()))
@@ -198,10 +198,10 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		Expect(bufMs[2].What).To(Equal(bottomPort.Name()))
 
 		// req_in owns only the post-admission processing.
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindData,
-			tracing.MilestoneKindDependency,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindData,
+			tasks.MilestoneKindDependency,
+			tasks.MilestoneKindNetworkBusy,
 		}))
 		reqMs := rec.milestonesOn(reqInID)
 		Expect(reqMs[0].What).To(Equal(bottomPort.Name()))
@@ -223,10 +223,10 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		driveRoundTrip(makeWrite(64, []byte{1, 2, 3, 4}), rsp)
 
 		reqInID := rec.taskID("req_in")
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindSubTask,
-			tracing.MilestoneKindDependency,
-			tracing.MilestoneKindNetworkBusy,
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+			tasks.MilestoneKindSubTask,
+			tasks.MilestoneKindDependency,
+			tasks.MilestoneKindNetworkBusy,
 		}))
 
 		Expect(rec.tags).To(HaveLen(1))
@@ -246,9 +246,9 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		var depIdx, topSendIdx int
 		for i, m := range rec.milestones {
 			switch {
-			case m.Kind == tracing.MilestoneKindDependency:
+			case m.Kind == tasks.MilestoneKindDependency:
 				depIdx = i
-			case m.Kind == tracing.MilestoneKindNetworkBusy &&
+			case m.Kind == tasks.MilestoneKindNetworkBusy &&
 				m.What == topPort.Name():
 				topSendIdx = i
 			}

@@ -2,8 +2,8 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // bankTickMW drives the banks. Its timing tables, completion delays, and
@@ -96,35 +96,35 @@ func (m *bankTickMW) issue(spec *Spec, next *state) bool {
 // the trace; attributing it to the first command that issues afterward charges
 // the wait to the sub-transaction that was actually held off.
 func (m *bankTickMW) traceRefreshStall(next *state, cmd *commandState) {
-	if m.comp.NumHooks() == 0 {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 	sub := subTransByRef(next, cmd.SubTransRef)
 	if sub == nil {
 		return
 	}
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: sub.ID,
-		Kind:   tracing.MilestoneKindHardwareResource,
+	tasks.AddMilestone(m.comp, tasks.Milestone{
+		TaskID: sub.TaskID,
+		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".refresh",
 	})
 }
 
 // traceCmdIssue records the command as a milestone on its sub-transaction's
 // trace task — each ACT/RD/PRE the controller issues for a sub-transaction is a
-// point on that task's timeline. Guarded by NumHooks so the hot path does
+// point on that task's timeline. Guarded by TaskTracker so the hot path does
 // nothing when no tracer is attached.
 func (m *bankTickMW) traceCmdIssue(next *state, cmd *commandState) {
-	if m.comp.NumHooks() == 0 {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 	sub := subTransByRef(next, cmd.SubTransRef)
 	if sub == nil {
 		return
 	}
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: sub.ID,
-		Kind:   tracing.MilestoneKindHardwareResource,
+	tasks.AddMilestone(m.comp, tasks.Milestone{
+		TaskID: sub.TaskID,
+		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   commandKind(cmd.Kind).String(),
 	})
 }
@@ -132,10 +132,10 @@ func (m *bankTickMW) traceCmdIssue(next *state, cmd *commandState) {
 // endSubTransTasks ends the trace task of every sub-transaction that just
 // completed (its data/response became ready).
 func (m *bankTickMW) endSubTransTasks(ids []uint64) {
-	if m.comp.NumHooks() == 0 {
+	if m.comp.TaskTracker() == nil {
 		return
 	}
 	for _, id := range ids {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: id})
+		tasks.End(m.comp, tasks.EndInfo{ID: id})
 	}
 }

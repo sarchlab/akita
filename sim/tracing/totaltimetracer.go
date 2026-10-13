@@ -3,6 +3,7 @@ package tracing
 import (
 	"sync"
 
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -10,19 +11,17 @@ import (
 // task. If the execution of two tasks overlaps, this tracer will simply add
 // the two task processing time together.
 type TotalTimeTracer struct {
-	NopTracer
+	tasks.NopObserver
 
-	filter        TaskFilter
-	lock          sync.Mutex
-	totalTime     timing.VTimeInPicoSec
-	inflightTasks map[uint64]timing.VTimeInPicoSec
+	filter    TaskFilter
+	lock      sync.Mutex
+	totalTime timing.VTimeInPicoSec
 }
 
 // NewTotalTimeTracer creates a new TotalTimeTracer
 func NewTotalTimeTracer(filter TaskFilter) *TotalTimeTracer {
 	return &TotalTimeTracer{
-		filter:        filter,
-		inflightTasks: make(map[uint64]timing.VTimeInPicoSec),
+		filter: filter,
 	}
 }
 
@@ -34,27 +33,12 @@ func (t *TotalTimeTracer) TotalTime() timing.VTimeInPicoSec {
 	return t.totalTime
 }
 
-// StartTask records the task start time
-func (t *TotalTimeTracer) StartTask(task TaskStart) {
-	if !t.filter(task) {
-		return
-	}
-
-	t.lock.Lock()
-	t.inflightTasks[task.ID] = task.Time
-	t.lock.Unlock()
-}
-
-// EndTask records the end of the task
-func (t *TotalTimeTracer) EndTask(task TaskEnd) {
+// TaskEnded accounts for a completed task using its full timing record.
+func (t *TotalTimeTracer) TaskEnded(task tasks.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
-	startTime, ok := t.inflightTasks[task.ID]
-	if !ok {
+	if t.filter != nil && !t.filter(task) {
 		return
 	}
-
-	t.totalTime += task.Time - startTime
-	delete(t.inflightTasks, task.ID)
+	t.totalTime += task.EndTime - task.StartTime
 }

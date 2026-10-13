@@ -38,7 +38,7 @@ and constructors are removed.
 
 NoC builders now explicitly support buffered ports and ideal direct connections.
 The port factory is removed; endpoint device wiring rejects unsupported device
-ports. The tracing ownership change below updates the port checkpoint encoding.
+ports. Port checkpoints store messages without tracing IDs.
 
 ## Explicit component assembly
 
@@ -75,68 +75,42 @@ automatically from the running binary's build information, stored in the
 checkpoint, and checked on load. There is no public override.
 Per-entity checkpoint methods are unchanged.
 
-## Tracing task ownership
+## Simulation-scoped task tracking
 
-This is a breaking pre-v5 change (related to #503). Migrate downstream callers,
-including MGPUSim, in this order:
+This pre-v5 change moves component tracing commands and task types to
+`sim/tasks`. Enable `WithTaskTracking` (also implied by monitor and trace-on-start),
+and subscribe observers through `s.Tasks().Subscribe(observer, owners...)`
+before running. Components receive the service through `TaskTracker()`;
+tracking is nil when disabled.
 
-1. Add `uint64` task-ID fields with JSON tags to each transaction in component
-   `State`, alongside the request metadata. Keep distinct fields for the
-   receive task and every independently outstanding send task. Coalesced
-   requests each retain their own receive ID. These fields must pass
-   `ValidateState` and participate in checkpoints.
-2. Store the return of `TraceReqReceive(domain, msg) uint64` on admission.
-   Replace every `MsgIDAtReceiver(msg, domain)` with that stored ID.
-3. Store `TraceReqInitiate(domain, msg, parentID) uint64` before `port.Send`.
-   Pass the receive ID as `parentID` when forwarding an upstream request.
-   Never use the outgoing message ID as a task ID.
-4. Change completion to `TraceReqComplete(domain, recvTaskID)` and
-   `TraceReqFinalize(domain, sendTaskID)`. Change all resets to
-   `EndTaskOnReset(domain, taskID)` for each owned task, before clearing state.
-   Delete all forget calls. Zero denotes an unstarted task and is ignored by
-   completion, reset, tag, and milestone helpers.
-5. Replace incoming-buffer lookups with `port.PeekIncomingTaskID() uint64`,
-   read before `RetrieveIncoming`. The port stores IDs in buffer entries and
-   saves/restores them with the typed messages. Custom `messaging.Port`
-   implementations need this method and should emit `PortBufferTrace` as
-   hook `Detail` (message `Item` is unchanged). Retrieve hooks now run under
-   the port lock, like enqueue hooks. Custom hooks must use the supplied
-   `PortBufferTrace.HeadTaskID` instead of calling buffer operations such as
-   Peek/NumIncoming/NumOutgoing, which would deadlock. Owner/Name access is
-   safe. Recreate old checkpoints.
-6. Custom tracers that need parent links use a per-tracer
-   `RequestTaskParents`: pass every start through
-   `ResolveStart(TaskStart) TaskStart`, then call `End(taskID uint64)` on every
-   end. Serialize these calls with the tracer's lock. Do this before filtering.
+- Replace `StartTask` with `id := tasks.Start(owner, tasks.StartInfo{...})`.
+  It allocates an independent task ID; do not pass a caller-generated ID.
+- Use `StartReqOut` before `port.Send`, and `StartReqIn` on admission. Store each
+  returned handle in State. End with `FinalizeReq`, `CompleteReq`, or
+  `End(owner, EndInfo{ID: id})`; reset discarded work with `EndOnReset`.
+- Use `tasks.Tag`, `tasks.Milestone`, `AddTag`, and `AddMilestone`. Replace buffer
+  task lookups with `AddBufferMilestone(owner, port, msg, milestone)` before
+  retrieval. It drops events for untracked messages without misattribution.
+- Replace custom Tracer methods with `TaskStarted(Task)`, `TaskEnded(Task)`,
+  `TagAdded(Tag)`, and `MilestoneAdded(Milestone)`, optionally embedding
+  `tasks.NopObserver`. Both lifecycle notifications carry the basic task record;
+  the end includes the original start time. Observers no longer resolve parents.
+- Remove `CollectTrace`, the buffer collector helpers, task hook positions,
+  `RequestTaskParents`, `PeekIncomingTaskID`, and `PortBufferTrace`. Custom ports
+  report generic `PortBufferChange` head facts in message-hook Detail. Hooks run
+  under the port lock and must not call buffer operations; Owner/Name are safe.
 
-Removed functions: `MsgIDAtReceiver`, `ForgetMsgIDAtReceiver`,
-`MsgIDAtIncomingBuffer`, `ForgetMsgIDAtIncomingBuffer`,
-`MsgIDAtOutgoingBuffer`, `ForgetMsgIDAtOutgoingBuffer`, and `EndReqInOnReset`.
-`TaskStart` adds `MsgID uint64`; `messaging.Msg` is unchanged. Domain arguments
-come first throughout the tracing API.
+`messaging.Msg` is unchanged. Request/NoC handles remain in component or flit
+State, and the Tracker owns records and buffer identities. DRAM subtransaction
+IDs remain simulation identities with separate tracing handles. Port checkpoint
+entries are messages again, without the temporary tracing version/ID fields.
+Pre-v5 checkpoint formats should be recreated after upgrading.
 
-`DBTracer` and `BackTraceTracer` resolve req_in parents from observed req_out
-starts and discard correlation on req_out end. Flit buffer parents are resolved from observed `flit_e2e`
-starts and forgotten when that transport task ends. Unmatched requests have no
-parent, including requests already in flight at restore. Correlation is
-observer state and is not checkpointed. Buffer tasks use the same helper,
-including response buffers linked by the message's `RspTo`. Existing task and
-parent columns suffice: neither the DBTracer schema nor Daisen changed.
+Tracker state and observer history are not checkpointed. Restored unknown task
+handles are ignored; simulation transactions still complete. Trace continuity,
+snapshots, and historical backfill are deferred. Recording started mid-run can
+consume complete end records but does not promise all in-flight tasks or their
+earlier events. Daisen's stored task/parent schema is unchanged, and its frontend
+ID types are numeric. MGPUSim migration follows this Akita change separately.
 
-The TLB and MMU-cache control middlewares drop milestones that previously
-referred to nonexistent req_in tasks. Other control tracing, such as the
-writeback cache's actual flush task, retains its complete task lifecycle.
-
-For example, idealmemcontroller now initializes
-`tx.RecvTaskID = tracing.TraceReqReceive(comp, req)` and completes with
-`tracing.TraceReqComplete(comp, tx.RecvTaskID)`. Previously it obtained the ID
-from `MsgIDAtReceiver(req, comp)` and had to forget the registry entry. The
-stored ID now survives a checkpoint without any tracing-global state.
-
-NoC transport tasks follow the same identity rule. `packetization.Flit` adds
-`FlitTaskID uint64` alongside the existing `MsgTaskID`; both travel through
-checkpointed endpoint/port/switch state. Endpoints end the original IDs at the
-receiving side, and switches parent their local tasks to `FlitTaskID`.
-`RequestTaskParents` resolves `msg_e2e` parents using the handled message ID
-(or `RspTo` for responses), just like buffer tasks. No field is added to
-`messaging.Msg`.
+See [tasks](../sim/tasks/README.md) and [observers](../sim/tracing/README.md).

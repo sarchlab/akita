@@ -20,19 +20,11 @@ interface TaskHierarchy {
   expandNext: () => void;
 }
 
-function normalize(raw: unknown): Task[] {
-  return (raw as Array<Record<string, unknown>>).map((t) => ({
-    ...(t as unknown as Task),
-    id: String(t.id),
-    parent_id: t.parent_id === 0 ? "" : String(t.parent_id),
-  }));
-}
-
 async function fetchTrace(params: Record<string, string>, signal: AbortSignal): Promise<Task[]> {
   const response = await fetch(`/api/trace?${new URLSearchParams(params).toString()}`, { signal });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-  return normalize(await response.json());
+  return response.json() as Promise<Task[]>;
 }
 
 // useTaskHierarchy loads a task with its full ancestor chain and its descendant
@@ -80,15 +72,15 @@ export function useTaskHierarchy(taskId: string): TaskHierarchy {
 
         // Ancestor chain, walking up parent_id (guarded against cycles).
         const chain: Task[] = [];
-        const seen = new Set<string>([String(main.id)]);
-        let pid = String(main.parent_id ?? "");
+        const seen = new Set<number>([main.id]);
+        let pid = main.parent_id;
         while (pid && !seen.has(pid)) {
           seen.add(pid);
-          const [parent] = await fetchTrace({ id: pid }, ctrl.signal);
+          const [parent] = await fetchTrace({ id: String(pid) }, ctrl.signal);
           if (myGen !== gen.current) return;
           if (!parent) break;
           chain.push(parent);
-          pid = String(parent.parent_id ?? "");
+          pid = parent.parent_id;
         }
         setAncestors(chain.reverse());
 

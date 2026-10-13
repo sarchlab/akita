@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type bankStage struct {
@@ -121,12 +121,9 @@ func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		pid := s.cache.comp.NewID()
-		trans.BankPID = pid
-		tracing.StartTask(s.cache.comp, tracing.TaskStart{
-			ID:       pid,
+		trans.BankPID = tasks.Start(s.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
-			Kind:     tracing.PipelineTaskKind,
+			Kind:     tasks.KindPipeline,
 			What:     s.cache.comp.Name() + ".bank",
 		})
 	}
@@ -147,13 +144,13 @@ func (s *bankStage) finishBank(trans *transactionState) {
 		return
 	}
 
-	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+	tasks.AddMilestone(s.cache.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindWork,
+		Kind:   tasks.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})
 	if trans.BankPID != 0 {
-		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.BankPID})
+		tasks.End(s.cache.comp, tasks.EndInfo{ID: trans.BankPID})
 		trans.BankPID = 0
 	}
 }
@@ -224,7 +221,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	s.cache.topPort().Send(dataReady)
 
 	s.finishBank(trans)
-	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
+	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }
@@ -263,7 +260,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	s.cache.topPort().Send(done)
 
 	s.finishBank(trans)
-	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
+	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }

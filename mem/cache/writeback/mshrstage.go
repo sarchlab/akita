@@ -3,7 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type mshrStage struct {
@@ -118,12 +118,12 @@ func (s *mshrStage) respondRead(
 	// bank itself (only the fetcher did), so that wait is a dependency, not its
 	// own work — record it so the interval since the fill-data milestone is not
 	// an unexplained tail before the response.
-	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+	tasks.AddMilestone(s.cache.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindDependency,
+		Kind:   tasks.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
+	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
@@ -140,12 +140,12 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 	// See respondRead: the wait for the fetched line to land in the bank and
 	// resolve through this MSHR stage is a dependency on the fetcher, not this
 	// request's own bank work.
-	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+	tasks.AddMilestone(s.cache.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindDependency,
+		Kind:   tasks.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tracing.TraceReqComplete(s.cache.comp, trans.RecvTaskID)
+	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {

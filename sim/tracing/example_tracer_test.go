@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
@@ -38,17 +38,16 @@ func (d *SampleDomain) CurrentTime() timing.VTimeInPicoSec {
 func (d *SampleDomain) Start() {
 	d.nextID++
 
-	tracing.StartTask(d, tracing.TaskStart{
-		ID:   d.nextID,
+	id := tasks.Start(d, tasks.StartInfo{
 		Kind: "sampleTaskKind",
 		What: "something",
 	})
 
-	d.taskIDs = append(d.taskIDs, d.nextID)
+	d.taskIDs = append(d.taskIDs, id)
 }
 
 func (d *SampleDomain) End() {
-	tracing.EndTask(d, tracing.TaskEnd{
+	tasks.End(d, tasks.EndInfo{
 		ID: d.taskIDs[0],
 	})
 
@@ -56,23 +55,23 @@ func (d *SampleDomain) End() {
 }
 
 // Example for how to use standard tracers
-func ExampleTracer() {
+func ExampleNewTotalTimeTracer() {
 	timeTeller := &SampleTimeTeller{}
-	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking(),
 		HookableBase: &hooking.HookableBase{},
 		timeTeller:   timeTeller,
 	}
 
-	filter := func(t tracing.TaskStart) bool {
+	filter := func(t tasks.Task) bool {
 		return t.Kind == "sampleTaskKind"
 	}
 
 	totalTimeTracer := tracing.NewTotalTimeTracer(filter)
 	busyTimeTracer := tracing.NewBusyTimeTracer(filter)
 	avgTimeTracer := tracing.NewAverageTimeTracer(filter)
-	tracing.CollectTrace(domain, totalTimeTracer)
-	tracing.CollectTrace(domain, busyTimeTracer)
-	tracing.CollectTrace(domain, avgTimeTracer)
+	domain.TaskTracker().Subscribe(totalTimeTracer, domain)
+	domain.TaskTracker().Subscribe(busyTimeTracer, domain)
+	domain.TaskTracker().Subscribe(avgTimeTracer, domain)
 
 	timeTeller.time = 10
 
@@ -101,3 +100,7 @@ func ExampleTracer() {
 }
 
 func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }
+
+func (d *SampleDomain) TaskTracker() *tasks.Tracker {
+	return d.sim.(interface{ Tasks() *tasks.Tracker }).Tasks()
+}

@@ -1,15 +1,15 @@
 // Package server is the responding side of the reqtracing example: a ticking
 // component that answers every ReadReq Latency cycles after it arrives. It
 // traces its handling of each request as a req_in task, opened with
-// TraceReqReceive and closed with TraceReqComplete.
+// StartReqIn and closed with CompleteReq.
 package server
 
 import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // ReadReq asks the server for a read.
@@ -90,7 +90,7 @@ func (m *serveMW) receive() bool {
 
 	_ = msg.Payload.(ReadReq)
 	req := msg
-	recvTaskID := tracing.TraceReqReceive(m.comp, req)
+	recvTaskID := tasks.StartReqIn(m.comp, req)
 	m.comp.State.Pending = append(m.comp.State.Pending,
 		txn{Req: req, RecvTaskID: recvTaskID, Left: m.comp.Spec.Latency})
 	port.RetrieveIncoming()
@@ -131,7 +131,7 @@ func (m *serveMW) respond() bool {
 			Seq: req.Payload.(ReadReq).Seq,
 		}})
 
-	tracing.TraceReqComplete(m.comp, s.Pending[0].RecvTaskID)
+	tasks.CompleteReq(m.comp, s.Pending[0].RecvTaskID)
 	s.Pending = s.Pending[1:]
 
 	return true

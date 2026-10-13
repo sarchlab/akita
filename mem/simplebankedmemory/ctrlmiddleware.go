@@ -3,8 +3,8 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -148,7 +148,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // buffer, so a hard Reset that rebuilds the banks leaves no
 // started-never-ended task. The memory is
 // a leaf, so there is no downstream req_out. Mirrors the completion in
-// tickFinalizeMW.finishPipeline + TraceReqComplete.
+// tickFinalizeMW.finishPipeline + CompleteReq.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for i := range m.comp.State.Banks {
 		bank := &m.comp.State.Banks[i]
@@ -162,10 +162,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 }
 
 func (m *ctrlMiddleware) endItemTasks(item bankPipelineItemState) {
-	tracing.EndTaskOnReset(m.comp, item.RecvTaskID)
+	tasks.EndOnReset(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)
+		tasks.EndOnReset(m.comp, item.PipelineTaskID)
 	}
 }
 

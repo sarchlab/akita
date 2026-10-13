@@ -14,8 +14,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 var migDebugFlag = flag.Bool(
@@ -301,9 +301,7 @@ func (m *migMW) beginMigration() {
 
 	// Open a parent task spanning the whole migration so the control phases nest
 	// under it in the trace.
-	state.MigTaskID = m.ctrl.NewID()
-	tracing.StartTask(m.ctrl, tracing.TaskStart{
-		ID:       state.MigTaskID,
+	state.MigTaskID = tasks.Start(m.ctrl, tasks.StartInfo{
 		Kind:     "migration",
 		What:     "migration",
 		Location: m.ctrl.Name(),
@@ -319,13 +317,11 @@ func (m *migMW) startPhaseTask(phase migPhase) {
 	state := &m.ctrl.State
 
 	if state.PhaseTaskID != 0 {
-		tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: state.PhaseTaskID})
+		tasks.End(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
 	}
 
 	name := phaseName(phase)
-	state.PhaseTaskID = m.ctrl.NewID()
-	tracing.StartTask(m.ctrl, tracing.TaskStart{
-		ID:       state.PhaseTaskID,
+	state.PhaseTaskID = tasks.Start(m.ctrl, tasks.StartInfo{
 		ParentID: state.MigTaskID,
 		Kind:     "migration_step",
 		What:     name,
@@ -384,7 +380,7 @@ func (m *migMW) runControlPhase(
 
 		// Open a req_out task under the current phase so the receiver's req_in
 		// task can be linked by the observer; closed in processAcks.
-		state.CommandTasks[req.ID] = tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+		state.CommandTasks[req.ID] = tasks.StartReqOut(m.ctrl, req, state.PhaseTaskID)
 		m.ctrlPort().Send(req)
 
 		state.SendCursor++
@@ -422,7 +418,7 @@ func (m *migMW) processAcks() bool {
 		}
 
 		// Close the req_out task opened for this command (keyed by request ID).
-		tracing.TraceReqFinalize(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
+		tasks.FinalizeReq(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
 		delete(m.ctrl.State.CommandTasks, rsp.RspTo)
 
 		m.ctrl.State.PendingAcks--
@@ -459,7 +455,7 @@ func (m *migMW) tickCopying() bool {
 
 	// Open a req_out task under the copy phase so the data mover's req_in task
 	// has a parent; closed in processMoveRsp.
-	state.MoveTaskID = tracing.TraceReqInitiate(m.ctrl, req, state.PhaseTaskID)
+	state.MoveTaskID = tasks.StartReqOut(m.ctrl, req, state.PhaseTaskID)
 	m.moverPort().Send(req)
 
 	state.MoveSent = true
@@ -491,7 +487,7 @@ func (m *migMW) processMoveRsp() bool {
 	}
 
 	// Close the req_out task opened for the data-move request.
-	tracing.TraceReqFinalize(m.ctrl, state.MoveTaskID)
+	tasks.FinalizeReq(m.ctrl, state.MoveTaskID)
 	state.MoveTaskID = 0
 
 	vAddr := state.CurPage * pageSize
@@ -515,11 +511,11 @@ func (m *migMW) finishMigration() {
 
 	// Close the final phase task and the parent migration task.
 	if state.PhaseTaskID != 0 {
-		tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: state.PhaseTaskID})
+		tasks.End(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
 		state.PhaseTaskID = 0
 	}
 	if state.MigTaskID != 0 {
-		tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: state.MigTaskID})
+		tasks.End(m.ctrl, tasks.EndInfo{ID: state.MigTaskID})
 		state.MigTaskID = 0
 	}
 

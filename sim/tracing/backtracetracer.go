@@ -3,27 +3,28 @@ package tracing
 import (
 	"fmt"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // TaskPrinter can print tasks with a format.
 type TaskPrinter interface {
-	Print(task Task)
+	Print(task tasks.Task)
 }
 
 type defaultTaskPrinter struct {
 }
 
-func (p *defaultTaskPrinter) Print(task Task) {
+func (p *defaultTaskPrinter) Print(task tasks.Task) {
 	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Location)
 }
 
 // BackTraceTracer can record incomplete tasks.
 type BackTraceTracer struct {
-	parents RequestTaskParents
-	NopTracer
+	tasks.NopObserver
 
 	printer      TaskPrinter
-	tracingTasks map[uint64]Task
+	tracingTasks map[uint64]tasks.Task
 	lock         sync.Mutex
 }
 
@@ -31,7 +32,7 @@ type BackTraceTracer struct {
 func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	t := &BackTraceTracer{
 		printer:      printer,
-		tracingTasks: make(map[uint64]Task),
+		tracingTasks: make(map[uint64]tasks.Task),
 	}
 
 	if t.printer == nil {
@@ -41,36 +42,30 @@ func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	return t
 }
 
-// StartTask records the started task so it can be back-traced.
-func (t *BackTraceTracer) StartTask(task TaskStart) {
+// TaskStarted records the started task so it can be back-traced.
+func (t *BackTraceTracer) TaskStarted(task tasks.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	task = t.parents.ResolveStart(task)
-
-	t.tracingTasks[task.ID] = Task{
-		ID:        task.ID,
-		ParentID:  task.ParentID,
-		Kind:      task.Kind,
-		What:      task.What,
-		Location:  task.Location,
-		StartTime: task.Time,
-		Detail:    task.Detail,
-	}
+	t.tracingTasks[task.ID] = task
 }
 
-// EndTask removes the completed task.
-func (t *BackTraceTracer) EndTask(task TaskEnd) {
+// TaskEnded removes the completed task.
+func (t *BackTraceTracer) TaskEnded(task tasks.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
-	t.parents.End(task.ID)
 
 	delete(t.tracingTasks, task.ID)
 }
 
 // DumpBackTrace prints the task and the chain of its ancestors.
-func (t *BackTraceTracer) DumpBackTrace(task Task) {
+func (t *BackTraceTracer) DumpBackTrace(task tasks.Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.dumpBackTrace(task)
+}
+
+func (t *BackTraceTracer) dumpBackTrace(task tasks.Task) {
 	t.printer.Print(task)
 
 	if task.ParentID == 0 {
@@ -82,5 +77,5 @@ func (t *BackTraceTracer) DumpBackTrace(task Task) {
 		return
 	}
 
-	t.DumpBackTrace(parentTask)
+	t.dumpBackTrace(parentTask)
 }

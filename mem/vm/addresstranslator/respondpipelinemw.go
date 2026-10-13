@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // respondPipelineMW handles translation responses and bottom-port responses.
@@ -115,9 +115,9 @@ func (m *respondPipelineMW) traceTranslationComplete(
 ) uint64 {
 	topTaskID := reqState.RecvTaskID
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: topTaskID,
-		Kind:   tracing.MilestoneKindTranslation,
+		Kind:   tasks.MilestoneKindTranslation,
 		What:   "translation",
 	})
 
@@ -125,14 +125,14 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	// network-busy wait belongs to the top req_in, not to the downstream
 	// req_out (which this component sends, so its receiver-side ID would
 	// be a phantom task).
-	tracing.AddMilestone(m.comp, tracing.Milestone{
+	tasks.AddMilestone(m.comp, tasks.Milestone{
 		TaskID: topTaskID,
-		Kind:   tracing.MilestoneKindNetworkBusy,
+		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
 
-	tracing.TraceReqFinalize(m.comp, trans.TranslationTaskID)
-	return tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
+	tasks.FinalizeReq(m.comp, trans.TranslationTaskID)
+	return tasks.StartReqOut(m.comp, translatedReq, topTaskID)
 }
 
 //nolint:funlen,gocyclo
@@ -166,9 +166,9 @@ func (m *respondPipelineMW) respond() bool {
 				TrafficClass: "memprotocol.DataReadyRsp", Payload: memprotocol.DataReadyRsp{
 					Data: content.Data,
 				}}
-			tracing.AddMilestone(m.comp, tracing.Milestone{
+			tasks.AddMilestone(m.comp, tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
-				Kind:   tracing.MilestoneKindData,
+				Kind:   tasks.MilestoneKindData,
 				What:   "data",
 			})
 		}
@@ -184,9 +184,9 @@ func (m *respondPipelineMW) respond() bool {
 				RspTo:        reqFromTopState.ReqFromTopID,
 				TrafficBytes: 4,
 				TrafficClass: "memprotocol.WriteDoneRsp", Payload: memprotocol.WriteDoneRsp{}}
-			tracing.AddMilestone(m.comp, tracing.Milestone{
+			tasks.AddMilestone(m.comp, tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
-				Kind:   tracing.MilestoneKindSubTask,
+				Kind:   tasks.MilestoneKindSubTask,
 				What:   "subtask",
 			})
 		}
@@ -201,17 +201,17 @@ func (m *respondPipelineMW) respond() bool {
 
 		m.topPort().Send(rspToTop)
 
-		tracing.AddMilestone(m.comp, tracing.Milestone{
+		tasks.AddMilestone(m.comp, tasks.Milestone{
 			TaskID: reqFromTopState.RecvTaskID,
-			Kind:   tracing.MilestoneKindNetworkBusy,
+			Kind:   tasks.MilestoneKindNetworkBusy,
 			What:   m.topPort().Name(),
 		})
 
 		rspMeta := rspI
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
-		tracing.TraceReqFinalize(m.comp, reqFromTopState.SendTaskID)
-		tracing.TraceReqComplete(m.comp, reqFromTopState.RecvTaskID)
+		tasks.FinalizeReq(m.comp, reqFromTopState.SendTaskID)
+		tasks.CompleteReq(m.comp, reqFromTopState.RecvTaskID)
 	}
 
 	m.bottomPort().RetrieveIncoming()

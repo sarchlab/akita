@@ -83,7 +83,7 @@ func stageTestSpec() Spec {
 // drives, with its ports plugged into noop connections. The test ticks the
 // stage under test directly rather than the component.
 func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking()
 	comp := Definition.Builder().
 		WithSimulation(setupSim1).
 		WithSpec(spec).

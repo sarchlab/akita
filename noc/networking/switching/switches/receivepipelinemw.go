@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type receivePipelineMW struct {
@@ -42,7 +42,12 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			flit := itemI
-			taskID := m.comp.NewID()
+			taskID := tasks.Start(m.comp, tasks.StartInfo{
+				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
+				Kind:     "flit",
+				What:     "flit_inside_sw",
+				Detail:   flit,
+			})
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,
@@ -64,14 +69,6 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			port.RetrieveIncoming()
 
 			madeProgress = true
-
-			tracing.StartTask(m.comp, tracing.TaskStart{
-				ID:       taskID,
-				ParentID: flit.Payload.(packetization.Flit).FlitTaskID,
-				Kind:     "flit",
-				What:     "flit_inside_sw",
-				Detail:   flit,
-			})
 		}
 	}
 

@@ -5,8 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -23,7 +23,7 @@ func (t *testTimeTeller) SetCurrentTime(time timing.VTimeInPicoSec) {
 	t.currentTime = time
 }
 
-var _ = Describe("DBTracer Milestone Deduplication", func() {
+var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 	var (
 		timeTeller   *testTimeTeller
 		dataRecorder datarecording.DataRecorder
@@ -46,37 +46,37 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		}
 	})
 
-	Context("AddMilestone with same timestamp", func() {
+	Context("MilestoneAdded with same timestamp", func() {
 		It("should only record the first milestone when multiple milestones occur at the same time", func() {
 			tracer.StartTracing()
 
-			milestone1 := Milestone{
+			milestone1 := tasks.Milestone{
 				ID:     uint64(10),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "resource_acquired",
 			}
 
-			milestone2 := Milestone{
+			milestone2 := tasks.Milestone{
 				ID:     uint64(11),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindNetworkTransfer,
+				Kind:   tasks.MilestoneKindNetworkTransfer,
 				What:   "data_sent",
 			}
 
-			milestone3 := Milestone{
+			milestone3 := tasks.Milestone{
 				ID:     uint64(12),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindQueue,
+				Kind:   tasks.MilestoneKindQueue,
 				What:   "queued",
 			}
 
-			tracer.AddMilestone(milestone1)
-			tracer.AddMilestone(milestone2) // Same time, different milestone - should be ignored
-			tracer.AddMilestone(milestone3) // Same time, different milestone - should be ignored
+			tracer.MilestoneAdded(milestone1)
+			tracer.MilestoneAdded(milestone2) // Same time, different milestone - should be ignored
+			tracer.MilestoneAdded(milestone3) // Same time, different milestone - should be ignored
 
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(1), "Only first milestone should be recorded at same time")
@@ -87,24 +87,24 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should allow milestones for different tasks at the same time", func() {
 			tracer.StartTracing()
 
-			milestone1 := Milestone{
+			milestone1 := tasks.Milestone{
 				ID:     uint64(10),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "resource_acquired",
 			}
 
-			milestone2 := Milestone{
+			milestone2 := tasks.Milestone{
 				ID:     uint64(11),
 				TaskID: uint64(2), // Different task
 				Time:   100,
-				Kind:   MilestoneKindNetworkTransfer,
+				Kind:   tasks.MilestoneKindNetworkTransfer,
 				What:   "data_sent",
 			}
 
-			tracer.AddMilestone(milestone1)
-			tracer.AddMilestone(milestone2)
+			tracer.MilestoneAdded(milestone1)
+			tracer.MilestoneAdded(milestone2)
 
 			task1 := tracer.tracingTasks[uint64(1)]
 			task2 := tracer.tracingTasks[uint64(2)]
@@ -117,25 +117,25 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should allow milestones for same task at different times", func() {
 			tracer.StartTracing()
 
-			milestone1 := Milestone{
+			milestone1 := tasks.Milestone{
 				ID:     uint64(10),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "resource_acquired",
 			}
 
-			tracer.AddMilestone(milestone1)
+			tracer.MilestoneAdded(milestone1)
 
-			milestone2 := Milestone{
+			milestone2 := tasks.Milestone{
 				ID:     uint64(11),
 				TaskID: uint64(1),
 				Time:   200,
-				Kind:   MilestoneKindNetworkTransfer,
+				Kind:   tasks.MilestoneKindNetworkTransfer,
 				What:   "data_sent",
 			}
 
-			tracer.AddMilestone(milestone2)
+			tracer.MilestoneAdded(milestone2)
 
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(2))
@@ -146,16 +146,16 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should still prevent identical milestones from being recorded twice", func() {
 			tracer.StartTracing()
 
-			milestone := Milestone{
+			milestone := tasks.Milestone{
 				ID:     uint64(10),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "resource_acquired",
 			}
 
-			tracer.AddMilestone(milestone)
-			tracer.AddMilestone(milestone) // Same milestone again
+			tracer.MilestoneAdded(milestone)
+			tracer.MilestoneAdded(milestone) // Same milestone again
 
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(1))
@@ -164,25 +164,25 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should keep a repeated (kind, what) at different times", func() {
 			tracer.StartTracing()
 
-			m1 := Milestone{
+			m1 := tasks.Milestone{
 				ID:     uint64(10),
 				TaskID: uint64(1),
 				Time:   100,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "VALU",
 			}
-			m2 := Milestone{
+			m2 := tasks.Milestone{
 				ID:     uint64(11),
 				TaskID: uint64(1),
 				Time:   200,
-				Kind:   MilestoneKindHardwareResource,
+				Kind:   tasks.MilestoneKindHardwareResource,
 				What:   "VALU",
 			}
 
-			tracer.AddMilestone(m1)
+			tracer.MilestoneAdded(m1)
 			// Same (kind, what) but a later time: a long-lived task recurs through
 			// the same reason, so this must be kept, not collapsed to the first.
-			tracer.AddMilestone(m2)
+			tracer.MilestoneAdded(m2)
 
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(2))

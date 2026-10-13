@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type bottomParser struct {
@@ -20,9 +20,9 @@ func (p *bottomParser) chargeFillDataMilestone(entryTransIdxs []int) {
 	next := &p.cache.comp.State
 	for _, idx := range entryTransIdxs {
 		waiter := &next.Transactions[idx]
-		tracing.AddMilestone(p.cache.comp, tracing.Milestone{
+		tasks.AddMilestone(p.cache.comp, tasks.Milestone{
 			TaskID: waiter.RecvTaskID,
-			Kind:   tracing.MilestoneKindData,
+			Kind:   tasks.MilestoneKindData,
 			What:   p.cache.comp.Name() + ".Bottom",
 		})
 	}
@@ -58,9 +58,9 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	// The lower memory acknowledged the write-through this req_in dispatched.
 	// Charge the dependency at response-arrival, keyed to the req_in (not the
 	// WriteDoneRsp).
-	tracing.AddMilestone(p.cache.comp, tracing.Milestone{
+	tasks.AddMilestone(p.cache.comp, tasks.Milestone{
 		TaskID: trans.RecvTaskID,
-		Kind:   tracing.MilestoneKindDependency,
+		Kind:   tasks.MilestoneKindDependency,
 		What:   p.cache.comp.Name() + ".Bottom",
 	})
 
@@ -71,7 +71,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tracing.TraceReqFinalize(p.cache.comp, trans.WriteTaskID)
+	tasks.FinalizeReq(p.cache.comp, trans.WriteTaskID)
 	trans.WriteTaskID = 0
 
 	return true
@@ -133,7 +133,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tracing.TraceReqFinalize(p.cache.comp, trans.ReadTaskID)
+	tasks.FinalizeReq(p.cache.comp, trans.ReadTaskID)
 	trans.ReadTaskID = 0
 
 	return true

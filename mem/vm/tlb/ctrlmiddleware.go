@@ -4,8 +4,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -275,19 +275,19 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 func (m *ctrlMiddleware) endMSHREntryTasks(entry *mshrEntryState) {
 	for i := range entry.Requests {
-		tracing.EndTaskOnReset(m.comp, entry.Requests[i].RecvTaskID)
+		tasks.EndOnReset(m.comp, entry.Requests[i].RecvTaskID)
 	}
 
 	if entry.HasReqToBottom {
-		tracing.EndTaskOnReset(m.comp, entry.SendTaskID)
+		tasks.EndOnReset(m.comp, entry.SendTaskID)
 	}
 }
 
 func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
-	tracing.EndTaskOnReset(m.comp, item.RecvTaskID)
+	tasks.EndOnReset(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)
+		tasks.EndOnReset(m.comp, item.PipelineTaskID)
 	}
 }
 

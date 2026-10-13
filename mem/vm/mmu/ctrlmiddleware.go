@@ -3,8 +3,8 @@ package mmu
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -146,9 +146,9 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // req_out to finalize. Mirrors the completion in translationMW.doPageWalkHit.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tracing.EndTaskOnReset(m.comp, walking.RecvTaskID)
+		tasks.EndOnReset(m.comp, walking.RecvTaskID)
 		if walking.WalkTaskID != 0 {
-			tracing.EndTaskOnReset(m.comp, walking.WalkTaskID)
+			tasks.EndOnReset(m.comp, walking.WalkTaskID)
 		}
 	}
 }

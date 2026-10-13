@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/sarchlab/akita/v5/sim/messaging"
+
 	"github.com/sarchlab/akita/v5/sim/queueing"
 )
 
@@ -22,7 +24,6 @@ type bufferCheckpoint struct {
 // buffer. Hooks and the owning component/connection are rebuilt by setup and not
 // serialized.
 type portCheckpoint struct {
-	Version  int              `json:"version"`
 	Incoming bufferCheckpoint `json:"incoming"`
 	Outgoing bufferCheckpoint `json:"outgoing"`
 }
@@ -43,7 +44,6 @@ func (p *Port) SaveCheckpoint(w io.Writer) error {
 	}
 
 	return json.NewEncoder(w).Encode(portCheckpoint{
-		Version:  1,
 		Incoming: incoming,
 		Outgoing: outgoing,
 	})
@@ -58,11 +58,6 @@ func (p *Port) LoadCheckpoint(r io.Reader) error {
 		return err
 	}
 
-	if dto.Version != 1 {
-		return fmt.Errorf("twowaybuffered: unsupported checkpoint version %d; "+
-			"recreate pre-v5 tracing checkpoints", dto.Version)
-	}
-
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -75,7 +70,7 @@ func (p *Port) LoadCheckpoint(r io.Reader) error {
 
 // saveBuffer captures a buffer's capacity and its type-tagged contents.
 func saveBuffer(
-	buf *queueing.Buffer[bufferEntry], portName, label string,
+	buf *queueing.Buffer[messaging.Msg], portName, label string,
 ) (bufferCheckpoint, error) {
 	elements, err := json.Marshal(buf.Elements())
 	if err != nil {
@@ -92,7 +87,7 @@ func saveBuffer(
 // loadBuffer checks the rebuilt buffer's capacity against the checkpoint (a shape
 // check) and restores its contents directly, firing no hooks.
 func loadBuffer(
-	buf *queueing.Buffer[bufferEntry], bc bufferCheckpoint, portName, label string,
+	buf *queueing.Buffer[messaging.Msg], bc bufferCheckpoint, portName, label string,
 ) error {
 	if got := buf.Capacity(); bc.Capacity != got {
 		return fmt.Errorf(
@@ -100,7 +95,7 @@ func loadBuffer(
 			portName, label, bc.Capacity, got)
 	}
 
-	var elements []bufferEntry
+	var elements []messaging.Msg
 	if err := json.Unmarshal(bc.Elements, &elements); err != nil {
 		return fmt.Errorf("twowaybuffered: port %q %s: %w", portName, label, err)
 	}

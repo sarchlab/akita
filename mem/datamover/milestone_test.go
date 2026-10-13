@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // dmTraceRecorder captures the full trace event stream the data mover emits —
@@ -19,21 +19,21 @@ import (
 // DBTracer's dedup, so a test can assert the admission milestone on the buffer
 // task and that the req_in opened on the request is also ended.
 type dmTraceRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *dmTraceRecorder) StartTask(t tracing.TaskStart) {
+func (r *dmTraceRecorder) TaskStarted(t tasks.Task) {
 	r.starts = append(r.starts, t)
 }
 
-func (r *dmTraceRecorder) EndTask(t tracing.TaskEnd) {
+func (r *dmTraceRecorder) TaskEnded(t tasks.Task) {
 	r.ends = append(r.ends, t)
 }
 
-func (r *dmTraceRecorder) AddMilestone(m tracing.Milestone) {
+func (r *dmTraceRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
@@ -57,8 +57,8 @@ func (r *dmTraceRecorder) endedIDs() []uint64 {
 	return ids
 }
 
-func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -85,7 +85,7 @@ var _ = Describe("DataMover milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		srcPort = newDriverPort("Src.Top", 4)
 
@@ -141,8 +141,8 @@ var _ = Describe("DataMover milestones", func() {
 		// are no hooks). The admission milestone lands on the Top-port buffer
 		// task, so the test also needs that buffer task to exist.
 		rec = &dmTraceRecorder{}
-		tracing.CollectTrace(dataMover, rec)
-		tracing.CollectIncomingBufferTrace(topPort)
+		dataMover.TaskTracker().Subscribe(rec, dataMover)
+
 	})
 
 	It("attributes the admission wait to the buffer task and closes the "+
@@ -177,16 +177,16 @@ var _ = Describe("DataMover milestones", func() {
 			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
 		Expect(bufID).ToNot(Equal(reqInID))
 
 		bufMs := rec.milestonesOn(bufID)
-		var admission *tracing.Milestone
+		var admission *tasks.Milestone
 		for i := range bufMs {
-			if bufMs[i].Kind == tracing.MilestoneKindHardwareResource {
+			if bufMs[i].Kind == tasks.MilestoneKindHardwareResource {
 				admission = &bufMs[i]
 			}
 		}
@@ -239,11 +239,11 @@ var _ = Describe("DataMover milestones", func() {
 		// The src-read waits are charged as data milestones on the src port.
 		var hasData, hasSubTask bool
 		for _, ms := range reqInMs {
-			if ms.Kind == tracing.MilestoneKindData &&
+			if ms.Kind == tasks.MilestoneKindData &&
 				ms.What == dataMover.Ports.Outside.Name() {
 				hasData = true
 			}
-			if ms.Kind == tracing.MilestoneKindSubTask &&
+			if ms.Kind == tasks.MilestoneKindSubTask &&
 				ms.What == dataMover.Ports.Inside.Name() {
 				hasSubTask = true
 			}

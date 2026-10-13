@@ -1,15 +1,17 @@
 package tracing
 
 import (
-	"database/sql"
 	"os"
 	"testing"
 
+	"database/sql"
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"path/filepath"
 )
 
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
@@ -53,22 +55,22 @@ func writeRoundTripTrace(t *testing.T) string {
 	t.Cleanup(func() { os.Remove(dbFile) })
 
 	recorder := datarecording.NewDataRecorder(dbName)
-	domain := &roundTripDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+	domain := &roundTripDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking(),
 		HookableBase: &hooking.HookableBase{},
 		name:         "GPU[0].L1Cache",
 	}
 
 	tracer := NewDBTracer(domain, recorder)
-	CollectTrace(domain, tracer)
+	domain.TaskTracker().Subscribe(tracer, domain)
 	tracer.StartTracing()
 
 	domain.now = 10
-	StartTask(domain, TaskStart{ID: 1, Kind: "req_in", What: "ReadReq"})
+	tasks.Start(domain, tasks.StartInfo{Kind: "req_in", What: "ReadReq"})
 	domain.now = 12
-	AddTaskTag(domain, TaskTag{TaskID: 1, What: "read-hit"})
-	AddMilestone(domain, Milestone{TaskID: 1, Kind: MilestoneKindQueue, What: "queued"})
+	tasks.AddTag(domain, tasks.Tag{TaskID: 1, What: "read-hit"})
+	tasks.AddMilestone(domain, tasks.Milestone{TaskID: 1, Kind: tasks.MilestoneKindQueue, What: "queued"})
 	domain.now = 20
-	EndTask(domain, TaskEnd{ID: 1})
+	tasks.End(domain, tasks.EndInfo{ID: 1})
 
 	tracer.StopTracing()
 	tracer.Terminate()
@@ -130,3 +132,51 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 }
 
 func (c *roundTripDomain) NewID() uint64 { return c.sim.NewID() }
+
+func (d *roundTripDomain) TaskTracker() *tasks.Tracker {
+	return d.sim.(interface{ Tasks() *tasks.Tracker }).Tasks()
+}
+
+func TestDBRecordsCompleteEndWithoutStartOrHistory(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "late")
+	backend := datarecording.NewDataRecorder(base)
+	clock := &testTimeTeller{}
+	tracer := NewDBTracer(clock, backend)
+	task := tasks.Task{ID: 10, MsgID: 5, ParentID: 2, Kind: tasks.KindReqIn, What: "late",
+		Location: "Owner.req_in", StartTime: 10, EndTime: 40}
+	tracer.TaskStarted(task)
+	tracer.MilestoneAdded(tasks.Milestone{ID: 20, TaskID: 10, Time: 15, What: "before"})
+	if len(tracer.tracingTasks) != 0 {
+		t.Fatal("idle DB observer retained task history")
+	}
+	clock.SetCurrentTime(30)
+	tracer.StartTracing()
+	tracer.MilestoneAdded(tasks.Milestone{ID: 21, TaskID: 10, Time: 35, What: "during"})
+	tracer.TaskEnded(task)
+	clock.SetCurrentTime(40)
+	tracer.StopTracing()
+	tracer.Terminate()
+	backend.Close()
+	db, err := sql.Open("sqlite", base+".sqlite3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var parent uint64
+	var start, end float64
+	row := db.QueryRow("SELECT ParentID, StartTime, EndTime FROM trace WHERE ID=10")
+	if err := row.Scan(&parent, &start, &end); err != nil {
+		t.Fatal(err)
+	}
+	if parent != 2 || start != 10 || end != 40 {
+		t.Fatalf("incomplete end record: %d %v %v", parent, start, end)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM milestone").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected only the milestone observed during recording, got %d", count)
+	}
+	t.Log("SQLite recorded parent=2 and original interval [10,40] from an end notification, with no historical backfill")
+}

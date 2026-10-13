@@ -1,18 +1,19 @@
 // Command customtracer shows how to write your own tracer.
 //
-// A tracer is any type that implements the tracing.Tracer interface. Here a
+// A tracer is any type that implements the tasks.Observer interface. Here a
 // hand-written maxDurationTracer watches the worker's job tasks and reports
 // the longest one. It is attached exactly like a built-in tracer, with
-// tracing.CollectTrace.
+// Tracker.Subscribe.
 package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // Spec is the worker's configuration.
@@ -72,16 +73,14 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 		}
 
 		s.NextID++
-		s.CurTaskID = s.NextID
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:   s.CurTaskID,
+		s.CurTaskID = tasks.Start(m.comp, tasks.StartInfo{
 			Kind: "job",
-			What: fmt.Sprintf("job-%d", s.CurTaskID),
+			What: fmt.Sprintf("job-%d", s.NextID),
 		})
 
 		s.Working = true
 		// Jobs get progressively longer so "the longest" is meaningful.
-		s.CountDown = m.comp.Spec.CyclesPerJob * int(s.CurTaskID)
+		s.CountDown = m.comp.Spec.CyclesPerJob * int(s.NextID)
 		s.JobsLeft--
 
 		return true
@@ -89,48 +88,40 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 	s.CountDown--
 	if s.CountDown == 0 {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
+		tasks.End(m.comp, tasks.EndInfo{ID: s.CurTaskID})
 		s.Working = false
 	}
 
 	return true
 }
 
-// maxDurationTracer is a custom tracer. Each trace event carries the time it
-// happened, so the tracer just records every task's start time and tracks the
-// longest start-to-end span. It embeds tracing.NopTracer, so it only has to
-// implement the two methods it actually cares about.
+// maxDurationTracer uses complete end records to track the longest job. It
+// embeds NopObserver because it needs no start, tag, or milestone callback.
 type maxDurationTracer struct {
-	tracing.NopTracer
-	starts map[uint64]timing.VTimeInPicoSec
-	max    timing.VTimeInPicoSec
+	tasks.NopObserver
+	lock sync.Mutex
+	max  timing.VTimeInPicoSec
 }
 
-func newMaxDurationTracer() *maxDurationTracer {
-	return &maxDurationTracer{starts: make(map[uint64]timing.VTimeInPicoSec)}
-}
+func newMaxDurationTracer() *maxDurationTracer { return &maxDurationTracer{} }
 
-func (t *maxDurationTracer) StartTask(task tracing.TaskStart) {
-	t.starts[task.ID] = task.Time
-}
-
-func (t *maxDurationTracer) EndTask(task tracing.TaskEnd) {
-	start, ok := t.starts[task.ID]
-	if !ok {
-		return
-	}
-	delete(t.starts, task.ID)
-
-	if d := task.Time - start; d > t.max {
+func (t *maxDurationTracer) TaskEnded(task tasks.Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if d := task.EndTime - task.StartTime; d > t.max {
 		t.max = d
 	}
 }
 
-func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec { return t.max }
+func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.max
+}
 
 func main() {
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	worker := Definition.Builder().
 		WithSimulation(sim).
@@ -140,7 +131,7 @@ func main() {
 	}
 
 	tracer := newMaxDurationTracer()
-	tracing.CollectTrace(worker, tracer)
+	worker.TaskTracker().Subscribe(tracer, worker)
 
 	worker.TickLater()
 

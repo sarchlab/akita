@@ -11,8 +11,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts, milestones, and tags the cache
@@ -21,37 +21,37 @@ import (
 // req_in vs pipeline subtask) each one is attributed to. Mirrors the recorder
 // used in mem/rob/milestone_test.go.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	milestones []tracing.Milestone
-	tags       []tracing.TaskTag
+	tasks.NopObserver
+	starts     []tasks.Task
+	milestones []tasks.Milestone
+	tags       []tasks.Tag
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *milestoneRecorder) AddTaskTag(t tracing.TaskTag) {
+func (r *milestoneRecorder) TagAdded(t tasks.Tag) {
 	r.tags = append(r.tags, t)
 }
 
 // firstStart returns the first recorded task start of the given kind.
-func (r *milestoneRecorder) firstStart(kind string) (tracing.TaskStart, bool) {
+func (r *milestoneRecorder) firstStart(kind string) (tasks.Task, bool) {
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			return s, true
 		}
 	}
 
-	return tracing.TaskStart{}, false
+	return tasks.Task{}, false
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -71,8 +71,8 @@ func (r *milestoneRecorder) hasMilestone(taskID uint64, what string) bool {
 	return false
 }
 
-func (r *milestoneRecorder) tagsWith(what string) []tracing.TaskTag {
-	var ts []tracing.TaskTag
+func (r *milestoneRecorder) tagsWith(what string) []tasks.Tag {
+	var ts []tasks.Tag
 	for _, t := range r.tags {
 		if t.What == what {
 			ts = append(ts, t)
@@ -96,7 +96,7 @@ var _ = Describe("Cache milestones", func() {
 
 	buildCache := func(policy string) {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 		connection = direct.NewConnection("Conn", sim, timing.GHz)
 
 		cuPort = newDriverPort("CU.Top", 16)
@@ -138,10 +138,10 @@ var _ = Describe("Cache milestones", func() {
 		}
 
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(c, rec)
+		c.TaskTracker().Subscribe(rec, c)
 		// The admission milestones and the buffer task land on the Top-port
 		// buffer task, so the test needs that task to exist.
-		tracing.CollectIncomingBufferTrace(c.Ports.Top)
+
 	}
 
 	drainResponses := func() []messaging.Msg {
@@ -179,7 +179,7 @@ var _ = Describe("Cache milestones", func() {
 
 		// The buffer task exists and carries the two hardware-resource
 		// admission milestones the intake emits before retrieve.
-		bufStart, ok := rec.firstStart(tracing.IncomingBufferTaskKind)
+		bufStart, ok := rec.firstStart(tasks.KindIncomingBuffer)
 		Expect(ok).To(BeTrue())
 		Expect(rec.hasMilestone(bufStart.ID, "Cache.trans")).To(BeTrue())
 		Expect(rec.hasMilestone(bufStart.ID, "Cache.dir_buf")).To(BeTrue())
@@ -192,7 +192,7 @@ var _ = Describe("Cache milestones", func() {
 
 		// The directory pipeline subtask exists and is parented to req_in,
 		// per the buffer-task convention.
-		pipeStart, ok := rec.firstStart(tracing.PipelineTaskKind)
+		pipeStart, ok := rec.firstStart(tasks.KindPipeline)
 		Expect(ok).To(BeTrue())
 		Expect(pipeStart.What).To(Equal("Cache.dir_pipeline"))
 		Expect(pipeStart.ParentID).To(Equal(reqInStart.ID))
@@ -237,7 +237,7 @@ var _ = Describe("Cache milestones", func() {
 			To(BeTrue())
 		for _, m := range rec.milestonesOn(reqInStart.ID) {
 			if m.What == "Cache.dir_pipeline" {
-				Expect(m.Kind).To(Equal(tracing.MilestoneKindWork))
+				Expect(m.Kind).To(Equal(tasks.MilestoneKindWork))
 			}
 		}
 
@@ -246,7 +246,7 @@ var _ = Describe("Cache milestones", func() {
 		Expect(rec.hasMilestone(reqInStart.ID, "Cache.Bottom")).To(BeTrue())
 		for _, m := range rec.milestonesOn(reqInStart.ID) {
 			if m.What == "Cache.Bottom" {
-				Expect(m.Kind).To(Equal(tracing.MilestoneKindData))
+				Expect(m.Kind).To(Equal(tasks.MilestoneKindData))
 			}
 		}
 	})
@@ -317,7 +317,7 @@ var _ = Describe("Cache milestones", func() {
 		Expect(rec.hasMilestone(reqInStart.ID, "Cache.Bottom")).To(BeTrue())
 		for _, m := range rec.milestonesOn(reqInStart.ID) {
 			if m.What == "Cache.Bottom" {
-				Expect(m.Kind).To(Equal(tracing.MilestoneKindDependency))
+				Expect(m.Kind).To(Equal(tasks.MilestoneKindDependency))
 			}
 		}
 	})
@@ -389,10 +389,10 @@ var _ = Describe("Cache milestones", func() {
 
 		// The bank access is a pipeline subtask (What ".bank") parented to the
 		// req_in: every "work" interval has a corresponding child bar.
-		var bankStart tracing.TaskStart
+		var bankStart tasks.Task
 		found := false
 		for _, s := range rec.starts {
-			if s.Kind == tracing.PipelineTaskKind && s.What == "Cache.bank" {
+			if s.Kind == tasks.KindPipeline && s.What == "Cache.bank" {
 				bankStart = s
 				found = true
 			}
@@ -404,7 +404,7 @@ var _ = Describe("Cache milestones", func() {
 		Expect(rec.hasMilestone(reqInStart.ID, "Cache.bank")).To(BeTrue())
 		for _, m := range rec.milestonesOn(reqInStart.ID) {
 			if m.What == "Cache.bank" {
-				Expect(m.Kind).To(Equal(tracing.MilestoneKindWork))
+				Expect(m.Kind).To(Equal(tasks.MilestoneKindWork))
 			}
 		}
 	})

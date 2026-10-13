@@ -2,12 +2,12 @@
 //
 // A Client sends requests to a Server, one at a time, over a direct
 // connection; the Server replies after a fixed latency. Both sides annotate
-// the request with the tracing.TraceReq* helpers:
+// the request with the tasks request helpers:
 //
-//	Client send : TraceReqInitiate  -> opens a "req_out" task (round trip)
-//	Server recv : TraceReqReceive   -> opens a "req_in"  task (handling)
-//	Server done : TraceReqComplete  -> ends the "req_in"  task
-//	Client recv : TraceReqFinalize  -> ends the "req_out" task
+//	Client send : StartReqOut  -> opens a "req_out" task (round trip)
+//	Server recv : StartReqIn   -> opens a "req_in"  task (handling)
+//	Server done : CompleteReq  -> ends the "req_in"  task
+//	Client recv : FinalizeReq  -> ends the "req_out" task
 //
 // Two AverageTimeTracers — one filtering "req_out" on the client, one
 // filtering "req_in" on the server — then report the round-trip latency and
@@ -25,13 +25,14 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 func main() {
 	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().
@@ -60,11 +61,11 @@ func main() {
 
 	// The filter is how each tracer selects the tasks it cares about.
 	roundTrip := tracing.NewAverageTimeTracer(
-		func(t tracing.TaskStart) bool { return t.Kind == "req_out" })
+		func(t tasks.Task) bool { return t.Kind == "req_out" })
 	handling := tracing.NewAverageTimeTracer(
-		func(t tracing.TaskStart) bool { return t.Kind == "req_in" })
-	tracing.CollectTrace(cli, roundTrip)
-	tracing.CollectTrace(srv, handling)
+		func(t tasks.Task) bool { return t.Kind == "req_in" })
+	cli.TaskTracker().Subscribe(roundTrip, cli)
+	srv.TaskTracker().Subscribe(handling, srv)
 
 	// The client sends on its own, so start it; the server wakes when a
 	// request arrives.

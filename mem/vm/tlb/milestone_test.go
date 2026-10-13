@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // tlbMilestoneRecorder captures the task starts, ends, milestones, and tags the
@@ -19,26 +19,26 @@ import (
 // assert the buffer-vs-req_in attribution of each event and the parent/child
 // relationship between req_in and the pipeline subtask.
 type tlbMilestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	ends       []tracing.TaskEnd
-	milestones []tracing.Milestone
-	tags       []tracing.TaskTag
+	tasks.NopObserver
+	starts     []tasks.Task
+	ends       []tasks.Task
+	milestones []tasks.Milestone
+	tags       []tasks.Tag
 }
 
-func (r *tlbMilestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *tlbMilestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *tlbMilestoneRecorder) EndTask(e tracing.TaskEnd) {
+func (r *tlbMilestoneRecorder) TaskEnded(e tasks.Task) {
 	r.ends = append(r.ends, e)
 }
 
-func (r *tlbMilestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *tlbMilestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *tlbMilestoneRecorder) AddTaskTag(t tracing.TaskTag) {
+func (r *tlbMilestoneRecorder) TagAdded(t tasks.Tag) {
 	r.tags = append(r.tags, t)
 }
 
@@ -54,18 +54,18 @@ func (r *tlbMilestoneRecorder) taskID(kind string) uint64 {
 }
 
 // taskStart returns the first recorded task start of the given kind.
-func (r *tlbMilestoneRecorder) taskStart(kind string) (tracing.TaskStart, bool) {
+func (r *tlbMilestoneRecorder) taskStart(kind string) (tasks.Task, bool) {
 	for _, s := range r.starts {
 		if s.Kind == kind {
 			return s, true
 		}
 	}
 
-	return tracing.TaskStart{}, false
+	return tasks.Task{}, false
 }
 
-func (r *tlbMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *tlbMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -75,9 +75,9 @@ func (r *tlbMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 	return ms
 }
 
-func (r *tlbMilestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
+func (r *tlbMilestoneRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	ms := r.milestonesOn(taskID)
-	ks := make([]tracing.MilestoneKind, len(ms))
+	ks := make([]tasks.MilestoneKind, len(ms))
 	for i, m := range ms {
 		ks[i] = m.Kind
 	}
@@ -86,7 +86,7 @@ func (r *tlbMilestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
 }
 
 func (r *tlbMilestoneRecorder) hasMilestone(
-	taskID uint64, kind tracing.MilestoneKind, what string,
+	taskID uint64, kind tasks.MilestoneKind, what string,
 ) bool {
 	for _, m := range r.milestonesOn(taskID) {
 		if m.Kind == kind && m.What == what {
@@ -121,7 +121,7 @@ var _ = Describe("TLB milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		spec := Definition.DefaultSpec
 		spec.NumSets = 1
@@ -149,10 +149,10 @@ var _ = Describe("TLB milestones", func() {
 		topPort = tlbComp.Ports.Top
 
 		rec = &tlbMilestoneRecorder{}
-		tracing.CollectTrace(tlbComp, rec)
+		tlbComp.TaskTracker().Subscribe(rec, tlbComp)
 		// The admission milestone lands on the Top-port buffer task, so the test
 		// needs the buffer task to exist.
-		tracing.CollectIncomingBufferTrace(topPort)
+
 	})
 
 	makeReq := func(vAddr uint64) messaging.Msg {
@@ -190,9 +190,9 @@ var _ = Describe("TLB milestones", func() {
 
 		drive(20)
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
-		pipeStart, hasPipe := rec.taskStart(tracing.PipelineTaskKind)
+		pipeStart, hasPipe := rec.taskStart(tasks.KindPipeline)
 
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
@@ -201,7 +201,7 @@ var _ = Describe("TLB milestones", func() {
 
 		// (a) The buffer task carries the hardware_resource admission milestone
 		// for the at-head wait on a free pipeline slot.
-		Expect(rec.hasMilestone(bufID, tracing.MilestoneKindHardwareResource,
+		Expect(rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
 			tlbComp.Name()+".pipeline")).To(BeTrue())
 
 		// (b) The pipeline subtask is parented to req_in.
@@ -218,19 +218,19 @@ var _ = Describe("TLB milestones", func() {
 
 		// The pipeline traversal is recorded as work on req_in — not a blocking
 		// reason and not the data/MSHR milestone.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
 			tlbComp.Name()+".pipeline")).To(BeTrue())
 
 		// (c) The post-lookup data milestone and the hit tag attach to req_in.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindData,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindData,
 			tlbComp.Name()+".Sets")).To(BeTrue())
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
 			topPort.Name())).To(BeTrue())
 		Expect(rec.tagsOn(reqInID)).To(ContainElement("hit"))
 
 		// The admission milestone is NOT on req_in (it belongs to the buffer task).
 		Expect(rec.kindsOn(reqInID)).ToNot(
-			ContainElement(tracing.MilestoneKindHardwareResource))
+			ContainElement(tasks.MilestoneKindHardwareResource))
 	})
 
 	It("attributes the at-head wait to the buffer task and keeps the MSHR and "+
@@ -246,32 +246,32 @@ var _ = Describe("TLB milestones", func() {
 
 		drive(20)
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
-		pipeStart, hasPipe := rec.taskStart(tracing.PipelineTaskKind)
+		pipeStart, hasPipe := rec.taskStart(tasks.KindPipeline)
 
 		Expect(bufID).ToNot(BeZero())
 		Expect(reqInID).ToNot(BeZero())
 		Expect(hasPipe).To(BeTrue())
 
 		// (a) Admission milestone on the buffer task.
-		Expect(rec.hasMilestone(bufID, tracing.MilestoneKindHardwareResource,
+		Expect(rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
 			tlbComp.Name()+".pipeline")).To(BeTrue())
 
 		// (b) Pipeline subtask parented to req_in.
 		Expect(pipeStart.ParentID).To(Equal(reqInID))
 
 		// The pipeline traversal is recorded as work on req_in, not the MSHR.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
 			tlbComp.Name()+".pipeline")).To(BeTrue())
 
 		// (c) The post-lookup MSHR hardware_resource and the bottom-port
 		// network_busy milestones attach to the already-open req_in; the miss tag
 		// is on req_in.
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindHardwareResource,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindHardwareResource,
 			tlbComp.Name()+".MSHR")).To(BeTrue())
 		bottomPort := tlbComp.Ports.Bottom
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
 			bottomPort.Name())).To(BeTrue())
 		Expect(rec.tagsOn(reqInID)).To(ContainElement("miss"))
 
@@ -293,18 +293,18 @@ var _ = Describe("TLB milestones", func() {
 		bottomPort.Deliver(rsp)
 		drive(20)
 
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindTranslation,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
 			"translation")).To(BeTrue())
-		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
+		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
 			topPort.Name())).To(BeTrue())
 
 		reqMs := rec.milestonesOn(reqInID)
 		transIdx, topIdx := -1, -1
 		for i, ms := range reqMs {
 			switch {
-			case ms.Kind == tracing.MilestoneKindTranslation:
+			case ms.Kind == tasks.MilestoneKindTranslation:
 				transIdx = i
-			case ms.Kind == tracing.MilestoneKindNetworkBusy &&
+			case ms.Kind == tasks.MilestoneKindNetworkBusy &&
 				ms.What == topPort.Name():
 				topIdx = i
 			}

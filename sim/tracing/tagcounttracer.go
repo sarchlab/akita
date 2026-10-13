@@ -2,12 +2,14 @@ package tracing
 
 import (
 	"sync"
+
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // TagCountTracer counts how often each tag name is recorded, and how many
 // distinct tasks carry a tag with a given name.
 type TagCountTracer struct {
-	NopTracer
+	tasks.NopObserver
 
 	filter           TaskFilter
 	lock             sync.Mutex
@@ -57,19 +59,19 @@ func (t *TagCountTracer) TaskCount(tagName string) uint64 {
 	return t.taskWithTagCount[tagName]
 }
 
-// StartTask begins tracking a task's tags.
-func (t *TagCountTracer) StartTask(task TaskStart) {
-	if !t.filter(task) {
+// TaskStarted begins tracking a task's tags.
+func (t *TagCountTracer) TaskStarted(task tasks.Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if t.filter != nil && !t.filter(task) {
 		return
 	}
 
-	t.lock.Lock()
 	t.inflightTasks[task.ID] = make(map[string]bool)
-	t.lock.Unlock()
 }
 
-// AddTaskTag counts the tag and the task that carries it.
-func (t *TagCountTracer) AddTaskTag(tag TaskTag) {
+// TagAdded counts the tag and the task that carries it.
+func (t *TagCountTracer) TagAdded(tag tasks.Tag) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -90,9 +92,9 @@ func (t *TagCountTracer) AddTaskTag(tag TaskTag) {
 	}
 }
 
-// EndTask stops tracking the task.
-func (t *TagCountTracer) EndTask(task TaskEnd) {
+// TaskEnded stops tracking the task.
+func (t *TagCountTracer) TaskEnded(task tasks.Task) {
 	t.lock.Lock()
+	defer t.lock.Unlock()
 	delete(t.inflightTasks, task.ID)
-	t.lock.Unlock()
 }

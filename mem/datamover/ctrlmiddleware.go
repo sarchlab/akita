@@ -3,8 +3,8 @@ package datamover
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -168,15 +168,15 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	trans := &m.comp.State.CurrentTransaction
 
 	if trans.Active {
-		tracing.EndTaskOnReset(m.comp, trans.RecvTaskID)
+		tasks.EndOnReset(m.comp, trans.RecvTaskID)
 	}
 
 	for _, req := range trans.PendingRead {
-		tracing.EndTaskOnReset(m.comp, req.TaskID)
+		tasks.EndOnReset(m.comp, req.TaskID)
 	}
 
 	for _, req := range trans.PendingWrite {
-		tracing.EndTaskOnReset(m.comp, req.TaskID)
+		tasks.EndOnReset(m.comp, req.TaskID)
 	}
 }
 

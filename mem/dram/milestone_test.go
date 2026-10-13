@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // milestoneRecorder captures the task starts and milestones the DRAM emits, in
@@ -17,16 +17,16 @@ import (
 // can assert the blocking reasons and the task (buffer vs sub-trans) each one is
 // attributed to.
 type milestoneRecorder struct {
-	tracing.NopTracer
-	starts     []tracing.TaskStart
-	milestones []tracing.Milestone
+	tasks.NopObserver
+	starts     []tasks.Task
+	milestones []tasks.Milestone
 }
 
-func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+func (r *milestoneRecorder) TaskStarted(s tasks.Task) {
 	r.starts = append(r.starts, s)
 }
 
-func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
+func (r *milestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
@@ -41,8 +41,8 @@ func (r *milestoneRecorder) taskID(kind string) uint64 {
 	return 0
 }
 
-func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
-	var ms []tracing.Milestone
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
+	var ms []tasks.Milestone
 	for _, m := range r.milestones {
 		if m.TaskID == taskID {
 			ms = append(ms, m)
@@ -63,7 +63,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
 		Expect(sim.Initialize()).To(Succeed())
@@ -75,8 +75,8 @@ var _ = Describe("DRAM admission milestones", func() {
 		// hooks). The admission milestone lands on the Top-port buffer task, so
 		// the buffer task must exist.
 		rec = &milestoneRecorder{}
-		tracing.CollectTrace(memCtrl, rec)
-		tracing.CollectIncomingBufferTrace(topPort)
+		memCtrl.TaskTracker().Subscribe(rec, memCtrl)
+
 	})
 
 	makeRead := func(addr uint64) messaging.Msg {
@@ -97,16 +97,16 @@ var _ = Describe("DRAM admission milestones", func() {
 		// queue admission milestone is emitted just before RetrieveIncoming.
 		modelingtest.Tick(memCtrl)
 
-		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		Expect(bufID).ToNot(BeZero())
 
 		bufMs := rec.milestonesOn(bufID)
 		// The buffer task carries the reached-head milestone (from the port
 		// hook) followed by the SubTransQueue admission milestone.
 		Expect(bufMs).To(HaveLen(2))
-		Expect(bufMs[0].Kind).To(Equal(tracing.MilestoneKindQueue))
+		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
 		Expect(bufMs[0].What).To(Equal(topPort.Name()))
-		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindQueue))
+		Expect(bufMs[1].Kind).To(Equal(tasks.MilestoneKindQueue))
 		Expect(bufMs[1].What).To(Equal(memCtrl.Name() + ".SubTransQueue"))
 	})
 })
@@ -115,7 +115,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 	It("charges a refresh milestone to the sub-trans that issues "+
 		"after a refresh window", func() {
 		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
@@ -129,8 +129,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		topPort := memCtrl.Ports.Top
 
 		rec := &milestoneRecorder{}
-		tracing.CollectTrace(memCtrl, rec)
-		tracing.CollectIncomingBufferTrace(topPort)
+		memCtrl.TaskTracker().Subscribe(rec, memCtrl)
 
 		read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4},
 			ID:           sim.NewID(),
@@ -150,9 +149,9 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		subID := rec.taskID("sub-trans")
 		Expect(subID).ToNot(BeZero())
 
-		var refreshMs []tracing.Milestone
+		var refreshMs []tasks.Milestone
 		for _, m := range rec.milestonesOn(subID) {
-			if m.Kind == tracing.MilestoneKindHardwareResource &&
+			if m.Kind == tasks.MilestoneKindHardwareResource &&
 				m.What == memCtrl.Name()+".refresh" {
 				refreshMs = append(refreshMs, m)
 			}

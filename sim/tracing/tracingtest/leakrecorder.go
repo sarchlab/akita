@@ -4,43 +4,40 @@ package tracingtest
 
 import (
 	"fmt"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"sort"
 	"strings"
-
-	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
-// LeakRecorder is a [tracing.Tracer] that tracks which tasks a component has
-// started but not yet ended. It exists for reset-leak tests: attach it with
-// [tracing.CollectTrace], drive the component into an in-flight state, issue a
-// control Reset, then assert [LeakRecorder.OpenTasks] is empty — any task still
-// open is a started-never-ended leak.
-//
-// It records only task starts and ends, so milestones and tags — which never
-// open a task — do not register, and a blanket end-on-reset of a task that was
-// never started is a no-op (deleting an absent key). Do not attach
-// [tracing.CollectIncomingBufferTrace]: the buffer tasks it opens are ended by
-// the port retrieve hook, not the component, and would otherwise show up here.
+// LeakRecorder observes component work for reset-leak tests. Subscribe before
+// driving the component, issue Reset, then check OpenTasks. Port buffer tasks
+// are excluded because they close on retrieval rather than component reset.
 type LeakRecorder struct {
-	tracing.NopTracer
+	tasks.NopObserver
 
 	started int
-	open    map[uint64]tracing.TaskStart
+	open    map[uint64]tasks.Task
 }
 
-// StartTask records a task as open.
-func (r *LeakRecorder) StartTask(s tracing.TaskStart) {
+// TaskStarted records a task as open.
+func (r *LeakRecorder) TaskStarted(s tasks.Task) {
+	if s.Kind == tasks.KindIncomingBuffer || s.Kind == tasks.KindOutgoingBuffer {
+		return
+	}
 	if r.open == nil {
-		r.open = map[uint64]tracing.TaskStart{}
+		r.open = map[uint64]tasks.Task{}
 	}
 
 	r.started++
 	r.open[s.ID] = s
 }
 
-// EndTask removes a task from the open set. Ending a task that was never started
+// TaskEnded removes a task from the open set. Ending a task that was never started
 // is a no-op, which is what makes blanket end-on-reset safe.
-func (r *LeakRecorder) EndTask(e tracing.TaskEnd) {
+func (r *LeakRecorder) TaskEnded(e tasks.Task) {
+	if e.Kind == tasks.KindIncomingBuffer || e.Kind == tasks.KindOutgoingBuffer {
+		return
+	}
 	delete(r.open, e.ID)
 }
 
@@ -52,8 +49,8 @@ func (r *LeakRecorder) NumStarted() int {
 
 // OpenTasks returns the tasks that were started but not ended, sorted by ID for
 // a stable failure message.
-func (r *LeakRecorder) OpenTasks() []tracing.TaskStart {
-	out := make([]tracing.TaskStart, 0, len(r.open))
+func (r *LeakRecorder) OpenTasks() []tasks.Task {
+	out := make([]tasks.Task, 0, len(r.open))
 	for _, s := range r.open {
 		out = append(out, s)
 	}
