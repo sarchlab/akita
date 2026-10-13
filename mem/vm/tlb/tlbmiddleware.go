@@ -88,10 +88,11 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			What:     m.comp.Name() + ".pipeline",
 		})
 
-		// Dwell one extra cycle at stage 0 to preserve the same per-stage
-		// latency as the original hand-coded pipeline.
-		next.Pipeline.AcceptWithDelay(
-			pipelineTLBReqState{Msg: msg, RecvTaskID: recvTaskID, PipelineTaskID: pid}, 1)
+		// Each stage takes one cycle, so a request spends spec.Latency
+		// cycles in the pipeline and a new request can enter every cycle.
+		next.Pipeline.Accept(pipelineTLBReqState{
+			Msg: msg, RecvTaskID: recvTaskID, PipelineTaskID: pid,
+		})
 
 		madeProgress = true
 	}
