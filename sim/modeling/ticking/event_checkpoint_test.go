@@ -19,7 +19,11 @@ func (r *eventRecorder) Handle(e timing.Event) { r.events = append(r.events, e) 
 // Both newly scheduled events and restored legacy events must save the exact
 // pre-rename JSON, including the concrete type tag and secondary queue placement.
 func TestEventLegacyCheckpoint(t *testing.T) {
-	const legacy = `{"time":0,"primary":[{"type":"github.com/sarchlab/akita/v5/sim/modeling/ticking.TickEvent","payload":{"id":7,"time":42,"handler_id":"h","secondary":false}}],"secondary":[{"type":"github.com/sarchlab/akita/v5/sim/modeling/ticking.TickEvent","payload":{"id":8,"time":42,"handler_id":"h","secondary":true}}]}` + "\n"
+	const legacy = `{"time":0,"primary":[` +
+		`{"type":"github.com/sarchlab/akita/v5/sim/modeling/ticking.TickEvent",` +
+		`"payload":{"id":7,"time":42,"handler_id":"h","secondary":false}}],"secondary":[` +
+		`{"type":"github.com/sarchlab/akita/v5/sim/modeling/ticking.TickEvent",` +
+		`"payload":{"id":8,"time":42,"handler_id":"h","secondary":true}}]}` + "\n"
 
 	for _, pointer := range []bool{false, true} {
 		name, fixture := "value", legacy
