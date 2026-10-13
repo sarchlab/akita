@@ -8,7 +8,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing"
+	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 )
 
 // Builder can be used to build a simulation.

@@ -81,7 +81,10 @@ This pre-v5 change moves component tracing commands and task types to
 `sim/tasks`. Enable `WithTaskTracking` (also implied by monitor and trace-on-start),
 and subscribe observers through `s.Tasks().Subscribe(observer, owners...)`
 before running. Components receive the service through `TaskTracker()`;
-tracking is nil when disabled.
+tracking is nil when disabled. Built-in observers move from `sim/tracing` to
+`sim/tasks/tracing` (the package name remains `tracing`); update those imports.
+Tracker construction, port registration, freezing, and persistence are internal
+framework operations; only `Subscribe` is public on `tasks.Tracker`.
 
 - Replace `StartTask` with `id := tasks.Start(owner, tasks.StartInfo{...})`.
   It allocates an independent task ID; do not pass a caller-generated ID.
@@ -119,4 +122,4 @@ interval are recorded without replaying its history. Open-task snapshots remain
 deferred. Daisen's stored task/parent schema is unchanged, and its frontend ID
 types are numeric. MGPUSim migration follows this Akita change separately.
 
-See [tasks](../sim/tasks/README.md) and [observers](../sim/tracing/README.md).
+See [tasks](../sim/tasks/README.md) and [observers](../sim/tasks/tracing/README.md).

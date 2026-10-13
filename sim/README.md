@@ -22,7 +22,8 @@ provide independently usable building blocks:
 | `sim/timing` | Time, events, and engines |
 | `sim/messaging` | Messages, ports, and protocols |
 | `sim/modeling` | Component definitions and execution models |
-| `sim/tracing` | Trace events and collectors |
+| `sim/tasks` | Task lifecycles, identities, and observer subscriptions |
+| `sim/tasks/tracing` | Built-in task observers for recording and statistics |
 | `sim/datarecording` | Recording simulation results |
 | `sim/sourcefs` | Archiving and reading recorded source |
 

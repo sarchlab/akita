@@ -1,7 +1,7 @@
 # Tracing observers
 
-`sim/tracing` contains observers for the simulation-scoped `sim/tasks` service.
-See [the task API](../tasks/README.md) for component commands, registration,
+`sim/tasks/tracing` contains observers for the simulation-scoped `sim/tasks` service.
+See [the task API](../README.md) for component commands, registration,
 concurrency, buffer identity, and checkpoint behavior.
 
 ```go

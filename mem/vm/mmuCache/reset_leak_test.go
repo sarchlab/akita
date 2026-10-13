@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/sarchlab/akita/v5/sim/tracing/tracingtest"
+	"github.com/sarchlab/akita/v5/sim/tasks/tracing/tracingtest"
 )
 
 // TestResetEndsInflightTracingTasks delivers a Top translation request that

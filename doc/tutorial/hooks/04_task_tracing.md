@@ -1,7 +1,7 @@
 # Task tracing
 
 A task describes work over simulated time. Components use `sim/tasks`; observers
-use `sim/tracing` or implement `tasks.Observer`. Enable tracking on the simulation
+use `sim/tasks/tracing` or implement `tasks.Observer`. Enable tracking on the simulation
 builder before component assembly, then subscribe before seeding work or running.
 
 ```go
