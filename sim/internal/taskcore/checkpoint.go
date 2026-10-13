@@ -45,7 +45,9 @@ func (c *Checkpoint) SaveCheckpoint(w io.Writer) error {
 		state.Tasks = append(state.Tasks, savedTask{Task: e.task, Owner: e.owner})
 	}
 	for key, id := range t.buffers {
-		state.Buffers = append(state.Buffers, savedBuffer{Port: key.port, MsgID: key.msgID, Incoming: key.incoming, TaskID: id})
+		state.Buffers = append(state.Buffers, savedBuffer{
+			Port: key.port, MsgID: key.msgID, Incoming: key.incoming, TaskID: id,
+		})
 	}
 	sort.Slice(state.Tasks, func(i, j int) bool { return state.Tasks[i].Task.ID < state.Tasks[j].Task.ID })
 	sort.Slice(state.Buffers, func(i, j int) bool { return state.Buffers[i].TaskID < state.Buffers[j].TaskID })
