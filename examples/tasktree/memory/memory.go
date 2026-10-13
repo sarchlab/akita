@@ -80,7 +80,7 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 
 	taskID := tasks.StartReqIn(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
-	tasks.CompleteReq(m.comp, taskID)
+	tasks.EndReqIn(m.comp, taskID)
 	port.RetrieveIncoming()
 	return true
 }

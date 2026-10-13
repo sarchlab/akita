@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing/tracingtest"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a read MISS into the writeback cache
@@ -143,7 +143,7 @@ func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 	active := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
 	flush := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
 	eviction := tasks.StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
-	tasks.CompleteReq(comp, completed)
+	tasks.EndReqIn(comp, completed)
 	comp.State.HasProcessingFlush = true
 	comp.State.ProcessingFlush = flushReqState{RecvTaskID: flush}
 	comp.State.Transactions = []transactionState{

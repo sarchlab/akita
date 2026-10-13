@@ -275,19 +275,19 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 func (m *ctrlMiddleware) endMSHREntryTasks(entry *mshrEntryState) {
 	for i := range entry.Requests {
-		tasks.EndOnReset(m.comp, entry.Requests[i].RecvTaskID)
+		tasks.EndReqIn(m.comp, entry.Requests[i].RecvTaskID)
 	}
 
 	if entry.HasReqToBottom {
-		tasks.EndOnReset(m.comp, entry.SendTaskID)
+		tasks.EndReqOut(m.comp, entry.SendTaskID)
 	}
 }
 
 func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
-	tasks.EndOnReset(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tasks.EndOnReset(m.comp, item.PipelineTaskID)
+		tasks.End(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
 	}
 }
 

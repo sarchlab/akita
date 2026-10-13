@@ -62,7 +62,7 @@ func AddMilestone(o Owner, m Milestone) {
 }
 
 // StartReqOut begins a sender task. Call before port.Send so child buffer tasks
-// can resolve their parent, and retain the returned ID until FinalizeReq.
+// can resolve their parent, and retain the returned ID until EndReqOut.
 func StartReqOut(o Owner, msg messaging.Msg, parent uint64) uint64 {
 	if o.TaskTracker() == nil {
 		return 0
@@ -70,7 +70,7 @@ func StartReqOut(o Owner, msg messaging.Msg, parent uint64) uint64 {
 	return Start(o, StartInfo{MsgID: msg.ID, ParentID: parent, Kind: KindReqOut, What: msgTypeName(msg), Detail: msg})
 }
 
-// StartReqIn begins the receiver's handling task; retain its ID until CompleteReq.
+// StartReqIn begins the receiver's handling task; retain its ID until EndReqIn.
 func StartReqIn(o Owner, msg messaging.Msg) uint64 {
 	if o.TaskTracker() == nil {
 		return 0
@@ -78,14 +78,13 @@ func StartReqIn(o Owner, msg messaging.Msg) uint64 {
 	return Start(o, StartInfo{MsgID: msg.ID, Kind: KindReqIn, What: msgTypeName(msg), Detail: msg})
 }
 
-// CompleteReq ends receiver work using its stored task ID.
-func CompleteReq(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
+// EndReqIn ends receiver work using the ID returned by StartReqIn.
+// Zero and unknown IDs are ignored, including repeated ends during reset.
+func EndReqIn(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
 
-// FinalizeReq ends sender work using its stored task ID.
-func FinalizeReq(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
-
-// EndOnReset ends work discarded by a component reset. Unknown IDs are harmless.
-func EndOnReset(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
+// EndReqOut ends sender work using the ID returned by StartReqOut.
+// Zero and unknown IDs are ignored, including repeated ends during reset.
+func EndReqOut(o Owner, id uint64) { End(o, EndInfo{ID: id}) }
 
 func msgTypeName(msg messaging.Msg) string {
 	t := reflect.TypeOf(msg.Payload)

@@ -6,8 +6,8 @@
 //
 //	Client send : StartReqOut  -> opens a "req_out" task (round trip)
 //	Server recv : StartReqIn   -> opens a "req_in"  task (handling)
-//	Server done : CompleteReq  -> ends the "req_in"  task
-//	Client recv : FinalizeReq  -> ends the "req_out" task
+//	Server done : EndReqIn  -> ends the "req_in"  task
+//	Client recv : EndReqOut  -> ends the "req_out" task
 //
 // Two AverageTimeTracers — one filtering "req_out" on the client, one
 // filtering "req_in" on the server — then report the round-trip latency and
@@ -26,8 +26,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func main() {

@@ -99,7 +99,7 @@ func (m *requestMW) receive() bool {
 	_ = msg.Payload.(memory.ReadRsp)
 	rsp := msg
 	if taskID, ok := s.InFlight[rsp.RspTo]; ok {
-		tasks.FinalizeReq(m.comp, taskID)
+		tasks.EndReqOut(m.comp, taskID)
 		delete(s.InFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()

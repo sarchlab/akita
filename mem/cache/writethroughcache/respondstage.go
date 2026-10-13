@@ -52,7 +52,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original read request.
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }
@@ -75,7 +75,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original write request.
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }

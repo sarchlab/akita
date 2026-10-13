@@ -67,7 +67,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tasks.FinalizeReq(m.comp, req.TaskID)
+		tasks.EndReqOut(m.comp, req.TaskID)
 		delete(state.PendingWriteReq, msg.RspTo)
 
 		if m.writeProgressBar != nil {
@@ -87,7 +87,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		m.checkReadResult(req.Msg, msg, state)
 
-		tasks.FinalizeReq(m.comp, req.TaskID)
+		tasks.EndReqOut(m.comp, req.TaskID)
 		delete(state.PendingReadReq, msg.RspTo)
 
 		if m.readProgressBar != nil {

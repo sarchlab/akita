@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing/tracingtest"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a read miss into the writethrough
@@ -161,7 +161,7 @@ func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
 	completed := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
 	active := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
 	write := tasks.StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
-	tasks.CompleteReq(comp, completed)
+	tasks.EndReqIn(comp, completed)
 	comp.State.Transactions = []transactionState{
 		{HasRead: true, RecvTaskID: completed, Removed: true, HasWriteToBottom: true, WriteTaskID: write},
 		{HasWrite: true, RecvTaskID: active},

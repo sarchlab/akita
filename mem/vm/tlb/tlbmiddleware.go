@@ -228,7 +228,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 	}
 
-	tasks.CompleteReq(m.comp, req.RecvTaskID)
+	tasks.EndReqIn(m.comp, req.RecvTaskID)
 
 	return true
 }
@@ -277,7 +277,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 		TaskID: item.RecvTaskID,
 		What:   "hit",
 	})
-	tasks.CompleteReq(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	return true
 }
@@ -459,7 +459,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tasks.FinalizeReq(m.comp, sendTaskID)
+		tasks.EndReqOut(m.comp, sendTaskID)
 	}
 
 	return true

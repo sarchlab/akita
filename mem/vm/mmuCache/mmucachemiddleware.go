@@ -250,7 +250,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// The upstream response is on its way: finalize the forwarded req_out and
 	// complete the original req_in, using the IDs saved in the transaction.
 	if inflight, ok := next.InflightReqs[rsp.RspTo]; ok {
-		tasks.FinalizeReq(m.comp, inflight.SendTaskID)
+		tasks.EndReqOut(m.comp, inflight.SendTaskID)
 
 		// The downstream walk-fetch the original Top request waited on has
 		// returned: charge that in-flight wait to the original req_in (this is
@@ -261,7 +261,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 			What:   "translation",
 		})
 
-		tasks.CompleteReq(m.comp, inflight.RecvTaskID)
+		tasks.EndReqIn(m.comp, inflight.RecvTaskID)
 		delete(next.InflightReqs, rsp.RspTo)
 	}
 

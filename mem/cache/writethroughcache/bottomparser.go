@@ -71,7 +71,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tasks.FinalizeReq(p.cache.comp, trans.WriteTaskID)
+	tasks.EndReqOut(p.cache.comp, trans.WriteTaskID)
 	trans.WriteTaskID = 0
 
 	return true
@@ -133,7 +133,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tasks.FinalizeReq(p.cache.comp, trans.ReadTaskID)
+	tasks.EndReqOut(p.cache.comp, trans.ReadTaskID)
 	trans.ReadTaskID = 0
 
 	return true

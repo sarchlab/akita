@@ -142,7 +142,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.topPort().Send(rsp)
 
-	tasks.CompleteReq(m.comp, trans.RecvTaskID)
+	tasks.EndReqIn(m.comp, trans.RecvTaskID)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{

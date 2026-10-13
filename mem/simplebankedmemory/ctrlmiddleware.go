@@ -148,7 +148,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // buffer, so a hard Reset that rebuilds the banks leaves no
 // started-never-ended task. The memory is
 // a leaf, so there is no downstream req_out. Mirrors the completion in
-// tickFinalizeMW.finishPipeline + CompleteReq.
+// tickFinalizeMW.finishPipeline + EndReqIn.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for i := range m.comp.State.Banks {
 		bank := &m.comp.State.Banks[i]
@@ -162,10 +162,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 }
 
 func (m *ctrlMiddleware) endItemTasks(item bankPipelineItemState) {
-	tasks.EndOnReset(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tasks.EndOnReset(m.comp, item.PipelineTaskID)
+		tasks.End(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
 	}
 }
 

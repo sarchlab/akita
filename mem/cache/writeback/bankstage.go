@@ -221,7 +221,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	s.cache.topPort().Send(dataReady)
 
 	s.finishBank(trans)
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }
@@ -260,7 +260,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	s.cache.topPort().Send(done)
 
 	s.finishBank(trans)
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 
 	return true
 }

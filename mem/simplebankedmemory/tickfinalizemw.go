@@ -80,7 +80,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	// The item has just left the bank pipeline (it is at the head of
 	// PostPipelineBuf and about to be dequeued). Attribute the pipeline
 	// traversal as work on req_in before the response send and before
-	// CompleteReq, so the same-tick complete does not absorb it via the
+	// EndReqIn, so the same-tick complete does not absorb it via the
 	// same-time dedup.
 	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
@@ -96,7 +96,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tasks.CompleteReq(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -135,7 +135,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	}
 
 	// See finalizeRead: attribute the bank-pipeline traversal as work on
-	// req_in at pipeline exit, before the response send and CompleteReq.
+	// req_in at pipeline exit, before the response send and EndReqIn.
 	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
 	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
@@ -148,7 +148,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tasks.CompleteReq(m.comp, item.RecvTaskID)
+	tasks.EndReqIn(m.comp, item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -159,7 +159,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 // task at pipeline exit. It emits a work milestone (the must-have: it marks the
 // pipeline interval as productive work rather than a blocking gap) and closes
 // the PipelineTaskKind subtask opened at dispatch. Call it before the response
-// send and before CompleteReq so the same-tick complete does not shadow the
+// send and before EndReqIn so the same-tick complete does not shadow the
 // work milestone via the dedup. Both task IDs are retained in the pipeline
 // entry from dispatch through completion.
 func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {

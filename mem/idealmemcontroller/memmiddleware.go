@@ -152,7 +152,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	tasks.CompleteReq(m.comp, tx.RecvTaskID)
+	tasks.EndReqIn(m.comp, tx.RecvTaskID)
 
 	return true
 }
@@ -188,7 +188,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		m.comp.Resources.Storage.Write(addr, data)
 	}
 
-	tasks.CompleteReq(m.comp, tx.RecvTaskID)
+	tasks.EndReqIn(m.comp, tx.RecvTaskID)
 
 	return true
 }

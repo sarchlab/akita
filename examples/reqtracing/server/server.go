@@ -1,7 +1,7 @@
 // Package server is the responding side of the reqtracing example: a ticking
 // component that answers every ReadReq Latency cycles after it arrives. It
 // traces its handling of each request as a req_in task, opened with
-// StartReqIn and closed with CompleteReq.
+// StartReqIn and closed with EndReqIn.
 package server
 
 import (
@@ -131,7 +131,7 @@ func (m *serveMW) respond() bool {
 			Seq: req.Payload.(ReadReq).Seq,
 		}})
 
-	tasks.CompleteReq(m.comp, s.Pending[0].RecvTaskID)
+	tasks.EndReqIn(m.comp, s.Pending[0].RecvTaskID)
 	s.Pending = s.Pending[1:]
 
 	return true

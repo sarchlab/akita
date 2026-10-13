@@ -123,7 +123,7 @@ func (s *mshrStage) respondRead(
 		Kind:   tasks.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
@@ -145,7 +145,7 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 		Kind:   tasks.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
-	tasks.CompleteReq(s.cache.comp, trans.RecvTaskID)
+	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {

@@ -159,7 +159,7 @@ func (m *middleware) parseBottom() bool {
 			Kind:   tasks.MilestoneKindData,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tasks.FinalizeReq(m.comp, trans.SendTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 		return true
 	case memprotocol.WriteDoneRsp:
 		dataRsp := msg
@@ -180,7 +180,7 @@ func (m *middleware) parseBottom() bool {
 			Kind:   tasks.MilestoneKindSubTask,
 			What:   m.comp.Ports.Bottom.Name(),
 		})
-		tasks.FinalizeReq(m.comp, trans.SendTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 		return true
 	default:
 		m.comp.Ports.Bottom.RetrieveIncoming()
@@ -231,7 +231,7 @@ func (m *middleware) bottomUp() bool {
 		What:   m.comp.Ports.Top.Name(),
 	})
 
-	tasks.CompleteReq(m.comp, head.RecvTaskID)
+	tasks.EndReqIn(m.comp, head.RecvTaskID)
 
 	return true
 }
@@ -504,8 +504,8 @@ func drainIncoming(p messaging.Port) {
 // bottomUp (req_in) and parseBottom (req_out) completion.
 func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tasks.EndOnReset(m.comp, trans.RecvTaskID)
-		tasks.EndOnReset(m.comp, trans.SendTaskID)
+		tasks.EndReqIn(m.comp, trans.RecvTaskID)
+		tasks.EndReqOut(m.comp, trans.SendTaskID)
 	}
 }
 

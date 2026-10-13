@@ -83,7 +83,8 @@ and subscribe observers through `s.Tasks().Subscribe(observer, owners...)`
 before running. With tracking disabled, `s.VisTracer()` is nil and no tracing
 tables are created. `WithTaskTracking` alone creates and subscribes the tracer;
 call `s.VisTracer().StartTracing()` to begin recording. Components receive the
-service through `TaskTracker()`; tracking is nil when disabled. Built-in observers move from `sim/tracing` to
+service through `TaskTracker()`; tracking is nil when disabled. Built-in observers
+move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
 Task types and their implementation live directly in `sim/tasks`, with private
 state and helpers. Framework assembly uses the exported `NewTracker`,
@@ -94,8 +95,9 @@ builder; checkpoint entity names and optional archive membership stay in `sim`.
 - Replace `StartTask` with `id := tasks.Start(owner, tasks.StartInfo{...})`.
   It allocates an independent task ID; do not pass a caller-generated ID.
 - Use `StartReqOut` before `port.Send`, and `StartReqIn` on admission. Store each
-  returned handle in State. End with `FinalizeReq`, `CompleteReq`, or
-  `End(owner, EndInfo{ID: id})`; reset discarded work with `EndOnReset`.
+  returned handle in State. End with `EndReqOut`, `EndReqIn`, or
+  `End(owner, EndInfo{ID: id})`. Reset paths use the same end commands;
+  `EndOnReset` is removed because it had no distinct behavior.
 - Use `tasks.Tag`, `tasks.Milestone`, `AddTag`, and `AddMilestone`. Replace buffer
   task lookups with `AddBufferMilestone(owner, port, msg, milestone)` before
   retrieval. It drops events for untracked messages without misattribution.
@@ -107,6 +109,15 @@ builder; checkpoint entity names and optional archive membership stay in `sim`.
   `RequestTaskParents`, `PeekIncomingTaskID`, and `PortBufferTrace`. Custom ports
   report generic `PortBufferChange` head facts in message-hook Detail. Hooks run
   under the port lock and must not call buffer operations; Owner/Name are safe.
+
+Request helper migration (end commands take the stored task ID):
+
+| Previous helper | New helper |
+|---|---|
+| `TraceReqReceive` | `StartReqIn` |
+| `TraceReqComplete` / `CompleteReq` | `EndReqIn` |
+| `TraceReqInitiate` | `StartReqOut` |
+| `TraceReqFinalize` / `FinalizeReq` | `EndReqOut` |
 
 `messaging.Msg` is unchanged. Request/NoC handles remain in component or flit
 State, and the Tracker owns records and buffer identities. DRAM subtransaction

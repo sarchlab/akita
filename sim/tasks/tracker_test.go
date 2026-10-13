@@ -97,7 +97,8 @@ func TestDisabledDoesNotAllocateOrReadClock(t *testing.T) {
 	require.Zero(t, tasks.StartReqOut(o, messaging.Msg{}, 0))
 	require.Zero(t, tasks.StartReqIn(o, messaging.Msg{}))
 	tasks.End(o, tasks.EndInfo{ID: 1})
-	tasks.EndOnReset(o, 1)
+	tasks.EndReqIn(o, 1)
+	tasks.EndReqOut(o, 1)
 	tasks.AddTag(o, tasks.Tag{TaskID: 1})
 	tasks.AddMilestone(o, tasks.Milestone{TaskID: 1})
 	tasks.AddBufferMilestone(o, nil, messaging.Msg{}, tasks.Milestone{})
@@ -127,12 +128,12 @@ func TestFullEndAndSharedParentResolution(t *testing.T) {
 	want.EndTime = 30
 	require.Equal(t, want, scoped.ends[0])
 	require.Equal(t, want, all.ends[0])
-	tasks.EndOnReset(sender, send)
-	tasks.EndOnReset(sender, send)
+	tasks.EndReqOut(sender, send)
+	tasks.EndReqOut(sender, send)
 	require.Len(t, all.ends, 2)
 	orphan := tasks.StartReqIn(receiver, msg)
 	require.Zero(t, all.starts[2].ParentID)
-	tasks.CompleteReq(receiver, orphan)
+	tasks.EndReqIn(receiver, orphan)
 	t.Logf("message %d, sender task %d, receiver task %d; both observers received full end [%d,%d] with parent %d",
 		msg.ID, send, recv, want.StartTime, want.EndTime, want.ParentID)
 }
@@ -209,7 +210,7 @@ func TestConcurrentDeliveryAndAdmission(t *testing.T) {
 				tasks.AddBufferMilestone(o, p, msg, tasks.Milestone{What: "admission"})
 				p.RetrieveIncoming()
 				tasks.AddTag(o, tasks.Tag{TaskID: id, What: "done"})
-				tasks.FinalizeReq(o, id)
+				tasks.EndReqOut(o, id)
 			}
 		}()
 	}
@@ -232,7 +233,7 @@ func (h taskHandler) Handle(timing.Event) {
 	h.p.Deliver(msg)
 	tasks.AddBufferMilestone(h.o, h.p, msg, tasks.Milestone{What: "admission"})
 	h.p.RetrieveIncoming()
-	tasks.FinalizeReq(h.o, id)
+	tasks.EndReqOut(h.o, id)
 }
 
 func TestParallelEngineTaskLifecycles(t *testing.T) {

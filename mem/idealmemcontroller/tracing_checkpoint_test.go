@@ -156,7 +156,7 @@ func checkTaskCheckpoint(t *testing.T, savedOn, restoredOn bool) {
 		}
 		require.Equal(t, expectedParent, fresh.starts[0].ParentID, "response must resolve the saved sender")
 	}
-	tasks.FinalizeReq(restored, saved.senderID)
+	tasks.EndReqOut(restored, saved.senderID)
 	tasks.End(restored, tasks.EndInfo{ID: saved.root})
 	assertCheckpointEnds(t, saved, fresh, dst.Engine().CurrentTime(), savedOn, restoredOn)
 }

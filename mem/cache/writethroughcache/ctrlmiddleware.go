@@ -188,23 +188,23 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tasks.EndOnReset(comp, trans.RecvTaskID)
+			tasks.EndReqIn(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasReadToBottom {
-			tasks.EndOnReset(comp, trans.ReadTaskID)
+			tasks.EndReqOut(comp, trans.ReadTaskID)
 		}
 
 		if trans.HasWriteToBottom {
-			tasks.EndOnReset(comp, trans.WriteTaskID)
+			tasks.EndReqOut(comp, trans.WriteTaskID)
 		}
 
 		if trans.DirPipelineTaskID != 0 {
-			tasks.EndOnReset(comp, trans.DirPipelineTaskID)
+			tasks.End(comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
 		}
 
 		if trans.BankTaskID != 0 {
-			tasks.EndOnReset(comp, trans.BankTaskID)
+			tasks.End(comp, tasks.EndInfo{ID: trans.BankTaskID})
 		}
 	}
 }

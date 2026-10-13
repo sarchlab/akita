@@ -303,8 +303,8 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 // close. Mirrors the completion path in handleRsp.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		tasks.EndOnReset(m.comp, inflight.SendTaskID)
-		tasks.EndOnReset(m.comp, inflight.RecvTaskID)
+		tasks.EndReqOut(m.comp, inflight.SendTaskID)
+		tasks.EndReqIn(m.comp, inflight.RecvTaskID)
 	}
 }
 

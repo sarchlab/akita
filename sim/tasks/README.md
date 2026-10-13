@@ -45,12 +45,14 @@ Request helpers preserve separate sender and receiver identities:
 ```go
 sendID := tasks.StartReqOut(comp, msg, parent) // before port.Send(msg)
 recvID := tasks.StartReqIn(comp, msg)
-tasks.CompleteReq(comp, recvID)
-tasks.FinalizeReq(comp, sendID)
+tasks.EndReqIn(comp, recvID)
+tasks.EndReqOut(comp, sendID)
 ```
 
-Retain each returned handle for milestones, children, completion, and
-`EndOnReset`. Messages are unchanged. The tracker resolves request, response
+Retain each returned handle for milestones, children, and completion. On reset,
+close request tasks with `EndReqIn` / `EndReqOut` and other work with
+`End(owner, EndInfo{ID: id})`; zero and unknown handles are harmless.
+Messages are unchanged. The tracker resolves request, response
 buffer, and NoC transport parents once, before any observer filtering. Unknown
 parents are zero; they are not filled in retroactively. A task can start at one
 component and end at another component in the same simulation.

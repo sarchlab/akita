@@ -131,7 +131,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		What:   m.bottomPort().Name(),
 	})
 
-	tasks.FinalizeReq(m.comp, trans.TranslationTaskID)
+	tasks.EndReqOut(m.comp, trans.TranslationTaskID)
 	return tasks.StartReqOut(m.comp, translatedReq, topTaskID)
 }
 
@@ -210,8 +210,8 @@ func (m *respondPipelineMW) respond() bool {
 		rspMeta := rspI
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
-		tasks.FinalizeReq(m.comp, reqFromTopState.SendTaskID)
-		tasks.CompleteReq(m.comp, reqFromTopState.RecvTaskID)
+		tasks.EndReqOut(m.comp, reqFromTopState.SendTaskID)
+		tasks.EndReqIn(m.comp, reqFromTopState.RecvTaskID)
 	}
 
 	m.bottomPort().RetrieveIncoming()

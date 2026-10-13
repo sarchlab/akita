@@ -418,7 +418,7 @@ func (m *migMW) processAcks() bool {
 		}
 
 		// Close the req_out task opened for this command (keyed by request ID).
-		tasks.FinalizeReq(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
+		tasks.EndReqOut(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
 		delete(m.ctrl.State.CommandTasks, rsp.RspTo)
 
 		m.ctrl.State.PendingAcks--
@@ -487,7 +487,7 @@ func (m *migMW) processMoveRsp() bool {
 	}
 
 	// Close the req_out task opened for the data-move request.
-	tasks.FinalizeReq(m.ctrl, state.MoveTaskID)
+	tasks.EndReqOut(m.ctrl, state.MoveTaskID)
 	state.MoveTaskID = 0
 
 	vAddr := state.CurPage * pageSize

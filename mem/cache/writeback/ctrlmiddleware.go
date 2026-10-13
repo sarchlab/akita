@@ -275,29 +275,29 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // owns that task and ends it once, independently of how many blocks it evicts.
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
-	tasks.EndOnReset(comp, comp.State.ProcessingFlush.RecvTaskID)
+	tasks.EndReqIn(comp, comp.State.ProcessingFlush.RecvTaskID)
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tasks.EndOnReset(comp, trans.RecvTaskID)
+			tasks.EndReqIn(comp, trans.RecvTaskID)
 		}
 
 		if trans.HasFetchReadReq {
-			tasks.EndOnReset(comp, trans.FetchTaskID)
+			tasks.EndReqOut(comp, trans.FetchTaskID)
 		}
 
 		if trans.HasEvictionWriteReq {
-			tasks.EndOnReset(comp, trans.EvictionTaskID)
+			tasks.EndReqOut(comp, trans.EvictionTaskID)
 		}
 
 		if trans.DirPipelinePID != 0 {
-			tasks.EndOnReset(comp, trans.DirPipelinePID)
+			tasks.End(comp, tasks.EndInfo{ID: trans.DirPipelinePID})
 		}
 
 		if trans.BankPID != 0 {
-			tasks.EndOnReset(comp, trans.BankPID)
+			tasks.End(comp, tasks.EndInfo{ID: trans.BankPID})
 		}
 	}
 }

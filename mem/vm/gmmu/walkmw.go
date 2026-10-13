@@ -266,7 +266,7 @@ func (m *walkMW) doPageWalkHit(
 	})
 	tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 
-	tasks.CompleteReq(m.comp, walking.RecvTaskID)
+	tasks.EndReqIn(m.comp, walking.RecvTaskID)
 
 	return true
 }

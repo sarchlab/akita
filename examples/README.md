@@ -155,7 +155,7 @@ cd customtracer && go run main.go
 
 A client and server exchange request/response over a direct connection,
 annotated with the four request helpers (`StartReqOut`, `StartReqIn`,
-`CompleteReq`, `FinalizeReq`). Two `AverageTimeTracer`s — filtering
+`EndReqIn`, `EndReqOut`). Two `AverageTimeTracer`s — filtering
 `req_out` and `req_in` — report round-trip latency and server handling time
 from the same run. Each component type is in its own package (`client`,
 `server`); `main.go` wires them together.

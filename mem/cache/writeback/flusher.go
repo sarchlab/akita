@@ -247,7 +247,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tasks.CompleteReq(f.pipeline.comp, next.ProcessingFlush.RecvTaskID)
+	tasks.EndReqIn(f.pipeline.comp, next.ProcessingFlush.RecvTaskID)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

@@ -205,7 +205,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 		What:   m.srcPort().Name(),
 	})
 
-	tasks.FinalizeReq(m.comp, originalReq.TaskID)
+	tasks.EndReqOut(m.comp, originalReq.TaskID)
 
 	return true
 }
@@ -299,7 +299,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 		What:   m.dstPort().Name(),
 	})
 
-	tasks.FinalizeReq(m.comp, originalReq.TaskID)
+	tasks.EndReqOut(m.comp, originalReq.TaskID)
 
 	// Processing a write ack is real progress: the component must tick again
 	// so the remaining acks drain and the transaction can finish (which now

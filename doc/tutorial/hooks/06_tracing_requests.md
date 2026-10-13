@@ -21,9 +21,9 @@ port.Send(msg)
 // Receiver admission:
 state.RecvTaskID = tasks.StartReqIn(comp, msg)
 // Receiver completion:
-tasks.CompleteReq(comp, state.RecvTaskID)
+tasks.EndReqIn(comp, state.RecvTaskID)
 // Sender receives the response:
-tasks.FinalizeReq(comp, state.SendTaskID)
+tasks.EndReqOut(comp, state.SendTaskID)
 ```
 
 When forwarding, pass the upstream receive handle as the new sender task's

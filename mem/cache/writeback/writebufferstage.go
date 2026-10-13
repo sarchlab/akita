@@ -346,7 +346,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort().RetrieveIncoming()
 
-	tasks.FinalizeReq(wb.cache.comp, trans.FetchTaskID)
+	tasks.EndReqOut(wb.cache.comp, trans.FetchTaskID)
 	trans.FetchTaskID = 0
 
 	return true
@@ -451,7 +451,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			})
 
 			wb.cache.bottomPort().RetrieveIncoming()
-			tasks.FinalizeReq(wb.cache.comp, e.EvictionTaskID)
+			tasks.EndReqOut(wb.cache.comp, e.EvictionTaskID)
 			e.EvictionTaskID = 0
 
 			return true

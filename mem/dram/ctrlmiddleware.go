@@ -186,11 +186,11 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	for i := range m.comp.State.Transactions {
 		t := &m.comp.State.Transactions[i]
 
-		tasks.EndOnReset(m.comp, t.RecvTaskID)
+		tasks.EndReqIn(m.comp, t.RecvTaskID)
 
 		for _, sub := range t.SubTransactions {
 			if !sub.Completed {
-				tasks.EndOnReset(m.comp, sub.TaskID)
+				tasks.End(m.comp, tasks.EndInfo{ID: sub.TaskID})
 			}
 		}
 	}

@@ -165,14 +165,14 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
 		for _, inc := range trans.IncomingReqs {
-			tasks.EndOnReset(m.comp, inc.RecvTaskID)
+			tasks.EndReqIn(m.comp, inc.RecvTaskID)
 		}
-		tasks.EndOnReset(m.comp, trans.TranslationTaskID)
+		tasks.EndReqOut(m.comp, trans.TranslationTaskID)
 	}
 
 	for _, r := range m.comp.State.InflightReqToBottom {
-		tasks.EndOnReset(m.comp, r.RecvTaskID)
-		tasks.EndOnReset(m.comp, r.SendTaskID)
+		tasks.EndReqIn(m.comp, r.RecvTaskID)
+		tasks.EndReqOut(m.comp, r.SendTaskID)
 	}
 }
 

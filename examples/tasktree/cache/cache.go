@@ -125,11 +125,11 @@ func (m *forwardMW) respondUp() bool {
 	downRsp := msg
 	t := m.comp.State.Txns[downRsp.RspTo]
 
-	tasks.FinalizeReq(m.comp, t.SendTaskID) // close the downstream task
+	tasks.EndReqOut(m.comp, t.SendTaskID) // close the downstream task
 
 	top.Send(memory.NewRsp(m.comp.NewID(),
 		top.AsRemote(), t.UpReq.Src, t.UpReq.ID))
-	tasks.CompleteReq(m.comp, t.RecvTaskID) // close the handling task
+	tasks.EndReqIn(m.comp, t.RecvTaskID) // close the handling task
 
 	delete(m.comp.State.Txns, downRsp.RspTo)
 	bottom.RetrieveIncoming()

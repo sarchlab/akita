@@ -168,15 +168,15 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	trans := &m.comp.State.CurrentTransaction
 
 	if trans.Active {
-		tasks.EndOnReset(m.comp, trans.RecvTaskID)
+		tasks.EndReqIn(m.comp, trans.RecvTaskID)
 	}
 
 	for _, req := range trans.PendingRead {
-		tasks.EndOnReset(m.comp, req.TaskID)
+		tasks.EndReqOut(m.comp, req.TaskID)
 	}
 
 	for _, req := range trans.PendingWrite {
-		tasks.EndOnReset(m.comp, req.TaskID)
+		tasks.EndReqOut(m.comp, req.TaskID)
 	}
 }
 

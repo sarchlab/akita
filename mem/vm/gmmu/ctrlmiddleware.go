@@ -158,18 +158,18 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // req_in) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tasks.EndOnReset(m.comp, walking.RecvTaskID)
+		tasks.EndReqIn(m.comp, walking.RecvTaskID)
 		// These walks have not yet reached an exit, so their walk subtask is
 		// still open. (Remote walks in RemoteMemReqs already closed theirs in
 		// processRemoteMemReq.)
 		if walking.WalkTaskID != 0 {
-			tasks.EndOnReset(m.comp, walking.WalkTaskID)
+			tasks.End(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
 		}
 	}
 
 	for _, walking := range m.comp.State.RemoteMemReqs {
-		tasks.EndOnReset(m.comp, walking.SendTaskID)
-		tasks.EndOnReset(m.comp, walking.RecvTaskID)
+		tasks.EndReqOut(m.comp, walking.SendTaskID)
+		tasks.EndReqIn(m.comp, walking.RecvTaskID)
 	}
 }
 

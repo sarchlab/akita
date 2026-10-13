@@ -56,14 +56,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tasks.CompleteReq(m.comp, recvTaskID)
+			tasks.EndReqIn(m.comp, recvTaskID)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tasks.CompleteReq(m.comp, recvTaskID)
+		tasks.EndReqIn(m.comp, recvTaskID)
 	}
 	return done
 }

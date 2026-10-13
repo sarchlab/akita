@@ -1,7 +1,7 @@
 // Package client is the requesting side of the reqtracing example: a ticking
 // component that sends NumReqs requests to Dst, one at a time. It traces each
 // round trip as a req_out task, opened with StartReqOut and closed with
-// FinalizeReq.
+// EndReqOut.
 package client
 
 import (
@@ -112,7 +112,7 @@ func (m *requestMW) receive() bool {
 	_ = msg.Payload.(server.ReadRsp)
 	rsp := msg
 	if taskID, ok := s.InFlight[rsp.RspTo]; ok {
-		tasks.FinalizeReq(m.comp, taskID)
+		tasks.EndReqOut(m.comp, taskID)
 		delete(s.InFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()
