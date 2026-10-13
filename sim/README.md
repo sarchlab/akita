@@ -161,7 +161,8 @@ the checkpoint restores only the *runtime* (each entity's `State`, port buffers,
 shared resources, the event queue, the engine time, and the ID-generator
 counter). The archive holds a `build_id` entry plus one payload per entity; the
 payload files are the inventory (there is no manifest). Loading validates the
-build ID and that the saved and rebuilt entity sets match exactly.
+build ID and that the saved and rebuilt entity sets match, except for the
+optional task-tracker payload described below.
 Build identity is derived automatically from the running binary's build
 information; callers do not supply or configure it.
 
@@ -178,9 +179,13 @@ setup rebuilds; put cursors and counters in `State`.
 
 - **Serial engine only.** `SaveCheckpoint`/`LoadCheckpoint` reject a
   `ParallelEngine`.
-- **Run with tracing off** for a deterministic resume: the tracing task-ID side
-  table is not checkpointed; rebuilding associations consumes the simulation's
-  ID counter, perturbing the resumed ID sequence.
+- **Task tracking is checkpointed.** An enabled tracker restores open task
+  identities, buffer identities, and request-parent correlation without allocating
+  replacement IDs. Keep the tracking setting consistent across save and restore
+  when comparing ID sequences; changing it changes future ID allocation. `Detail`
+  and observer history, including earlier tags/milestones, are not restored. Mixed
+  tracking settings are supported: off-to-on starts empty, and on-to-off ignores
+  the optional tracker payload. See [task tracking](tasks/README.md).
 - **`SerialEngine.RunUntil(t)`** stops the engine at a deterministic boundary
   (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
   (stops at a non-reproducible point) — useful for taking a mid-transaction
