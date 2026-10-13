@@ -183,7 +183,9 @@ implementations; the old names are removed.
 - `memprotocol.AccessReq.GetAddress()` / `GetPID()` → `AccessAddress()` /
   `AccessPID()`, including `ReadReq` and `WriteReq`. Their fields are unchanged.
 
-This cleanup changes no simulation behavior or checkpoint JSON format. Event
-fields keep the `time` and `handler_id` JSON keys, ticking events keep their
-existing `ticking.TickEvent` wire tag, and component checkpoints keep the
-`scheduler` guard object with `scheduled` and `at` fields.
+Simulation behavior and the event field keys `time` and `handler_id` are
+unchanged. Tick checkpoint type tags now use `ticking.Event`, derived from the
+Go type. The component checkpoint guard is named `pending_event_guard` instead
+of `scheduler`, with `scheduled` and `at` fields. Saved checkpoints from before
+this cleanup are not supported; no legacy type-tag alias or schema migration
+is provided.

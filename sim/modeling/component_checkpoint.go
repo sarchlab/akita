@@ -11,19 +11,19 @@ import (
 )
 
 // componentCheckpoint is the serialized form of a generic component: a spec hash
-// for compatibility checking, the mutable State, and the scheduler guard.
+// for compatibility checking, the mutable State, and the pending-event guard.
 // Resources and ports are rebuilt by setup, not serialized. The guard is saved
 // directly — alongside the engine's matching event — so load is a single pass
 // with no post-load reconciliation against the queue.
 type componentCheckpoint struct {
-	SpecHash  string              `json:"spec_hash"`
-	State     json.RawMessage     `json:"state"`
-	Scheduler schedulerCheckpoint `json:"scheduler"`
+	SpecHash          string                      `json:"spec_hash"`
+	State             json.RawMessage             `json:"state"`
+	PendingEventGuard pendingEventGuardCheckpoint `json:"pending_event_guard"`
 }
 
-// schedulerCheckpoint is the serialized scheduler dedup guard: whether an event
+// pendingEventGuardCheckpoint is the serialized pending-event guard: whether an event
 // is pending and at what time.
-type schedulerCheckpoint struct {
+type pendingEventGuardCheckpoint struct {
 	Scheduled bool                  `json:"scheduled"`
 	At        timing.VTimeInPicoSec `json:"at"`
 }
@@ -38,11 +38,11 @@ type PendingEventGuard interface {
 	Restore(at timing.VTimeInPicoSec, scheduled bool)
 }
 
-// WriteCheckpoint writes a component's spec hash, State, and scheduler guard
-// as JSON. Component models use it to implement SaveCheckpoint; s is nil for a
+// WriteCheckpoint writes a component's spec hash, State, and pending-event guard
+// as JSON. Component models use it to implement SaveCheckpoint; guard is nil for a
 // component without its own scheduler.
 func WriteCheckpoint[S, T any](
-	w io.Writer, spec S, state T, s PendingEventGuard,
+	w io.Writer, spec S, state T, guard PendingEventGuard,
 ) error {
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -53,18 +53,18 @@ func WriteCheckpoint[S, T any](
 		SpecHash: specHash(spec),
 		State:    data,
 	}
-	if s != nil {
-		at, scheduled := s.Snapshot()
-		dto.Scheduler = schedulerCheckpoint{Scheduled: scheduled, At: at}
+	if guard != nil {
+		at, scheduled := guard.Snapshot()
+		dto.PendingEventGuard = pendingEventGuardCheckpoint{Scheduled: scheduled, At: at}
 	}
 
 	return json.NewEncoder(w).Encode(dto)
 }
 
-// ReadCheckpoint restores a component's State and scheduler guard after
+// ReadCheckpoint restores a component's State and pending-event guard after
 // verifying that the saved spec hash matches spec, the rebuilt component's.
 func ReadCheckpoint[S, T any](
-	r io.Reader, spec S, state *T, s PendingEventGuard,
+	r io.Reader, spec S, state *T, guard PendingEventGuard,
 ) error {
 	var dto componentCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
@@ -83,8 +83,8 @@ func ReadCheckpoint[S, T any](
 	}
 	*state = restored
 
-	if s != nil {
-		s.Restore(dto.Scheduler.At, dto.Scheduler.Scheduled)
+	if guard != nil {
+		guard.Restore(dto.PendingEventGuard.At, dto.PendingEventGuard.Scheduled)
 	}
 
 	return nil

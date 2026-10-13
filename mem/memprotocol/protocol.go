@@ -63,7 +63,7 @@ func (r WriteReq) AccessAddress() uint64 {
 	return r.Address
 }
 
-// AccessPID returns the PID of the read address.
+// AccessPID returns the process ID that the request is working on.
 func (r WriteReq) AccessPID() vm.PID {
 	return r.PID
 }

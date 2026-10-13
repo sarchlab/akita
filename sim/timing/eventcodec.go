@@ -17,8 +17,8 @@ func init() {
 // RegisterEvent registers a concrete event type so a checkpoint that captured it
 // in the engine queue can be decoded. Call it from an init() with a zero value
 // of each event type. Events may be value types (e.g. ticking.Event) or
-// pointers; tags are derived from Go types, with legacy tags retained for renamed
-// built-in types. Registering the same type twice is harmless.
+// pointers; the tag is derived from the Go type either way. Registering the same
+// type twice is harmless.
 //
 // A forgotten registration fails loudly at load time: decoding a checkpoint that
 // holds an unregistered event reports an unknown-event-type error.

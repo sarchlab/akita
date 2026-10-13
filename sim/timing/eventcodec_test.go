@@ -61,20 +61,20 @@ func TestEventBaseRegisteredByDefault(t *testing.T) {
 	}
 }
 
-func TestEventBaseLegacyJSON(t *testing.T) {
-	const legacy = `{"id":7,"time":42,"handler_id":"h","secondary":true}`
+func TestEventBaseJSON(t *testing.T) {
+	const wantJSON = `{"id":7,"time":42,"handler_id":"h","secondary":true}`
 	var event EventBase
-	if err := json.Unmarshal([]byte(legacy), &event); err != nil {
+	if err := json.Unmarshal([]byte(wantJSON), &event); err != nil {
 		t.Fatal(err)
 	}
 	if event.ID != 7 || event.Time() != 42 || event.HandlerID() != "h" || !event.IsSecondary() {
-		t.Fatalf("legacy event fields changed: %+v", event)
+		t.Fatalf("unexpected event fields: %+v", event)
 	}
 	encoded, err := json.Marshal(event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(encoded) != legacy {
-		t.Fatalf("event JSON = %s, want %s", encoded, legacy)
+	if string(encoded) != wantJSON {
+		t.Fatalf("event JSON = %s, want %s", encoded, wantJSON)
 	}
 }
