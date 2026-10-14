@@ -4,6 +4,7 @@ package sqlitepath
 import (
 	"net/url"
 	"path/filepath"
+	"strings"
 )
 
 // URI preserves filename characters that a raw DSN would interpret as options.
@@ -13,5 +14,14 @@ func URI(filename, mode string) string {
 	if err != nil {
 		panic(err)
 	}
-	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolute), RawQuery: "mode=" + mode}).String()
+	return fileURI(filepath.ToSlash(absolute), mode)
+}
+
+func fileURI(absolute, mode string) string {
+	// Drive-letter paths need a leading slash so the drive is a path segment,
+	// not the authority in file://C:/... . Unix and UNC paths already have it.
+	if !strings.HasPrefix(absolute, "/") {
+		absolute = "/" + absolute
+	}
+	return (&url.URL{Scheme: "file", Path: absolute, RawQuery: "mode=" + mode}).String()
 }

@@ -51,8 +51,10 @@ type Monitor struct {
 	port       int
 	engine     timing.Engine
 	simulation timing.Simulation
-	visTracer  *tracing.DBTracer
-	tracePath  string
+	// Execution uses Simulation.Run; the engine provides timing and controls.
+	runSimulation func() error
+	visTracer     *tracing.DBTracer
+	tracePath     string
 
 	// Internal state.
 	started          bool
@@ -85,6 +87,7 @@ func (m *Monitor) Start(s *sim.Simulation) {
 	}
 	m.started = true
 	m.simulation = s
+	m.runSimulation = s.Run
 	m.engine = s.Engine()
 	m.visTracer = s.VisTracer()
 	m.tracePath = s.TraceDBPath()
@@ -423,7 +426,7 @@ func (m *Monitor) now(w http.ResponseWriter, r *http.Request) {
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	go func() {
-		err := m.engine.Run()
+		err := m.runSimulation()
 		if err != nil {
 			log.Printf("simulation run failed: %v", err)
 		}
