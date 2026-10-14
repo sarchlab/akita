@@ -28,5 +28,5 @@ a blocking condition resolves. A task has one location and an optional parent.
 Observers receive the complete basic record on both start and end, with end time
 filled at completion; they choose what events to retain.
 
-Run [examples/tracing](../../../examples/tracing) for busy and average time, or
-read the [full task contracts](../../../sim/tasks/README.md).
+Run [examples/tracing](https://github.com/sarchlab/akita/tree/main/examples/tracing) for busy and average time, or
+read the [full task contracts](/packages/tasks/).

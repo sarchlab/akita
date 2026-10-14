@@ -222,7 +222,7 @@ each of them.
   when comparing ID sequences; changing it changes future ID allocation. `Detail`
   and observer history, including earlier tags/milestones, are not restored. Mixed
   tracking settings are supported: off-to-on starts empty, and on-to-off ignores
-  the optional tracker payload. See [task tracking](../../sim/tasks/README.md).
+  the optional tracker payload. See [task tracking](/packages/tasks/).
 - **Take mid-transaction checkpoints with `SerialEngine.RunUntil(t)`**, which
   stops at a reproducible boundary (every event with time ≤ `t`), unlike `Run`
   (drains everything) or `RequestPause` (stops at a non-reproducible point).

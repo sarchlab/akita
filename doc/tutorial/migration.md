@@ -99,8 +99,10 @@ attached. Wire support and non-ideal link timing remain separate changes.
 ## Simulation umbrella and tool names
 
 The runtime packages now live below `sim/`: `naming`, `hooking`,
-`queueing`, `timing`, `messaging`, `modeling`, `tracing`, `datarecording`, and
-`sourcefs`. Change imports such as `github.com/sarchlab/akita/v5/timing` to
+`queueing`, `timing`, `messaging`, `modeling`, `tasks`, and `datarecording`.
+Task observers live in `sim/tasks/tracing`; replace old `sim/tracing` imports
+with `sim/tasks` for task commands and `sim/tasks/tracing` for observers.
+Change imports such as `github.com/sarchlab/akita/v5/timing` to
 `github.com/sarchlab/akita/v5/sim/timing`; apply the same change to
 component-model subpackages and mock-generation directives. The runner also moves from
 `github.com/sarchlab/akita/v5/simulation` to `github.com/sarchlab/akita/v5/sim`;
@@ -126,12 +128,12 @@ bar := monitor.CreateProgressBar("kernels", 100)
 Remove `WithoutMonitoring()` calls; omitting `WithMonitor` disables monitoring.
 Tracing remains independent. Move `WithMonitorPort(port)` configuration to
 `monitoring.NewMonitor().WithPortNumber(port)`. Keep the concrete `monitor`
-variable for progress bars; `s.Monitor()` exposes the small `sim.Monitor`
-interface, or nil when monitoring is disabled.
+variable for progress bars and other monitor-specific operations.
 
 Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
-`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` to bind the
-initialized simulation and start the server, then `Stop()` during termination.
+`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` during
+`Build` to bind the simulation and start the server, then `Stop()` during termination. Component
+State and Middlewares are created later by `Initialize`.
 A monitor can be started only once, even after stopping, and progress bars must
 be created after startup.
 
@@ -148,7 +150,7 @@ memaccessagent.SetProgressTrackers(agent,
 )
 ```
 
-Call this after building a fresh agent and before running. Either tracker can
+Call this after initializing a fresh agent and before running. Either tracker can
 be nil to disable reporting for that operation. After checkpoint restoration,
 initialize fresh trackers for both remaining and already in-flight requests.
 
@@ -162,13 +164,13 @@ initialize fresh trackers for both remaining and already in-flight requests.
 2. [uint64 Entity IDs](#2-uint64-entity-ids)
 3. [Unified Control Protocol](#3-unified-control-protocol)
 4. [Event Serialization: Handler() → HandlerID()](#4-event-serialization-handler--handlerid)
-5. [In-Place State Update](#5-in-place-state-update)
+5. [Single-State Update](#5-single-state-update)
 6. [Component Models: Five Structs + Definition](#6-component-model)
 7. [DRAM Improvements](#7-dram-improvements)
 8. [Port Creation API](#8-port-creation-api)
-9. [Queueing V5](#9-queueing-v5)
-10. [CLI Changes](#10-cli-changes)
-11. [CI Migration](#11-ci-migration)
+9. [Queueing](#9-queueing)
+10. [CLI Limitations](#10-cli-limitations)
+11. [CI Validation](#11-ci-validation)
 
 ---
 
@@ -296,7 +298,7 @@ case ReadReq:
 
 `Msg` contains `ID`, `Src`, `Dst`, `TrafficClass`, `TrafficBytes`, `RspTo`, and
 `Payload`. `msg.IsRsp()` means `msg.RspTo != 0`. The earlier `MsgMeta` type and
-`Meta()` method are removed. Tracing task IDs live in component transaction State and port buffer entries; see the tracing migration in [V5 release notes](../release-notes-v5.md#tracing-task-ownership).
+`Meta()` method are removed. Tracing task IDs live in component transaction State and port buffer entries; see the tracing migration in [V5 release notes](https://github.com/sarchlab/akita/blob/main/doc/release-notes-v5.md#simulation-scoped-task-tracking).
 
 Payloads must be registered values, including in examples that never checkpoint.
 Pointer prototypes and pointer/interface/channel/function/unsafe-pointer fields
@@ -342,9 +344,10 @@ package builders accept the shared `timing.Simulation` interface. A component
 keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
-all builders. A custom tracing domain (`tracing.NamedHookable`) implements
-`NewID() uint64` from its simulation. Monitors receive the simulation through `Start(s)`
-so progress IDs come from the same counter.
+all builders. A custom task owner implements `tasks.Owner`: `Name`,
+`CurrentTime`, `NewID`, and `TaskTracker`, all backed by the same simulation.
+Tracking does not require a hook interface. Monitors receive the simulation
+through `Start(s)` so progress IDs come from the same counter.
 
 ### Before / After
 
@@ -604,20 +607,21 @@ evt := timing.MakeEventBase(sim.NewID(), now, "MyComponent") // pass handler nam
 
 ## 5. Single-State Update
 
-**Motivation:** V4 used a double-buffered model where `current` and `next`
-were deep copies. This was expensive and error-prone. V5 simplifies to
-one mutable state value per component.
+**Motivation:** An earlier V5 pre-release used a double-buffered model with
+deep copies of `current` and `next`. That pre-release design was expensive and
+error-prone; it was not the V4 component model. V5 now uses one mutable State
+value per component. The cleanup below applies to code using that pre-release
+design; V4 components should follow the component-model migration in section 6.
 
 ### V5 Dispatch
 
 A V5 component hands each event it receives to its middlewares, which mutate
-its one State in place. From `v5/modeling/ticking/component.go`:
+its one State in place. The dispatch logic in
+`sim/modeling/ticking/component.go` includes:
 
 ```go
-func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
-    if base.Dispatch(c.pipeline, e) {
-        c.ticks.TickLater()
-    }
+if base.Dispatch(c.pipeline, e) {
+    c.ticks.TickLater()
 }
 ```
 
@@ -642,16 +646,9 @@ own code writes it.
 
 ### Before / After
 
-**Before (V4) — deep copy double buffer:**
-```go
-// V4: current and next were separate deep copies.
-// Reading current gave the pre-tick snapshot.
-// Writing next didn't affect current until commit.
-state := comp.State     // snapshot from start of tick
-next := &comp.State  // separate copy
-next.Value = state.Value + 1 // must read from state, write to next
-comp.CommitNextState()        // deep copy next → current
-```
+The pre-release double-buffered design required reading the old state,
+writing a separate next state, and committing it after each tick. Remove that
+copy/commit machinery when migrating pre-release components.
 
 **After (V5) — single-state update:**
 ```go
@@ -1164,23 +1161,26 @@ This aligns with V5 principles: `State` fields are value types with `json` tags,
 
 ---
 
-## 10. CLI Changes
+## 10. CLI Limitations
 
-- Command rename: `akita check [path]` → `akita component-lint [path]`.
-  - Usage: `akita component-lint .`, `akita component-lint ./...`, `akita component-lint -r mem/`
-  - Directories without `//akita:component` are reported as `not a component` and do not fail.
-- New scaffolding: `akita component-create <path>` replaces `component --create`.
-  - Example: `akita component-create mem/newcontroller`
-  - Must run inside the Akita Git repository.
+The current CLI has `akita component --create` and `akita check`, but both
+still target the legacy builder-based component layout. Their generated code
+and validation rules do not support the V5 component models. There are no
+`akita component-lint` or `akita component-create` commands.
+
+For V5, follow the [component tutorial](components/01_what_is_a_component.md),
+use a package-level `Definition`, and add the appropriate
+`modelingtest.CheckTicking`, `CheckWakeup`, or `CheckEvent` test. The `inspect`
+package reads component definitions without constructing a simulation.
 
 ---
 
-## 11. CI Migration
+## 11. CI Validation
 
-The CI pipeline now uses **self-hosted runners** instead of GitHub-hosted runners. All jobs in `.github/workflows/akita_test.yml` specify `runs-on: self-hosted`.
-
-Key points:
-- All workflow jobs (compile, lint, unit test, acceptance tests) run on self-hosted infrastructure.
-- The workflow triggers on both `push` and `pull_request` events.
-- Mock generation (`go generate ./...`) and builds operate from the `v5/` directory.
-- No changes to test commands are needed — only the runner target has changed.
+`.github/workflows/akita_test.yml` runs on pushes to `main` and on pull requests.
+It builds and tests the Go packages, generates mocks, runs lint and memory/NoC
+acceptance tests, validates DRAM, and builds/tests the Daisen and monitoring
+frontends. It also installs the locked `doc-site` dependencies and builds the
+site with broken-link and anchor checks enabled. Commands run from the
+repository root or their explicit working directory; there is no `v5/`
+subdirectory. Runner selection is recorded in the workflow.

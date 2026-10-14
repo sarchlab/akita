@@ -86,6 +86,12 @@ Resource means the system builder, not the component, chooses the seed.
 Because Resources are references rather than data, they may hold pointers
 and interfaces.
 
+Resources are not saved with component State. This walker uses `*rand.Rand`
+for a repeatable fresh run, but does not checkpoint its generator position and
+cannot resume the same random walk from a checkpoint. A checkpointable model
+must save serializable RNG state in State or in a registered checkpointable
+resource; choosing the same seed again is not sufficient.
+
 A component that references no shared objects puts `modeling.None` in the
 Resources slot instead of declaring an empty struct — the components in the
 next section do.

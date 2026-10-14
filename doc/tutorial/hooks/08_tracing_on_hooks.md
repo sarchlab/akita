@@ -15,4 +15,4 @@ Generic port hooks remain available. They carry the affected message in Item,
 with nil Detail. Hooks execute under the port lock: do not call Peek, Retrieve,
 Send, or count methods from a callback. The locking order is port, tracker,
 observer. Task observers must not re-enter either earlier layer. See the
-[task guide](../../../sim/tasks/README.md) for concurrency and subscription scope.
+[task guide](/packages/tasks/) for concurrency and subscription scope.

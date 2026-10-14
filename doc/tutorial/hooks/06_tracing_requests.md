@@ -36,7 +36,7 @@ it receives the complete basic task record, including both times, without
 having to save every start. Callbacks may be concurrent for different tasks
 and must not re-enter the Tracker or port buffer operations.
 
-See the runnable [request example](../../../examples/reqtracing),
-[task tree](../../../examples/tasktree), and [custom observer](../../../examples/customtracer).
-The [task API guide](../../../sim/tasks/README.md) covers buffer admission,
+See the runnable [request example](https://github.com/sarchlab/akita/tree/main/examples/reqtracing),
+[task tree](https://github.com/sarchlab/akita/tree/main/examples/tasktree), and [custom observer](https://github.com/sarchlab/akita/tree/main/examples/customtracer).
+The [task API guide](/packages/tasks/) covers buffer admission,
 subscription scope, recording windows, and checkpoint restoration and history limits.

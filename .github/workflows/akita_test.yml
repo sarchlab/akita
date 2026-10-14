@@ -6,6 +6,24 @@ on:
   pull_request:
 
 jobs:
+  doc_site_build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: doc-site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: doc-site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          DOCS_BASE_URL: /${{ github.event.repository.name }}/
+
   # Keep required check IDs stable; branch protection uses these names.
   daisen2_compile:
     runs-on: ubuntu-latest

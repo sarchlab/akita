@@ -65,11 +65,10 @@ A few things to notice:
 - The middleware holds a reference to the component (`m.comp`) so it can
   read `Spec` and `Resources`, mutate `State`, and call
   `CurrentTime()`. That is the whole API surface for a minimal component.
-- It holds **nothing else**. A middleware keeps only references;
-  everything that changes during the run lives in `State`, because only
-  `State` is saved in checkpoints. Even the random source is not a
-  middleware field: it arrives through `Resources`, supplied by the system
-  builder.
+- It holds **nothing else**. A middleware keeps only references. Component
+  data that must survive checkpoint/restore belongs in `State`. The random
+  source arrives through `Resources`; its mutable generator position is not
+  checkpointed, so this introductory example supports fresh runs only.
 - The event argument is the tick, a `ticking.Event`. A ticking
   middleware usually does its cycle of work without looking at it, so the
   walker names it `_`. (In the other two component models the same method

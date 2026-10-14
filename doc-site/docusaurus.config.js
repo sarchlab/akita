@@ -17,8 +17,8 @@ const config = {
   organizationName: 'sarchlab',
   projectName: 'akita',
 
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   i18n: {
     defaultLocale: 'en',
@@ -27,6 +27,9 @@ const config = {
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 
@@ -93,7 +96,7 @@ const config = {
         routeBasePath: pkg === 'sim' ? 'packages' : `packages/${pkg}`,
         sidebarPath: `./sidebars/${pkg}.js`,
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
-        include: ['**/README.md'],
+        include: ['**/README.md', '**/CONTROL.md', '**/CONTROL_PROTOCOL.md', '**/ROADMAP.md'],
         exclude: ['**/node_modules/**', '**/static/**'],
       }),
     ]),
