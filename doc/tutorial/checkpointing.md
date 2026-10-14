@@ -225,7 +225,7 @@ each of them.
   the optional tracker payload. See [task tracking](../../sim/tasks/README.md).
 - **Take mid-transaction checkpoints with `SerialEngine.RunUntil(t)`**, which
   stops at a reproducible boundary (every event with time ≤ `t`), unlike `Run`
-  (drains everything) or `Pause` (stops at a non-reproducible point).
+  (drains everything) or `RequestPause` (stops at a non-reproducible point).
 
 ## Testing your types
 

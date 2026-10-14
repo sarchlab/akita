@@ -107,7 +107,7 @@ func (e *SerialEngine) Run() (err error) {
 // or the queue empties. Events at times <= t scheduled while running (including
 // newly scheduled ones) are processed; the engine stops with its time at the
 // last processed event and all later events still queued. This is a
-// deterministic mid-run boundary — unlike Pause, which stops at a
+// deterministic mid-run boundary — unlike RequestPause, which stops at a
 // non-reproducible point — used to take a mid-transaction checkpoint.
 func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 	if e.runGuard != nil {

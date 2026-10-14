@@ -56,7 +56,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 				component.State.Values[1] = 40
 			}))
 			e.Schedule(timing.EventBase{At: 1, Handler: "model"})
-			if err := e.Pause(); err != nil {
+			if err := e.RequestPause().Wait(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			runDone := make(chan error, 1)
@@ -72,7 +72,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 				close(requestDone)
 			}()
 			waitInspection(t, writer.writing)
-			if !e.IsPaused() {
+			if !e.State().IsPaused() {
 				t.Fatal("inspection resumed the user's paused engine")
 			}
 			if err := e.Continue(); err != nil {
@@ -105,7 +105,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 
 func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 	e := timing.NewSerialEngine()
-	if err := e.Pause(); err != nil {
+	if err := e.RequestPause().Wait(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	s := modeling.NewStandaloneSimulation(e)

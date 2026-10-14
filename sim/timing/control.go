@@ -18,6 +18,13 @@ const (
 	EngineResuming                    // A continue is queued; dispatch remains paused.
 )
 
+// IsPaused reports whether dispatch is paused. It returns true for EnginePaused,
+// where a pause has been acknowledged, and EngineResuming, where a queued
+// continue has not taken effect yet. EnginePausing is not yet paused.
+func (s EngineState) IsPaused() bool {
+	return s == EnginePaused || s == EngineResuming
+}
+
 func (s EngineState) String() string {
 	switch s {
 	case EngineRunning:
@@ -36,6 +43,11 @@ func (s EngineState) String() string {
 // PauseRequest acknowledges a requested pause once execution reaches a boundary.
 // Multiple callers may Wait. Cancellation stops waiting, not the pause request.
 type PauseRequest interface {
+	// Wait waits for pause acknowledgment or ctx cancellation and returns any
+	// engine failure or context error. Call it outside handlers and hooks:
+	// acknowledgment needs the current event or batch and its hooks to finish.
+	// Cancelling the wait does not cancel the pause request. Multiple callers
+	// may wait on the same request, including after acknowledgment.
 	Wait(context.Context) error
 }
 
@@ -90,30 +102,25 @@ func newEngineControl() *engineControl {
 }
 
 // RequestPause requests a pause without waiting for the current event or batch.
-// Handlers and hooks may call it, but must return before waiting on the result.
+// Handlers and hooks may call it; Wait must be called outside those callbacks,
+// because acknowledgment requires them to finish. Repeated requests are
+// idempotent, and the pause persists until Continue.
 func (c *engineControl) RequestPause() PauseRequest {
 	return c.submit(controlRequest{kind: controlPause})
 }
 
-// Pause requests and waits for a pause. Use RequestPause from handlers/hooks or
-// when a cancellable wait is needed. Repeated pauses are idempotent.
-func (c *engineControl) Pause() error {
-	return c.RequestPause().Wait(context.Background())
-}
-
-// Continue resumes event dispatch. It is idempotent and is for external callers.
+// Continue waits for permission to resume dispatch, not for an event to run.
+// Call it outside handlers and hooks. Requests are applied in enqueue order;
+// repeated calls are idempotent.
 func (c *engineControl) Continue() error {
 	return c.submit(controlRequest{kind: controlContinue}).Wait(context.Background())
 }
 
-// IsPaused reports the last acknowledged pause state. It is safe during Run.
-func (c *engineControl) IsPaused() bool {
-	state := c.State()
-	return state == EnginePaused || state == EngineResuming
-}
-
 // State reports the acknowledged state and the next queued transition. It is
 // safe during Run and does not wait for an event, batch, or inspection callback.
+// The states are EngineRunning, EnginePausing, EnginePaused, and EngineResuming;
+// they do not report whether Run is active or failed. Use EngineState.IsPaused
+// to check whether dispatch is still paused.
 func (c *engineControl) State() EngineState { return EngineState(c.state.Load()) }
 
 // Inspect runs a read-only callback between events (between joined batches in a

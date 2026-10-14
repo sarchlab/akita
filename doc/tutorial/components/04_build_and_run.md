@@ -101,6 +101,60 @@ and the component schedules its next tick automatically — you only call
 `TickLater` once to start it (and again later if the component went idle
 and now has work to do).
 
+## Pausing from Another Goroutine
+
+To control a running simulation, run the engine in one goroutine and request a
+pause from another. After initialization and `walker.TickLater()`, the following
+can replace the synchronous `Run` and `Terminate` calls above. It uses `context`,
+`fmt`, and `time` from the standard library.
+
+```go
+engine := s.Engine()
+runDone := make(chan error, 1)
+go func() { runDone <- engine.Run() }()
+
+// This controller runs outside the engine's handlers and hooks.
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+if err := engine.RequestPause().Wait(ctx); err != nil {
+    panic(err)
+}
+
+var now timing.VTimeInPicoSec
+if err := engine.Inspect(ctx, func() error {
+    now = engine.CurrentTime()
+    return nil
+}); err != nil {
+    panic(err)
+}
+fmt.Printf("Paused at %d ps\n", now)
+
+if err := engine.Continue(); err != nil {
+    panic(err)
+}
+if err := <-runDone; err != nil {
+    panic(err)
+}
+s.Terminate()
+```
+
+The pause is acknowledged after the current event and hooks finish, or after all
+workers and hooks in the current parallel batch finish. A fast run may finish
+before the request arrives; the pause then applies to the idle engine and
+persists until `Continue`. It does not select a deterministic virtual time.
+
+Handlers and hooks may call `RequestPause`, but **must not call `Wait`**:
+acknowledgment needs that callback to finish first. Send the returned request to
+an external controller if the pause originates in a callback. Cancelling a wait
+stops waiting; it does not undo the pause request.
+
+Use `Inspect` to copy state at an execution boundary. A pause does not grant
+exclusive ownership of model state if another controller can call `Continue`.
+`engine.State().IsPaused()` reports true for both `EnginePaused` and
+`EngineResuming`, because a queued continue has not taken effect yet. Call
+`Continue` outside handlers and hooks as well; it waits for dispatch permission,
+not for an event to execute.
+
 ## Reading the Output
 
 ```

@@ -65,9 +65,7 @@ type Engine interface {
     EventScheduler
     Run() error
     RequestPause() PauseRequest
-    Pause() error
     Continue() error
-    IsPaused() bool
     State() EngineState
     Inspect(context.Context, func() error) error
 }

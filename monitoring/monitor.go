@@ -397,7 +397,7 @@ func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
 func (m *Monitor) engineStateResponse() engineStateRsp {
 	state := m.engine.State()
 	return engineStateRsp{
-		State: state.String(), Paused: state == timing.EnginePaused || state == timing.EngineResuming,
+		State: state.String(), Paused: state.IsPaused(),
 	}
 }
 
