@@ -25,8 +25,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type fakeEngine struct {
@@ -74,8 +74,6 @@ func (e *fakeEngine) RequestPause() timing.PauseRequest {
 	return e.controls().RequestPause()
 }
 
-func (e *fakeEngine) Pause() error { return e.RequestPause().Wait(context.Background()) }
-
 func (e *fakeEngine) Continue() error {
 	e.mu.Lock()
 	e.continueCalls++
@@ -84,8 +82,6 @@ func (e *fakeEngine) Continue() error {
 }
 
 func (e *fakeEngine) State() timing.EngineState { return e.controls().State() }
-
-func (e *fakeEngine) IsPaused() bool { return e.controls().IsPaused() }
 
 func (e *fakeEngine) Inspect(ctx context.Context, fn func() error) error {
 	return e.controls().Inspect(ctx, fn)

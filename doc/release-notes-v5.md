@@ -1,5 +1,28 @@
 # V5 release notes
 
+## Engine pause API
+
+`timing.Engine`, `SerialEngine`, and `ParallelEngine` remove `Pause` and
+`IsPaused`. The control surface is `RequestPause`, `Continue`, `State`, and
+`Inspect`.
+
+- Replace `Pause()` with `RequestPause().Wait(ctx)` and handle the returned error.
+  Use a context appropriate to the caller, such as an HTTP request's context.
+- Replace the engine's `IsPaused` method with `engine.State().IsPaused()`.
+  `EngineState.IsPaused` is true for `EnginePaused` and `EngineResuming`: a
+  queued continue has not taken effect yet. It is false for `EnginePausing`.
+
+Handlers and hooks may call `RequestPause`, but must not call `Wait`:
+acknowledgment needs the current event or parallel batch and its hooks to finish.
+Wait from another goroutine. Cancelling the wait does not cancel the request.
+
+For MGPUSim's `amd/driver/driver.go`, migrate
+`Pause(); TickLater(); Continue()` to
+`RequestPause().Wait(ctx); TickLater(); Continue()`. Handle the wait error before
+calling `TickLater` or `Continue`, and keep this sequence outside handlers and
+hooks. Continue also returns an error that must be handled. MGPUSim source
+changes follow separately.
+
 ## Simulation package migration
 
 Runtime packages are now under `sim/`; `simulation`, `monitoring2`, and

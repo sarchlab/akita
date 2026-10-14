@@ -22,24 +22,26 @@ if err := request.Wait(ctx); err != nil {
 // The pause was acknowledged at a boundary. It persists until Continue.
 ```
 
-`Pause() error` is shorthand for requesting a pause and waiting without a
-deadline. `Continue() error` acknowledges resumption permission; it does not wait
-for an event to execute. These blocking methods are for external controllers.
+Use `engine.RequestPause().Wait(ctx)` to request and wait for a pause with the
+controller's context. `Continue() error` acknowledges resumption permission; it
+does not wait for an event to execute. Call Wait and Continue outside handlers
+and hooks: acknowledgment needs the current callback to finish first.
 Repeated pause/continue requests are idempotent, not nested lock acquisitions.
 Requests are applied in enqueue order. A concurrent Continue may therefore resume
 an acknowledged pause; callers must use Inspect rather than assume a pause gives
 them exclusive ownership of live model state.
 
-`IsPaused()` is safe to call concurrently and reports acknowledged state. A
-pending request alone does not make it true. Cancelling PauseRequest.Wait stops
+`engine.State().IsPaused()` is safe to call concurrently and reports acknowledged
+state. A pending request alone does not make it true. Cancelling PauseRequest.Wait stops
 that wait; it does not cancel or undo the pause. A request can be waited on more
 than once.
 
 `State()` reports `EngineRunning`, `EnginePausing`, `EnginePaused`, or
 `EngineResuming`. A queued pause reports pausing until a boundary acknowledges it;
-a queued continue reports resuming while dispatch is still paused. IsPaused is
-true for paused and resuming. If opposing requests are queued, State reports the
-first transition that changes the acknowledged state, in enqueue order. Repeated
+a queued continue reports resuming while dispatch is still paused.
+`EngineState.IsPaused()` is true for paused and resuming. If opposing requests are
+queued, State reports the first transition that changes the acknowledged state,
+in enqueue order. Repeated
 requests and inspection alone do not introduce transitions. State reads do not
 wait for events or inspection callbacks. Requests waiting to acquire the control
 mutex have not been enqueued and do not yet change State.
@@ -100,10 +102,12 @@ Control requests cannot forcibly interrupt a nonreturning handler or callback.
 
 ## Migration and cost
 
-Pause and Continue now return errors. Custom Engine implementations must also
-provide RequestPause, IsPaused, State, and Inspect. Mock generation picks up these
-methods. Existing scheduling and checkpoint interfaces are unchanged; control
-requests and pause state are not serialized into checkpoints.
+The engine control surface is RequestPause, Continue, State, and Inspect.
+The former Pause method is replaced by `RequestPause().Wait(ctx)`; handle its
+error. The former engine IsPaused method is replaced by `State().IsPaused()`.
+Custom Engine implementations provide the four control methods; mock generation
+picks them up. Existing scheduling and checkpoint interfaces are unchanged;
+control requests and pause state are not serialized into checkpoints.
 
 The ordinary serial event path checks one atomic pending flag. The control mutex
 is used for requests, boundary work, and run start/end, never around each event.

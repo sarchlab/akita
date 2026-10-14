@@ -37,19 +37,21 @@ type Engine interface {
 	// Run will process all the events until the simulation finishes.
 	Run() error
 
-	// RequestPause is safe in handlers; wait for its acknowledgment externally.
+	// RequestPause requests a pause without waiting for the current event or
+	// parallel batch and its hooks to finish. Handlers and hooks may request a
+	// pause, but PauseRequest.Wait must be called outside those callbacks.
+	// Repeated requests are idempotent; a pause persists until Continue.
 	RequestPause() PauseRequest
 
-	// Pause waits for the current event/batch and hooks to finish.
-	Pause() error
-
-	// Continue resumes dispatch; repeated calls are harmless.
+	// Continue waits for permission to resume dispatch, not for an event to run.
+	// Call it outside handlers and hooks. Requests are applied in enqueue order;
+	// repeated calls are idempotent.
 	Continue() error
 
-	// IsPaused reports acknowledged state, including pauses requested by handlers.
-	IsPaused() bool
-
-	// State reports running, pausing, paused, or resuming without blocking.
+	// State reports dispatch permission and the next queued transition without
+	// blocking: EngineRunning, EnginePausing, EnginePaused, or EngineResuming.
+	// It is safe during Run, but does not report whether Run is active or failed.
+	// Use EngineState.IsPaused to check whether dispatch is still paused.
 	State() EngineState
 
 	// Inspect copies/serializes state at a boundary without changing pause state.

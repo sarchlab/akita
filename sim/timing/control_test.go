@@ -22,7 +22,7 @@ func controlEngines(t *testing.T, test func(*testing.T, testEngine)) {
 
 func controlContext(t *testing.T) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	t.Cleanup(cancel)
 	return ctx
 }
@@ -80,6 +80,25 @@ func startControlRun(e Engine) <-chan error {
 	return done
 }
 
+func TestEngineStateIsPaused(t *testing.T) {
+	for _, tc := range []struct {
+		state  EngineState
+		paused bool
+	}{
+		{EngineRunning, false},
+		{EnginePausing, false},
+		{EnginePaused, true},
+		{EngineResuming, true},
+		{EngineState(99), false},
+	} {
+		t.Run(tc.state.String(), func(t *testing.T) {
+			if got := tc.state.IsPaused(); got != tc.paused {
+				t.Fatalf("state %s: paused=%v, want %v", tc.state, got, tc.paused)
+			}
+		})
+	}
+}
+
 func TestPauseAcknowledgesAfterHooksAndServesInspection(t *testing.T) {
 	controlEngines(t, func(t *testing.T, e testEngine) {
 		t.Helper()
@@ -110,7 +129,7 @@ func TestPauseAcknowledgesAfterHooksAndServesInspection(t *testing.T) {
 			t.Fatal("pause acknowledged inside handler")
 		default:
 		}
-		if e.State() != EnginePausing || e.IsPaused() {
+		if e.State() != EnginePausing || e.State().IsPaused() {
 			t.Fatal("pending pause must report pausing without acknowledgment")
 		}
 		close(release)
@@ -125,10 +144,10 @@ func TestPauseAcknowledgesAfterHooksAndServesInspection(t *testing.T) {
 		if err := pause.Wait(ctx); err != nil {
 			t.Fatal("acknowledgment is not reusable", err)
 		}
-		if !e.IsPaused() {
+		if !e.State().IsPaused() {
 			t.Fatal("pause was not recorded")
 		}
-		requireControlSuccess(t, e.Pause())
+		requireControlSuccess(t, e.RequestPause().Wait(ctx))
 		assertPausedSnapshot(t, e, &events)
 		requireControlSuccess(t, e.Continue())
 		requireControlSuccess(t, receiveControl(t, done))
@@ -156,7 +175,7 @@ func TestHandlerCanRequestPause(t *testing.T) {
 		if err := receiveControl(t, ticket).Wait(controlContext(t)); err != nil {
 			t.Fatal(err)
 		}
-		if e.State() != EnginePaused || !e.IsPaused() {
+		if e.State() != EnginePaused || !e.State().IsPaused() {
 			t.Fatal("handler pause was lost")
 		}
 		if err := e.Continue(); err != nil {
@@ -200,7 +219,7 @@ func TestInspectionWaitsForConsistentState(t *testing.T) {
 		if err := receiveControl(t, done); err != nil {
 			t.Fatal(err)
 		}
-		if e.IsPaused() {
+		if e.State().IsPaused() {
 			t.Fatal("inspection changed pause state")
 		}
 		t.Log("inspection observed both completed field updates, even when the last event ended Run")
@@ -229,7 +248,7 @@ func TestFailedRunSettlesPendingControls(t *testing.T) {
 		if pause.Wait(ctx) != err || receiveControl(t, inspected) != err || e.Continue() != err {
 			t.Fatal("pending control lost run failure")
 		}
-		if e.IsPaused() {
+		if e.State().IsPaused() {
 			t.Fatal("failed engine reported paused")
 		}
 	})
@@ -262,7 +281,7 @@ func TestCancelledInspectionAndPauseWait(t *testing.T) {
 		if err := pause.Wait(controlContext(t)); err != nil {
 			t.Fatal(err)
 		}
-		if !e.IsPaused() {
+		if !e.State().IsPaused() {
 			t.Fatal("cancelling a wait cancelled the pause request")
 		}
 		if err := e.Continue(); err != nil {
@@ -324,7 +343,7 @@ func TestRunUntilSettlesControlsAtLimit(t *testing.T) {
 	if err := ticket.Wait(controlContext(t)); err != nil {
 		t.Fatal(err)
 	}
-	if !e.IsPaused() {
+	if !e.State().IsPaused() {
 		t.Fatal("RunUntil lost pending pause at its time limit")
 	}
 	if err := e.Inspect(controlContext(t), func() error {
@@ -419,7 +438,7 @@ func assertPausedSnapshot(t *testing.T, e Engine, events *int) {
 		}
 		return nil
 	}))
-	if !e.IsPaused() {
+	if !e.State().IsPaused() {
 		t.Fatal("inspection resumed a paused engine")
 	}
 }
@@ -450,7 +469,7 @@ func TestEngineReportsQueuedTransitionsInOrder(t *testing.T) {
 		continued := make(chan error, 1)
 		go func() { continued <- e.Continue() }()
 		awaitControlKind(t, e, controlContinue)
-		if e.State() != EnginePausing || e.IsPaused() {
+		if e.State() != EnginePausing || e.State().IsPaused() {
 			t.Fatal("a later Continue hid the pending pause")
 		}
 		close(release)
@@ -461,7 +480,7 @@ func TestEngineReportsQueuedTransitionsInOrder(t *testing.T) {
 		if err := duplicatePause.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if e.State() != EngineResuming || !e.IsPaused() {
+		if e.State() != EngineResuming || !e.State().IsPaused() {
 			t.Fatal("Continue must report resuming while dispatch is still paused")
 		}
 		select {
@@ -479,7 +498,7 @@ func TestEngineReportsQueuedTransitionsInOrder(t *testing.T) {
 		if err := receiveControl(t, done); err != nil {
 			t.Fatal(err)
 		}
-		if e.State() != EngineRunning || e.IsPaused() {
+		if e.State() != EngineRunning || e.State().IsPaused() {
 			t.Fatal("acknowledged Continue did not report running")
 		}
 		t.Log("pausing during event; resuming during boundary inspection with paused=true; " +

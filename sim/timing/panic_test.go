@@ -174,7 +174,7 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 	if !errors.As(err, &failure) || failure.Cause != "dispatcher failure" || !joined.Load() {
 		t.Fatalf("dispatcher did not contain panic and join worker: %v joined=%v", err, joined.Load())
 	}
-	if got := finishRun(t, e.Pause); got != err {
+	if got := finishRun(t, func() error { return e.RequestPause().Wait(t.Context()) }); got != err {
 		t.Fatalf("control request after failed run: %v", got)
 	}
 	t.Log("dispatcher failure released and joined a worker blocked in Schedule")
