@@ -79,5 +79,5 @@ index advances by one each tick, ensuring no port is permanently starved.
 
 - No bandwidth modeling — all pending messages are forwarded each tick.
 - No latency modeling beyond the tick granularity.
-- `noc/networking` adds switch pipelines, routing, and contention while using
+- The `noc` packages add switch pipelines, routing, and contention while using
   ideal direct links. Finite link bandwidth and latency are separate future work.
