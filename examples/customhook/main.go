@@ -12,8 +12,9 @@ import (
 	"fmt"
 	"math/rand"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -108,8 +109,8 @@ func (h *stepLogger) Func(ctx hooking.HookCtx) {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	walker := Definition.Builder().
 		WithSimulation(sim).

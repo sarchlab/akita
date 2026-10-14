@@ -119,8 +119,8 @@ case pingReq:
 ### Wiring
 
 ```go
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+sim := sim.MakeBuilder().Build()
+engine := sim.Engine()
 
 agentA := ping.Definition.Builder().
     WithSimulation(sim).

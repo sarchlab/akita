@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -13,15 +14,17 @@ import (
 // statically.
 var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
-		Freq:           1 * timing.GHz,
-		NumReqPerCycle: 4,
-		NumSets:        1,
-		NumWays:        32,
-		Log2PageSize:   12,
-		MSHRSize:       4,
-		Latency:        4,
+		TranslationMapperType: mem.AddressMapperSingle,
+		Freq:                  1 * timing.GHz,
+		NumReqPerCycle:        4,
+		NumSets:               1,
+		NumWays:               32,
+		Log2PageSize:          12,
+		MSHRSize:              4,
+		Latency:               4,
 	},
 	NewState:       newState,
+	ValidateSpec:   validateSpec,
 	NewMiddlewares: newMiddlewares,
 }
 
@@ -42,6 +45,10 @@ func newState(c *Comp) state {
 func newMiddlewares(c *Comp) middlewares {
 	return middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
-		TLB:  &tlbMiddleware{comp: c},
+		TLB:  &tlbMiddleware{comp: c, translationProvider: c.Spec.translationMapping().Mapper()},
 	}
+}
+
+func validateSpec(spec Spec) error {
+	return spec.translationMapping().Validate()
 }

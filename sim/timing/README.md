@@ -121,9 +121,11 @@ process-global generator, configuration, and reset functions have been removed.
 A `sim.Simulation` checkpoints its counter automatically. Restore into a
 fresh, stopped simulation; restoring one simulation does not change another
 simulation's counter. Parallel simulation checkpointing remains unsupported.
-Lightweight setups can create `sim := modeling.NewStandaloneSimulation(engine)`
-once and share it with every component builder; such a simulation registers
-nothing and does not support checkpoints.
+All setups use `s := sim.MakeBuilder().Build()` and pass that context to builders.
+It creates no recording by default. Call `s.Initialize()` after wiring, then
+`s.Run()` to check readiness and execute. Direct engine `Run` and serial
+`RunUntil` document the same precondition but perform no readiness check.
+Custom engine injection is deferred to v5.2.
 
 ## Hooks
 

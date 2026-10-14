@@ -29,7 +29,7 @@ Runtime packages are now under `sim/`; `simulation`, `monitoring2`, and
 `daisen2` are renamed to `sim`, `monitoring`, and `daisen`.
 
 **Live monitoring is now opt-in.** Downstream simulators such as MGPUSim must
-supply `WithMonitor(monitoring.NewMonitor())` to retain their monitoring server.
+supply `WithMonitor(monitoring.MakeBuilder().Build())` to retain their monitoring server.
 `Build()` binds and starts the supplied monitor, and `Terminate()` stops it.
 Omitting `WithMonitor` leaves runs headless while tracing remains independent.
 The `WithoutMonitoring` and `WithMonitorPort` options are removed.

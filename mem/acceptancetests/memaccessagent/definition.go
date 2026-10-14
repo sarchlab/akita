@@ -36,8 +36,8 @@ func newState(c *Comp) State {
 }
 
 func newMiddlewares(c *Comp) Middlewares {
-	if c.Resources.LowModule == nil {
-		panic("memaccessagent: Resources.LowModule is required")
+	if c.Spec.LowModule == "" {
+		panic("memaccessagent: Spec.LowModule is required")
 	}
 
 	return Middlewares{

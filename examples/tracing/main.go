@@ -10,6 +10,8 @@ package main
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -98,8 +100,8 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	worker := Definition.Builder().
 		WithSimulation(sim).

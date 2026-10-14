@@ -1,11 +1,13 @@
 package modelingtest
 
 import (
-	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/nofreq"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/flatlinks"
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/nofreq"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
 	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/aliasdef"
@@ -17,6 +19,7 @@ import (
 
 func TestCheckTickingSupportedDeclarations(t *testing.T) {
 	CheckTicking(t, fullcomp.Definition)
+	CheckTicking(t, flatlinks.Definition)
 	CheckTicking(t, scalars.Definition)
 	CheckTicking(t, zerodefaults.Definition)
 	CheckTicking(t, aliasdef.Definition)

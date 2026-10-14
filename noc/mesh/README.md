@@ -1,0 +1,100 @@
+# mesh — 2D/3D Mesh and Torus Network-on-Chip
+
+Package `mesh` provides a connector that builds a mesh (or torus) network
+topology for the Akita simulation framework. Within `noc`, it constructs the
+switches, links, and routing tables that move messages between components laid
+out on a 2D or 3D grid of tiles.
+
+## How It Works
+
+A `Connector` lays out tiles on a grid of up to three dimensions. Each tile
+holds one or more device ports and is backed by a switch. When the network is
+established, the connector:
+
+1. Creates one switch per occupied tile and connects each tile's device ports
+   to its switch.
+2. Wires neighboring switches together with bidirectional links along the
+   left/right (X), top/bottom (Y), and front/back (Z) directions.
+3. Installs a `meshRoutingTable` on every switch that performs
+   dimension-ordered (Z, then Y, then X) routing toward the destination tile.
+
+The configured frequency, flit size, and switch latency affect the network
+components. Links currently use ideal direct connections at the network's
+default frequency: the per-link frequency computed by `WithBandwidth` is
+ignored. `WithBandwidth` still sets link-end buffer sizes and channel counts
+using the rounded-up transfers per cycle, so it can affect buffering and
+congestion, but it does not set the ideal-link frequency. Non-ideal link timing
+is not implemented; see
+[#502](https://github.com/sarchlab/akita/issues/502). 2D meshes are built by
+leaving the third coordinate at `0`.
+
+## Key Types
+
+### Connector
+
+```go
+type Connector struct { /* ... */ }
+
+func MakeBuilder() Builder
+func (b Builder) Build(name string) *Connector
+func (c *Connector) AddTile(loc [3]int, ports []messaging.Port)
+func (c *Connector) EstablishNetwork()
+```
+
+`AddTile` places device ports at grid coordinate `loc` (negative coordinates
+are rejected; calling it twice for the same coordinate merges the ports). The
+grid grows automatically beyond its default `8x8x2` capacity as tiles are
+added. `EstablishNetwork` then creates the switches, links, and routing tables.
+
+The internal `meshRoutingTable` (in `mesh_routing_table.go`) resolves each
+destination port to its tile and returns the next-hop port.
+
+## Builder Pattern
+
+`MakeBuilder` returns a value builder configured with chained `WithX` options:
+
+```go
+connector := mesh.MakeBuilder().
+    WithSimulation(sim).
+    WithFreq(1 * timing.GHz).
+    WithFlitSize(16).
+    WithSwitchLatency(1). // cycles per switch hop
+    Build("Mesh")
+```
+
+### Builder Options
+
+| Method | Description |
+|---|---|
+| `WithSimulation(sim)` | Simulation context (required) |
+| `WithFreq(f)` | Frequency the network runs at |
+| `WithFlitSize(n)` | Flit size in bytes |
+| `WithBandwidth(t)` | Sets link-end buffer sizes and channel counts; does not change ideal-link frequency |
+| `WithSwitchLatency(n)` | Latency in cycles added at each switch |
+
+The connector builds its switches and endpoints with `WithSimulation(sim)`,
+so the simulation's tracer and monitor see each of them.
+
+## Usage
+
+```go
+connector := mesh.MakeBuilder().
+    WithSimulation(sim).
+    WithFreq(1 * timing.GHz).
+    Build("Mesh")
+
+connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.Ports.Net})
+connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.Ports.Net})
+connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.Ports.Net})
+
+connector.EstablishNetwork()
+```
+
+Once established, a message sent from one tile's port with its `Dst` set to a
+port on another tile is routed hop-by-hop across the mesh to its destination.
+
+All `WithX` methods belong to the value `Builder`. `Build(name)` returns a fresh
+`*Connector`; a builder can be reused for independent networks. Derived values
+are computed by `Build`, so setting frequency and bandwidth in either order
+produces the same configuration. Use the connector's assembly methods after
+Build, then call `simulation.Initialize()` after all wiring is complete.

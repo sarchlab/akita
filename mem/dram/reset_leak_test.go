@@ -3,14 +3,14 @@ package dram
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks admits a read into the DRAM controller so
@@ -19,8 +19,7 @@ import (
 // kinds of task are ended — i.e. a mid-flight Reset leaves no
 // started-never-ended task. DRAM is a leaf, so there is no downstream req_out.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	comp := Definition.Builder().
 		WithSimulation(sim).

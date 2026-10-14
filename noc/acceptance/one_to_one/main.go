@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v5/noc/switching/endpoint"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim"

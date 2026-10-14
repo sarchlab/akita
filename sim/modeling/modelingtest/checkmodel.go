@@ -129,6 +129,12 @@ func defaultMismatches(static schema.Definition, runtimeSpec any) map[string]str
 // []any of its elements, and a nil slice an empty one.
 func defaultValue(v reflect.Value) any {
 	switch v.Kind() {
+	case reflect.Struct:
+		record := map[string]any{}
+		for i := range v.NumField() {
+			record[v.Type().Field(i).Name] = defaultValue(v.Field(i))
+		}
+		return record
 	case reflect.Slice, reflect.Array:
 		elems := make([]any, v.Len())
 		for i := range elems {

@@ -3,12 +3,12 @@ package writeback
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type ccNoopConn struct {
@@ -23,8 +23,8 @@ func (c *ccNoopConn) NotifySend()                      {}
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		storage := mem.NewStorage(1 * mem.MB)
 
 		spec := Definition.DefaultSpec
@@ -37,15 +37,12 @@ func TestControlContract(t *testing.T) {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
+		spec.AddressMapperType = "single"
+		spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithResources(Resources{
-				Storage: storage,
-				AddressToPortMapper: &mem.SinglePortMapper{
-					Port: messaging.RemotePort("LowerCache"),
-				},
-			}).
+			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
 		compPorts := makePorts("L1Cache", 4)
 		comp.BindPort("Top", compPorts.Top)

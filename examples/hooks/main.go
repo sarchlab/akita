@@ -10,6 +10,8 @@ package main
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
@@ -175,8 +177,8 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Choose buffer sizes; binding below assigns each port its name.
 	outA := twowaybuffered.NewPort(4, 4)

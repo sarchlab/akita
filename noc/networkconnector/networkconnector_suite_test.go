@@ -1,0 +1,195 @@
+package networkconnector
+
+import (
+	"fmt"
+	"testing"
+
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/timing"
+)
+
+func TestNetworkconnector(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Networkconnector Suite")
+}
+
+var _ = Describe("Connector", func() {
+	It("should establish route in a simple network", func() {
+		sim := akitasim.MakeBuilder().Build()
+		connector := MakeBuilder().
+			WithSimulation(sim).
+			WithFreq(1 * timing.GHz).Build("Network")
+
+		connector.AddSwitch()
+
+		for i := 0; i < 2; i++ {
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
+			connector.ConnectDevice(0, []messaging.Port{port},
+				DeviceToSwitchLinkParameter{
+					DeviceEndParam: LinkEndDeviceParameter{
+						IncomingBufSize: 1,
+						OutgoingBufSize: 1,
+					},
+					SwitchEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					LinkParam: LinkParameter{
+						IsIdeal:       true,
+						Frequency:     1 * timing.GHz,
+						NumStage:      0,
+						CyclePerStage: 0,
+						PipelineWidth: 0,
+					},
+				})
+		}
+
+		connector.EstablishRoute()
+	})
+
+	It("should establish route in a small tree", func() {
+		sim := akitasim.MakeBuilder().Build()
+		connector := MakeBuilder().
+			WithSimulation(sim).
+			WithFreq(1 * timing.GHz).Build("Network")
+
+		for i := 0; i < 3; i++ {
+			connector.AddSwitch()
+		}
+
+		for i := 0; i < 2; i++ {
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
+			connector.ConnectDevice(1+i, []messaging.Port{port},
+				DeviceToSwitchLinkParameter{
+					DeviceEndParam: LinkEndDeviceParameter{
+						IncomingBufSize: 1,
+						OutgoingBufSize: 1,
+					},
+					SwitchEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					LinkParam: LinkParameter{
+						IsIdeal:       true,
+						Frequency:     1 * timing.GHz,
+						NumStage:      0,
+						CyclePerStage: 0,
+						PipelineWidth: 0,
+					},
+				})
+		}
+
+		for i := 1; i < 3; i++ {
+			connector.ConnectSwitches(i, (i-1)/2,
+				SwitchToSwitchLinkParameter{
+					LeftEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					RightEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					LinkParam: LinkParameter{
+						IsIdeal:       true,
+						Frequency:     1 * timing.GHz,
+						NumStage:      0,
+						CyclePerStage: 0,
+						PipelineWidth: 0,
+					},
+				})
+		}
+
+		connector.EstablishRoute()
+	})
+
+	It("should establish route in a large tree", func() {
+		sim := akitasim.MakeBuilder().Build()
+		connector := MakeBuilder().
+			WithSimulation(sim).
+			WithFreq(1 * timing.GHz).Build("Network")
+
+		for i := 0; i < 16; i++ {
+			connector.AddSwitch()
+		}
+
+		for i := 0; i < 8; i++ {
+			port := twowaybuffered.NewPort(1, 1)
+			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
+			connector.ConnectDevice(8+i, []messaging.Port{port},
+				DeviceToSwitchLinkParameter{
+					DeviceEndParam: LinkEndDeviceParameter{
+						IncomingBufSize: 1,
+						OutgoingBufSize: 1,
+					},
+					SwitchEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					LinkParam: LinkParameter{
+						IsIdeal:       true,
+						Frequency:     1 * timing.GHz,
+						NumStage:      0,
+						CyclePerStage: 0,
+						PipelineWidth: 0,
+					},
+				})
+		}
+
+		for i := 1; i < 16; i++ {
+			connector.ConnectSwitches(i, i/2,
+				SwitchToSwitchLinkParameter{
+					LeftEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					RightEndParam: LinkEndSwitchParameter{
+						IncomingBufSize:  1,
+						OutgoingBufSize:  1,
+						NumInputChannel:  1,
+						NumOutputChannel: 1,
+						Latency:          1,
+					},
+					LinkParam: LinkParameter{
+						IsIdeal:       true,
+						Frequency:     1 * timing.GHz,
+						NumStage:      0,
+						CyclePerStage: 0,
+						PipelineWidth: 0,
+					},
+				})
+		}
+
+		connector.EstablishRoute()
+	})
+})
+
+type routeTestOwner struct{}
+
+func (routeTestOwner) NotifyRecv(messaging.Port)     {}
+func (routeTestOwner) NotifyPortFree(messaging.Port) {}

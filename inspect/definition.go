@@ -127,7 +127,7 @@ func applyDefinitionFields(
 		switch key {
 		case "DefaultSpec":
 			defaults, err = evalStructLiteral(pkg, value)
-		case "NewState", "NewMiddlewares":
+		case "NewState", "NewMiddlewares", "ValidateSpec", "ValidateSetup":
 			err = functionRef(pkg, key, value)
 		default:
 			err = posErrorf(pkg, value.Pos(), "unsupported Definition field %q", key)

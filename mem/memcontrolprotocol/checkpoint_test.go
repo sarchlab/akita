@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
@@ -11,9 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // This file is the Layer-3 end-to-end checkpoint-correctness test. It wires
@@ -74,8 +74,8 @@ func (h *cacheOverDRAM) tick() {
 func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	t.Helper()
 
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
@@ -98,15 +98,12 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
+	cacheSpec.AddressMapperType = "single"
+	cacheSpec.RemotePorts = []messaging.RemotePort{dramTop.AsRemote()}
 	cache := writeback.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(cacheSpec).
-		WithResources(writeback.Resources{
-			Storage: mem.NewStorage(cacheSpec.TotalByteSize),
-			AddressToPortMapper: &mem.SinglePortMapper{
-				Port: dramTop.AsRemote(),
-			},
-		}).
+		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 		Build("Cache")
 
 	cache.BindPort("Top", twowaybuffered.NewPort(256, 256))

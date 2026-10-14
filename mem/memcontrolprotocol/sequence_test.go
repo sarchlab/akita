@@ -1,8 +1,10 @@
 package memcontrolprotocol_test
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
@@ -13,10 +15,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // This file holds Layer-3 cross-component sequence tests: it drives a real
@@ -71,16 +71,16 @@ func driveCtrl(
 // address) -> Enable, and confirm only the filtered entry was dropped (it
 // now misses to Bottom) while the other still hits.
 func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	remote := messaging.RemotePort("MMU")
 
+	routingSpec1 := tlb.Definition.DefaultSpec
+	routingSpec1.TranslationMapperType = "single"
+	routingSpec1.TranslationProviders = []messaging.RemotePort{remote}
 	comp := tlb.Definition.Builder().
 		WithSimulation(sim).
-		WithSpec(tlb.Definition.DefaultSpec).
-		WithResources(tlb.Resources{
-			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
-		}).
+		WithSpec(routingSpec1).
 		Build("TLB")
 
 	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -376,8 +376,8 @@ func buildWritebackForSequence(
 ) (*writeback.Comp, *mem.Storage, messaging.Port, messaging.Port) {
 	t.Helper()
 
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	storage := mem.NewStorage(1 * mem.MB)
 
 	spec := writeback.Definition.DefaultSpec
@@ -390,15 +390,12 @@ func buildWritebackForSequence(
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
+	spec.AddressMapperType = "single"
+	spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 	comp := writeback.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithResources(writeback.Resources{
-			Storage: storage,
-			AddressToPortMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("LowerCache"),
-			},
-		}).
+		WithResources(writeback.Resources{Storage: storage}).
 		Build("L1Cache")
 
 	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))

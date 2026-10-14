@@ -3,10 +3,11 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -22,7 +23,7 @@ var _ = Describe("Address Operations", func() {
 
 var _ = Describe("Transaction Splitting", func() {
 	var ids timing.Simulation
-	BeforeEach(func() { ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine()) })
+	BeforeEach(func() { ids = akitasim.MakeBuilder().Build() })
 	It("should split a transaction into sub-transactions", func() {
 		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
@@ -204,7 +205,7 @@ var _ = Describe("DRAM Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 1024)
 	})
@@ -281,8 +282,8 @@ var _ = Describe("DRAM Integration", func() {
 
 var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR4 spec", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		ctrl := buildDRAM(sim, DDR4Spec, "DDR4Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
@@ -295,8 +296,8 @@ var _ = Describe("Predefined Specs", func() {
 	})
 
 	It("should build with DDR5 spec", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		ctrl := buildDRAM(sim, DDR5Spec, "DDR5Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
@@ -308,8 +309,8 @@ var _ = Describe("Predefined Specs", func() {
 	})
 
 	It("should build with HBM2 spec", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		ctrl := buildDRAM(sim, HBM2Spec, "HBM2Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
@@ -322,8 +323,8 @@ var _ = Describe("Predefined Specs", func() {
 	})
 
 	It("should build with HBM3 spec", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		ctrl := buildDRAM(sim, HBM3Spec, "HBM3Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
@@ -335,8 +336,8 @@ var _ = Describe("Predefined Specs", func() {
 	})
 
 	It("should build with GDDR6 spec", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		ctrl := buildDRAM(sim, GDDR6Spec, "GDDR6Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
@@ -447,7 +448,7 @@ var _ = Describe("Open Page Policy", func() {
 	)
 
 	BeforeEach(func() {
-		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		ids = akitasim.MakeBuilder().Build()
 		defaultSpec := Definition.DefaultSpec
 		spec = &defaultSpec
 		st = &state{
@@ -803,7 +804,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 	)
 
 	BeforeEach(func() {
-		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		ids = akitasim.MakeBuilder().Build()
 		spec = &Spec{
 			NumRank:              1,
 			NumBankGroup:         1,
@@ -1043,8 +1044,8 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 var _ = Describe("Builder Configuration", func() {
 	It("should set page policy via builder", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		spec := Definition.DefaultSpec
 		spec.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
@@ -1054,8 +1055,8 @@ var _ = Describe("Builder Configuration", func() {
 	})
 
 	It("should set R/W queue sizes via builder", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		spec := Definition.DefaultSpec
 		spec.ReadQueueSize = 8
 		spec.WriteQueueSize = 8
@@ -1071,8 +1072,8 @@ var _ = Describe("Builder Configuration", func() {
 	})
 
 	It("should build with spec and preserve page policy", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		specWithOpenPage := DDR4Spec
 		specWithOpenPage.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
@@ -1083,8 +1084,8 @@ var _ = Describe("Builder Configuration", func() {
 	})
 
 	It("should build with spec and preserve R/W queue config", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		specWithRW := DDR4Spec
 		specWithRW.ReadQueueSize = 16
 		specWithRW.WriteQueueSize = 16
@@ -1100,7 +1101,7 @@ var _ = Describe("Builder Configuration", func() {
 	})
 
 	It("should require a storage", func() {
-		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		sim := akitasim.MakeBuilder().Build()
 
 		Expect(func() {
 			builtComponent := Definition.Builder().

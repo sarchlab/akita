@@ -26,7 +26,7 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
 func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	monitor := monitoring.NewMonitor()
+	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
@@ -50,10 +50,10 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
+	agentSpec.LowModule = "DRAM.Top"
 	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
-		WithResources(memaccessagent.Resources{LowModule: dramTop}).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))

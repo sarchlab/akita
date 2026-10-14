@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
-	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
+	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -39,7 +39,7 @@ var agent *memaccessagent.MemAccessAgent
 func setupTest(
 	seed int64,
 ) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	monitor := monitoring.NewMonitor()
+	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
@@ -56,23 +56,16 @@ func setupTest(
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
 	ioMMU, tlb, l2TLB := buildTranslationHierarchy(s)
 
-	atMemoryMapper := &mem.SinglePortMapper{
-		Port: l1Cache.Ports.Top.AsRemote(),
-	}
-	atTranslationMapper := &mem.SinglePortMapper{
-		Port: tlb.Ports.Top.AsRemote(),
-	}
-
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
+	atSpec.MemMapperType = "single"
+	atSpec.MemProviders = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
+	atSpec.TranslationMapperType = "single"
+	atSpec.TranslationProviders = []messaging.RemotePort{tlb.Ports.Top.AsRemote()}
 	at := addresstranslator.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(atSpec).
-		WithResources(addresstranslator.Resources{
-			MemProviderMapper:         atMemoryMapper,
-			TranslationProviderMapper: atTranslationMapper,
-		}).
 		Build("AT")
 
 	at.BindPort("Top", newPort("AT.Top"))
@@ -89,12 +82,10 @@ func setupTest(
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
+	agentSpec.LowModule = robComp.Ports.Top.AsRemote()
 	agent = memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
-		WithResources(memaccessagent.Resources{
-			LowModule: robComp.Ports.Top,
-		}).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", newPort("MemAccessAgent.Mem"))
@@ -134,7 +125,7 @@ func buildROB(s *sim.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
 
 //nolint:funlen // wires the whole hierarchy in one place
 func buildMemoryHierarchy(s *sim.Simulation) (
-	*writethroughcache.Comp,
+	*writethrough.Comp,
 	*writeback.Comp,
 	*idealmemcontroller.Comp,
 ) {
@@ -157,34 +148,30 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 	l2Spec.AddressMapperType = "single"
+	l2Spec.RemotePorts = []messaging.RemotePort{
+		memCtrl.Ports.Top.AsRemote(),
+	}
 	L2Cache := writeback.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2Spec).
-		WithResources(writeback.Resources{
-			Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage"),
-			RemotePorts: []messaging.RemotePort{
-				memCtrl.Ports.Top.AsRemote(),
-			},
-		}).
+		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
 	L2Cache.BindPort("Top", newPort("L2Cache.Top"))
 	L2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
 	L2Cache.BindPort("Control", newPort("L2Cache.Control"))
 
-	l1Spec := writethroughcache.Definition.DefaultSpec
+	l1Spec := writethrough.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
-	L1Cache := writethroughcache.Definition.Builder().
+	l1Spec.RemotePorts = []messaging.RemotePort{
+		L2Cache.Ports.Top.AsRemote(),
+	}
+	L1Cache := writethrough.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l1Spec).
-		WithResources(writethroughcache.Resources{
-			Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage"),
-			RemotePorts: []messaging.RemotePort{
-				L2Cache.Ports.Top.AsRemote(),
-			},
-		}).
+		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage")}).
 		Build("L1Cache")
 
 	L1Cache.BindPort("Top", newPort("L1Cache.Top"))
@@ -226,29 +213,27 @@ func buildTranslationHierarchy(
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
+	l2TLBSpec.TranslationMapperType = "single"
+	l2TLBSpec.TranslationProviders = []messaging.RemotePort{L2TLBMapper.Port}
 	L2TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
-		WithResources(tlb.Resources{TranslationProviderMapper: L2TLBMapper}).
 		Build("L2TLB")
 
 	L2TLB.BindPort("Top", newPort("L2TLB.Top"))
 	L2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
 	L2TLB.BindPort("Control", newPort("L2TLB.Control"))
 
-	TLBMapper := &mem.SinglePortMapper{
-		Port: L2TLB.Ports.Top.AsRemote(),
-	}
-
 	tlbSpec := tlb.Definition.DefaultSpec
 	tlbSpec.NumWays = 8
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
+	tlbSpec.TranslationMapperType = "single"
+	tlbSpec.TranslationProviders = []messaging.RemotePort{L2TLB.Ports.Top.AsRemote()}
 	TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(tlbSpec).
-		WithResources(tlb.Resources{TranslationProviderMapper: TLBMapper}).
 		Build("TLB")
 
 	TLB.BindPort("Top", newPort("TLB.Top"))
@@ -316,7 +301,7 @@ func setupConnection(
 	AT *addresstranslator.Comp,
 	TLB, L2TLB *tlb.Comp,
 	IoMMU *mmu.Comp,
-	L1Cache *writethroughcache.Comp,
+	L1Cache *writethrough.Comp,
 	L2Cache *writeback.Comp,
 	memCtrl *idealmemcontroller.Comp,
 ) {

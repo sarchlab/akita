@@ -175,7 +175,7 @@ Where things live in the Akita source (a starting map — `code_ls` to browse an
 `github.com/sarchlab/akita/v5/mem/cache/…`):
 
 - **Memory components** — `mem/`: caches in `mem/cache/` (`writeback`,
-  `writethroughcache`), DRAM in `mem/dram/`, MSHRs in `mem/mshr/`, reorder buffer in
+  `writethrough`), DRAM in `mem/dram/`, MSHRs in `mem/mshr/`, reorder buffer in
   `mem/rob/`, the ideal controller in `mem/idealmemcontroller/`.
 - **Virtual memory / translation** — `mem/vm/`: `tlb`, `mmu`, `addresstranslator`,
   page tables.

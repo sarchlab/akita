@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // buildWired builds a cache named "Cache" with the given spec and resources.
 // It supplies a storage when res has none.
 func buildWired(res Resources, spec Spec) *Comp {
-	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	sim := akitasim.MakeBuilder().Build()
 
 	if res.Storage == nil {
 		res.Storage = mem.NewStorage(spec.TotalByteSize)
@@ -38,7 +38,7 @@ func buildWired(res Resources, spec Spec) *Comp {
 }
 
 // TestBuildMapsRemotePorts checks that Build turns Spec.AddressMapperType and
-// Resources.RemotePorts into the mapper the pipeline routes through.
+// Spec.RemotePorts into the mapper the pipeline routes through.
 func TestBuildMapsRemotePorts(t *testing.T) {
 	ports := []messaging.RemotePort{"DRAM0", "DRAM1"}
 
@@ -61,7 +61,8 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			pipeline := buildWired(Resources{RemotePorts: ports}, c.spec).
+			c.spec.RemotePorts = ports
+			pipeline := buildWired(Resources{}, c.spec).
 				Middlewares.Pipeline
 			for addr, want := range c.want {
 				if got := pipeline.findPort(addr); got != want {
@@ -72,32 +73,28 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 	}
 }
 
-// TestRestoreRoutesThroughRebuiltWiring saves a cache wired to one lower
-// module and loads the checkpoint into a cache rebuilt against another.
-// Wiring comes from Resources, which the rebuild supplies, so the restored
-// cache must route to the new module rather than to the checkpointed one.
-func TestRestoreRoutesThroughRebuiltWiring(t *testing.T) {
+// TestRestoreRejectsChangedRouting confirms destinations participate in the Spec hash.
+func TestRestoreRejectsChangedRouting(t *testing.T) {
 	spec := Definition.DefaultSpec
-
-	saved := buildWired(Resources{
-		AddressToPortMapper: &mem.SinglePortMapper{Port: "OldMemory.Top"},
-	}, spec)
-
+	spec.RemotePorts = []messaging.RemotePort{"OldMemory.Top"}
+	saved := buildWired(Resources{}, spec)
 	var checkpoint bytes.Buffer
 	if err := saved.SaveCheckpoint(&checkpoint); err != nil {
-		t.Fatalf("SaveCheckpoint: %v", err)
+		t.Fatal(err)
 	}
-
-	rebuilt := buildWired(Resources{
-		AddressToPortMapper: &mem.SinglePortMapper{Port: "NewMemory.Top"},
-	}, spec)
-	if err := rebuilt.LoadCheckpoint(&checkpoint); err != nil {
-		t.Fatalf("LoadCheckpoint: %v", err)
+	original := append([]byte(nil), checkpoint.Bytes()...)
+	spec.RemotePorts = []messaging.RemotePort{"NewMemory.Top"}
+	rebuilt := buildWired(Resources{}, spec)
+	if err := rebuilt.LoadCheckpoint(&checkpoint); err == nil {
+		t.Fatal("accepted a different routing Spec")
 	}
-
-	pipeline := rebuilt.Middlewares.Pipeline
-	if got := pipeline.findPort(0); got != "NewMemory.Top" {
-		t.Errorf("restored cache routes to %s, want NewMemory.Top", got)
+	spec.RemotePorts = []messaging.RemotePort{"OldMemory.Top"}
+	same := buildWired(Resources{}, spec)
+	if err := same.LoadCheckpoint(bytes.NewReader(original)); err != nil {
+		t.Fatal(err)
+	}
+	if got := same.Middlewares.Pipeline.findPort(0); got != "OldMemory.Top" {
+		t.Fatalf("restored destination = %s", got)
 	}
 }
 
@@ -121,7 +118,8 @@ func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 
 	spec.InterleavingSize = 0
 	assertPanics(t, "non-zero Spec.InterleavingSize", func() {
-		buildWired(Resources{RemotePorts: []messaging.RemotePort{"DRAM0"}}, spec)
+		spec.RemotePorts = []messaging.RemotePort{"DRAM0"}
+		buildWired(Resources{}, spec)
 	})
 }
 
@@ -129,7 +127,7 @@ func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 // backing storage instead of failing on the first bank access.
 func TestBuildRequiresStorage(t *testing.T) {
 	assertPanics(t, "Resources.Storage is required", func() {
-		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		setupSim1 := akitasim.MakeBuilder().Build()
 		builtComponent := Definition.Builder().
 			WithSimulation(setupSim1).
 			Build("Cache")

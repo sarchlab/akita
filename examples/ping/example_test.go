@@ -1,15 +1,15 @@
 package ping
 
 import (
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func Example_pingWithEvents() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).

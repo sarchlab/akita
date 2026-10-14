@@ -20,19 +20,20 @@ package main
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/examples/reqtracing/client"
 	"github.com/sarchlab/akita/v5/examples/reqtracing/server"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().

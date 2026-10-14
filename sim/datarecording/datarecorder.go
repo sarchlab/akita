@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -36,7 +38,8 @@ type DataRecorder interface {
 	Close() error
 }
 
-// NewDataRecorder creates a new DataRecorder.
+// NewDataRecorder creates a recording at the exact path. An existing file is
+// never overwritten. An empty path chooses a unique .sqlite3 filename.
 func NewDataRecorder(path string) DataRecorder {
 	w := &sqliteWriter{
 		dbName:    path,
@@ -91,18 +94,19 @@ type sqliteWriter struct {
 // Init establishes a connection to the database.
 func (t *sqliteWriter) Init() {
 	if t.dbName == "" {
-		t.dbName = "akita_data_recording_" + xid.New().String()
+		t.dbName = "akita_data_recording_" + xid.New().String() + ".sqlite3"
 	}
 
-	filename := t.dbName + ".sqlite3"
-	os.Remove(filename)
-
-	_, err := os.Stat(filename)
-	if err == nil {
-		panic(fmt.Errorf("file %s already exists", filename))
+	filename := t.dbName
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		panic(fmt.Errorf("create recording %s: %w", filename, err))
+	}
+	if err := file.Close(); err != nil {
+		panic(err)
 	}
 
-	db, err := sql.Open("sqlite", filename)
+	db, err := sql.Open("sqlite", sqlitePath(filename, "rw"))
 	if err != nil {
 		panic(err)
 	}
@@ -533,4 +537,12 @@ func (t *sqliteWriter) Close() error {
 	}
 
 	return nil
+}
+
+func sqlitePath(filename, mode string) string {
+	absolute, err := filepath.Abs(filename)
+	if err != nil {
+		panic(err)
+	}
+	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolute), RawQuery: "mode=" + mode}).String()
 }

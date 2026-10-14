@@ -3,17 +3,18 @@ package event_test
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // A delay line completes every request it receives Latency later: a Recv
 // event schedules a doneEvent, and the doneEvent records the completion.
 func Example() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	delay := Definition.Builder().
 		WithSimulation(sim).

@@ -14,10 +14,11 @@ var dumpLog = false
 
 // Spec contains the immutable configuration for the MemAccessAgent.
 type Spec struct {
-	Freq       timing.Freq `json:"freq"`
-	MaxAddress uint64      `json:"max_address"`
-	WriteLeft  int         `json:"write_left"`
-	ReadLeft   int         `json:"read_left"`
+	LowModule  messaging.RemotePort `json:"low_module"`
+	Freq       timing.Freq          `json:"freq"`
+	MaxAddress uint64               `json:"max_address"`
+	WriteLeft  int                  `json:"write_left"`
+	ReadLeft   int                  `json:"read_left"`
 
 	// AddressOffset is added to every generated address. It lets several
 	// agents that share a downstream memory exercise disjoint address ranges:
@@ -34,12 +35,8 @@ type Spec struct {
 	RandSeed int64 `json:"rand_seed"`
 }
 
-// Resources holds the external wiring referenced by the MemAccessAgent.
-type Resources struct {
-	// LowModule is the downstream port to which memory requests are sent. It
-	// is required.
-	LowModule messaging.Port
-}
+// Resources has no live dependencies; the destination belongs to Spec.
+type Resources struct{}
 
 // pendingRequest keeps the request and its independent tracing task together.
 type pendingRequest struct {

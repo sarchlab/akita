@@ -12,7 +12,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
+	"github.com/sarchlab/akita/v5/noc/nvlink"
 
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -72,10 +72,9 @@ func createNetwork(
 ) []*acceptance.Agent {
 	agents := createAgents(s, test)
 
-	connector := nvlink.NewConnector().
+	connector := nvlink.MakeBuilder().
 		WithSimulation(s).
-		WithPCIeVersion(3, 16)
-	connector.CreateNetwork("Network")
+		WithPCIeVersion(3, 16).Build("Network")
 
 	deviceIDs := createPCIeNetwork(connector, agents)
 	createNVLinkNetwork(connector, deviceIDs)

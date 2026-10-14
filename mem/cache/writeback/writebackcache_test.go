@@ -7,9 +7,11 @@ import (
 	"log"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 
@@ -83,7 +85,7 @@ func stageTestSpec() Spec {
 // drives, with its ports plugged into noop connections. The test ticks the
 // stage under test directly rather than the component.
 func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking()
+	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
 	comp := Definition.Builder().
 		WithSimulation(setupSim1).
 		WithSpec(spec).
@@ -135,7 +137,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		agentPort = newDriverPort("Agent.Top", 8)
 		controlAgentPort = newDriverPort("Agent.Control", 8)
@@ -151,13 +153,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
+		cacheSpec.AddressMapperType = "single"
+		cacheSpec.RemotePorts = []messaging.RemotePort{addressToPortMapper.Port}
 		cacheComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(cacheSpec).
-			WithResources(Resources{
-				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
-				AddressToPortMapper: addressToPortMapper,
-			}).
+			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
 		cacheCompPorts := makePorts("Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)

@@ -68,6 +68,17 @@ func structFields(
 			field.Default = fieldDefault(f.Type(), defaults[f.Name()])
 		}
 
+		if slice, ok := f.Type().Underlying().(*types.Slice); ok {
+			if _, ok := slice.Elem().Underlying().(*types.Struct); ok && defaults != nil {
+				field.Fields, err = structFields(pkg, slice.Elem(), map[string]any{}, index)
+				if err != nil {
+					return nil, err
+				}
+				if err := validateFieldMetadata(pkg, slice.Elem(), field.Fields); err != nil {
+					return nil, err
+				}
+			}
+		}
 		fields = append(fields, field)
 	}
 

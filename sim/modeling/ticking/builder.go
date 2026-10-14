@@ -60,6 +60,11 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 
 	b.simulation.RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
+	if b.def.ValidateSpec != nil {
+		if err := b.def.ValidateSpec(b.spec); err != nil {
+			panic(fmt.Errorf("%s: %w", name, err))
+		}
+	}
 
 	c := &Component[S, T, R, P, M]{
 		ticks: NewScheduler(name, b.simulation, specFreq(name, b.spec)),
@@ -76,6 +81,9 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 		c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
 	})
 
+	if b.def.ValidateSetup != nil {
+		base.SetSetupValidator(&c.ComponentBase, func() error { return b.def.ValidateSetup(c) })
+	}
 	base.Register(&c.ComponentBase)
 
 	return c

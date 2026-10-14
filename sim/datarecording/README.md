@@ -21,11 +21,14 @@ type DataRecorder interface {
 ### Creating a Recorder
 
 ```go
-recorder := datarecording.NewDataRecorder("my_simulation")
+recorder := datarecording.NewDataRecorder("my_simulation.sqlite3")
 defer recorder.Close()
 ```
 
-This creates a SQLite file `my_simulation.sqlite3`. Simulation-level metadata
+The argument is the exact path: no extension is appended. Existing files are
+rejected without modification. An empty path chooses a unique SQLite filename.
+Readers also treat their path literally and open existing files read-only.
+Simulation-level metadata
 such as `exec_info` is recorded by the `sim` package, not by the generic
 data recorder.
 

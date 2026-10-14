@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/datamover"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
@@ -586,19 +585,15 @@ func buildDataMover(
 	dmSpec.BufferSize = pageSize
 	dmSpec.InsideByteGranularity = 64
 	dmSpec.OutsideByteGranularity = 64
+	dmSpec.InsideMapperType = "interleaved"
+	dmSpec.InsidePorts = memCtrlPorts
+	dmSpec.InsideInterleavingSize = shared.deviceStride
+	dmSpec.OutsideMapperType = "interleaved"
+	dmSpec.OutsidePorts = memCtrlPorts
+	dmSpec.OutsideInterleavingSize = shared.deviceStride
 	mover := datamover.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(dmSpec).
-		WithResources(datamover.Resources{
-			InsideMapper: &mem.InterleavedAddressPortMapper{
-				InterleavingSize: shared.deviceStride,
-				LowModules:       memCtrlPorts,
-			},
-			OutsideMapper: &mem.InterleavedAddressPortMapper{
-				InterleavingSize: shared.deviceStride,
-				LowModules:       memCtrlPorts,
-			},
-		}).
 		Build("DataMover")
 
 	mover.BindPort("Top", newPort("DataMover.Top"))

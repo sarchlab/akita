@@ -3,10 +3,10 @@ package datamover
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
@@ -28,7 +28,7 @@ var _ = Describe("DataMover", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		srcPort = newDriverPort("Src.Top", 4)
 
@@ -47,17 +47,13 @@ var _ = Describe("DataMover", func() {
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
+		dmSpec.InsideMapperType = "single"
+		dmSpec.InsidePorts = []messaging.RemotePort{insideMem.Ports.Top.AsRemote()}
+		dmSpec.OutsideMapperType = "single"
+		dmSpec.OutsidePorts = []messaging.RemotePort{outsideMem.Ports.Top.AsRemote()}
 		dataMover = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(dmSpec).
-			WithResources(Resources{
-				InsideMapper: &mem.SinglePortMapper{
-					Port: insideMem.Ports.Top.AsRemote(),
-				},
-				OutsideMapper: &mem.SinglePortMapper{
-					Port: outsideMem.Ports.Top.AsRemote(),
-				},
-			}).
 			Build("DataMover")
 		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 40960000)
 		dataMover.BindPort("Top", dataMoverPorts.Top)

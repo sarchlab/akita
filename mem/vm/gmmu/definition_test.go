@@ -3,9 +3,9 @@ package gmmu
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/modeling"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +19,7 @@ func TestDefinitionMatchesSource(t *testing.T) {
 // table instead of failing on the first walk.
 func TestBuildRequiresPageTable(t *testing.T) {
 	require.PanicsWithValue(t, "gmmu: Resources.PageTable is required", func() {
-		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		setupSim1 := akitasim.MakeBuilder().Build()
 		builtComponent := Definition.Builder().
 			WithSimulation(setupSim1).
 			Build("GMMU")

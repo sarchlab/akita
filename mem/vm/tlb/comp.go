@@ -2,6 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/internal/addressmapping"
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
@@ -13,6 +14,16 @@ import (
 
 // Spec contains immutable configuration for the TLB.
 type Spec struct {
+	// Translation routing configuration.
+	TranslationMapperType                mem.AddressMapperType  `json:"translation_mapper_type"`
+	TranslationProviders                 []messaging.RemotePort `json:"translation_providers"`
+	TranslationInterleavingSize          uint64                 `json:"translation_interleaving_size"`
+	TranslationBankSize                  uint64                 `json:"translation_bank_size"`
+	TranslationUseAddressSpaceLimitation bool                   `json:"translation_use_address_space_limitation"`
+	TranslationLowAddress                uint64                 `json:"translation_low_address"`
+	TranslationHighAddress               uint64                 `json:"translation_high_address"`
+	TranslationModuleForOtherAddresses   messaging.RemotePort   `json:"translation_module_for_other_addresses"`
+
 	Freq           timing.Freq `json:"freq"`
 	NumSets        int         `json:"num_sets"`
 	NumWays        int         `json:"num_ways"`
@@ -48,12 +59,8 @@ type middlewares struct {
 	TLB *tlbMiddleware
 }
 
-// Resources holds the external objects wired into the TLB. The translation
-// provider mapper resolves the remote port that serves the translation for a
-// given virtual address.
-type Resources struct {
-	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
-}
+// Resources is empty; routing configuration belongs to Spec.
+type Resources struct{}
 
 const (
 	tlbStateEnable = "enable"
@@ -213,3 +220,13 @@ func findTranslationPort(
 
 // Comp is the TLB component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
+
+func (s Spec) translationMapping() addressmapping.Config {
+	return addressmapping.Config{Kind: s.TranslationMapperType, Ports: s.TranslationProviders,
+		InterleavingSize:          s.TranslationInterleavingSize,
+		BankSize:                  s.TranslationBankSize,
+		UseAddressSpaceLimitation: s.TranslationUseAddressSpaceLimitation,
+		LowAddress:                s.TranslationLowAddress,
+		HighAddress:               s.TranslationHighAddress,
+		ModuleForOtherAddresses:   s.TranslationModuleForOtherAddresses}
+}

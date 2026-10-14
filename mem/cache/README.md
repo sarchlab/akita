@@ -3,7 +3,7 @@
 Package `cache` provides the common data structures and helper operations used
 by the concrete cache implementations in the Akita simulation framework. It is
 the parent package for the cache components (such as
-[`writethroughcache`](writethroughcache) and `writeback`) and does not itself
+[`writethrough`](writethrough) and `writeback`) and does not itself
 define a runnable component. Instead it supplies the serializable directory and
 MSHR state plus the pure functions that operate on them, so every cache shares
 the same set-associative lookup, LRU replacement, and miss-handling logic.
@@ -89,7 +89,7 @@ serializable `MSHRState` form.
 
 ## Related Packages
 
-- [`writethroughcache`](writethroughcache) — a unified GPU cache supporting the
+- [`writethrough`](writethrough) — a unified GPU cache supporting the
   write-around, write-evict, and write-through policies.
 - `writeback` — a write-back cache built on the same directory and MSHR helpers.
 - `mem/mshr` — the underlying miss-status-handling-register primitives.

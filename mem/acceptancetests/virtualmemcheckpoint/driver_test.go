@@ -52,8 +52,9 @@ func bytesToUint32(b []byte) uint32 { return binary.LittleEndian.Uint32(b) }
 // (unlike MemAccessAgent's RNG), so the checkpoint captures everything the
 // driver needs to resume.
 type driverSpec struct {
-	Freq   timing.Freq `json:"freq"`
-	NumOps int         `json:"num_ops"`
+	LowModule messaging.RemotePort `json:"low_module"`
+	Freq      timing.Freq          `json:"freq"`
+	NumOps    int                  `json:"num_ops"`
 }
 
 type driverState struct {
@@ -67,10 +68,7 @@ type driverState struct {
 }
 
 // driverResources holds the driver's external wiring.
-type driverResources struct {
-	// LowModule is the memory port the driver sends requests to.
-	LowModule messaging.Port
-}
+type driverResources struct{}
 
 // driverPorts holds the driver's ports.
 type driverPorts struct {
@@ -176,7 +174,7 @@ func (m *driverMW) sendNext() bool {
 			Data:    uint32ToBytes(valueForOp(idx))},
 			ID:  m.d.NewID(),
 			Src: port.AsRemote(),
-			Dst: m.d.Resources.LowModule.AsRemote()}
+			Dst: m.d.Spec.LowModule}
 
 		req.TrafficBytes = len(req.Payload.(memprotocol.WriteReq).Data) + 12
 		req.TrafficClass = "memprotocol.WriteReq"
@@ -203,7 +201,7 @@ func (m *driverMW) sendNext() bool {
 			PID:            pid},
 			ID:  m.d.NewID(),
 			Src: port.AsRemote(),
-			Dst: m.d.Resources.LowModule.AsRemote(),
+			Dst: m.d.Spec.LowModule,
 
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
@@ -221,10 +219,11 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 	spec := Definition.DefaultSpec
 	spec.NumOps = numOps
 
+	spec.LowModule = lowModule.AsRemote()
 	builtComponent := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithResources(driverResources{LowModule: lowModule}).
+		WithResources(driverResources{}).
 		Build("Driver")
 
 	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))

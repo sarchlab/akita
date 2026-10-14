@@ -30,11 +30,8 @@ type Engine interface {
 	// registers itself.
 	RegisterHandler(name string, handler Handler)
 
-	// SetRunGuard installs the simulation readiness check before every Run.
-	// Set it during setup, before the engine can run.
-	SetRunGuard(check func() error)
-
-	// Run will process all the events until the simulation finishes.
+	// Run processes events until the simulation finishes. The owning simulation
+	// must have been initialized successfully; this is not checked by the engine.
 	Run() error
 
 	// RequestPause requests a pause without waiting for the current event or

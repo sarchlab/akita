@@ -3,10 +3,10 @@ package idealmemcontroller
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestControlContract verifies the ideal memory controller satisfies
@@ -14,8 +14,8 @@ import (
 // universal verbs; Invalidate and Flush must return "unsupported".
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+
 		storage := mem.NewStorage(1 * mem.MB)
 		spec := Definition.DefaultSpec
 		spec.Width = 1

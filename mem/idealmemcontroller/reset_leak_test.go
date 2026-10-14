@@ -3,14 +3,14 @@ package idealmemcontroller
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a read into the ideal memory
@@ -20,8 +20,7 @@ import (
 // ended — i.e. a mid-flight Reset leaves no started-never-ended task. The
 // controller is a leaf, so the only open task per access is its req_in.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	storage := mem.NewStorage(1 * mem.MB)
 

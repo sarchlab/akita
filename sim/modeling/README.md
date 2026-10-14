@@ -13,7 +13,7 @@ package-level `Definition`:
 
 | Struct | What it is | Supplied by |
 |---|---|---|
-| `Spec` | configuration: scalars and slices of scalars | system builder (defaults in `Definition`) |
+| `Spec` | configuration: scalars, scalar arrays/slices, flat record slices | system builder (defaults in `Definition`) |
 | `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
@@ -30,9 +30,11 @@ objects.
 
 - **Spec** must be a plain struct whose fields are scalars (booleans, numbers,
   strings, and named types based on them, such as `timing.Freq`, a
-  `messaging.RemotePort`, or an enum-like string type) or slices of scalars,
-  such as the list of remote ports a unit talks to, whose length depends on the
-  system. No maps or nested structs. `Build` copies the slices, so an instance
+  `messaging.RemotePort`, or an enum-like string type), scalar arrays/slices,
+  or slices of flat records such as `[]Link`. Each record field must be an
+  exported scalar with an explicit, unique JSON name. Records cannot contain
+  nested structs, slices, maps, pointers, or interfaces. Maps and standalone
+  nested structs are not allowed in Spec. `Build` copies the slices, so an instance
   never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
   after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
@@ -49,7 +51,7 @@ objects.
 `Build` runs both through `MustBeCheckpointable`. Both reject pointers,
 interfaces, channels, and functions, and two fields that share a JSON name
 (which `encoding/json` silently drops). `ValidateSpec` additionally rejects
-maps, nested structs, and slices of anything but scalars; `ValidateState`
+maps, standalone nested structs, and nested containers; `ValidateState`
 allows them, with `string` or integer map keys.
 
 A Spec may hold a slice of scalars, such as the remote ports a unit talks to.
@@ -59,8 +61,9 @@ Other values that seem to belong in the Spec usually belong elsewhere:
   single scalar;
 - a value derived from other Spec fields is an unexported Spec method, not a
   field;
-- a reference to an external object, or something derived only from one (the
-  address mapper that routes to lower memory), is a Resources field. A
+- destination addresses and address-mapping choices belong in Spec; derive
+  private lookup objects in `NewMiddlewares`;
+- a reference to an external live object is a Resources field. A
   component's Resources are not part of its checkpoint: the rebuild supplies
   them, and `NewMiddlewares` recomputes what it derives from them. A shared
   object they point to, such as a `mem.Storage` or a `vm.PageTable`, is a
@@ -135,13 +138,22 @@ owns the counter, so two components share one ID sequence even though they
 have different names. Independent simulations have separate
 sequences.
 
-For isolated tests or small examples, create a lightweight context once:
+Use the same entry point for tests, examples, and full simulations:
 
 ```go
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+s := sim.MakeBuilder().Build()
 ```
 
-Pass `sim` to each builder through `WithSimulation(sim)`. This context performs
-no entity registration or recording. Use `sim.MakeBuilder().Build()`
-when automatic checkpoint inventory, recording, or monitoring is needed.
+Pass `s` to every builder through `WithSimulation(s)`. This creates no recording
+or server by default, but always owns IDs, initialization, and entity inventory.
+The separate StandaloneSimulation context has been removed.
+
+### Validation hooks
+
+A Definition may supply `ValidateSpec func(Spec) error` for configuration checks
+that need only Spec. Build runs it before registering the component and panics
+on an error. It must not require later-bound ports.
+`ValidateSetup func(*Comp) error` runs during `Initialize`, alongside the generic
+port checks, before any State or Middlewares is created. A validation error
+leaves setup editable. For example, switches validate each `Spec.Links` record
+at Build, but compare its length with `Ports.Links` during Initialize.

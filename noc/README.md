@@ -36,12 +36,13 @@ switches, endpoints, routing, and switch pipelines. Links between them are ideal
 and switches with parameterized links:
 
 ```go
-import "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
+import "github.com/sarchlab/akita/v5/noc/networkconnector"
 
-connector := networkconnector.MakeConnector().
+connector := networkconnector.MakeBuilder().
     WithSimulation(sim).
-    WithDefaultFreq(1 * timing.GHz).
-    WithFlitSize(64)
+    WithFreq(1 * timing.GHz).
+    WithFlitSize(64).
+    Build("Network")
 
 // Add switches, connect devices, build routing tables...
 ```
@@ -50,18 +51,18 @@ connector := networkconnector.MakeConnector().
 
 | Package | Description |
 |---------|-------------|
-| `networking/mesh` | 2D mesh topology builder and routing tables |
-| `networking/pcie` | PCIe topology connector |
-| `networking/nvlink` | NVLink topology connector |
+| `mesh` | 2D mesh topology builder and routing tables |
+| `pcie` | PCIe topology connector |
+| `nvlink` | NVLink topology connector |
 
 ### Infrastructure Packages
 
 | Package | Description |
 |---------|-------------|
-| `networking/switching/switches` | Switch components with input/output buffers and crossbar |
-| `networking/switching/endpoint` | Network endpoints that fragment messages into flits |
-| `networking/routing` | Routing table abstraction |
-| `networking/networkconnector` | Generic topology builder with Floyd-Warshall routing |
+| `switching/switches` | Switch components with input/output buffers and crossbar |
+| `switching/endpoint` | Network endpoints that fragment messages into flits |
+| `routing` | Routing table abstraction |
+| `networkconnector` | Generic topology builder with Floyd-Warshall routing |
 
 ## Messaging
 

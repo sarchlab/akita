@@ -67,8 +67,7 @@ func (m *pipelineMW) bottomPort() messaging.Port {
 // findPort resolves an address to the lower-memory port that serves it.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
 	if m.addressMapper == nil {
-		panic("writeback: no address mapper; set Resources.AddressToPortMapper, " +
-			"or Spec.AddressMapperType with Resources.RemotePorts")
+		panic("writeback: no address mapper; configure Spec.AddressMapperType and Spec.RemotePorts")
 	}
 
 	return m.addressMapper.Find(address)

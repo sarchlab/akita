@@ -1,11 +1,8 @@
 package writeback
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -18,6 +15,7 @@ import (
 // statically.
 var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
+		AddressMapperType:   mem.AddressMapperSingle,
 		Freq:                1 * timing.GHz,
 		NumReqPerCycle:      1,
 		Log2BlockSize:       6,
@@ -32,6 +30,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		InterleavingSize:    4096,
 	},
 	NewState:       newState,
+	ValidateSpec:   validateSpec,
 	NewMiddlewares: newMiddlewares,
 }
 
@@ -94,7 +93,7 @@ func newMiddlewares(c *Comp) middlewares {
 	pipeline := &pipelineMW{
 		comp:          c,
 		storage:       res.Storage,
-		addressMapper: resolveAddressMapper(c.Spec, res),
+		addressMapper: resolveAddressMapper(c.Spec),
 	}
 	pipeline.createInternalStages()
 
@@ -108,44 +107,9 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 }
 
-// resolveAddressMapper returns the mapper that routes fetches and evictions
-// to lower memory: the injected Resources.AddressToPortMapper, or one built
-// from Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
-// neither is configured or there are no remote ports, so the first routed
-// request reports the missing wiring.
-func resolveAddressMapper(spec Spec, res Resources) mem.AddressToPortMapper {
-	if res.AddressToPortMapper != nil {
-		return res.AddressToPortMapper
-	}
+// resolveAddressMapper derives the lookup solely from immutable Spec data.
+func resolveAddressMapper(spec Spec) mem.AddressToPortMapper { return spec.addressMapping().Mapper() }
 
-	ports := res.RemotePorts
-
-	switch spec.AddressMapperType {
-	case "":
-		return nil
-	case "single":
-		if len(ports) == 0 {
-			return nil
-		}
-
-		return &mem.SinglePortMapper{Port: ports[0]}
-	case "interleaved":
-		if len(ports) == 0 {
-			return nil
-		}
-
-		if spec.InterleavingSize == 0 {
-			panic("writeback: an interleaved address mapper needs a " +
-				"non-zero Spec.InterleavingSize")
-		}
-
-		return &mem.InterleavedAddressPortMapper{
-			InterleavingSize: spec.InterleavingSize,
-			LowModules:       append([]messaging.RemotePort(nil), ports...),
-		}
-	default:
-		panic(fmt.Sprintf(
-			"writeback: unknown address mapper type %q",
-			spec.AddressMapperType))
-	}
+func validateSpec(spec Spec) error {
+	return spec.addressMapping().Validate()
 }

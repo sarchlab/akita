@@ -41,9 +41,8 @@ The cache's behavior is three middlewares, run in this order every cycle:
 - `State` — mutable runtime data: the directory state, MSHR state, all
   inter-stage buffers and pipelines, the transaction list, and inflight
   counters. Fully JSON-serializable, as required by the `State` constraint.
-- `Resources` — shared wiring; holds the backing `*mem.Storage` (required) and
-  the address-to-port mapping used to route fetches/evictions to lower memory
-  (supply either `AddressToPortMapper` or `RemotePorts`).
+- `Resources` — the backing `*mem.Storage` (required). Destination ports and
+  mapping parameters belong to Spec, including range and fallback configuration.
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl`, `Flusher`, and `Pipeline`, run in that order every
   cycle.
@@ -65,10 +64,14 @@ type Spec struct {
     MaxInflightFetch    int         // Concurrent fetches to lower memory
     MaxInflightEviction int         // Concurrent evictions to lower memory
 
-    // Address mapping over Resources.RemotePorts, used when no
-    // Resources.AddressToPortMapper is injected.
-    AddressMapperType string // "single" or "interleaved"
-    InterleavingSize  uint64
+    // Mapping is derived privately from Spec during Initialize.
+    AddressMapperType mem.AddressMapperType // single, interleaved, or banked
+    RemotePorts []messaging.RemotePort
+    InterleavingSize uint64
+    BankSize uint64
+    UseAddressSpaceLimitation bool
+    LowAddress, HighAddress uint64
+    ModuleForOtherAddresses messaging.RemotePort
 }
 ```
 
@@ -81,7 +84,7 @@ The number of sets is not configured directly: it is
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides
 the engine and registers the component), `WithResources` (the backing storage
-plus the address-to-port mapping for lower memory), and `component.BindPort` after Build (the port instances).
+only), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := writeback.Definition.DefaultSpec
@@ -89,13 +92,13 @@ spec.TotalByteSize = 64 * mem.KB
 spec.WayAssociativity = 4
 spec.Log2BlockSize = 6 // 64-byte lines
 spec.NumMSHREntry = 16
+spec.RemotePorts = []messaging.RemotePort{"DRAM.Top"}
 
 cache := writeback.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(writeback.Resources{
         Storage:             mem.NewStorage(spec.TotalByteSize),
-        AddressToPortMapper: lowModuleMapper,
     }).
     Build("L1Cache")
 cache.BindPort("Top", twowaybuffered.NewPort(8, 8))
@@ -109,7 +112,7 @@ topPort := cache.Ports.Top
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{...})` | Backing storage (required) and the lower-memory address mapping (`AddressToPortMapper` or `RemotePorts`) |
+| `WithResources(Resources{...})` | Backing storage (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 `Initialize` panics if `Resources.Storage` is nil; the cache no longer creates a

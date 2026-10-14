@@ -63,13 +63,16 @@ type Monitor struct {
 	fs               http.FileSystem
 }
 
-// NewMonitor creates an unbound monitor with default settings. It opens no
-// listener until Start is called, normally by sim.Builder.WithMonitor.
-func NewMonitor() *Monitor {
-	return &Monitor{
-		fs:           static.Assets(),
-		progressBars: []*ProgressBar{},
-	}
+// Builder configures a monitor without opening a listener.
+type Builder struct{ port int }
+
+// MakeBuilder returns a monitor builder using an automatically selected port.
+func MakeBuilder() Builder { return Builder{} }
+
+// Build creates an independent monitor. Start opens its listener when attached
+// to a simulation with sim.Builder.WithMonitor.
+func (b Builder) Build() *Monitor {
+	return &Monitor{port: b.port, fs: static.Assets(), progressBars: []*ProgressBar{}}
 }
 
 // Start permanently binds the monitor to s and starts live monitoring.
@@ -87,9 +90,8 @@ func (m *Monitor) Start(s *sim.Simulation) {
 	m.startServer()
 }
 
-// WithPortNumber sets the port number for the monitoring server. Returns the
-// Monitor for method chaining.
-func (m *Monitor) WithPortNumber(port int) *Monitor {
+// WithPortNumber selects the server port; values below 1000 select a random port.
+func (b Builder) WithPortNumber(port int) Builder {
 	if port < 1000 {
 		fmt.Fprintf(os.Stderr,
 			"Port number %d is assigned to the server, "+
@@ -99,9 +101,9 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 		port = 0
 	}
 
-	m.port = port
+	b.port = port
 
-	return m
+	return b
 }
 
 // RegisterComponent registers a component with the monitor so its internal

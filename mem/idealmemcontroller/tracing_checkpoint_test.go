@@ -32,7 +32,7 @@ func (checkpointClock) Handle(timing.Event) {}
 
 func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*sim.Simulation, *Comp) {
 	t.Helper()
-	b := sim.MakeBuilder().WithoutSourceRecording().WithOutputFileName(filepath.Join(t.TempDir(), "trace"))
+	b := sim.MakeBuilder().WithoutSourceRecording().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3")
 	if enabled {
 		b = b.WithTaskTracking()
 	}

@@ -3,22 +3,21 @@ package rob
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a request into the ROB so its req_in
 // and shadow req_out tasks are open, then issues a Reset and asserts both tasks
 // are ended — i.e. a mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 4

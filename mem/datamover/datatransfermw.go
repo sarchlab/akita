@@ -78,7 +78,7 @@ func (m *dataTransferMW) mapperFor(side string) mem.AddressToPortMapper {
 
 	if mapper == nil {
 		log.Panicf("datamover: no mapper for the %s side; "+
-			"set Resources.InsideMapper and Resources.OutsideMapper", side)
+			"configure Spec.InsidePorts and Spec.OutsidePorts", side)
 	}
 
 	return mapper

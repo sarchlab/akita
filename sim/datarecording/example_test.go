@@ -19,7 +19,7 @@ func Example() {
 	dbPath := "test"
 	os.Remove(dbPath + ".sqlite3")
 
-	recorder := datarecording.NewDataRecorder(dbPath)
+	recorder := datarecording.NewDataRecorder(dbPath + ".sqlite3")
 
 	cleanup := func() {
 		os.Remove(dbPath + ".sqlite3")

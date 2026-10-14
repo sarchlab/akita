@@ -4,21 +4,21 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	setupSim1 := akitasim.MakeBuilder().Build()
+	routingSpec1 := Definition.DefaultSpec
+	routingSpec1.InsideMapperType = "single"
+	routingSpec1.InsidePorts = []messaging.RemotePort{inside}
+	routingSpec1.OutsideMapperType = "single"
+	routingSpec1.OutsidePorts = []messaging.RemotePort{outside}
 	builtComponent := Definition.Builder().
 		WithSimulation(setupSim1).
-		WithSpec(Definition.DefaultSpec).
-		WithResources(Resources{
-			InsideMapper:  &mem.SinglePortMapper{Port: inside},
-			OutsideMapper: &mem.SinglePortMapper{Port: outside},
-		}).
+		WithSpec(routingSpec1).
 		Build("DataMover")
 	builtComponentPorts := makePorts("DataMover", 1, 1, 1, 1)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
@@ -42,32 +42,29 @@ func dataTransferOf(t *testing.T, comp *Comp) *dataTransferMW {
 	return comp.Middlewares.DataTransfer
 }
 
-// TestRestoreRoutesThroughRebuiltMappers saves a data mover wired to one pair
-// of memories and loads the checkpoint into one rebuilt against another pair.
-// The mappers come from Resources, which the rebuild supplies, so the
-// restored data mover must route through the new ones.
-func TestRestoreRoutesThroughRebuiltMappers(t *testing.T) {
-	saved := buildWithMappers("OldInside.Top", "OldOutside.Top")
-
+// TestRestoreRoutingSpec rejects changed destinations and restores identical wiring.
+func TestRestoreRoutingSpec(t *testing.T) {
+	saved := buildWithMappers("Inside.Top", "Outside.Top")
 	var checkpoint bytes.Buffer
 	if err := saved.SaveCheckpoint(&checkpoint); err != nil {
-		t.Fatalf("SaveCheckpoint: %v", err)
+		t.Fatal(err)
 	}
-
-	rebuilt := buildWithMappers("NewInside.Top", "NewOutside.Top")
-	if err := rebuilt.LoadCheckpoint(&checkpoint); err != nil {
-		t.Fatalf("LoadCheckpoint: %v", err)
+	original := append([]byte(nil), checkpoint.Bytes()...)
+	changed := buildWithMappers("OtherInside.Top", "Outside.Top")
+	if err := changed.LoadCheckpoint(&checkpoint); err == nil {
+		t.Fatal("accepted changed routing Spec")
 	}
-
+	rebuilt := buildWithMappers("Inside.Top", "Outside.Top")
+	if err := rebuilt.LoadCheckpoint(bytes.NewReader(original)); err != nil {
+		t.Fatal(err)
+	}
 	rebuilt.State.SrcSide = "inside"
 	rebuilt.State.DstSide = "outside"
 	dt := dataTransferOf(t, rebuilt)
-
-	if got := dt.findSrcPort(0); got != "NewInside.Top" {
-		t.Errorf("source routes to %s, want NewInside.Top", got)
+	if got := dt.findSrcPort(0); got != "Inside.Top" {
+		t.Fatalf("source routes to %s", got)
 	}
-
-	if got := dt.findDstPort(0); got != "NewOutside.Top" {
-		t.Errorf("destination routes to %s, want NewOutside.Top", got)
+	if got := dt.findDstPort(0); got != "Outside.Top" {
+		t.Fatalf("destination routes to %s", got)
 	}
 }

@@ -49,12 +49,13 @@ type ComponentBase[S, T, R, P, M any] struct {
 	// receives goes to each field in declaration order.
 	Middlewares M
 
-	name        string
-	owner       modeling.Component
-	simulation  timing.Simulation
-	taskTracker *tasks.Tracker
-	initialize  func()
-	initialized bool
+	name          string
+	owner         modeling.Component
+	simulation    timing.Simulation
+	taskTracker   *tasks.Tracker
+	initialize    func()
+	validateSetup func() error
+	initialized   bool
 }
 
 // Init records the instance identity, simulation, Spec and Resources.
@@ -244,6 +245,9 @@ func (c *ComponentBase[S, T, R, P, M]) ValidateSetup() error {
 			failures = append(failures, fmt.Errorf("port %s has inconsistent ownership", slot))
 		}
 	})
+	if c.validateSetup != nil {
+		failures = append(failures, c.validateSetup())
+	}
 	return errors.Join(failures...)
 }
 
@@ -267,7 +271,7 @@ func (c *ComponentBase[S, T, R, P, M]) RequireInitialized() {
 
 // cloneSpec returns spec with its own copy of every slice field, so an
 // instance shares no slice with the Definition's DefaultSpec or with the value
-// given to WithSpec. A Spec holds only scalars and slices of scalars, so
+// given to WithSpec. A Spec holds only scalars, scalar collections, and slices of flat scalar records, so
 // copying the slices copies everything.
 func cloneSpec[S any](spec S) S {
 	v := reflect.ValueOf(&spec).Elem()
@@ -291,3 +295,8 @@ func cloneSpec[S any](spec S) S {
 
 // TaskTracker returns this component's optional simulation task service.
 func (c *ComponentBase[S, T, R, P, M]) TaskTracker() *tasks.Tracker { return c.taskTracker }
+
+// SetSetupValidator registers the definition's completed-wiring validation.
+func SetSetupValidator[S, T, R, P, M any](c *ComponentBase[S, T, R, P, M], validate func() error) {
+	c.validateSetup = validate
+}

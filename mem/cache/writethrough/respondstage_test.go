@@ -1,0 +1,149 @@
+package writethrough
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+)
+
+var _ = Describe("Respond Stage", func() {
+	var (
+		mw      *pipelineMW
+		topPort messaging.Port
+		s       *respondStage
+	)
+
+	BeforeEach(func() {
+		// topPort is a real, single-slot port (owned by the component) so the
+		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
+		ports := makePorts("Cache", 4)
+		ports.Top = twowaybuffered.NewPort(1, 1)
+
+		mw = buildStageTestCache(
+			Definition.DefaultSpec,
+			Resources{Storage: mem.NewStorage(4 * mem.KB)},
+			ports,
+			state{},
+		)
+
+		topPort = ports.Top
+
+		s = &respondStage{cache: mw}
+	})
+
+	// fillOutgoing pre-fills topPort's single outgoing slot so the next
+	// CanSend returns false, simulating a busy port.
+	fillOutgoing := func() {
+		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+			Src:          topPort.AsRemote(),
+			Dst:          messaging.RemotePort("SomeSrc"),
+			TrafficClass: "rsp"}
+
+		Expect(topPort.CanSend()).To(BeTrue())
+		topPort.Send(dummy)
+	}
+
+	Context("read", func() {
+		var readMeta messaging.Msg
+
+		BeforeEach(func() {
+			next := &mw.comp.State
+
+			readMeta = messaging.Msg{
+				ID:           mw.comp.NewID(),
+				Src:          "SomeSrc",
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           readMeta,
+					ReadAddress:        0x100,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+				},
+			)
+		})
+
+		It("should stall if cannot send to top", func() {
+			next := &mw.comp.State
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
+			fillOutgoing()
+
+			madeProgress := s.Tick()
+
+			Expect(madeProgress).To(BeFalse())
+		})
+
+		It("should send data ready to top", func() {
+			next := &mw.comp.State
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
+
+			madeProgress := s.Tick()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(next.Transactions[0].Removed).To(BeTrue())
+
+			out, _ := topPort.RetrieveOutgoing()
+			dr := out
+			Expect(dr.RspTo).To(Equal(readMeta.ID))
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		})
+	})
+
+	Context("write", func() {
+		var writeMeta messaging.Msg
+
+		BeforeEach(func() {
+			next := &mw.comp.State
+
+			writeMeta = messaging.Msg{
+				ID:           mw.comp.NewID(),
+				Src:          "SomeSrc",
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    writeMeta,
+					WriteAddress: 0x100,
+					WritePID:     1,
+				},
+			)
+		})
+
+		It("should stall if cannot send to top", func() {
+			next := &mw.comp.State
+			next.Transactions[0].Done = true
+			fillOutgoing()
+
+			madeProgress := s.Tick()
+
+			Expect(madeProgress).To(BeFalse())
+		})
+
+		It("should send data ready to top", func() {
+			next := &mw.comp.State
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
+
+			madeProgress := s.Tick()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(next.Transactions[0].Removed).To(BeTrue())
+
+			out, _ := topPort.RetrieveOutgoing()
+			Expect(out.RspTo).To(Equal(writeMeta.ID))
+		})
+	})
+
+})

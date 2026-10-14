@@ -3,26 +3,24 @@ package tlb
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
 func newSingleStageTLB(t *testing.T) *Comp {
 	t.Helper()
-	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	sim := akitasim.MakeBuilder().Build()
 	spec := Definition.DefaultSpec
 	spec.Latency = 1
 	spec.NumReqPerCycle = 1
-	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).
-		WithResources(Resources{
-			TranslationProviderMapper: &mem.SinglePortMapper{Port: "Walker"},
-		}).Build("TLB")
+	spec.TranslationMapperType = "single"
+	spec.TranslationProviders = []messaging.RemotePort{"Walker"}
+	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("TLB")
 	ports := defaultPorts("TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)
@@ -93,14 +91,13 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 // TestTLBPipelineAcceptsEveryCycle guards against a stage-0 dwell, which made
 // each request hold the pipeline entry for two cycles and halved throughput.
 func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
-	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	sim := akitasim.MakeBuilder().Build()
 	spec := Definition.DefaultSpec
 	spec.Latency = 4
 	spec.NumReqPerCycle = 1
-	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).
-		WithResources(Resources{
-			TranslationProviderMapper: &mem.SinglePortMapper{Port: "Walker"},
-		}).Build("TLB")
+	spec.TranslationMapperType = "single"
+	spec.TranslationProviders = []messaging.RemotePort{"Walker"}
+	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("TLB")
 	ports := defaultPorts("TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)

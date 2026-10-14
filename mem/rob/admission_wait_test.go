@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func (c *admissionClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *milestoneRecorder, uint64) {
 	t.Helper()
 	clock := &admissionClock{Engine: timing.NewSerialEngine()}
-	sim := modeling.NewStandaloneSimulation(clock).WithTaskTracking()
+	sim := testsim.New(clock, true)
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 1
 	spec.BottomUnit = "Remote"

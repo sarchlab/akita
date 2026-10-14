@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -105,7 +107,7 @@ func build(sim timing.Simulation, spec Spec) *Comp {
 }
 
 func newSim() timing.Simulation {
-	return modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	return akitasim.MakeBuilder().Build()
 }
 
 func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
@@ -129,7 +131,7 @@ func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 // they are for the same component. The component must still handle them one
 // at a time.
 func TestSimultaneousEventsAreHandledOneAtATime(t *testing.T) {
-	sim := modeling.NewStandaloneSimulation(timing.NewParallelEngine())
+	sim := akitasim.MakeBuilder().WithParallelEngine().Build()
 	c := build(sim, Definition.DefaultSpec)
 
 	const n = 1000

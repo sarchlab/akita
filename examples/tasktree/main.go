@@ -18,13 +18,14 @@ import (
 	"fmt"
 	"strings"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/examples/tasktree/cache"
 	"github.com/sarchlab/akita/v5/examples/tasktree/client"
 	"github.com/sarchlab/akita/v5/examples/tasktree/memory"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -95,8 +96,8 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Build bottom-up, so each level's Spec can name the port of the level
 	// below it.

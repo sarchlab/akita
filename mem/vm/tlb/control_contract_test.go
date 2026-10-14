@@ -3,12 +3,11 @@ package tlb
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type ccNoopConn struct {
@@ -23,16 +22,13 @@ func (c *ccNoopConn) NotifySend()                      {}
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
 
+		routingSpec1 := Definition.DefaultSpec
+		routingSpec1.TranslationMapperType = "single"
+		routingSpec1.TranslationProviders = []messaging.RemotePort{messaging.RemotePort("MMU")}
 		comp := Definition.Builder().
-			WithSimulation(sim).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: messaging.RemotePort("MMU"),
-				},
-			}).
+			WithSimulation(sim).WithSpec(routingSpec1).
 			Build("TLB")
 		compPorts := defaultPorts("TLB")
 		comp.BindPort("Top", compPorts.Top)

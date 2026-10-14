@@ -3,11 +3,12 @@ package memcontrolprotocol_test
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -43,7 +44,7 @@ type pendingReq struct {
 }
 
 func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay int) *fakeComp {
-	c := &fakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+	c := &fakeComp{sim: akitasim.MakeBuilder().Build(),
 		name:       name,
 		matrix:     matrix,
 		asyncDelay: asyncDelay,

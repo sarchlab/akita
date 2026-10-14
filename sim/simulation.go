@@ -51,22 +51,23 @@ func (s *Simulation) Engine() timing.Engine {
 }
 
 // DataRecorder returns the data recorder used in the simulation. A simulator
-// can write its own tables into the same recording.
+// can write its own tables into the same recording. It is nil unless recording
+// was explicitly enabled during construction.
 func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
 // VisTracer returns the visualization tracer owned by the simulation.
-// It returns nil when task tracking is disabled. Enable WithTaskTracking during
-// construction to record tasks with manual StartTracing. WithMonitor and
-// WithVisTracingOnStart also enable task tracking and create the tracer.
+// It returns nil unless both task tracking and recording are enabled. For manual
+// StartTracing, use WithTaskTracking and WithOutputPath. WithMonitor and
+// WithVisTracingOnStart enable both services.
 func (s *Simulation) VisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
 
-// TraceDBPath returns the SQLite recording path, including the file extension.
+// TraceDBPath returns the exact SQLite recording path, or "" without recording.
 func (s *Simulation) TraceDBPath() string {
-	return s.outputPath + ".sqlite3"
+	return s.outputPath
 }
 
 // Monitor returns the live monitor attached to the simulation, if enabled.
@@ -164,7 +165,9 @@ func (s *Simulation) Terminate() {
 		s.topologyRecorder.Record(s.components, s.ports)
 	}
 
-	s.dataRecorder.Close()
+	if s.dataRecorder != nil {
+		s.dataRecorder.Close()
+	}
 }
 
 // NewID allocates an ID unique within this simulation.
@@ -173,6 +176,14 @@ func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
 // Initialize validates the completed wiring, freezes topology, and creates state
 // and middleware. Call it once before seeding work or loading a checkpoint.
 func (s *Simulation) Initialize() error { return s.setup.Initialize() }
+
+// Run executes queued events after successful initialization.
+func (s *Simulation) Run() error {
+	if err := s.setup.Ready(); err != nil {
+		return err
+	}
+	return s.engine.Run()
+}
 
 // RequireSetup rejects structural changes after initialization begins.
 func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }

@@ -3,6 +3,8 @@ package mmu
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -78,8 +80,8 @@ func verifyState(t *testing.T, got state, reqID uint64) {
 }
 
 func TestStateAndStateAssignment(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	mmu := buildTestMMU(sim, "TestMMU")
 
 	reqID := sim.NewID()

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -78,7 +80,7 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 }
 
 func newSim() timing.Simulation {
-	return modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	return akitasim.MakeBuilder().Build()
 }
 
 func newPort(name string) messaging.Port {

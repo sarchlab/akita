@@ -11,8 +11,8 @@ pages actually talk.
 ## Wiring It All Together
 
 ```go
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+sim := sim.MakeBuilder().Build()
+engine := sim.Engine()
 
 // Choose buffer sizes; binding below assigns each port its name.
 outA := twowaybuffered.NewPort(16, 16)

@@ -3,14 +3,13 @@ package tlb
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation lookup into the TLB so
@@ -20,19 +19,16 @@ import (
 // asserts every open task is ended, i.e. a mid-flight Reset leaves no
 // started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	remotePort := messaging.RemotePort("MMU")
 
+	routingSpec1 := Definition.DefaultSpec
+	routingSpec1.TranslationMapperType = "single"
+	routingSpec1.TranslationProviders = []messaging.RemotePort{remotePort}
 	tlbComp := Definition.Builder().
 		WithSimulation(sim).
-		WithSpec(Definition.DefaultSpec).
-		WithResources(Resources{
-			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: remotePort,
-			},
-		}).
+		WithSpec(routingSpec1).
 		Build("TLB")
 	tlbCompPorts := defaultPorts("TLB")
 	tlbComp.BindPort("Top", tlbCompPorts.Top)

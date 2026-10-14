@@ -55,7 +55,7 @@ func (c namedComponent) Name() string { return string(c) }
 func TestInjectedMonitorLifecycle(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "recording")
 	monitor := &lifecycleMonitor{}
-	s := sim.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
+	s := sim.MakeBuilder().WithOutputPath(output + ".sqlite3").WithMonitor(monitor).Build()
 	if s.Monitor() != monitor || monitor.runtime != s || monitor.path != output+".sqlite3" {
 		t.Fatal("monitor did not receive the simulation and recording destination")
 	}
@@ -75,7 +75,7 @@ func TestInjectedMonitorLifecycle(t *testing.T) {
 }
 
 func TestMonitoringIsOptIn(t *testing.T) {
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "recording")).Build()
+	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "recording") + ".sqlite3").Build()
 	defer s.Terminate()
 	if s.Monitor() != nil {
 		t.Fatal("default simulation unexpectedly has a monitor")
@@ -89,7 +89,7 @@ func TestMonitoringIsOptIn(t *testing.T) {
 }
 
 func TestHeadlessSimulationPreservesTracing(t *testing.T) {
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace")).
+	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3").
 		WithVisTracingOnStart().WithoutSourceRecording().Build()
 	if s.Monitor() != nil || !s.VisTracer().IsTracing() {
 		t.Fatal("headless simulation must preserve tracing")

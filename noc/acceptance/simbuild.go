@@ -24,7 +24,7 @@ func NewSimulation() *sim.Simulation {
 	b := sim.MakeBuilder()
 
 	if *traceFlag {
-		b = b.WithVisTracingOnStart().WithOutputFileName("trace")
+		b = b.WithVisTracingOnStart().WithOutputPath("trace" + ".sqlite3")
 	}
 
 	return b.Build()

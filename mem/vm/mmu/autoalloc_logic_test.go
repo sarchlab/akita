@@ -3,15 +3,14 @@ package mmu
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestAutoPageAllocationLogic tests the core auto page allocation functionality
 func TestAutoPageAllocationLogic(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
 	spec := Definition.DefaultSpec
@@ -79,8 +78,7 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 
 // TestPhysicalPageAllocator tests the physical page allocation algorithm
 func TestPhysicalPageAllocator(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
@@ -127,8 +125,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 
 // TestAutoPageAllocationDisabled tests behavior when auto page allocation is disabled
 func TestAutoPageAllocationDisabled(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation disabled (default)
 
@@ -150,8 +147,7 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 // TestAutoPageAllocationEnabled tests that auto page allocation is properly enabled
 func TestAutoPageAllocationEnabled(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
 	spec := Definition.DefaultSpec

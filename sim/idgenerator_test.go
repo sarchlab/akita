@@ -15,7 +15,7 @@ import (
 func buildIDTestSimulation(t *testing.T, parallel bool) *Simulation {
 	t.Helper()
 	b := MakeBuilder().WithoutSourceRecording().
-		WithOutputFileName(filepath.Join(t.TempDir(), "simulation"))
+		WithOutputPath(filepath.Join(t.TempDir(), "simulation") + ".sqlite3")
 	if parallel {
 		b = b.WithParallelEngine()
 	}

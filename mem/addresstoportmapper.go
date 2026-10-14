@@ -4,6 +4,15 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
+// AddressMapperType selects a built-in address-to-destination mapping.
+type AddressMapperType string
+
+const (
+	AddressMapperSingle      AddressMapperType = "single"
+	AddressMapperInterleaved AddressMapperType = "interleaved"
+	AddressMapperBanked      AddressMapperType = "banked"
+)
+
 // AddressToPortMapper helps a cache unit or a akita to find the low module that
 // should hold the data at a certain address
 type AddressToPortMapper interface {

@@ -3,9 +3,9 @@ package mmuCache
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/modeling"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func TestBuildRequiresBlocks(t *testing.T) {
 	spec.NumBlocks = 0
 
 	require.PanicsWithValue(t, "mmuCache: Spec.NumBlocks must be > 0", func() {
-		setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		setupSim1 := akitasim.MakeBuilder().Build()
 		builtComponent := Definition.Builder().
 			WithSimulation(setupSim1).
 			WithSpec(spec).

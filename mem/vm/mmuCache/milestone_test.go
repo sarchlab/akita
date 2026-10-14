@@ -3,12 +3,12 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -100,7 +100,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	BeforeEach(func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim := testsim.New(engine, true)
 
 		spec := Definition.DefaultSpec
 		spec.NumBlocks = 4

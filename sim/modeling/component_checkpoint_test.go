@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
@@ -64,7 +66,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	newScheduler := func() (*ticking.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
 		engine.RegisterHandler("C", handlerFunc(func(timing.Event) {}))
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := testsim.New(engine, false)
 		if err := sim.Initialize(); err != nil {
 			t.Fatal(err)
 		}

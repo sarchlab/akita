@@ -23,7 +23,7 @@ type initializationComp = ticking.Component[
 func TestExplicitBindingThenInitialization(t *testing.T) {
 	for _, parallel := range []bool{false, true} {
 		t.Run(map[bool]string{false: "serial", true: "parallel"}[parallel], func(t *testing.T) {
-			builder := MakeBuilder().WithoutSourceRecording().WithOutputFileName(filepath.Join(t.TempDir(), "trace"))
+			builder := MakeBuilder().WithoutSourceRecording().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3")
 			if parallel {
 				builder = builder.WithParallelEngine()
 			}
@@ -40,7 +40,7 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			}
 			c := def.Builder().WithSimulation(s).Build("GPU.SA.CU")
 			require.Zero(t, calls)
-			require.ErrorContains(t, s.Engine().Run(), "Initialize")
+			require.ErrorContains(t, s.Run(), "Initialize")
 			path := filepath.Join(t.TempDir(), "snapshot.tar.gz")
 			require.ErrorContains(t, s.SaveCheckpoint(path), "Initialize")
 			require.NoFileExists(t, path)
@@ -56,7 +56,7 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.Equal(t, "GPU.SA.CU.Top", p.Name())
 			require.Same(t, c, p.Owner())
 			require.Same(t, conn, p.Connection())
-			require.NoError(t, s.Engine().Run())
+			require.NoError(t, s.Run())
 			require.Error(t, s.Initialize())
 			require.Panics(t, func() { def.Builder().WithSimulation(s).Build("Late") })
 			require.Panics(t, func() { c.BindPort("Top", twowaybuffered.NewPort(1, 1)) })

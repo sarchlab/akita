@@ -3,11 +3,12 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -25,7 +26,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		spec := Definition.DefaultSpec
 		spec.NumBlocks = 1
@@ -200,7 +201,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg2 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		reg2 := akitasim.MakeBuilder().Build()
 		comp2 := Definition.Builder().
 			WithSimulation(reg2).
 			WithSpec(spec).

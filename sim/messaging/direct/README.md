@@ -54,8 +54,8 @@ conn.BindPort(portC)
 
 ```go
 // Create engine and connection
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+sim := sim.MakeBuilder().Build()
+engine := sim.Engine()
 conn := direct.NewConnection("Bus", sim, timing.GHz)
 
 // Create components with ports, then plug them in

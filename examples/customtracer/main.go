@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sync"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -120,8 +122,8 @@ func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	worker := Definition.Builder().
 		WithSimulation(sim).

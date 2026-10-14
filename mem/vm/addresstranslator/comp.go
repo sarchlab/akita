@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem/internal/addressmapping"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -15,6 +17,26 @@ import (
 
 // Spec contains immutable configuration for the AddressTranslator.
 type Spec struct {
+	// Mem routing configuration.
+	MemMapperType                mem.AddressMapperType  `json:"mem_mapper_type"`
+	MemProviders                 []messaging.RemotePort `json:"mem_providers"`
+	MemInterleavingSize          uint64                 `json:"mem_interleaving_size"`
+	MemBankSize                  uint64                 `json:"mem_bank_size"`
+	MemUseAddressSpaceLimitation bool                   `json:"mem_use_address_space_limitation"`
+	MemLowAddress                uint64                 `json:"mem_low_address"`
+	MemHighAddress               uint64                 `json:"mem_high_address"`
+	MemModuleForOtherAddresses   messaging.RemotePort   `json:"mem_module_for_other_addresses"`
+
+	// Translation routing configuration.
+	TranslationMapperType                mem.AddressMapperType  `json:"translation_mapper_type"`
+	TranslationProviders                 []messaging.RemotePort `json:"translation_providers"`
+	TranslationInterleavingSize          uint64                 `json:"translation_interleaving_size"`
+	TranslationBankSize                  uint64                 `json:"translation_bank_size"`
+	TranslationUseAddressSpaceLimitation bool                   `json:"translation_use_address_space_limitation"`
+	TranslationLowAddress                uint64                 `json:"translation_low_address"`
+	TranslationHighAddress               uint64                 `json:"translation_high_address"`
+	TranslationModuleForOtherAddresses   messaging.RemotePort   `json:"translation_module_for_other_addresses"`
+
 	Freq           timing.Freq `json:"freq"`
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
@@ -51,12 +73,8 @@ type middlewares struct {
 	RespondPipeline *respondPipelineMW
 }
 
-// Resources holds the external wiring referenced by the AddressTranslator. The
-// mappers tell the translator where to send memory and translation requests.
-type Resources struct {
-	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
-	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
-}
+// Resources is empty; routing configuration belongs to Spec.
+type Resources struct{}
 
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
@@ -262,3 +280,23 @@ func buildReqToBottom(
 
 // Comp is the AddressTranslator component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
+
+func (s Spec) memMapping() addressmapping.Config {
+	return addressmapping.Config{Kind: s.MemMapperType, Ports: s.MemProviders,
+		InterleavingSize:          s.MemInterleavingSize,
+		BankSize:                  s.MemBankSize,
+		UseAddressSpaceLimitation: s.MemUseAddressSpaceLimitation,
+		LowAddress:                s.MemLowAddress,
+		HighAddress:               s.MemHighAddress,
+		ModuleForOtherAddresses:   s.MemModuleForOtherAddresses}
+}
+
+func (s Spec) translationMapping() addressmapping.Config {
+	return addressmapping.Config{Kind: s.TranslationMapperType, Ports: s.TranslationProviders,
+		InterleavingSize:          s.TranslationInterleavingSize,
+		BankSize:                  s.TranslationBankSize,
+		UseAddressSpaceLimitation: s.TranslationUseAddressSpaceLimitation,
+		LowAddress:                s.TranslationLowAddress,
+		HighAddress:               s.TranslationHighAddress,
+		ModuleForOtherAddresses:   s.TranslationModuleForOtherAddresses}
+}

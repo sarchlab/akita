@@ -3,12 +3,11 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -28,21 +27,18 @@ var _ = Describe("TLB", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		spec := Definition.DefaultSpec
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
+		spec.TranslationMapperType = "single"
+		spec.TranslationProviders = []messaging.RemotePort{remotePort}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: remotePort,
-				},
-			}).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)
@@ -516,21 +512,19 @@ var _ = Describe("TLB Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		connection = makeDirectConnection(sim)
 
 		lowModule = newIdealEndpoint("LowModule")
 		agent = newIdealEndpoint("Agent")
 
+		routingSpec2 := Definition.DefaultSpec
+		routingSpec2.TranslationMapperType = "single"
+		routingSpec2.TranslationProviders = []messaging.RemotePort{lowModule.port.AsRemote()}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
-			WithSpec(Definition.DefaultSpec).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: lowModule.port.AsRemote(),
-				},
-			}).
+			WithSpec(routingSpec2).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)

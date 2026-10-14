@@ -216,6 +216,16 @@ func evalSpecValue(pkg *packages.Package, expr ast.Expr) (any, error) {
 		elems = make([]any, 0, len(lit.Elts))
 	case *types.Array:
 		elems = make([]any, 0, t.Len())
+	case *types.Struct:
+		explicit, err := evalStructLiteral(pkg, lit)
+		if err != nil {
+			return nil, err
+		}
+		record := zeroValue(tv.Type).(map[string]any)
+		for name, value := range explicit {
+			record[name] = value
+		}
+		return record, nil
 	default:
 		return evalConstExpr(pkg, expr)
 	}
@@ -226,7 +236,7 @@ func evalSpecValue(pkg *packages.Package, expr ast.Expr) (any, error) {
 				"slice literal elements must not be keyed")
 		}
 
-		v, err := evalConstExpr(pkg, elt)
+		v, err := evalSpecValue(pkg, elt)
 		if err != nil {
 			return nil, err
 		}
@@ -263,6 +273,12 @@ func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 // out, in the same representation as constantValue.
 func zeroValue(typ types.Type) any {
 	switch u := typ.Underlying().(type) {
+	case *types.Struct:
+		record := map[string]any{}
+		for i := range u.NumFields() {
+			record[u.Field(i).Name()] = zeroValue(u.Field(i).Type())
+		}
+		return record
 	case *types.Slice:
 		return []any{}
 	case *types.Array:

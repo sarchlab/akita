@@ -57,13 +57,7 @@ func (w *walker) validateFieldType(t reflect.Type, path string, allowComposite b
 
 	case reflect.Slice, reflect.Array:
 		if !allowComposite {
-			if !isScalarKind(t.Elem().Kind()) {
-				return fmt.Errorf("%s: %s of %s not allowed in spec; "+
-					"spec fields must be scalars or slices of scalars",
-					path, t.Kind(), t.Elem().Kind())
-			}
-
-			return nil
+			return w.validateSpecSequence(t, path)
 		}
 
 		return w.validateFieldType(t.Elem(), path+"[]", allowComposite)
@@ -71,7 +65,7 @@ func (w *walker) validateFieldType(t reflect.Type, path string, allowComposite b
 	case reflect.Map:
 		if !allowComposite {
 			return fmt.Errorf("%s: map not allowed in spec; "+
-				"spec fields must be scalars or slices of scalars", path)
+				"spec fields must be scalars, scalar arrays/slices, or slices of flat scalar records", path)
 		}
 
 		k := t.Key().Kind()
@@ -117,7 +111,7 @@ func isScalarKind(k reflect.Kind) bool {
 }
 
 func (w *walker) validateStructType(t reflect.Type, path string, allowComposite bool) error {
-	// Spec fields must be scalars or slices of scalars even when the Spec
+	// Spec fields must follow the flat configuration rules even when the Spec
 	// customizes its JSON: any other container is not configuration.
 	if !allowComposite {
 		if err := w.validateFields(t, path, allowComposite); err != nil {
@@ -393,5 +387,30 @@ func validateSpecJSONValue(v reflect.Value, path string) error {
 			}
 		}
 	}
+	return nil
+}
+
+// validateSpecRecord permits only exported scalar fields with explicit JSON names.
+func (w *walker) validateSpecRecord(t reflect.Type, path string) error {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if !f.IsExported() || !isScalarKind(f.Type.Kind()) || name == "-" || !isValidJSONName(name) {
+			return fmt.Errorf("%s.%s: Spec record fields must be exported scalars with explicit JSON names", path, f.Name)
+		}
+	}
+	return w.validateStructType(t, path, false)
+}
+
+func (w *walker) validateSpecSequence(t reflect.Type, path string) error {
+	if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct {
+		return w.validateSpecRecord(t.Elem(), path+"[]")
+	}
+	if !isScalarKind(t.Elem().Kind()) {
+		return fmt.Errorf("%s: %s of %s not allowed in spec; "+
+			"spec fields must be scalars, scalar arrays/slices, or slices of flat scalar records",
+			path, t.Kind(), t.Elem().Kind())
+	}
+
 	return nil
 }

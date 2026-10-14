@@ -2,13 +2,14 @@ package monitoring
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/internal/testsim"
+	"github.com/stretchr/testify/require"
+
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -46,7 +47,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 		"parallel": timing.NewParallelEngine(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := modeling.NewStandaloneSimulation(e)
+			s := testsim.New(e, false)
 			require.NoError(t, s.Initialize())
 			m := newTestMonitorWithSimulation(s)
 			component := newSliceFieldComponent("snapshot", []int{10, 20})
@@ -108,7 +109,7 @@ func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 	if err := e.RequestPause().Wait(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	s := modeling.NewStandaloneSimulation(e)
+	s := testsim.New(e, false)
 	require.NoError(t, s.Initialize())
 	m := newTestMonitorWithSimulation(s)
 	w := httptest.NewRecorder()
@@ -127,8 +128,6 @@ type stateReportingEngine struct {
 	state timing.EngineState
 }
 
-func (stateReportingEngine) SetRunGuard(func() error) {}
-
 func (e stateReportingEngine) State() timing.EngineState { return e.state }
 
 func TestMonitorReportsAllEngineStates(t *testing.T) {
@@ -143,7 +142,7 @@ func TestMonitorReportsAllEngineStates(t *testing.T) {
 		{timing.EngineResuming, "resuming", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(stateReportingEngine{state: tc.state}))
+			m := newTestMonitorWithSimulation(testsim.New(stateReportingEngine{state: tc.state}, false))
 			w := httptest.NewRecorder()
 			m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 			var response engineStateRsp

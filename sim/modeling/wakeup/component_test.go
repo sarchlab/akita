@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -73,7 +75,7 @@ func build(sim timing.Simulation, spec Spec) *Comp {
 }
 
 func newSim() timing.Simulation {
-	return modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	return akitasim.MakeBuilder().Build()
 }
 
 func run(t *testing.T, sim timing.Simulation) {

@@ -100,6 +100,8 @@ func TestInspect(t *testing.T) {
 		}
 	})
 
+	checkFlatRecordFields(t, byPkg[fixturePath("flatlinks")])
+
 	t.Run("slices of scalars", func(t *testing.T) {
 		checkSliceFields(t, byPkg)
 	})
@@ -460,4 +462,23 @@ func fixturePatterns(t *testing.T) []string {
 		}
 	}
 	return patterns
+}
+
+func checkFlatRecordFields(t *testing.T, def schema.Definition) {
+	t.Helper()
+	if len(def.Spec) != 2 {
+		t.Fatalf("missing flat record definition: %+v", def)
+	}
+	field := def.Spec[1]
+	want := []any{
+		map[string]any{"Remote": "Peer.Top", "Latency": int64(3)},
+		map[string]any{"Remote": "Other.Top", "Latency": int64(0)},
+	}
+	if !reflect.DeepEqual(field.Default, want) {
+		t.Fatalf("defaults = %#v", field.Default)
+	}
+	if len(field.Fields) != 2 || field.Fields[0].JSONName != "remote" ||
+		field.Fields[1].Min == nil || *field.Fields[1].Min != 0 {
+		t.Fatalf("record fields = %+v", field.Fields)
+	}
 }

@@ -3,6 +3,9 @@ package simplebankedmemory
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
@@ -12,7 +15,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -179,8 +181,8 @@ const (
 )
 
 func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.Freq) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	freq := 1 * timing.GHz
 
 	spec := Definition.DefaultSpec
@@ -255,7 +257,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(4 * mem.GB)
 
 		spec := Definition.DefaultSpec
@@ -362,7 +364,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 	})
 
 	It("accesses storage at the global request address (identity)", func() {
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		// Storage is global: a request's address indexes the backing store
 		// directly, with no per-controller conversion.
 		spec := Definition.DefaultSpec

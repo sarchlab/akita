@@ -3,12 +3,11 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -130,21 +129,18 @@ var _ = Describe("TLB milestones", func() {
 
 	BeforeEach(func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim = testsim.New(engine, true)
 
 		spec := Definition.DefaultSpec
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
+		spec.TranslationMapperType = "single"
+		spec.TranslationProviders = []messaging.RemotePort{remotePort}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: remotePort,
-				},
-			}).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)

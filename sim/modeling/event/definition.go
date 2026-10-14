@@ -14,6 +14,12 @@ type Definition[S, T, R, P, M any] struct {
 	// Build copies it, so replace a slice field rather than writing into it.
 	DefaultSpec S
 
+	// ValidateSpec checks configuration values at Build, before registration.
+	ValidateSpec func(S) error
+
+	// ValidateSetup checks completed wiring before any component initializes.
+	ValidateSetup func(c *Component[S, T, R, P, M]) error
+
 	// NewState returns the initial State of the instance, which may depend on
 	// its name, Spec, Resources, and Ports. Initialize calls it once, after the
 	// ports are bound and before the middlewares exist. Omit it to start from

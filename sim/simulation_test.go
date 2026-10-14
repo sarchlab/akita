@@ -219,7 +219,7 @@ var _ = Describe("Simulation", func() {
 
 		It("should allow custom output file to be set", func() {
 			builder := MakeBuilder().
-				WithOutputFileName("test_custom_output")
+				WithOutputPath("test_custom_output" + ".sqlite3")
 			customSim = builder.Build()
 
 			Expect(customSim).ToNot(BeNil())

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem"
+
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -14,7 +16,8 @@ import (
 
 // respondPipelineMW handles translation responses and bottom-port responses.
 type respondPipelineMW struct {
-	comp *Comp
+	memProvider mem.AddressToPortMapper
+	comp        *Comp
 }
 
 func (m *respondPipelineMW) topPort() messaging.Port {
@@ -73,7 +76,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	spec := m.comp.Spec
 	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(vmprotocol.TranslationRsp).Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Resources.MemProviderMapper)
+		m.memProvider)
 
 	if !m.bottomPort().CanSend() {
 		return false

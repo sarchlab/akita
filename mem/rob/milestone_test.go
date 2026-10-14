@@ -4,12 +4,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // milestoneRecorder captures the task starts, milestones, and tags the ROB
@@ -81,8 +80,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	)
 
 	BeforeEach(func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 		spec := Definition.DefaultSpec
 		spec.BufferSize = 4

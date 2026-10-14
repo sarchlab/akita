@@ -5,8 +5,8 @@ slug: /simulation
 # sim — Simulation Framework and Runner
 
 Package `sim` provides the top-level simulation runner for the Akita
-simulation framework. It wires together an engine, a data recorder, a visual
-tracer, and an optional monitoring server, and acts as a global inventory that
+simulation framework. It wires together an engine and optional recording, visual
+tracing, and monitoring services, and acts as a global inventory that
 registers every runtime object as a named entity.
 
 ## Package layout
@@ -43,13 +43,17 @@ accessors for runtime services such as `Engine`, `DataRecorder`,
 `TaskTracker`, and `VisTracer`. The entity inventory is internal; keep the
 component and port references returned during setup. After all ports and connections
 are bound, call `s.Initialize()` to validate wiring and create component State
-and Middlewares. This freezes topology; seed work and run only afterward.
+and Middlewares. This freezes topology; seed work and call `s.Run()` afterward.
+`Simulation.Run() error` checks successful initialization. Direct `Engine.Run()`
+and `SerialEngine.RunUntil(t)` require initialization but do not check it.
+`RunUntil` is a serial-engine checkpoint/testing API, not part of `Engine` or
+`Simulation`. Custom engine injection is deferred to v5.2.
 
 ## Key Concepts
 
-- A `Simulation` holds an `Engine` (serial or parallel), a SQLite-backed
-  `DataRecorder`, a `DBTracer` for visual tracing (used by the Daisen
-  visualizer), and an optional `Monitor` for live web inspection.
+- A `Simulation` always holds an `Engine` (serial or parallel). Recording,
+  visual tracing, and monitoring are optional. The default simulation creates
+  no database and no output files, including during Run and Terminate.
 - Every registered runtime object — component, port, connection, and
   shared-state resource — is held in one internal flat inventory. Names are
   **globally unique across all kinds**.
@@ -60,7 +64,7 @@ and Middlewares. This freezes topology; seed work and run only afterward.
 ## Builder Pattern
 
 ```go
-monitor := monitoring.NewMonitor().WithPortNumber(8080)
+monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().
     WithParallelEngine().       // optional: use the parallel engine
     WithMonitor(monitor).       // optional: enable live monitoring
@@ -73,9 +77,9 @@ defer s.Terminate()
 |--------|-------------|
 | `WithParallelEngine()` | Use `ParallelEngine` instead of `SerialEngine` |
 | `WithMonitor(monitor)` | Attach an optional monitor; omitted by default |
-| `WithOutputFileName(name)` | Custom SQLite output file name |
+| `WithOutputPath(path)` | Enable recording at this exact path; existing files are rejected |
 | `WithVisTracingOnStart()` | Enable task tracking and visual tracing from time 0 |
-| `WithTaskTracking()` | Enable task tracking and prepare the tracer for manual recording |
+| `WithTaskTracking()` | Enable in-memory task tracking; no recording by itself |
 
 ### Optional monitoring
 
@@ -86,10 +90,13 @@ above. After creating the engine, tracer, and recorder, the runner calls
 registrations and stops the monitor before closing those resources in `Terminate`.
 Each monitor belongs to one simulation and must not be reused.
 
-The visualization tracer is constructed only when task tracking is enabled by
-`WithTaskTracking`, `WithMonitor`, or `WithVisTracingOnStart`. Otherwise,
-`VisTracer()` returns nil and no tracing tables are created. Recording starts
-with `WithVisTracingOnStart` or a later `VisTracer().StartTracing()` call.
+Recording is enabled explicitly by `WithOutputPath`, `WithVisTracingOnStart`, or
+`WithMonitor`. Without an explicit path, the latter two choose a unique SQLite
+filename. Existing files are never overwritten. `WithTaskTracking` alone keeps
+tracking in memory: `DataRecorder()` and `VisTracer()` remain nil. For manual
+database tracing, combine `WithTaskTracking().WithOutputPath("trace.sqlite3")`,
+then call `s.VisTracer().StartTracing()`. `WithVisTracingOnStart` starts it
+automatically. A DB tracer exists only when both tracking and recording are on.
 Monitors can access runtime services through `Engine()`, `DataRecorder()`,
 `VisTracer()`, and `TraceDBPath()` without changing their lifecycle interface.
 

@@ -48,9 +48,24 @@ port name, or build and bind the destination before asking for its address.
 Components remain unaware of domains; domain configuration/builders are a
 separate change.
 
-Custom `timing.Simulation` implementations must provide `Initialize`,
-`RequireSetup`, and `RequireNameAvailable`. Custom `timing.Engine` implementations
-must provide `SetRunGuard` and check the installed guard before executing events.
+Use `sim.MakeBuilder().Build()` for every setup; StandaloneSimulation is removed.
+`Simulation.Run()` checks that Initialize succeeded. Direct `Engine.Run()` and
+`SerialEngine.RunUntil(t)` require prior initialization but do not check it.
+RunUntil remains only on SerialEngine for deterministic checkpoint boundaries.
+Custom engine injection is deferred to v5.2.
+
+Recording is off by default. `WithOutputPath(path)` enables it at an exact path
+and rejects existing files. `WithVisTracingOnStart` and `WithMonitor` also enable
+recording, choosing a unique filename when none is supplied. `WithTaskTracking`
+alone works in memory; `VisTracer()` is nil. For manual database tracing, combine
+tracking with an explicit recording option.
+
+Monitor and NoC connector configuration now uses value builders:
+`MakeBuilder().With...().Build()` (or `Build(name)` for a connector). Only builders
+have With methods; topology assembly happens on the built connector. Use
+`WithFreq` consistently. Frequency/bandwidth derived values are computed at Build.
+Imports move from `noc/networking/...` to `noc/...`, and from
+`mem/cache/writethroughcache` to `mem/cache/writethrough`.
 
 ## Domain API deferred to v5.1
 
@@ -124,7 +139,7 @@ must add `WithMonitor` to retain live monitoring; importing the package alone
 does not enable it. MGPUSim migration is a separate change.
 
 ```go
-monitor := monitoring.NewMonitor().WithPortNumber(8080)
+monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().WithMonitor(monitor).Build()
 defer s.Terminate()
 bar := monitor.CreateProgressBar("kernels", 100)
@@ -132,7 +147,7 @@ bar := monitor.CreateProgressBar("kernels", 100)
 
 Remove `WithoutMonitoring()` calls; omitting `WithMonitor` disables monitoring.
 Tracing remains independent. Move `WithMonitorPort(port)` configuration to
-`monitoring.NewMonitor().WithPortNumber(port)`. Keep the concrete `monitor`
+`monitoring.MakeBuilder().WithPortNumber(port).Build()`. Keep the concrete `monitor`
 variable for progress bars and other monitor-specific operations.
 
 Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
@@ -348,7 +363,7 @@ Pass the simulation to builders with `WithSimulation(sim)`. All component and
 package builders accept the shared `timing.Simulation` interface. A component
 keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
-`modeling.NewStandaloneSimulation(engine)` once and share that instance with
+`sim.MakeBuilder().Build()` once and share that instance with
 all builders. A custom task owner implements `tasks.Owner`: `Name`,
 `CurrentTime`, `NewID`, and `TaskTracker`, all backed by the same simulation.
 Tracking does not require a hook interface. Monitors receive the simulation
@@ -400,7 +415,7 @@ if msg.ID == 0 { ... }
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
 - Replace global ID allocation with `sim.NewID()` or `component.NewID()`.
-- Simulation checkpoints include the owned counter. A standalone simulation (`modeling.NewStandaloneSimulation`) does not support checkpoints. Restore into fresh instances.
+- Simulation checkpoints include the owned counter. Restore into fresh initialized instances.
 
 ---
 
@@ -689,7 +704,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 
 | Struct | What it is | Supplied by | Key rule |
 |--------|------------|-------------|----------|
-| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them) and slices or arrays of scalars. No maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
+| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and slices of flat scalar records with explicit JSON tags. No maps, standalone nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
@@ -836,7 +851,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Core Principles
 
 1. Spec (immutable configuration)
-   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) and slices of scalars. No maps or nested structs.
+   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) scalar slices/arrays, and slices of flat scalar records with explicit JSON tags. No maps or standalone nested structs.
    - Strategy dependencies are expressed as flat scalar fields: a kind plus its scalar parameters (e.g., `AddressMapperType: "interleaved"` and `InterleavingSize: 4096`).
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
    - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
@@ -849,7 +864,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - A checkpoint serializes the State; loading one replaces it wholesale.
 
 3. Resources (references supplied by the system builder)
-   - References to shared objects — a `*mem.Storage`, a `vm.PageTable`, a `mem.AddressToPortMapper` — passed with `WithResources`.
+   - References to shared objects — a `*mem.Storage` or a `vm.PageTable` — passed with `WithResources`.
    - Not checkpointed. A shared object that holds data checkpoints itself as a registered resource, and the rebuild supplies the same references again.
 
 4. Ports (declared by the component, created by the system builder)
@@ -866,7 +881,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 - Strategy injection (e.g., address conversion)
   - Keep in Spec as flat scalar fields (a `Kind` string plus scalar parameters), not as a live object.
-  - Resolve to concrete implementations in the component package (in `NewState` or `NewMiddlewares`), or accept a ready-made object through Resources — the caches take a `mem.AddressToPortMapper` either way.
+  - Derive private lookup implementations in `NewMiddlewares` from Spec. Builtin components do not accept mapper overrides through Resources.
   - On restore, reconstruct from Spec; never serialize strategy objects.
 
 - Emulation state (e.g., memory storage)
@@ -917,23 +932,37 @@ This pattern generalizes to other components: keep Spec flat and declarative, ke
 
 ### Lists in Spec
 
-V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a Spec has a map, a nested struct, a slice of containers, a pointer, or an interface field, and the `inspect` package reports the same error. A V4 configuration field that holds a list is usually one of three things:
+V5 Spec accepts scalars, scalar arrays/slices, and slices of flat scalar records
+such as `[]Link`. Every field in a record must be an exported scalar with an
+explicit, unique JSON name. Nested structs/containers, maps, pointers, interfaces,
+and record arrays are rejected; runtime validation and `inspect` use the same
+rules. The inspector exports record fields and literal defaults in its schema.
 
 | The list is… | Put it in | Example |
 |---|---|---|
-| Configuration whose length depends on the system | A slice of scalars in Spec, which the system builder fills before `Build` | A command processor's `CUs []messaging.RemotePort`, or a per-SIMD `VGPRCounts []int`. |
-| Wiring through an address mapping | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources. |
-| Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
+| Destinations or address mapping | Spec | `RemotePorts`, mapper kind, interleaving/bank size, range and fallback destination |
+| Per-link configuration | Spec | `Links []Link`, index-aligned with `Ports.Links` |
+| Runtime data | State | Queues and in-flight transactions |
+| Shared live objects | Resources | Storage and page tables |
 
-`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Fill remote-port lists with planned full names during configuration, or bind the destination ports before calling `AsRemote()`.
+Build copies Spec slices. Do not mutate the instance's Spec afterward; it is
+included in checkpoint compatibility checks. Fill remote addresses with planned
+full names, or bind destination ports before calling `AsRemote()`.
 
-A component's Resources are not part of its checkpoint. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring; a shared object they point to, such as a `mem.Storage`, is a registered resource that checkpoints itself. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
+Builtin components derive address mappers and routing tables privately from Spec
+during initialization. Resources must not provide a second routing override.
+Resources are rebuilt separately; shared registered objects checkpoint themselves.
+
+Use Definition.ValidateSpec for configuration-only checks at Build. Use
+Definition.ValidateSetup for checks involving bound ports during Initialize,
+before any State or Middlewares is created. In particular, link count equality
+is an Initialize check, since Build precedes port binding.
 
 ### Migration Checklist
 
 - Give each component type its own package, and choose its model: `modeling/ticking` for cycle-by-cycle work, `modeling/wakeup` or `modeling/event` for clockless components.
 - Split each component's configuration into Spec (scalar user settings, including `Freq timing.Freq` for a ticking component), State (data that changes while simulating), and Resources (references to external objects and the wiring derived from them).
-- Replace every slice, array, map, or nested-struct Spec field using the table above.
+- Classify lists and nested values using the table above; flatten unsupported containers.
 - Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
 - Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>.<role>"` when it speaks a protocol role, where `<protocol>` is the import path of the package that defines the protocol. Reach ports as `comp.Ports.X`.

@@ -3,15 +3,14 @@ package mmu
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestPageSizeValidation tests that the MMU validates page table page size consistency
 func TestPageSizeValidation(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
@@ -64,7 +63,7 @@ func TestPageSizeValidation(t *testing.T) {
 
 // TestPageTableRequired tests that Build panics when no page table is given.
 func TestPageTableRequired(t *testing.T) {
-	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	sim := akitasim.MakeBuilder().Build()
 
 	defer func() {
 		expectedMessage := "mmu: Resources.PageTable is required"
