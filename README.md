@@ -122,7 +122,7 @@ It does not cover:
 ## Package organization
 
 `sim` is the runner and umbrella for the simulation infrastructure:
-`sim/{naming,hooking,queueing,timing,messaging,modeling,tasks,datarecording}`.
+`sim/{naming,hooking,queueing,timing,messaging,modeling,tasks,datarecording,sourcefs}`.
 Task observers live in `sim/tasks/tracing`. Hardware models remain under `mem`
 and `noc`; the live UI and trace viewer are `monitoring` and `daisen`. See [the simulation guide](sim/README.md)
 for setup and [the migration guide](doc/tutorial/migration.md) for import and

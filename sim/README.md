@@ -25,6 +25,7 @@ provide independently usable building blocks:
 | `sim/tasks` | Task lifecycles, identities, and observer subscriptions |
 | `sim/tasks/tracing` | Built-in task observers for recording and statistics |
 | `sim/datarecording` | Recording simulation results |
+| `sim/sourcefs` | Archiving and reading recorded source |
 
 These packages remain in the same Go module. Import, for example,
 `github.com/sarchlab/akita/v5/sim/modeling/ticking`. Runtime subpackages
@@ -188,7 +189,7 @@ setup rebuilds; put cursors and counters in `State`.
   ports, `mem.Storage`, and `vm.PageTable` already do.
 
 **Writing your own checkpointable messages, events, and components:** see
-[`doc/tutorial/checkpointing.md`](/tutorial/checkpointing) for the full checklists, a
+[`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md) for the full checklists, a
 worked example, and the gotchas.
 
 See `examples/checkpointdemo` for a runnable save/load demo and

@@ -21,8 +21,10 @@ npm run serve
 
 The build fails on missing sidebar document IDs, broken Markdown links,
 broken site links, or missing anchors. Package documentation includes READMEs,
-control guides, and DRAM roadmaps. Links between docs plugins use site routes;
-links to source-only examples and release notes use GitHub URLs.
+control guides, and DRAM roadmaps. Shared links between docs plugins keep
+relative Markdown paths so they also work on GitHub. The config maps the known
+cross-plugin targets to site routes; any other unresolved Markdown target
+fails the build. Links to source-only examples and release notes use GitHub URLs.
 
 The default base path is `/akita-dev/`. To reproduce the public site:
 

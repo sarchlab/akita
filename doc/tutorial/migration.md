@@ -99,7 +99,8 @@ attached. Wire support and non-ideal link timing remain separate changes.
 ## Simulation umbrella and tool names
 
 The runtime packages now live below `sim/`: `naming`, `hooking`,
-`queueing`, `timing`, `messaging`, `modeling`, `tasks`, and `datarecording`.
+`queueing`, `timing`, `messaging`, `modeling`, `tasks`, `datarecording`, and
+`sourcefs`.
 Task observers live in `sim/tasks/tracing`; replace old `sim/tracing` imports
 with `sim/tasks` for task commands and `sim/tasks/tracing` for observers.
 Change imports such as `github.com/sarchlab/akita/v5/timing` to
@@ -107,6 +108,10 @@ Change imports such as `github.com/sarchlab/akita/v5/timing` to
 component-model subpackages and mock-generation directives. The runner also moves from
 `github.com/sarchlab/akita/v5/simulation` to `github.com/sarchlab/akita/v5/sim`;
 its Go package is now named `sim`, while the type remains `sim.Simulation`.
+
+Source archives currently live in `sim/sourcefs`. Register a simulator's source
+with `sim.Builder.WithSourceFS`; moving the archive implementation to `internal/`
+is tracked separately in [#539](https://github.com/sarchlab/akita/issues/539).
 
 The live monitor is now `github.com/sarchlab/akita/v5/monitoring` and the
 visualizer is `github.com/sarchlab/akita/v5/daisen`. The old package paths are

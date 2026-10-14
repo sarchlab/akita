@@ -112,7 +112,7 @@ registration-coverage audit
 (`protocolaudit_test.go`) fails CI for concrete payloads constructed in library message literals that are
 not registered. Events are registered with `timing.RegisterEvent`. No custom
 marshalling is needed.
-See [`doc/tutorial/checkpointing.md`](/tutorial/checkpointing).
+See [`doc/tutorial/checkpointing.md`](../../doc/tutorial/checkpointing.md).
 
 ### Port
 

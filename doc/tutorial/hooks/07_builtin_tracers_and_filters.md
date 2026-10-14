@@ -134,4 +134,4 @@ tasks behind your question.
 The final chapter is an advanced look under the hood: how typed task notifications relate to generic port hooks.
 
 Enable task tracking before assembly. Recording is separate from tracking; see
-[recording windows and history limits](/packages/tasks/tracing/).
+[recording windows and history limits](../../../sim/tasks/tracing/README.md).

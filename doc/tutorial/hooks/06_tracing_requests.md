@@ -38,5 +38,5 @@ and must not re-enter the Tracker or port buffer operations.
 
 See the runnable [request example](https://github.com/sarchlab/akita/tree/main/examples/reqtracing),
 [task tree](https://github.com/sarchlab/akita/tree/main/examples/tasktree), and [custom observer](https://github.com/sarchlab/akita/tree/main/examples/customtracer).
-The [task API guide](/packages/tasks/) covers buffer admission,
+The [task API guide](../../../sim/tasks/README.md) covers buffer admission,
 subscription scope, recording windows, and checkpoint restoration and history limits.
