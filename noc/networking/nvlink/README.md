@@ -15,12 +15,18 @@ switch, and connects the device switch to a PCIe switch toward the host.
 
 - **PCIe** links carry CPU-device traffic; their flit size is derived from the
   PCIe bandwidth (version × lane width) and the network frequency.
-- **NVLink** links directly join two devices' NVLink switches; bandwidth comes
-  from the NVLink version, and `numLink` sets the link's pipeline width.
+- **NVLink** links directly join two devices' NVLink switches. The connector
+  computes link parameters from the NVLink version and `numLink`, but the
+  underlying ideal-link implementation ignores their frequency and width.
+  `WithNVLinkBandwidth`, `WithNVLinkVersion`, and `numLink` do not currently
+  change link throughput.
 
-Routing uses a `BandwidthFirstRouter`, so paths prefer higher-bandwidth links
-(e.g. NVLink between peers) over PCIe. Routing tables are populated by
-`EstablishRoute`.
+All links are ideal direct connections at the default network frequency;
+non-ideal latency and per-link bandwidth are not modeled. Although routing
+uses a `BandwidthFirstRouter`, every link reports infinite bandwidth, so it
+cannot prefer NVLink based on bandwidth. `EstablishRoute` populates reachable
+paths without that guarantee. These limitations are tracked in
+[#502](https://github.com/sarchlab/akita/issues/502).
 
 ## Key Types
 
@@ -64,9 +70,9 @@ connector := nvlink.NewConnector().
 |---|---|
 | `WithSimulation(sim)` | Simulation context (required) |
 | `WithFrequency(f)` | Frequency of the network components |
-| `WithPCIeVersion(v, w)` / `WithPCIeBandwidth(b)` | PCIe link bandwidth |
+| `WithPCIeVersion(v, w)` / `WithPCIeBandwidth(b)` | Sets flit size from PCIe bandwidth and network frequency; not a per-link rate limit |
 | `WithPCIeSwitchLatency(n)` | Cycles per PCIe switch hop |
-| `WithNVLinkVersion(v)` / `WithNVLinkBandwidth(b)` | NVLink link bandwidth |
+| `WithNVLinkVersion(v)` / `WithNVLinkBandwidth(b)` | Stored parameters; currently no effect on link throughput |
 | `WithNVLinkSwitchLatency(n)` | Cycles per NVLink switch hop |
 
 The connector builds its switches and endpoints with `WithSimulation(sim)`,
@@ -89,10 +95,11 @@ root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
 dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.Ports.Net})
 dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.Ports.Net})
 
-connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // 4 NVLinks between the GPUs
+connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // numLink currently has no timing effect
 
 connector.EstablishRoute()
 ```
 
-After `EstablishRoute`, host-device traffic flows over PCIe while device-device
-traffic prefers the higher-bandwidth NVLink path.
+After `EstablishRoute`, the network can carry host-device and device-device
+traffic through the assembled topology. Do not use this connector to compare
+PCIe and NVLink bandwidth until the link-model limitations above are resolved.

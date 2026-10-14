@@ -1,41 +1,42 @@
-# Website
+# Documentation website
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+The site uses Docusaurus and builds the tutorials and package guides from their
+source Markdown in this repository. Use Node.js 22.12.0, matching CI.
 
-## Installation
+## Install and develop
 
-```bash
-yarn
+From `doc-site/`:
+
+```sh
+npm ci
+npm start
 ```
 
-## Local Development
+## Validate and preview
 
-```bash
-yarn start
+```sh
+npm run build
+npm run serve
 ```
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+The build fails on missing sidebar document IDs, broken Markdown links,
+broken site links, or missing anchors. Package documentation includes READMEs,
+control guides, and DRAM roadmaps. Shared links between docs plugins keep
+relative Markdown paths so they also work on GitHub. The config maps the known
+cross-plugin targets to site routes; any other unresolved Markdown target
+fails the build. Links to source-only examples and release notes use GitHub URLs.
 
-## Build
+The default base path is `/akita-dev/`. To reproduce the public site:
 
-```bash
-yarn build
+```sh
+DOCS_BASE_URL=/akita/ npm run build
+DOCS_BASE_URL=/akita/ npm run serve
 ```
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
+## CI and deployment
 
-## Deployment
-
-Using SSH:
-
-```bash
-USE_SSH=true yarn deploy
-```
-
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> yarn deploy
-```
-
-If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+`akita_test.yml` builds the site on pull requests and pushes to `main`.
+`deploy-docs.yml` builds and deploys it through GitHub Pages on matching pushes
+to `main` or `v5`. Both workflows derive `DOCS_BASE_URL` from the repository
+name. A passing PR build validates the site; publication happens after merge
+through the separate deploy workflow.

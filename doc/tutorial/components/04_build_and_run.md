@@ -50,6 +50,18 @@ with `1`, so the output is reproducible — and build with a unique name. The
 walker keeps the default Spec, so there is no `WithSpec` call, and it has no
 ports, so there are no port bindings.
 
+:::warning Checkpoint limitation of this example
+
+The seed makes a fresh run reproducible, but the `*rand.Rand` in Resources
+is not saved in a component checkpoint. Rebuilding with seed 1 restarts its
+sequence; it does not resume the saved position. This introductory walker
+therefore does not support checkpoint/resume. For a checkpointable model,
+keep serializable RNG state in State, or use a registered resource that
+implements checkpoint save/load for the RNG. See
+[Writing Checkpointable Code](../checkpointing.md).
+
+:::
+
 `Build` validates the Spec and State shapes and registers the configured
 instance. It leaves State and Middlewares unset. After all components and
 connections are built and bound, call `s.Initialize()` once. Initialization
@@ -184,7 +196,8 @@ those cycles map to simulated time.
 - **A ticking component runs its middlewares every cycle**, in field order,
   while any of them makes progress.
 - **Spec and State are plain JSON-serializable structs.** That is what
-  makes Akita simulations checkpoint-friendly out of the box.
+  lets the framework save component State; mutable Resources need their own
+  checkpoint support, as the RNG limitation above illustrates.
 - **`type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]`**
   is the per-package alias that keeps the long generic out of the rest of
   the code. `modeling.None` fills the Resources slot when there are no

@@ -15,7 +15,10 @@ const sidebars = {
       {type: 'doc', id: 'messaging/direct/README', label: 'direct'},
     ]},
     {type: 'doc', id: 'modeling/README', label: 'modeling'},
-    {type: 'doc', id: 'tracing/README', label: 'tracing'},
+    {type: 'category', label: 'tasks', items: [
+      {type: 'doc', id: 'tasks/README', label: 'Overview'},
+      {type: 'doc', id: 'tasks/tracing/README', label: 'tracing'},
+    ]},
     {type: 'doc', id: 'README', label: 'sim'},
     {type: 'link', label: 'examples', href: '/packages/examples/'},
   ],

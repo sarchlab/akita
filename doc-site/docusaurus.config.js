@@ -1,5 +1,29 @@
 // @ts-check
 import {themes as prismThemes} from 'prism-react-renderer';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Docusaurus resolves Markdown files only within the current docs plugin.
+// Keep these shared links readable on GitHub and resolve them to site routes
+// during the build. All other unresolved Markdown targets remain errors.
+const crossPluginRoutes = new Map([
+  ['sim/tasks/README.md', '/packages/tasks/'],
+  ['sim/tasks/tracing/README.md', '/packages/tasks/tracing/'],
+  ['doc/tutorial/checkpointing.md', '/tutorial/checkpointing'],
+].map(([file, route]) => [path.resolve(__dirname, '..', file), route]));
+
+/** @type {import('@docusaurus/types').OnBrokenMarkdownLinksFunction} */
+function resolveCrossPluginMarkdownLink({sourceFilePath, url}) {
+  const match = /^([^?#]+\.md)([?#].*)?$/.exec(url);
+  if (match) {
+    const target = path.resolve(path.dirname(sourceFilePath), match[1]);
+    const route = crossPluginRoutes.get(target);
+    if (route && fs.existsSync(target)) {
+      return route + (match[2] || '');
+    }
+  }
+  throw new Error(`Unresolved Markdown link in ${sourceFilePath}: ${url}`);
+}
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -17,8 +41,8 @@ const config = {
   organizationName: 'sarchlab',
   projectName: 'akita',
 
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   i18n: {
     defaultLocale: 'en',
@@ -27,6 +51,9 @@ const config = {
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: resolveCrossPluginMarkdownLink,
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 
@@ -93,7 +120,7 @@ const config = {
         routeBasePath: pkg === 'sim' ? 'packages' : `packages/${pkg}`,
         sidebarPath: `./sidebars/${pkg}.js`,
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
-        include: ['**/README.md'],
+        include: ['**/README.md', '**/CONTROL.md', '**/CONTROL_PROTOCOL.md', '**/ROADMAP.md'],
         exclude: ['**/node_modules/**', '**/static/**'],
       }),
     ]),

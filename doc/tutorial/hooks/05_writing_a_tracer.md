@@ -30,5 +30,5 @@ so synchronize both updates and accessors. Callbacks must not call into the
 tracker or port buffers. They may retain event values, but must treat `Detail`
 as borrowed read-only data.
 
-See [examples/customtracer](../../../examples/customtracer) for a complete
+See [examples/customtracer](https://github.com/sarchlab/akita/tree/main/examples/customtracer) for a complete
 example. No Hook adapter or per-observer request-parent registry is needed.

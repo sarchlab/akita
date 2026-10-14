@@ -6,9 +6,9 @@ GMMU, MMU cache, address translator, ROB, ideal memory controller,
 DRAM, simple banked memory, and the datamover — through one message
 type on one well-known port.
 
-The protocol primitives live in `mem/protocol.go`. The reusable state
+The protocol primitives live in `mem/memcontrolprotocol/protocol.go`. The reusable state
 enum, support matrix, and a `*testing.T` conformance harness live in
-`mem/memcontrolprotocol/` (see [`mem/memcontrolprotocol/README.md`](control/README.md)).
+`mem/memcontrolprotocol/` (see [`mem/memcontrolprotocol/README.md`](memcontrolprotocol/README.md)).
 
 Every memory agent implements its supported subset of the protocol. The
 support matrix and the [per-component behavior](#per-component-behavior)
@@ -18,7 +18,7 @@ below describe the implemented state.
 
 - Every memory agent exposes a port named `Control`.
 - That port carries `memcontrolprotocol.Req` in and `memcontrolprotocol.Rsp` out (by
-  value, not pointers — handlers type-assert `msg.(memcontrolprotocol.Req)`).
+  value, not pointers — handlers type-assert `msg.Payload.(memcontrolprotocol.Req)`).
 - The request's `Command` field is one of six verbs.
 - The component runs the verb and replies on the same port.
 - Whether the reply is same-tick (sync) or whenever-the-work-finishes
@@ -396,8 +396,8 @@ points at exactly which verb the component handles wrong.
 
 ## See also
 
-- `mem/protocol.go` — the request/response type definitions.
-- [`mem/memcontrolprotocol/README.md`](control/README.md) — the `control` package
+- `mem/memcontrolprotocol/protocol.go` — the request/response type definitions.
+- [`mem/memcontrolprotocol/README.md`](memcontrolprotocol/README.md) — the `memcontrolprotocol` package
   overview (State, VerbSupport, errors, `RunContract`).
 - `mem/memcontrolprotocol/state.go` — `State` enum, `VerbSupport`, helpers.
 - `mem/memcontrolprotocol/contract.go` — the `RunContract` harness.

@@ -39,8 +39,8 @@ type ParallelEngine struct {
 // SetRunGuard installs a readiness check for this engine.
 func (e *ParallelEngine) SetRunGuard(check func() error) { e.runGuard = check }
 
-// Name returns the name of the engine. The engine is registered as a simulation
-// entity so its event-queue and time state are part of the state snapshot.
+// Name returns the name used to register the engine in the simulation.
+// ParallelEngine does not support checkpoint save or restore.
 func (e *ParallelEngine) Name() string {
 	return "Engine"
 }

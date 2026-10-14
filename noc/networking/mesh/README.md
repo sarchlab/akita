@@ -18,9 +18,15 @@ established, the connector:
 3. Installs a `meshRoutingTable` on every switch that performs
    dimension-ordered (Z, then Y, then X) routing toward the destination tile.
 
-Links are modeled with the configured frequency, flit size, per-link bandwidth
-(transfers per cycle), and switch latency. 2D meshes are built by leaving the
-third coordinate at `0`.
+The configured frequency, flit size, and switch latency affect the network
+components. Links currently use ideal direct connections at the network's
+default frequency: the per-link frequency computed by `WithBandwidth` is
+ignored. `WithBandwidth` still sets link-end buffer sizes and channel counts
+using the rounded-up transfers per cycle, so it can affect buffering and
+congestion, but it does not set the ideal-link frequency. Non-ideal link timing
+is not implemented; see
+[#502](https://github.com/sarchlab/akita/issues/502). 2D meshes are built by
+leaving the third coordinate at `0`.
 
 ## Key Types
 
@@ -52,7 +58,6 @@ connector := mesh.NewConnector().
     WithSimulation(sim).
     WithFreq(1 * timing.GHz).
     WithFlitSize(16).
-    WithBandwidth(1).      // transfers per cycle, per link
     WithSwitchLatency(1)   // cycles per switch hop
 ```
 
@@ -63,7 +68,7 @@ connector := mesh.NewConnector().
 | `WithSimulation(sim)` | Simulation context (required) |
 | `WithFreq(f)` | Frequency the network runs at |
 | `WithFlitSize(n)` | Flit size in bytes |
-| `WithBandwidth(t)` | Per-link bandwidth as transfers per cycle |
+| `WithBandwidth(t)` | Sets link-end buffer sizes and channel counts; does not change ideal-link frequency |
 | `WithSwitchLatency(n)` | Latency in cycles added at each switch |
 
 The connector builds its switches and endpoints with `WithSimulation(sim)`,

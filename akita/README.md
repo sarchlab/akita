@@ -1,78 +1,30 @@
-# akita — Command-Line Tool
+# akita — Legacy Command-Line Tool
 
-`akita` is the command-line tool for common tasks related to developing
-simulators with the Akita framework. It is a [cobra](https://github.com/spf13/cobra)
-CLI that scaffolds new components and lints existing component packages so they
-follow Akita conventions.
+The `akita` CLI still contains `component --create` and `check`, but these
+commands target the older builder-based component layout. The scaffolder
+emits references to APIs that are absent from V5, and the checker expects a
+hand-written `Comp` and `Builder`. Do not use them to create or validate V5
+components. `component-lint`, `component-create`, and `inspect` are not CLI
+subcommands.
 
-## Install
+## Developing V5 components
 
-```sh
-go install github.com/sarchlab/akita/v5/akita@latest
-```
+Follow the [component tutorial](../doc/tutorial/components/01_what_is_a_component.md)
+and the runnable [examples](../examples/). A component declares Spec, State,
+Resources, Ports, Middlewares, and a package-level `Definition` using one of
+`sim/modeling/ticking`, `sim/modeling/wakeup`, or `sim/modeling/event`.
 
-This produces an `akita` binary on your `PATH`. Run `akita --help` to list the
-available subcommands.
+Build instances from the Definition, bind ports, and call
+`simulation.Initialize()` before seeding work or running. Add a
+`modelingtest.CheckTicking`, `CheckWakeup`, or `CheckEvent` test for the chosen
+model. The `inspect` Go package reads component definitions without running
+the simulation; it is separate from this legacy CLI.
 
-## Subcommands
-
-### `akita component --create <Name>`
-
-Scaffolds a new component package. The command must be run inside a Git
-repository. It creates a folder named `<Name>` and, from embedded templates,
-writes two files:
-
-- `comp.go` — a `Comp` struct embedding `sim.TickingComponent` and
-  `sim.MiddlewareHolder`, with a `Tick()` method.
-- `builder.go` — a `Builder` struct (with `engine` and `freq` fields), plus
-  `MakeBuilder`, `WithSimulation`, `WithFreq`, and `Build` methods.
-
-The package name in both files is set to `<Name>`.
+## Inspecting the existing CLI
 
 ```sh
-akita component --create MyCache
-# Component 'MyCache' created successfully!
-# Builder file generated successfully!
-# Comp file generated successfully!
+go run ./akita --help
 ```
 
-The command fails if the folder already exists or if it is not run inside a Git
-working tree.
-
-### `akita check <component folder path>`
-
-Lints a component package (the akitav5-lint check) and exits non-zero if any
-rule is violated. It validates two areas:
-
-- **Component (`comp.go`)** — the file exists and declares a `Comp` struct.
-- **Builder (`builder.go`)** — the file exists and declares a `Builder` struct;
-  every configurable field has a `With...` setter that returns `Builder`; the
-  struct includes at least `Freq` and `Engine`; and a `Build` function exists
-  that takes a single `string` argument and returns `*Comp`.
-
-```sh
-akita check ./mycache
-```
-
-Each reported problem is tagged (e.g. `<1>`, `<2b>`) to indicate which
-check failed. On success the command exits 0 with no output.
-
-Component metadata now comes from the package-level `Definition` of a component
-model (`ticking.Definition`, `wakeup.Definition`, or `event.Definition`), read
-by the `inspect` package. `akita component --create` and `akita check` still
-target the older builder-based layout; updating them to the component models,
-with inspector-based checks and an `akita inspect` command, is follow-up work.
-
-## Usage in a Project
-
-A typical workflow when adding a component to a simulator:
-
-```sh
-# Scaffold the package
-akita component --create MyUnit
-
-# ...implement comp.go / builder.go...
-
-# Verify it conforms to Akita conventions
-akita check ./MyUnit
-```
+This lists the commands actually present in this checkout. Updating or
+removing the legacy commands is separate from the V5 documentation repair.

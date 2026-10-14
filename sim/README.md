@@ -39,14 +39,11 @@ A `Simulation` is created through its `Builder`, which constructs and connects
 the supporting infrastructure. Once built, you register components, connections,
 and shared resources with the simulation; registration tracks each object in a
 flat inventory and wires it into tracing and monitoring. The simulation exposes
-typed accessors for the engine and infrastructure, plus name-based and
-inventory accessors for the registered entities. After all ports and connections
+accessors for runtime services such as `Engine`, `DataRecorder`,
+`TaskTracker`, and `VisTracer`. The entity inventory is internal; keep the
+component and port references returned during setup. After all ports and connections
 are bound, call `s.Initialize()` to validate wiring and create component State
 and Middlewares. This freezes topology; seed work and run only afterward.
-
-The runner depends only on minimal local interfaces (`Component`, `Port`,
-`Connection`, `Resource`). Concrete messaging types satisfy them structurally,
-so this package does not import the messaging package.
 
 ## Key Concepts
 
@@ -54,24 +51,11 @@ so this package does not import the messaging package.
   `DataRecorder`, a `DBTracer` for visual tracing (used by the Daisen
   visualizer), and an optional `Monitor` for live web inspection.
 - Every registered runtime object — component, port, connection, and
-  shared-state resource — satisfies the `Entity` interface and is held in one
-  flat inventory. Entity names are **globally unique across all kinds**.
+  shared-state resource — is held in one internal flat inventory. Names are
+  **globally unique across all kinds**.
 - A `Resource` is non-timing program state (such as memory contents or page
   tables) that multiple components reference. The simulation owns resources;
   components hold references to them rather than embedding the payload.
-
-## Entity Interfaces
-
-`Entity` is the abstract base interface; each kind embeds it and adds its own
-capabilities:
-
-| Interface | Methods | Purpose |
-|-----------|---------|---------|
-| `Entity` | `Name() string` | Abstract base for every registered object |
-| `Component` | `Entity` | Runtime components |
-| `Port` | `Entity` + `NumIncoming()` / `NumOutgoing()` | Port buffers |
-| `Connection` | `Entity` | Runtime connections |
-| `Resource` | `Entity` | Shared state registered by setup, reachable by name |
 
 ## Builder Pattern
 
@@ -112,7 +96,7 @@ Monitors can access runtime services through `Engine()`, `DataRecorder()`,
 A custom monitor implements `sim.Monitor` with `Start(*sim.Simulation)`,
 `RegisterComponent`, `RegisterPort`, and `Stop`. Keep the concrete monitor in
 application setup for implementation-specific features such as
-`monitor.CreateProgressBar`; `s.Monitor()` exposes only the runtime contract.
+`monitor.CreateProgressBar`.
 The `sim` runtime has no dependency on monitoring, Daisen, or component libraries;
 only the root `sim` package knows about the monitor interface.
 
@@ -136,7 +120,7 @@ component written without a component model. Use `RegisterConnection` and
 ```go
 engine := s.Engine()
 recorder := s.DataRecorder() // a simulator can write its own tables into the recording
-monitor := s.Monitor()       // nil when monitoring is off
+tracker := s.TaskTracker() // nil when task tracking is off
 ```
 
 ## Checkpoint and Resume
@@ -188,8 +172,9 @@ setup rebuilds; put cursors and counters in `State`.
   tracking settings are supported: off-to-on starts empty, and on-to-off ignores
   the optional tracker payload. See [task tracking](tasks/README.md).
 - **`SerialEngine.RunUntil(t)`** stops the engine at a deterministic boundary
-  (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
-  (stops at a non-reproducible point) — useful for taking a mid-transaction
+  (every event with time ≤ `t`), unlike `Run` (drains everything) or
+  `RequestPause().Wait(ctx)` (acknowledges a pause at an execution boundary
+  without choosing a reproducible virtual time) — useful for taking a mid-transaction
   checkpoint.
 - **Register your message and event types.** A port holds `messaging.Msg` values whose non-nil payloads must be registered
   at package initialization
