@@ -28,6 +28,7 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 	"github.com/sarchlab/akita/v5/monitoring/static"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -1047,7 +1048,7 @@ func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", absPath)
+	db, err := sql.Open("sqlite", sqlitepath.URI(absPath, "ro"))
 	if err != nil {
 		return nil, err
 	}

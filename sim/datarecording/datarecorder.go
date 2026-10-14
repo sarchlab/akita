@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,6 +13,7 @@ import (
 	// Need to use SQLite connections.
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/rs/xid"
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 	"github.com/tebeka/atexit"
 )
 
@@ -106,7 +105,7 @@ func (t *sqliteWriter) Init() {
 		panic(err)
 	}
 
-	db, err := sql.Open("sqlite", sqlitePath(filename, "rw"))
+	db, err := sql.Open("sqlite", sqlitepath.URI(filename, "rw"))
 	if err != nil {
 		panic(err)
 	}
@@ -537,12 +536,4 @@ func (t *sqliteWriter) Close() error {
 	}
 
 	return nil
-}
-
-func sqlitePath(filename, mode string) string {
-	absolute, err := filepath.Abs(filename)
-	if err != nil {
-		panic(err)
-	}
-	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolute), RawQuery: "mode=" + mode}).String()
 }

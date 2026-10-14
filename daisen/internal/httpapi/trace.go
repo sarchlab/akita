@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -279,7 +280,7 @@ func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 
 // Init establishes a connection to the database.
 func (r *SQLiteTraceReader) Init() {
-	db, err := sql.Open("sqlite3", r.filename)
+	db, err := sql.Open("sqlite3", sqlitepath.URI(r.filename, "rwc"))
 	if err != nil {
 		panic(err)
 	}
@@ -300,7 +301,7 @@ func (r *SQLiteTraceReader) Init() {
 // setting WAL here would fail on any non-WAL file and panic — hence no such
 // pragma below.
 func (r *SQLiteTraceReader) InitReadOnly() {
-	db, err := sql.Open("sqlite3", r.filename+"?mode=ro")
+	db, err := sql.Open("sqlite3", sqlitepath.URI(r.filename, "ro"))
 	if err != nil {
 		panic(err)
 	}
