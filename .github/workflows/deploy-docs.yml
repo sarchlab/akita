@@ -16,7 +16,7 @@ on:
     paths:
       - 'doc-site/**'
       - 'doc/**'
-      - '**/README.md'
+      - '**/*.md'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
