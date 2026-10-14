@@ -27,7 +27,7 @@ modeling.
 
 ## Networking (Packet-Switched Networks)
 
-The `noc/networking` sub-packages provide realistic network models with
+The `noc` sub-packages provide realistic network models with
 switches, endpoints, routing, and switch pipelines. Links between them are ideal.
 
 ### Network Connector

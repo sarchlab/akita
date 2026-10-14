@@ -97,7 +97,7 @@ func (t *sqliteWriter) Init() {
 	}
 
 	filename := t.dbName
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		panic(fmt.Errorf("create recording %s: %w", filename, err))
 	}
