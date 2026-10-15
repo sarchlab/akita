@@ -61,8 +61,8 @@ Other values that seem to belong in the Spec usually belong elsewhere:
   single scalar;
 - a value derived from other Spec fields is an unexported Spec method, not a
   field;
-- destination addresses and address-mapping choices belong in Spec; derive
-  private lookup objects in `NewMiddlewares`;
+- destination addresses and address-mapping choices belong in Spec; memory
+  middleware routes directly through `mem.AddressMapper` values;
 - a reference to an external live object is a Resources field. A
   component's Resources are not part of its checkpoint: the rebuild supplies
   them, and `NewMiddlewares` recomputes what it derives from them. A shared

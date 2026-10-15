@@ -5,8 +5,8 @@
 // The cache is a ticking component. The system builder builds it with
 // Definition.Builder(): configuration is supplied as a whole through WithSpec
 // (start from Definition.DefaultSpec), the engine and registration come from
-// WithSimulation, shared/external wiring (the required storage, and the
-// address-to-port mapper or remote ports) is injected through WithResources,
+// WithSimulation, the required shared storage is supplied through WithResources,
+// and routing is configured by Spec.Bottom.
 // and the Top, Bottom, and Control port instances, created with
 // twowaybuffered.NewPort so the caller chooses the buffer sizes, are passed with
 // BindPort after construction.

@@ -15,8 +15,9 @@
 //     choices, and `akita:"min=<n>,max=<n>"` tag metadata, and the
 //     defaults the DefaultSpec literal assigns. The literal must be keyed and
 //     have constant leaves (a slice field's literal lists constants), and
-//     Spec fields must be scalars or slices of scalars with distinct JSON
-//     names;
+//     Spec fields may be scalars, scalar collections, flat records, or slices
+//     of flat records. Record members may be scalars or scalar slices with
+//     explicit, distinct JSON names;
 //   - the Resources fields, from the Resources type argument, a struct;
 //   - the ports, one per field of the Ports type argument: a messaging.Port
 //     field is a port, a []messaging.Port field a port group, and an

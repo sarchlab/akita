@@ -133,7 +133,7 @@ your data in the right one of the five structs:
 
 | Struct | Holds | Checkpoint treatment |
 | --- | --- | --- |
-| `Spec` | immutable config (scalars and slices of scalars) | hashed and **compared** on load, not restored |
+| `Spec` | immutable config (scalars, scalar collections, flat records and record slices) | hashed and **compared** on load, not restored |
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |

@@ -743,7 +743,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 |--------|------------|-------------|----------|
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
-| **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
+| **Resources** | References to shared objects (storage, page table) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
@@ -888,7 +888,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Core Principles
 
 1. Spec (immutable configuration)
-   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps or nested records.
+   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps or nested records.
    - Routing dependencies are plain values such as `Bottom mem.AddressMapper`; its destinations and parameters fully specify the behavior.
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
    - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
