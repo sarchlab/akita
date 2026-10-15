@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/noc/switching/switches"
+	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim"
 )
 

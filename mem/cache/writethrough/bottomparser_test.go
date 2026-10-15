@@ -42,12 +42,12 @@ var _ = Describe("Bottom Parser", func() {
 
 		ports := makePorts("Cache", 4)
 		c = buildStageTestCache(
-			Spec{
+			Spec{Bottom: mem.AddressMapper{Destinations: []messaging.RemotePort{"Memory.Top"}},
 				Freq:             1 * timing.GHz,
 				Log2BlockSize:    6,
 				WayAssociativity: 4,
 				NumMSHREntry:     4,
-				TotalByteSize:    4 * mem.KB, // 16 sets
+				TotalByteSize:    4 * mem.KB,
 				NumBanks:         1,
 				WritePolicyType:  "write-around",
 			},

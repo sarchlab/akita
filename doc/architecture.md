@@ -23,17 +23,20 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
 ## Component ownership
 
 - Spec holds immutable configuration, including destination addresses and routing
-  parameters. It accepts scalars, scalar arrays/slices, and slices of flat records.
-  Each record field must be an exported scalar with an explicit, unique JSON name.
-  No nested containers, maps, pointers, interfaces, or standalone nested structs.
+  parameters. It accepts scalars, scalar arrays/slices, flat record fields, and
+  slices of flat records. A record may contain exported scalars or scalar slices
+  with explicit, unique JSON names. Records cannot nest; maps, pointers,
+  interfaces, and other nested containers are prohibited. Build copies all
+  slices, including those within records.
 - State holds mutable runtime data and is checkpointed. Mutable state must not
   hide on a middleware.
 - Resources holds shared live objects such as storage and page tables. It must
   not duplicate Spec routing through injected mappers or destination lists.
 - Ports holds bound local ports. `Spec.Links[i]` describes `Ports.Links[i]`.
   Build checks link configuration; Initialize checks the length equality.
-- Middlewares implement behavior and derive private lookup tables/mappers from
-  Spec. Spec participates in checkpoint compatibility checks.
+- Middlewares implement behavior and may derive private lookup tables from Spec.
+  Memory routing uses `Spec.Bottom.Find(address)` (or the corresponding port
+  name) directly. Spec participates in checkpoint compatibility checks.
 
 Runtime validation, static inspection, literal default extraction, and schema
 output must accept the same Spec shapes. Definition.ValidateSpec checks values at
@@ -52,7 +55,12 @@ The networkconnector, mesh, pcie, and nvlink packages use
 `MakeBuilder().With...().Build(name) *Connector`; assembly methods operate on that
 connector. Reusing a builder creates independent networks without reset methods.
 
-NoC packages live directly below `noc`, without a `networking` layer. The cache
+NoCs are assembled through the public `networkconnector`, `mesh`, `pcie`, and
+`nvlink` connectors. Endpoint and switch implementation packages live under
+`noc/internal`. Endpoints remain pass-through device connections: their ordered
+`Spec.Devices` must match their bound device ports at Initialize, without adding
+a buffer or link hop. Other NoC packages live directly below `noc`, without a
+`networking` layer. The cache
 package is `mem/cache/writethrough`; it retains write-around, write-evict, and
 write-through policies. Group packages by responsibility and avoid redundant
 directory/package suffixes.

@@ -50,7 +50,7 @@ var _ = Describe("GMMU", func() {
 		spec := Definition.DefaultSpec
 		spec.DeviceID = 0
 		spec.Latency = 1
-		spec.LowModule = lowModulePort
+		spec.Bottom = lowModulePort
 
 		gmmuComp = Definition.Builder().
 			WithSimulation(sim).

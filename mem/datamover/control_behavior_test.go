@@ -37,10 +37,10 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.OutsideByteGranularity = 64
 
 		insideRemote = messaging.RemotePort("InsideMem")
-		spec.InsideMapperType = "single"
-		spec.InsidePorts = []messaging.RemotePort{insideRemote}
-		spec.OutsideMapperType = "single"
-		spec.OutsidePorts = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
+
+		spec.Inside.Destinations = []messaging.RemotePort{insideRemote}
+
+		spec.Outside.Destinations = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
 		dataMover = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

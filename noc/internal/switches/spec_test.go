@@ -3,7 +3,7 @@ package switches_test
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/noc/switching/switches"
+	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"

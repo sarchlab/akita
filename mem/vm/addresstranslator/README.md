@@ -18,7 +18,7 @@ do the translation work.
 For each incoming `memprotocol.ReadReq` / `memprotocol.WriteReq` on the `Top` port, the
 translator computes the virtual page ID (`addr >> Log2PageSize << Log2PageSize`)
 and sends a `vmprotocol.TranslationReq` on the `Translation` port to the provider
-resolved by the private translation mapper. The original request's fields are
+resolved by the Spec routing value. The original request's fields are
 saved in a transaction record while the translation is outstanding.
 
 ### RespondPipeline — forward and respond
@@ -26,7 +26,7 @@ saved in a transaction record while the translation is outstanding.
 1. **parseTranslation** — When a `vmprotocol.TranslationRsp` returns, the saved request is
    cloned with its address rewritten to `page.PAddr + offset` (where `offset` is
    the original address modulo the page size) and sent downstream on the `Bottom`
-   port to the memory provider resolved by the private memory mapper.
+   port to the memory provider resolved by the Spec.Bottom routing value.
 2. **respond** — When a `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp` returns on
    `Bottom`, it is matched to the in-flight request and a corresponding response
    is sent back up on `Top` to the original requester.
@@ -41,9 +41,8 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 - `State` — mutable runtime data: the control state, the in-flight translation
   transactions, and the requests forwarded to the bottom port awaiting
   responses.
-- `Resources` — empty. Destination lists and mapper kind, bank/interleave size,
-  range, and fallback parameters belong in Spec. Middleware derives private
-  lookup objects during Initialize; no Resources routing override exists.
+- `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom and Translation).
+  Middleware calls their `Find` methods directly; Resources has no routing override.
 - `Ports` — the `Top`, `Bottom`, `Translation`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands), `ParseTranslate` (accept and
   translate), and `RespondPipeline` (forward and respond), run in that order
@@ -56,8 +55,8 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 ```go
 spec := addresstranslator.Definition.DefaultSpec
 spec.DeviceID = 1
-spec.TranslationProviders = []messaging.RemotePort{"MMU.Top"}
-spec.MemProviders = []messaging.RemotePort{"Cache.Top"}
+spec.Translation.Destinations = []messaging.RemotePort{"MMU.Top"}
+spec.Bottom.Destinations = []messaging.RemotePort{"Cache.Top"}
 
 at := addresstranslator.Definition.Builder().
     WithSimulation(sim).

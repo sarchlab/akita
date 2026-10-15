@@ -1,7 +1,6 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -13,9 +12,7 @@ import (
 // statically.
 var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
-		OutsideMapperType: mem.AddressMapperSingle,
-		InsideMapperType:  mem.AddressMapperSingle,
-		Freq:              1 * timing.GHz,
+		Freq: 1 * timing.GHz,
 	},
 	ValidateSpec:   validateSpec,
 	NewMiddlewares: newMiddlewares,
@@ -26,18 +23,16 @@ func newMiddlewares(c *Comp) middlewares {
 		Ctrl:      &ctrlMiddleware{comp: c},
 		CtrlParse: &ctrlParseMW{comp: c},
 		DataTransfer: &dataTransferMW{
-			comp:          c,
-			insideMapper:  c.Spec.insideMapping().Mapper(),
-			outsideMapper: c.Spec.outsideMapping().Mapper(),
+			comp: c,
 		},
 	}
 }
 
 func validateSpec(spec Spec) error {
-	if err := spec.insideMapping().Validate(); err != nil {
+	if err := spec.Inside.Validate(); err != nil {
 		return err
 	}
-	if err := spec.outsideMapping().Validate(); err != nil {
+	if err := spec.Outside.Validate(); err != nil {
 		return err
 	}
 	return nil

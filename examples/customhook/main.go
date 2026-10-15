@@ -110,7 +110,6 @@ func (h *stepLogger) Func(ctx hooking.HookCtx) {
 
 func main() {
 	sim := akitasim.MakeBuilder().Build()
-	engine := sim.Engine().(*timing.SerialEngine)
 
 	walker := Definition.Builder().
 		WithSimulation(sim).
@@ -125,7 +124,7 @@ func main() {
 
 	walker.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 }

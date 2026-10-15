@@ -3,8 +3,6 @@ package datamover
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/internal/addressmapping"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -16,24 +14,10 @@ import (
 // Spec contains immutable configuration for the data mover.
 type Spec struct {
 	// Inside routing configuration.
-	InsideMapperType                mem.AddressMapperType  `json:"inside_mapper_type"`
-	InsidePorts                     []messaging.RemotePort `json:"inside_ports"`
-	InsideInterleavingSize          uint64                 `json:"inside_interleaving_size"`
-	InsideBankSize                  uint64                 `json:"inside_bank_size"`
-	InsideUseAddressSpaceLimitation bool                   `json:"inside_use_address_space_limitation"`
-	InsideLowAddress                uint64                 `json:"inside_low_address"`
-	InsideHighAddress               uint64                 `json:"inside_high_address"`
-	InsideModuleForOtherAddresses   messaging.RemotePort   `json:"inside_module_for_other_addresses"`
+	Inside mem.AddressMapper `json:"inside"`
 
 	// Outside routing configuration.
-	OutsideMapperType                mem.AddressMapperType  `json:"outside_mapper_type"`
-	OutsidePorts                     []messaging.RemotePort `json:"outside_ports"`
-	OutsideInterleavingSize          uint64                 `json:"outside_interleaving_size"`
-	OutsideBankSize                  uint64                 `json:"outside_bank_size"`
-	OutsideUseAddressSpaceLimitation bool                   `json:"outside_use_address_space_limitation"`
-	OutsideLowAddress                uint64                 `json:"outside_low_address"`
-	OutsideHighAddress               uint64                 `json:"outside_high_address"`
-	OutsideModuleForOtherAddresses   messaging.RemotePort   `json:"outside_module_for_other_addresses"`
+	Outside mem.AddressMapper `json:"outside"`
 
 	Freq                   timing.Freq `json:"freq"`
 	BufferSize             uint64      `json:"buffer_size"`
@@ -227,24 +211,4 @@ func resolveByteGranularity(spec Spec, side datamoverprotocol.DataMovePort) uint
 		log.Panicf("can't process port side %s", side)
 		return 0
 	}
-}
-
-func (s Spec) insideMapping() addressmapping.Config {
-	return addressmapping.Config{Kind: s.InsideMapperType, Ports: s.InsidePorts,
-		InterleavingSize:          s.InsideInterleavingSize,
-		BankSize:                  s.InsideBankSize,
-		UseAddressSpaceLimitation: s.InsideUseAddressSpaceLimitation,
-		LowAddress:                s.InsideLowAddress,
-		HighAddress:               s.InsideHighAddress,
-		ModuleForOtherAddresses:   s.InsideModuleForOtherAddresses}
-}
-
-func (s Spec) outsideMapping() addressmapping.Config {
-	return addressmapping.Config{Kind: s.OutsideMapperType, Ports: s.OutsidePorts,
-		InterleavingSize:          s.OutsideInterleavingSize,
-		BankSize:                  s.OutsideBankSize,
-		UseAddressSpaceLimitation: s.OutsideUseAddressSpaceLimitation,
-		LowAddress:                s.OutsideLowAddress,
-		HighAddress:               s.OutsideHighAddress,
-		ModuleForOtherAddresses:   s.OutsideModuleForOtherAddresses}
 }

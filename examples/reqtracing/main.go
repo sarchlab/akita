@@ -33,7 +33,6 @@ import (
 
 func main() {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
-	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().
@@ -72,7 +71,7 @@ func main() {
 	// request arrives.
 	cli.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 

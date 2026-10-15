@@ -21,7 +21,7 @@ The GMMU is configured with a `DeviceID` and is driven by two middlewares
    - If `page.DeviceID == DeviceID` (local), it finalizes the walk and returns a
      `vmprotocol.TranslationRsp` on `Top`.
    - Otherwise it forwards a `vmprotocol.TranslationReq` on the `Bottom` port to the
-     configured `LowModule`, remembering the transaction by request ID.
+     configured `Bottom`, remembering the transaction by request ID.
 
 ### respondMW — bottom→top path
 
@@ -31,7 +31,7 @@ remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `DeviceID`, `Log2PageSize`, walk
-  `Latency`, `MaxRequestsInFlight`, and the `LowModule` remote port.
+  `Latency`, `MaxRequestsInFlight`, and the `Bottom` remote port.
 - `State` — mutable runtime data: in-flight walks, the map of remote memory
   requests awaiting responses, and per-device page-access tracking.
 - `Resources` — shared wiring; holds the `vm.PageTable`, which is required.
@@ -54,7 +54,7 @@ if `Resources.PageTable` is nil.
 ```go
 spec := gmmu.Definition.DefaultSpec
 spec.DeviceID = 1
-spec.LowModule = mmuPort
+spec.Bottom = mmuPort
 
 pageTable := vm.MakePageTableBuilder().
     WithLog2PageSize(spec.Log2PageSize).

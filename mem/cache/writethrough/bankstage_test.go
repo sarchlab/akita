@@ -41,12 +41,12 @@ var _ = Describe("Bankstage", func() {
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
 		c = buildStageTestCache(
-			Spec{
+			Spec{Bottom: mem.AddressMapper{Destinations: []messaging.RemotePort{"Memory.Top"}},
 				Freq:             1 * timing.GHz,
 				BankLatency:      10,
 				Log2BlockSize:    6,
 				WayAssociativity: 4,
-				TotalByteSize:    4 * mem.KB, // 16 sets
+				TotalByteSize:    4 * mem.KB,
 				NumBanks:         1,
 				NumReqPerCycle:   1,
 				WritePolicyType:  "write-around",

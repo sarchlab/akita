@@ -12,10 +12,10 @@ import (
 func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
 	setupSim1 := akitasim.MakeBuilder().Build()
 	routingSpec1 := Definition.DefaultSpec
-	routingSpec1.InsideMapperType = "single"
-	routingSpec1.InsidePorts = []messaging.RemotePort{inside}
-	routingSpec1.OutsideMapperType = "single"
-	routingSpec1.OutsidePorts = []messaging.RemotePort{outside}
+
+	routingSpec1.Inside.Destinations = []messaging.RemotePort{inside}
+
+	routingSpec1.Outside.Destinations = []messaging.RemotePort{outside}
 	builtComponent := Definition.Builder().
 		WithSimulation(setupSim1).
 		WithSpec(routingSpec1).

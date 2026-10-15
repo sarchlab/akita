@@ -68,18 +68,18 @@
             "program": "${workspaceFolder}/mem/vm/addresstranslator"
         },
         {
-            "name": "Test github.com/sarchlab/akita/v5/noc/switching/endpoint",
+            "name": "Test github.com/sarchlab/akita/v5/noc/internal/endpoint",
             "type": "go",
             "request": "launch",
             "mode": "test",
-            "program": "${workspaceFolder}/noc/switching/endpoint"
+            "program": "${workspaceFolder}/noc/internal/endpoint"
         },
         {
-            "name": "Test github.com/sarchlab/akita/v5/noc/switching/switches",
+            "name": "Test github.com/sarchlab/akita/v5/noc/internal/switches",
             "type": "go",
             "request": "launch",
             "mode": "test",
-            "program": "${workspaceFolder}/noc/switching/switches"
+            "program": "${workspaceFolder}/noc/internal/switches"
         },
         {
             "name": "noc/acceptance/one_on_one",

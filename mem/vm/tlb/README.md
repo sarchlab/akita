@@ -23,7 +23,7 @@ flow through a fixed-latency pipeline before lookup:
      request is attached to the existing MSHR entry.
    - **Miss**: an MSHR entry is allocated and a `vmprotocol.TranslationReq` is forwarded
      on the `Bottom` port to the translation provider resolved by
-     the private translation mapper.
+     the Spec routing value.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
    the page, and replay every request queued in the matching MSHR entry back to
    `Top`.
@@ -37,9 +37,8 @@ are tracked by the shared `mshr` package.
 - `State` — mutable runtime data: per-set blocks and LRU order, MSHR entries, the
   request pipeline, and flush bookkeeping. The TLB runs a small state machine:
   `enable`, `drain`, `pause`, and `flush`.
-- `Resources` — empty. Destination lists and mapper kind, bank/interleave size,
-  range, and fallback parameters belong in Spec. Middleware derives private
-  lookup objects during Initialize; no Resources routing override exists.
+- `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom).
+  Middleware calls their `Find` methods directly; Resources has no routing override.
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands) and `TLB` (lookup, misses, and
   responses), run in that order every cycle.
@@ -53,7 +52,7 @@ spec := tlb.Definition.DefaultSpec
 spec.NumSets = 64
 spec.NumWays = 4
 spec.MSHRSize = 8
-spec.TranslationProviders = []messaging.RemotePort{"MMU.Top"}
+spec.Bottom.Destinations = []messaging.RemotePort{"MMU.Top"}
 
 t := tlb.Definition.Builder().
     WithSimulation(sim).

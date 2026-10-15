@@ -15,7 +15,7 @@ func TestControlContract(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := Definition.DefaultSpec
-		spec.BottomUnit = messaging.RemotePort("BottomUnit")
+		spec.Bottom = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
 			p := twowaybuffered.NewPort(16, 16)

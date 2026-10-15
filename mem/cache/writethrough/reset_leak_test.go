@@ -36,8 +36,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.TotalByteSize = 64 * 1024
 	spec.MaxNumConcurrentTrans = 16
 
-	spec.AddressMapperType = "single"
-	spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
@@ -149,7 +148,7 @@ func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 
 func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
 	spec := Definition.DefaultSpec
-	spec.RemotePorts = []messaging.RemotePort{"Lower"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"Lower"}
 	pipeline := buildStageTestCache(spec, Resources{
 		Storage: mem.NewStorage(1 * mem.MB),
 	}, makePorts("Cache", 8), state{})

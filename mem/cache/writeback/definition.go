@@ -15,7 +15,6 @@ import (
 // statically.
 var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
-		AddressMapperType:   mem.AddressMapperSingle,
 		Freq:                1 * timing.GHz,
 		NumReqPerCycle:      1,
 		Log2BlockSize:       6,
@@ -27,7 +26,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		WriteBufferCapacity: 1024,
 		MaxInflightFetch:    128,
 		MaxInflightEviction: 128,
-		InterleavingSize:    4096,
+		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
 	},
 	NewState:       newState,
 	ValidateSpec:   validateSpec,
@@ -83,7 +82,7 @@ func newState(c *Comp) state {
 
 // newMiddlewares creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
-// the address mapper, and the ports' accessors.
+// and the ports' accessors.
 func newMiddlewares(c *Comp) middlewares {
 	res := c.Resources
 	if res.Storage == nil {
@@ -91,9 +90,8 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 
 	pipeline := &pipelineMW{
-		comp:          c,
-		storage:       res.Storage,
-		addressMapper: resolveAddressMapper(c.Spec),
+		comp:    c,
+		storage: res.Storage,
 	}
 	pipeline.createInternalStages()
 
@@ -107,9 +105,6 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 }
 
-// resolveAddressMapper derives the lookup solely from immutable Spec data.
-func resolveAddressMapper(spec Spec) mem.AddressToPortMapper { return spec.addressMapping().Mapper() }
-
 func validateSpec(spec Spec) error {
-	return spec.addressMapping().Validate()
+	return spec.Bottom.Validate()
 }

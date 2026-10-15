@@ -3,7 +3,6 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/internal/addressmapping"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -25,14 +24,7 @@ const (
 // Spec contains immutable configuration for the writeback cache.
 type Spec struct {
 	// Lower memory routing configuration.
-	AddressMapperType         mem.AddressMapperType  `json:"address_mapper_type"`
-	RemotePorts               []messaging.RemotePort `json:"remote_ports"`
-	InterleavingSize          uint64                 `json:"interleaving_size"`
-	BankSize                  uint64                 `json:"bank_size"`
-	UseAddressSpaceLimitation bool                   `json:"use_address_space_limitation"`
-	LowAddress                uint64                 `json:"low_address"`
-	HighAddress               uint64                 `json:"high_address"`
-	ModuleForOtherAddresses   messaging.RemotePort   `json:"module_for_other_addresses"`
+	Bottom mem.AddressMapper `json:"bottom"`
 
 	Freq             timing.Freq `json:"freq"`
 	NumReqPerCycle   int         `json:"num_req_per_cycle"`
@@ -368,13 +360,3 @@ type Resources struct{ Storage *mem.Storage }
 
 // Comp is the writeback cache component, a ticking component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
-
-func (s Spec) addressMapping() addressmapping.Config {
-	return addressmapping.Config{Kind: s.AddressMapperType, Ports: s.RemotePorts,
-		InterleavingSize:          s.InterleavingSize,
-		BankSize:                  s.BankSize,
-		UseAddressSpaceLimitation: s.UseAddressSpaceLimitation,
-		LowAddress:                s.LowAddress,
-		HighAddress:               s.HighAddress,
-		ModuleForOtherAddresses:   s.ModuleForOtherAddresses}
-}

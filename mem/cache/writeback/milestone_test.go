@@ -92,16 +92,13 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
 
-		addressToPortMapper := &mem.SinglePortMapper{
-			Port: dramTop.AsRemote(),
-		}
+		addressToPortMapper := dramTop.AsRemote()
 
 		cacheSpec := Definition.DefaultSpec
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheSpec.AddressMapperType = "single"
-		cacheSpec.RemotePorts = []messaging.RemotePort{addressToPortMapper.Port}
+		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		cacheComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(cacheSpec).

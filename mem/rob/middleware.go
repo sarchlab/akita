@@ -98,7 +98,7 @@ func (m *middleware) topDown() bool {
 	}
 
 	shadow, isRead := m.buildShadowReq(
-		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec.BottomUnit)
+		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec.Bottom)
 
 	if !m.comp.Ports.Bottom.CanSend() {
 		return false

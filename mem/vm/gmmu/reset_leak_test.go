@@ -33,7 +33,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec := Definition.DefaultSpec
 	spec.DeviceID = deviceID
 	spec.Latency = 1
-	spec.LowModule = lowModule
+	spec.Bottom = lowModule
 
 	comp := Definition.Builder().
 		WithSimulation(sim).

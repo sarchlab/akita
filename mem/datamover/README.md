@@ -61,9 +61,8 @@ type DataMoveRsp struct {
   `InsideByteGranularity`/`OutsideByteGranularity`.
 - **State** — mutable runtime: the single `CurrentTransaction` (with its pending
   read/write maps and next read/write addresses) and the sliding `Buffer`.
-- **Resources** — empty. `Spec.InsidePorts` and `Spec.OutsidePorts`, their mapper
-  kinds, bank/interleave sizes, and range/fallback fields are checkpointed
-  configuration. Middleware derives private lookup objects during Initialize.
+- **Resources** — empty. `Spec.Inside` and `Spec.Outside` are
+  `mem.AddressMapper` values. Middleware routes directly through these values.
 - **Ports** — the `Top`, `Inside`, `Outside`, and `Control` ports.
 - **Middlewares** — `Ctrl` (control commands), `CtrlParse` (admits moves and
   completes finished ones), and `DataTransfer` (reads and writes), run in that
@@ -83,8 +82,8 @@ spec := datamover.Definition.DefaultSpec
 spec.BufferSize = 4096
 spec.InsideByteGranularity = 64
 spec.OutsideByteGranularity = 64
-spec.InsidePorts = []messaging.RemotePort{"L2.Top"}
-spec.OutsidePorts = []messaging.RemotePort{"DRAM.Top"}
+spec.Inside.Destinations = []messaging.RemotePort{"L2.Top"}
+spec.Outside.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 mover := datamover.Definition.Builder().
     WithSimulation(sim).

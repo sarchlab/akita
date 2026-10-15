@@ -10,15 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuildMapsRemotePorts checks that Build turns Spec.AddressMapperType and
-// Resources.RemotePorts into the mapper the pipeline routes through.
+// TestBuildMapsRemotePorts checks routing directly through Spec.Bottom.
 func TestBuildMapsRemotePorts(t *testing.T) {
 	spec := Definition.DefaultSpec
-	spec.AddressMapperType = "interleaved"
-	spec.InterleavingSize = 4096
+
+	spec.Bottom.InterleavingSize = 4096
 
 	setupSim1 := akitasim.MakeBuilder().Build()
-	spec.RemotePorts = []messaging.RemotePort{"DRAM0", "DRAM1"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"DRAM0", "DRAM1"}
 	comp := Definition.Builder().
 		WithSimulation(setupSim1).
 		WithSpec(spec).
@@ -46,8 +45,11 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 func TestBuildRequiresStorage(t *testing.T) {
 	require.PanicsWithValue(t, "writethrough: Resources.Storage is required", func() {
 		setupSim2 := akitasim.MakeBuilder().Build()
+		spec := Definition.DefaultSpec
+		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
 		builtComponent := Definition.Builder().
 			WithSimulation(setupSim2).
+			WithSpec(spec).
 			Build("Cache")
 		builtComponentPorts := makePorts("Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)

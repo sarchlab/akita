@@ -76,8 +76,8 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	remote := messaging.RemotePort("MMU")
 
 	routingSpec1 := tlb.Definition.DefaultSpec
-	routingSpec1.TranslationMapperType = "single"
-	routingSpec1.TranslationProviders = []messaging.RemotePort{remote}
+
+	routingSpec1.Bottom.Destinations = []messaging.RemotePort{remote}
 	comp := tlb.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(routingSpec1).
@@ -390,8 +390,7 @@ func buildWritebackForSequence(
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
-	spec.AddressMapperType = "single"
-	spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 	comp := writeback.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).

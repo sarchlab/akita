@@ -45,13 +45,15 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 
 // validateSpecFieldType accepts scalar field types (booleans, integers except
 // uintptr, floats, strings, and named types based on them) and slices and
-// arrays of scalars, and slices of flat scalar records.
+// arrays of scalars, and flat records or slices of flat records.
 func validateSpecFieldType(typ types.Type) error {
 	if isScalarType(typ) {
 		return nil
 	}
 
 	switch t := typ.Underlying().(type) {
+	case *types.Struct:
+		return validateSpecRecordType(t)
 	case *types.Slice:
 		if st, ok := t.Elem().Underlying().(*types.Struct); ok {
 			return validateSpecRecordType(st)
@@ -66,7 +68,7 @@ func validateSpecFieldType(typ types.Type) error {
 	}
 
 	return fmt.Errorf("disallowed Spec type %s: Spec fields must be scalars "+
-		"or slices of scalars, or slices of flat scalar records", typ)
+		"or slices of scalars, or flat records or slices of flat records", typ)
 }
 
 // isScalarType reports whether typ is a boolean, an integer other than
@@ -150,8 +152,8 @@ func validateSpecRecordType(st *types.Struct) error {
 		f := st.Field(i)
 		tag := reflect.StructTag(st.Tag(i)).Get("json")
 		name, options, _ := strings.Cut(tag, ",")
-		if !f.Exported() || !isScalarType(f.Type()) || name == "-" || !isValidJSONName(name) {
-			return fmt.Errorf("record field %s must be an exported scalar with an explicit JSON name", f.Name())
+		if !f.Exported() || !isSpecRecordFieldType(f.Type()) || name == "-" || !isValidJSONName(name) {
+			return fmt.Errorf("record field %s must be an exported scalar or scalar slice with an explicit JSON name", f.Name())
 		}
 		if seen[name] {
 			return fmt.Errorf("record has duplicate JSON name %q", name)
@@ -162,4 +164,12 @@ func validateSpecRecordType(st *types.Struct) error {
 		}
 	}
 	return nil
+}
+
+func isSpecRecordFieldType(t types.Type) bool {
+	if isScalarType(t) {
+		return true
+	}
+	s, ok := t.Underlying().(*types.Slice)
+	return ok && isScalarType(s.Elem())
 }

@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -10,8 +9,7 @@ import (
 )
 
 type tlbMiddleware struct {
-	translationProvider mem.AddressToPortMapper
-	comp                *Comp
+	comp *Comp
 }
 
 func (m *tlbMiddleware) topPort() messaging.Port {
@@ -364,7 +362,6 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 	request := msg.Payload.(vmprotocol.TranslationReq)
 
 	spec := m.comp.Spec
-	mapper := m.translationProvider
 
 	fetchBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
 		PID:      request.PID,
@@ -372,7 +369,7 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 		DeviceID: request.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
-		Dst: findTranslationPort(mapper, request.VAddr),
+		Dst: spec.Bottom.Find(request.VAddr),
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

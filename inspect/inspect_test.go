@@ -466,10 +466,21 @@ func fixturePatterns(t *testing.T) []string {
 
 func checkFlatRecordFields(t *testing.T, def schema.Definition) {
 	t.Helper()
-	if len(def.Spec) != 2 {
+	if len(def.Spec) != 4 {
 		t.Fatalf("missing flat record definition: %+v", def)
 	}
-	field := def.Spec[1]
+	bottom := def.Spec[0]
+	wantBottom := map[string]any{"Destinations": []any{"A", "B"}, "Size": uint64(64)}
+	if !reflect.DeepEqual(bottom.Default, wantBottom) || len(bottom.Fields) != 2 ||
+		!reflect.DeepEqual(bottom.Fields[0].Default, []any{"A", "B"}) || bottom.Fields[1].Min == nil {
+		t.Fatalf("standalone record = %+v", bottom)
+	}
+	mappings := def.Spec[1]
+	wantMappings := []any{map[string]any{"Destinations": []any{"C"}, "Size": uint64(0)}}
+	if !reflect.DeepEqual(mappings.Default, wantMappings) || len(mappings.Fields) != 2 {
+		t.Fatalf("record slice with scalar slices = %+v", mappings)
+	}
+	field := def.Spec[3]
 	want := []any{
 		map[string]any{"Remote": "Peer.Top", "Latency": int64(3)},
 		map[string]any{"Remote": "Other.Top", "Latency": int64(0)},

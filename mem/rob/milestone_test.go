@@ -85,7 +85,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec := Definition.DefaultSpec
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
-		spec.BottomUnit = bottomUnitRemote
+		spec.Bottom = bottomUnitRemote
 
 		port := func(name string, bufSize int) messaging.Port {
 			return twowaybuffered.NewPort(bufSize, bufSize)

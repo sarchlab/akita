@@ -120,7 +120,6 @@ case pingReq:
 
 ```go
 sim := sim.MakeBuilder().Build()
-engine := sim.Engine()
 
 agentA := ping.Definition.Builder().
     WithSimulation(sim).
@@ -140,7 +139,7 @@ if err := sim.Initialize(); err != nil { panic(err) }
 ping.SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 ping.SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
 
-engine.Run()
+if err := sim.Run(); err != nil { panic(err) }
 ```
 
 The system builder creates each port, choosing its buffer sizes, and passes

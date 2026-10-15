@@ -25,11 +25,6 @@ func TestSpecFlatScalarRecords(t *testing.T) {
 		}{},
 		struct {
 			Links []struct {
-				Ports []string `json:"ports"`
-			}
-		}{},
-		struct {
-			Links []struct {
 				Port *string `json:"port"`
 			}
 		}{},
@@ -42,4 +37,25 @@ func TestSpecFlatScalarRecords(t *testing.T) {
 	} {
 		require.Error(t, valuecheck.Spec(spec))
 	}
+}
+
+func TestSpecRecordWithScalarSlices(t *testing.T) {
+	type routing struct {
+		Ports []string `json:"ports"`
+		Size  uint64   `json:"size"`
+	}
+	require.NoError(t, valuecheck.Spec(struct {
+		Bottom routing   `json:"bottom"`
+		Links  []routing `json:"links"`
+	}{Bottom: routing{Ports: []string{"A"}}, Links: []routing{{Ports: []string{"B"}}}}))
+	require.Error(t, valuecheck.Spec(struct {
+		Bottom struct {
+			Nested routing `json:"nested"`
+		}
+	}{}))
+	require.Error(t, valuecheck.Spec(struct {
+		Bottom struct {
+			Nested [][]string `json:"nested"`
+		}
+	}{}))
 }

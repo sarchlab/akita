@@ -47,10 +47,9 @@ var _ = Describe("DataMover", func() {
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
-		dmSpec.InsideMapperType = "single"
-		dmSpec.InsidePorts = []messaging.RemotePort{insideMem.Ports.Top.AsRemote()}
-		dmSpec.OutsideMapperType = "single"
-		dmSpec.OutsidePorts = []messaging.RemotePort{outsideMem.Ports.Top.AsRemote()}
+		dmSpec.Inside.Destinations = []messaging.RemotePort{insideMem.Ports.Top.AsRemote()}
+
+		dmSpec.Outside.Destinations = []messaging.RemotePort{outsideMem.Ports.Top.AsRemote()}
 		dataMover = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(dmSpec).

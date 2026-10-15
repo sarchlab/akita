@@ -136,8 +136,7 @@ var _ = Describe("TLB milestones", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		spec.TranslationMapperType = "single"
-		spec.TranslationProviders = []messaging.RemotePort{remotePort}
+		spec.Bottom.Destinations = []messaging.RemotePort{remotePort}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

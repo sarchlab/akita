@@ -22,7 +22,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 4
 	spec.NumReqPerCycle = 2
-	spec.BottomUnit = messaging.RemotePort("BottomUnit")
+	spec.Bottom = messaging.RemotePort("BottomUnit")
 
 	port := func(name string) messaging.Port {
 		p := twowaybuffered.NewPort(4, 4)

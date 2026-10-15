@@ -75,8 +75,8 @@ func buildEnvironment(
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 4
 	cacheSpec.NumReqPerCycle = 16
-	cacheSpec.AddressMapperType = "single"
-	cacheSpec.RemotePorts = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
 	writeBackCache := writeback.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(cacheSpec).

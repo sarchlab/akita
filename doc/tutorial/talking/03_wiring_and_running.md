@@ -12,7 +12,6 @@ pages actually talk.
 
 ```go
 sim := sim.MakeBuilder().Build()
-engine := sim.Engine()
 
 // Choose buffer sizes; binding below assigns each port its name.
 outA := twowaybuffered.NewPort(16, 16)
@@ -50,7 +49,7 @@ if err := sim.Initialize(); err != nil {
 // arrives.
 agentA.TickLater()
 
-err := engine.Run()
+err := sim.Run()
 if err != nil {
 	panic(err)
 }

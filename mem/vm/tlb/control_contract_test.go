@@ -25,8 +25,8 @@ func TestControlContract(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		routingSpec1 := Definition.DefaultSpec
-		routingSpec1.TranslationMapperType = "single"
-		routingSpec1.TranslationProviders = []messaging.RemotePort{messaging.RemotePort("MMU")}
+
+		routingSpec1.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MMU")}
 		comp := Definition.Builder().
 			WithSimulation(sim).WithSpec(routingSpec1).
 			Build("TLB")

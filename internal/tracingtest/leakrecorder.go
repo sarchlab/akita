@@ -4,9 +4,10 @@ package tracingtest
 
 import (
 	"fmt"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"sort"
 	"strings"
+
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // LeakRecorder observes component work for reset-leak tests. Subscribe before

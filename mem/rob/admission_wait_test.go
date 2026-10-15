@@ -27,7 +27,7 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *milestoneRecorde
 	sim := testsim.New(clock, true)
 	spec := Definition.DefaultSpec
 	spec.BufferSize = 1
-	spec.BottomUnit = "Remote"
+	spec.Bottom = "Remote"
 	c := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("Rob")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		p := twowaybuffered.NewPort(2, 1)

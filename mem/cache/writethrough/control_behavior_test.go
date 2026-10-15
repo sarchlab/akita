@@ -50,8 +50,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.TotalByteSize = 64 * 1024
 		spec.MaxNumConcurrentTrans = 16
 
-		spec.AddressMapperType = "single"
-		spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

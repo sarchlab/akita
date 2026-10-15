@@ -28,8 +28,9 @@ func MustBeCheckpointable[S, T any](name string, spec S) {
 // ValidateSpec checks that the given value is a struct with exported fields
 // that are not tagged `json:"-"`. Fields must be scalars (bool, int*, uint*,
 // float*, string, and named types based on them), scalar arrays/slices, or
-// slices of flat records with exported scalar fields and explicit JSON names.
-// Nested containers, maps, pointers, interfaces, channels, and functions are
+// flat records or slices of flat records. Record fields must be exported scalars
+// or scalar slices with explicit JSON names. Nested records, other nested
+// containers, maps, pointers, interfaces, channels, and functions are
 // not allowed. Derived lookup objects belong in middleware; shared live objects
 // belong in Resources. Custom JSON codecs must
 // implement both MarshalJSON and UnmarshalJSON and round-trip the given value.

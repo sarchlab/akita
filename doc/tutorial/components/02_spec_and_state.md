@@ -46,7 +46,7 @@ checkpoint saves and restores. The two differ in what they may hold:
 
 | | Allowed field types |
 |---|---|
-| **Spec** | Scalars (`bool`, integers, floats, `string`, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) and slices or arrays of scalars. |
+| **Spec** | Scalars (`bool`, integers, floats, `string`, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) scalar slices/arrays, flat records, and slices of flat records. Record members may be scalars or scalar slices with explicit JSON names. |
 | **State** | Scalars, plus slices, arrays, maps with string or integer keys, and nested structs. |
 
 Neither may hold pointers, interfaces, channels, or functions. A reference to

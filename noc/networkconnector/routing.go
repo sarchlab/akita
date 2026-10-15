@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
+	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/noc/routing"
-	"github.com/sarchlab/akita/v5/noc/switching/endpoint"
-	"github.com/sarchlab/akita/v5/noc/switching/switches"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"

@@ -60,6 +60,43 @@ recording, choosing a unique filename when none is supplied. `WithTaskTracking`
 alone works in memory; `VisTracer()` is nil. For manual database tracing, combine
 tracking with an explicit recording option.
 
+`datarecording.NewDataRecorder(path)` also uses the exact path. Previously,
+`NewDataRecorder("trace")` appended `.sqlite3`; now it creates `trace`. Pass
+`"trace.sqlite3"` explicitly to retain that filename. Existing files are rejected.
+
+Memory routing now uses `mem.AddressMapper` values in Spec fields named after
+the routed port: `Bottom`, `Translation`, `Inside`, or `Outside`. The fixed
+peer fields `gmmu.Spec.LowModule` and `rob.Spec.BottomUnit` are also now `Bottom`.
+`SinglePortMapper`, `InterleavedAddressPortMapper`, `BankedAddressPortMapper`,
+and `AddressMapperType` are removed; `AddressToPortMapper` remains.
+
+```go
+spec.Bottom = mem.AddressMapper{
+    Destinations: []messaging.RemotePort{"DRAM0.Top", "DRAM1.Top"},
+    InterleavingSize: 256,
+    RangeLow: 1024, // inclusive
+    RangeHigh: 4096, // exclusive; zero disables range filtering
+    Fallback: "OtherMemory.Top",
+}
+```
+
+A single destination receives every in-range address. Multiple destinations
+repeat every `InterleavingSize` bytes using the absolute address, without
+translating it. Build requires at least one nonempty destination and a positive
+interleaving size when there are multiple destinations. A configured range must
+have `RangeHigh > RangeLow` and a nonempty `Fallback`; addresses outside it use
+that fallback. With `RangeHigh == 0`, no fallback is required.
+
+The former banked mapper panicked beyond its last bank; the unified mapper wraps
+across destinations. To bound a mapping, configure the range and fallback.
+Routing participates in the Spec hash; rebuild checkpoints after this API migration.
+
+Endpoints and switches moved from `noc/switching` to `noc/internal`.
+Applications build NoCs through `networkconnector`, `mesh`, `pcie`, or `nvlink`.
+Internally, endpoint device ports bind to `DeviceConnection(ep)`, and Initialize
+checks their ordered addresses against `Spec.Devices`. The endpoint stays a
+pass-through connection, preserving message sources and the existing hop count.
+
 Monitor and NoC connector configuration now uses value builders:
 `MakeBuilder().With...().Build()` (or `Build(name)` for a connector). Only builders
 have With methods; topology assembly happens on the built connector. Use
@@ -704,7 +741,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 
 | Struct | What it is | Supplied by | Key rule |
 |--------|------------|-------------|----------|
-| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and slices of flat scalar records with explicit JSON tags. No maps, standalone nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
+| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
@@ -741,10 +778,10 @@ type Spec struct {
     BufferSize     int         `json:"buffer_size"`
     NumReqPerCycle int         `json:"num_req_per_cycle"`
 
-    // BottomUnit is the remote port of the unit that the reorder buffer
+    // Bottom is the remote port of the unit that the reorder buffer
     // forwards requests to. The reorder buffer rewrites the Dst of every
     // shadow request to this value.
-    BottomUnit messaging.RemotePort `json:"bottom_unit"`
+    Bottom messaging.RemotePort `json:"bottom"`
 }
 
 type State struct {
@@ -827,7 +864,7 @@ port and builds the instance:
 
 ```go
 spec := rob.Definition.DefaultSpec
-spec.BottomUnit = bottomUnit.AsRemote()
+spec.Bottom = bottomUnit.AsRemote()
 
 r := rob.Definition.Builder().
     WithSimulation(sim).
@@ -851,8 +888,8 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Core Principles
 
 1. Spec (immutable configuration)
-   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) scalar slices/arrays, and slices of flat scalar records with explicit JSON tags. No maps or standalone nested structs.
-   - Strategy dependencies are expressed as flat scalar fields: a kind plus its scalar parameters (e.g., `AddressMapperType: "interleaved"` and `InterleavingSize: 4096`).
+   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps or nested records.
+   - Routing dependencies are plain values such as `Bottom mem.AddressMapper`; its destinations and parameters fully specify the behavior.
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
    - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
 
@@ -880,8 +917,8 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Dependency Injection and Shared State
 
 - Strategy injection (e.g., address conversion)
-  - Keep in Spec as flat scalar fields (a `Kind` string plus scalar parameters), not as a live object.
-  - Derive private lookup implementations in `NewMiddlewares` from Spec. Builtin components do not accept mapper overrides through Resources.
+  - Keep configuration in Spec as scalars or flat records, not as a live object.
+  - Route directly through `mem.AddressMapper` values in Spec; other strategies may derive private lookup tables at initialization. Builtin components do not accept mapper overrides through Resources.
   - On restore, reconstruct from Spec; never serialize strategy objects.
 
 - Emulation state (e.g., memory storage)
@@ -932,25 +969,27 @@ This pattern generalizes to other components: keep Spec flat and declarative, ke
 
 ### Lists in Spec
 
-V5 Spec accepts scalars, scalar arrays/slices, and slices of flat scalar records
-such as `[]Link`. Every field in a record must be an exported scalar with an
-explicit, unique JSON name. Nested structs/containers, maps, pointers, interfaces,
+V5 Spec accepts scalars, scalar arrays/slices, flat records such as
+`mem.AddressMapper`, and slices of flat records such as `[]Link`. Each record
+field must be an exported scalar or scalar slice with an explicit, unique JSON
+name. Nested records, other nested containers, maps, pointers, interfaces,
 and record arrays are rejected; runtime validation and `inspect` use the same
 rules. The inspector exports record fields and literal defaults in its schema.
 
 | The list is… | Put it in | Example |
 |---|---|---|
-| Destinations or address mapping | Spec | `RemotePorts`, mapper kind, interleaving/bank size, range and fallback destination |
+| Destinations or address mapping | Spec | `Bottom mem.AddressMapper`: destinations, interleaving size, range, fallback |
 | Per-link configuration | Spec | `Links []Link`, index-aligned with `Ports.Links` |
 | Runtime data | State | Queues and in-flight transactions |
 | Shared live objects | Resources | Storage and page tables |
 
-Build copies Spec slices. Do not mutate the instance's Spec afterward; it is
+Build copies every Spec slice, including scalar slices inside records. Do not mutate the instance's Spec afterward; it is
 included in checkpoint compatibility checks. Fill remote addresses with planned
 full names, or bind destination ports before calling `AsRemote()`.
 
-Builtin components derive address mappers and routing tables privately from Spec
-during initialization. Resources must not provide a second routing override.
+Memory middlewares route directly through the mapper value in Spec. Other
+components may derive lookup tables at initialization. Resources must not provide
+a second routing override.
 Resources are rebuilt separately; shared registered objects checkpoint themselves.
 
 Use Definition.ValidateSpec for configuration-only checks at Build. Use
@@ -963,7 +1002,7 @@ is an Initialize check, since Build precedes port binding.
 - Give each component type its own package, and choose its model: `modeling/ticking` for cycle-by-cycle work, `modeling/wakeup` or `modeling/event` for clockless components.
 - Split each component's configuration into Spec (scalar user settings, including `Freq timing.Freq` for a ticking component), State (data that changes while simulating), and Resources (references to external objects and the wiring derived from them).
 - Classify lists and nested values using the table above; flatten unsupported containers.
-- Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
+- Express strategy choices as scalars or flat configuration records. Records may contain scalar slices but cannot nest.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
 - Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>.<role>"` when it speaks a protocol role, where `<protocol>` is the import path of the package that defines the protocol. Reach ports as `comp.Ports.X`.
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.

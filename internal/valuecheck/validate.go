@@ -65,7 +65,7 @@ func (w *walker) validateFieldType(t reflect.Type, path string, allowComposite b
 	case reflect.Map:
 		if !allowComposite {
 			return fmt.Errorf("%s: map not allowed in spec; "+
-				"spec fields must be scalars, scalar arrays/slices, or slices of flat scalar records", path)
+				"spec fields must be scalars, scalar arrays/slices, flat records, or slices of flat records", path)
 		}
 
 		k := t.Key().Kind()
@@ -81,7 +81,7 @@ func (w *walker) validateFieldType(t reflect.Type, path string, allowComposite b
 
 	case reflect.Struct:
 		if !allowComposite {
-			return fmt.Errorf("%s: nested structs not allowed in spec", path)
+			return w.validateSpecRecord(t, path)
 		}
 
 		// Validate the nested struct's fields recursively.
@@ -390,13 +390,14 @@ func validateSpecJSONValue(v reflect.Value, path string) error {
 	return nil
 }
 
-// validateSpecRecord permits only exported scalar fields with explicit JSON names.
+// validateSpecRecord permits exported scalars and scalar slices with explicit JSON names.
 func (w *walker) validateSpecRecord(t reflect.Type, path string) error {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if !f.IsExported() || !isScalarKind(f.Type.Kind()) || name == "-" || !isValidJSONName(name) {
-			return fmt.Errorf("%s.%s: Spec record fields must be exported scalars with explicit JSON names", path, f.Name)
+		if !f.IsExported() || !isSpecRecordField(f.Type) || name == "-" || !isValidJSONName(name) {
+			return fmt.Errorf("%s.%s: Spec record fields must be exported scalars or scalar slices "+
+				"with explicit JSON names", path, f.Name)
 		}
 	}
 	return w.validateStructType(t, path, false)
@@ -408,9 +409,13 @@ func (w *walker) validateSpecSequence(t reflect.Type, path string) error {
 	}
 	if !isScalarKind(t.Elem().Kind()) {
 		return fmt.Errorf("%s: %s of %s not allowed in spec; "+
-			"spec fields must be scalars, scalar arrays/slices, or slices of flat scalar records",
+			"spec fields must be scalars, scalar arrays/slices, flat records, or slices of flat records",
 			path, t.Kind(), t.Elem().Kind())
 	}
 
 	return nil
+}
+
+func isSpecRecordField(t reflect.Type) bool {
+	return isScalarKind(t.Kind()) || (t.Kind() == reflect.Slice && isScalarKind(t.Elem().Kind()))
 }

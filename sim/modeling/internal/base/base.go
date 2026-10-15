@@ -269,28 +269,30 @@ func (c *ComponentBase[S, T, R, P, M]) RequireInitialized() {
 	}
 }
 
-// cloneSpec returns spec with its own copy of every slice field, so an
-// instance shares no slice with the Definition's DefaultSpec or with the value
-// given to WithSpec. A Spec holds only scalars, scalar collections, and slices of flat scalar records, so
-// copying the slices copies everything.
+// cloneSpec copies every slice, including scalar slices within flat records.
+// The Spec validator excludes pointers, maps, and other reference containers.
 func cloneSpec[S any](spec S) S {
-	v := reflect.ValueOf(&spec).Elem()
-	if v.Kind() != reflect.Struct {
-		return spec
-	}
-
-	for i := range v.NumField() {
-		f := v.Field(i)
-		if f.Kind() != reflect.Slice || f.IsNil() || !f.CanSet() {
-			continue
-		}
-
-		c := reflect.MakeSlice(f.Type(), f.Len(), f.Len())
-		reflect.Copy(c, f)
-		f.Set(c)
-	}
-
+	cloneSpecValue(reflect.ValueOf(&spec).Elem())
 	return spec
+}
+
+func cloneSpecValue(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Struct:
+		for i := range v.NumField() {
+			cloneSpecValue(v.Field(i))
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			return
+		}
+		copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		reflect.Copy(copied, v)
+		v.Set(copied)
+		for i := range v.Len() {
+			cloneSpecValue(v.Index(i))
+		}
+	}
 }
 
 // TaskTracker returns this component's optional simulation task service.

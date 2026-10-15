@@ -1,7 +1,6 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -13,8 +12,7 @@ import (
 // parseTranslateMW handles incoming requests from topPort and initiates
 // address translation. Control-port handling lives in ctrlMiddleware.
 type parseTranslateMW struct {
-	translationProvider mem.AddressToPortMapper
-	comp                *Comp
+	comp *Comp
 }
 
 func (m *parseTranslateMW) topPort() messaging.Port {
@@ -59,7 +57,7 @@ func (m *parseTranslateMW) translate() bool {
 		DeviceID: spec.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.translationPort().AsRemote(),
-		Dst: m.translationProvider.Find(vAddr),
+		Dst: m.comp.Spec.Translation.Find(vAddr),
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

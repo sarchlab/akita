@@ -9,7 +9,6 @@ import (
 
 func Example_pingWithEvents() {
 	sim := akitasim.MakeBuilder().Build()
-	engine := sim.Engine().(*timing.SerialEngine)
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).
@@ -34,7 +33,7 @@ func Example_pingWithEvents() {
 	SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 	SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 	// Output:

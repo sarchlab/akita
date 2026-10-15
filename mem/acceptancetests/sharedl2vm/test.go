@@ -178,8 +178,8 @@ func buildL2Cache(
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
-	l2Spec.AddressMapperType = "single"
-	l2Spec.RemotePorts = []messaging.RemotePort{
+
+	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
 	l2Cache := writeback.Definition.Builder().
@@ -224,8 +224,8 @@ func buildL2TLB(
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
-	l2TLBSpec.TranslationMapperType = "single"
-	l2TLBSpec.TranslationProviders = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
+
+	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
 	l2TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
@@ -272,10 +272,9 @@ func buildL1Cache(
 	l1Spec := writethrough.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
-	l1Spec.AddressMapperType = "single"
 
 	name := "L1Cache" + suffix
-	l1Spec.RemotePorts = []messaging.RemotePort{
+	l1Spec.Bottom.Destinations = []messaging.RemotePort{
 		l2Cache.Ports.Top.AsRemote(),
 	}
 	l1Cache := writethrough.Definition.Builder().
@@ -303,8 +302,8 @@ func buildL1TLB(
 	l1TLBSpec.NumReqPerCycle = 2
 
 	name := "L1TLB" + suffix
-	l1TLBSpec.TranslationMapperType = "single"
-	l1TLBSpec.TranslationProviders = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
+
+	l1TLBSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
 	l1TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l1TLBSpec).
@@ -328,10 +327,10 @@ func buildAddressTranslator(
 	atSpec.NumReqPerCycle = 4
 
 	name := "AT" + suffix
-	atSpec.MemMapperType = "single"
-	atSpec.MemProviders = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
-	atSpec.TranslationMapperType = "single"
-	atSpec.TranslationProviders = []messaging.RemotePort{l1TLB.Ports.Top.AsRemote()}
+
+	atSpec.Bottom.Destinations = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
+
+	atSpec.Translation.Destinations = []messaging.RemotePort{l1TLB.Ports.Top.AsRemote()}
 	at := addresstranslator.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(atSpec).
@@ -352,7 +351,7 @@ func buildROB(
 ) *rob.Comp {
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
-	robSpec.BottomUnit = at.Ports.Top.AsRemote()
+	robSpec.Bottom = at.Ports.Top.AsRemote()
 
 	name := "ROB" + suffix
 

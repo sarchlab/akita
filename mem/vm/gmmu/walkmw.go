@@ -188,7 +188,7 @@ func (m *walkMW) processRemoteMemReq(
 		DeviceID: walking.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
-		Dst: spec.LowModule,
+		Dst: spec.Bottom,
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

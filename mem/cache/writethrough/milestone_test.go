@@ -110,14 +110,12 @@ var _ = Describe("Cache milestones", func() {
 		dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
 		dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
-		addressToPortMapper := &mem.SinglePortMapper{
-			Port: dram.Ports.Top.AsRemote(),
-		}
+		addressToPortMapper := dram.Ports.Top.AsRemote()
 
 		spec := Definition.DefaultSpec
 		spec.WritePolicyType = policy
-		spec.AddressMapperType = "single"
-		spec.RemotePorts = []messaging.RemotePort{addressToPortMapper.Port}
+
+		spec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		c = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

@@ -40,10 +40,10 @@ func buildSim() (*sim.Simulation, *driver) {
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
-	atSpec.MemMapperType = "single"
-	atSpec.MemProviders = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
-	atSpec.TranslationMapperType = "single"
-	atSpec.TranslationProviders = []messaging.RemotePort{itlb.Ports.Top.AsRemote()}
+
+	atSpec.Bottom.Destinations = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
+
+	atSpec.Translation.Destinations = []messaging.RemotePort{itlb.Ports.Top.AsRemote()}
 	at := addresstranslator.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(atSpec).
@@ -89,8 +89,8 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
-	l2Spec.AddressMapperType = "single"
-	l2Spec.RemotePorts = []messaging.RemotePort{
+
+	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
 	l2Cache := writeback.Definition.Builder().
@@ -106,8 +106,8 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	l1Spec := writethrough.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
-	l1Spec.AddressMapperType = "single"
-	l1Spec.RemotePorts = []messaging.RemotePort{
+
+	l1Spec.Bottom.Destinations = []messaging.RemotePort{
 		l2Cache.Ports.Top.AsRemote(),
 	}
 	l1Cache := writethrough.Definition.Builder().
@@ -144,8 +144,8 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
-	l2TLBSpec.TranslationMapperType = "single"
-	l2TLBSpec.TranslationProviders = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
+
+	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
 	l2TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
@@ -160,8 +160,8 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
-	tlbSpec.TranslationMapperType = "single"
-	tlbSpec.TranslationProviders = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
+
+	tlbSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
 	itlb := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(tlbSpec).

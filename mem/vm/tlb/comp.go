@@ -2,7 +2,6 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/internal/addressmapping"
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
@@ -15,14 +14,7 @@ import (
 // Spec contains immutable configuration for the TLB.
 type Spec struct {
 	// Translation routing configuration.
-	TranslationMapperType                mem.AddressMapperType  `json:"translation_mapper_type"`
-	TranslationProviders                 []messaging.RemotePort `json:"translation_providers"`
-	TranslationInterleavingSize          uint64                 `json:"translation_interleaving_size"`
-	TranslationBankSize                  uint64                 `json:"translation_bank_size"`
-	TranslationUseAddressSpaceLimitation bool                   `json:"translation_use_address_space_limitation"`
-	TranslationLowAddress                uint64                 `json:"translation_low_address"`
-	TranslationHighAddress               uint64                 `json:"translation_high_address"`
-	TranslationModuleForOtherAddresses   messaging.RemotePort   `json:"translation_module_for_other_addresses"`
+	Bottom mem.AddressMapper `json:"bottom"`
 
 	Freq           timing.Freq `json:"freq"`
 	NumSets        int         `json:"num_sets"`
@@ -205,28 +197,5 @@ func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool
 	return mshr.IsPresent(entries, pid, vAddr)
 }
 
-// --- Free function for address mapping ---
-
-func findTranslationPort(
-	mapper mem.AddressToPortMapper,
-	vAddr uint64,
-) messaging.RemotePort {
-	if mapper == nil {
-		panic("no translation provider mapper configured")
-	}
-
-	return mapper.Find(vAddr)
-}
-
 // Comp is the TLB component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
-
-func (s Spec) translationMapping() addressmapping.Config {
-	return addressmapping.Config{Kind: s.TranslationMapperType, Ports: s.TranslationProviders,
-		InterleavingSize:          s.TranslationInterleavingSize,
-		BankSize:                  s.TranslationBankSize,
-		UseAddressSpaceLimitation: s.TranslationUseAddressSpaceLimitation,
-		LowAddress:                s.TranslationLowAddress,
-		HighAddress:               s.TranslationHighAddress,
-		ModuleForOtherAddresses:   s.TranslationModuleForOtherAddresses}
-}

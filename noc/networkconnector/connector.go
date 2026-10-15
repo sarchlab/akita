@@ -5,9 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/naming"
 
+	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
+	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/noc/routing"
-	"github.com/sarchlab/akita/v5/noc/switching/endpoint"
-	"github.com/sarchlab/akita/v5/noc/switching/switches"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -202,14 +202,18 @@ func (c *Connector) createEndPoint(
 	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
 	epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", swNode.name, len(swNode.ports)-1))
 
-	endPoint := endpoint.Definition.Builder().
+	for _, port := range ports {
+		epSpec.Devices = append(epSpec.Devices, port.AsRemote())
+	}
+	endPoint := endpoint.MakeBuilder().
 		WithSimulation(c.simulation).
 		WithSpec(epSpec).
-		WithResources(endpoint.Resources{DevicePorts: ports}).
 		Build(name)
 
 	endPoint.BindPort("NetworkPort", epPort)
-	endpoint.ConnectDevices(endPoint)
+	for _, port := range ports {
+		endpoint.DeviceConnection(endPoint).BindPort(port)
+	}
 
 	epNode := &deviceNode{
 		ports:    ports,

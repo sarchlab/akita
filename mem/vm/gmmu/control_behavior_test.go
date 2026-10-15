@@ -46,7 +46,7 @@ var _ = Describe("GMMU control behavior", func() {
 		// request be parsed into a walk before the first one finalizes, so
 		// all N walks can be observed in flight at once.
 		spec.Latency = 10
-		spec.LowModule = lowModule
+		spec.Bottom = lowModule
 
 		comp = Definition.Builder().
 			WithSimulation(sim).

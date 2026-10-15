@@ -35,8 +35,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
-	spec.AddressMapperType = "single"
-	spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
@@ -131,7 +130,7 @@ func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 
 func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 	spec := stageTestSpec()
-	spec.RemotePorts = []messaging.RemotePort{"Lower"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"Lower"}
 	comp := buildStageTestComp(spec, Resources{
 		Storage: mem.NewStorage(1 * mem.MB),
 	}, makePorts("Cache", 8))

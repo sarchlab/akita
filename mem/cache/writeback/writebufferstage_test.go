@@ -45,7 +45,7 @@ var _ = Describe("WriteBufferStage", func() {
 		spec.WriteBufferCapacity = 16
 		spec.MaxInflightFetch = 4
 		spec.MaxInflightEviction = 4
-		spec.RemotePorts = []messaging.RemotePort{"DRAM"}
+		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
 		comp := buildStageTestComp(spec,
 			Resources{
 				Storage: mem.NewStorage(spec.TotalByteSize),

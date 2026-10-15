@@ -25,10 +25,9 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
 
-	spec.InsideMapperType = "single"
-	spec.InsidePorts = []messaging.RemotePort{messaging.RemotePort("InsideMem")}
-	spec.OutsideMapperType = "single"
-	spec.OutsidePorts = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
+	spec.Inside.Destinations = []messaging.RemotePort{messaging.RemotePort("InsideMem")}
+
+	spec.Outside.Destinations = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
 	dataMover := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).

@@ -127,7 +127,7 @@ func main() {
 
 	switch *mode {
 	case "save":
-		runBatch(engine, worker, batch1)
+		runBatch(s, worker, batch1)
 		report("save", "phase 1 done", engine, worker)
 
 		if err := s.SaveCheckpoint(*ckpt); err != nil {
@@ -135,7 +135,7 @@ func main() {
 		}
 		fmt.Printf("[save] checkpoint written to %s\n", *ckpt)
 
-		runBatch(engine, worker, batch2)
+		runBatch(s, worker, batch2)
 		report("save", "FINAL", engine, worker)
 
 	case "load":
@@ -144,7 +144,7 @@ func main() {
 		}
 		report("load", "resumed", engine, worker)
 
-		runBatch(engine, worker, batch2)
+		runBatch(s, worker, batch2)
 		report("load", "FINAL", engine, worker)
 
 	default:
@@ -154,9 +154,9 @@ func main() {
 }
 
 // runBatch queues a batch of work and runs the engine until it goes quiescent.
-func runBatch(engine *timing.SerialEngine, worker *Comp, n int) {
+func runBatch(s *sim.Simulation, worker *Comp, n int) {
 	addWork(worker, n)
-	if err := engine.Run(); err != nil {
+	if err := s.Run(); err != nil {
 		panic(err)
 	}
 }

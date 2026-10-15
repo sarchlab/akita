@@ -64,14 +64,8 @@ type Spec struct {
     MaxInflightFetch    int         // Concurrent fetches to lower memory
     MaxInflightEviction int         // Concurrent evictions to lower memory
 
-    // Mapping is derived privately from Spec during Initialize.
-    AddressMapperType mem.AddressMapperType // single, interleaved, or banked
-    RemotePorts []messaging.RemotePort
-    InterleavingSize uint64
-    BankSize uint64
-    UseAddressSpaceLimitation bool
-    LowAddress, HighAddress uint64
-    ModuleForOtherAddresses messaging.RemotePort
+    // Routing is read directly from Spec.
+    Bottom mem.AddressMapper // destinations, interleaving, optional range/fallback
 }
 ```
 
@@ -92,7 +86,7 @@ spec.TotalByteSize = 64 * mem.KB
 spec.WayAssociativity = 4
 spec.Log2BlockSize = 6 // 64-byte lines
 spec.NumMSHREntry = 16
-spec.RemotePorts = []messaging.RemotePort{"DRAM.Top"}
+spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := writeback.Definition.Builder().
     WithSimulation(sim).

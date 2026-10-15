@@ -37,7 +37,7 @@ var _ = Describe("Cache", func() {
 		engine              timing.Engine
 		sim                 timing.Simulation
 		connection          messaging.Connection
-		addressToPortMapper *mem.SinglePortMapper
+		addressToPortMapper messaging.RemotePort
 		dram                *idealmemcontroller.Comp
 		dramStorage         *mem.Storage
 		cuPort              messaging.Port
@@ -76,15 +76,13 @@ var _ = Describe("Cache", func() {
 		dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
 		dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
-		addressToPortMapper = &mem.SinglePortMapper{
-			Port: dram.Ports.Top.AsRemote(),
-		}
+		addressToPortMapper = dram.Ports.Top.AsRemote()
 
 		// The system builder chooses the port buffer sizes. Control is
 		// unused here but every port must still be given.
 		routingSpec1 := Definition.DefaultSpec
-		routingSpec1.AddressMapperType = "single"
-		routingSpec1.RemotePorts = []messaging.RemotePort{addressToPortMapper.Port}
+
+		routingSpec1.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		c = Definition.Builder().
 			WithSimulation(sim).WithSpec(routingSpec1).
 			WithResources(Resources{Storage: mem.NewStorage(Definition.DefaultSpec.TotalByteSize)}).

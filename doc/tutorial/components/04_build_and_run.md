@@ -99,7 +99,7 @@ if err := s.Initialize(); err != nil {
 }
 walker.TickLater()
 
-if err := s.Engine().Run(); err != nil {
+if err := s.Run(); err != nil {
     panic(err)
 }
 
@@ -121,9 +121,8 @@ can replace the synchronous `Run` and `Terminate` calls above. It uses `context`
 `fmt`, and `time` from the standard library.
 
 ```go
-engine := s.Engine()
 runDone := make(chan error, 1)
-go func() { runDone <- engine.Run() }()
+go func() { runDone <- s.Run() }()
 
 // This controller runs outside the engine's handlers and hooks.
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -29,10 +29,9 @@ func TestControlContract(t *testing.T) {
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8
 
-		spec.InsideMapperType = "single"
-		spec.InsidePorts = []messaging.RemotePort{messaging.RemotePort("InsideMem")}
-		spec.OutsideMapperType = "single"
-		spec.OutsidePorts = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
+		spec.Inside.Destinations = []messaging.RemotePort{messaging.RemotePort("InsideMem")}
+
+		spec.Outside.Destinations = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
 		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

@@ -5,14 +5,19 @@ import (
 	"maps"
 
 	"github.com/rs/xid"
+	"github.com/sarchlab/akita/v5/internal/simconfig"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
+type engineOption = simconfig.EngineOption
+
 // Builder can be used to build a simulation.
 type Builder struct {
+	engineOption
 	parallelEngine    bool
 	monitor           Monitor
 	outputPath        string
@@ -156,6 +161,14 @@ func (b Builder) createDataRecorder(s *Simulation) {
 }
 
 func (b Builder) createEngine(s *Simulation) {
+	if engine := simconfig.Engine(&b.engineOption); engine != nil {
+		s.engine = engine
+		if named, ok := engine.(naming.Named); ok {
+			s.registerEntity(named)
+		}
+		return
+	}
+
 	if b.parallelEngine {
 		engine := timing.NewParallelEngine()
 		s.engine = engine

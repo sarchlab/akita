@@ -82,7 +82,7 @@ func main() {
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}
-	err := engine.Run()
+	err := s.Run()
 	if err != nil {
 		panic(err)
 	}

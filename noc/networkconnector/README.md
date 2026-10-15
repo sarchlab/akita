@@ -61,7 +61,7 @@ table for every reachable device port.
 ## How It Works
 
 `ConnectDevice` builds an `endpoint`, binds its network port, attaches the
-device ports through `endpoint.ConnectDevices`, and creates the switch-side
+device ports through `endpoint.DeviceConnection(ep).BindPort(port)`, and creates the switch-side
 port. It creates a `direct.Connection` and records the pending attachment
 and `Remote`s on both nodes. `ConnectSwitches` similarly records a pending
 link between two switches. Because `Spec.Links` is fixed at Build, the

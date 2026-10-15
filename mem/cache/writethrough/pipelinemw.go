@@ -7,13 +7,12 @@ import (
 )
 
 // pipelineMW runs the cache data pipeline. It holds only references: the
-// component, the storage and address mapper from Resources, and the pipeline
+// component, the storage from Resources, and the pipeline
 // stages, which keep their mutable data in State.
 type pipelineMW struct {
 	comp *Comp
 
-	storage       *mem.Storage
-	addressMapper mem.AddressToPortMapper
+	storage *mem.Storage
 
 	intakeStage      *intake
 	directoryStage   *directory
@@ -26,12 +25,10 @@ type pipelineMW struct {
 func newPipelineMW(
 	c *Comp,
 	storage *mem.Storage,
-	addressMapper mem.AddressToPortMapper,
 ) *pipelineMW {
 	m := &pipelineMW{
-		comp:          c,
-		storage:       storage,
-		addressMapper: addressMapper,
+		comp:    c,
+		storage: storage,
 	}
 
 	spec := c.Spec
@@ -63,11 +60,7 @@ func (m *pipelineMW) bottomPort() messaging.Port {
 
 // findPort resolves an address to the lower-memory port that serves it.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	if m.addressMapper == nil {
-		panic("writethrough: no address mapper; configure Spec.AddressMapperType and Spec.RemotePorts")
-	}
-
-	return m.addressMapper.Find(address)
+	return m.comp.Spec.Bottom.Find(address)
 }
 
 // Handle advances the cache pipeline by one cycle unless the cache is paused.

@@ -171,7 +171,9 @@ they are saved too — register each event type it schedules (see *Events*
 above).
 
 `Spec` may contain only scalars (booleans, numbers, strings, and named types
-based on them) and slices or arrays of scalars. No maps or nested structs. `State` is more
+based on them), scalar slices/arrays, flat records, and slices of flat records.
+Record fields may be scalars or scalar slices with explicit JSON names. No maps
+or records nested inside records. `State` is more
 permissive: nested structs, slices, arrays, and maps (with string or integer
 keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs;
 in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.

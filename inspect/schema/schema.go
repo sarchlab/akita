@@ -70,7 +70,7 @@ type Middleware struct {
 
 // Field describes one field of a Spec or Resources struct.
 type Field struct {
-	// Fields describes the scalar members of a flat record slice.
+	// Fields describes the members of a flat record or the element of a record slice.
 	Fields   []Field `json:"fields,omitempty"`
 	Name     string  `json:"name"`
 	JSONName string  `json:"json_name,omitempty"`
@@ -79,8 +79,8 @@ type Field struct {
 
 	// Default is the value the definition's DefaultSpec assigns to the
 	// field; fields the literal leaves out get their Go zero value. Spec
-	// fields are scalars, scalar collections, or flat record slices; record
-	// defaults map Go field names to scalar values. Absent for Resources fields.
+	// fields are scalars, scalar collections, flat records, or flat record slices; record
+	// defaults map Go field names to scalar or scalar-slice values. Absent for Resources fields.
 	// Values describe Go fields before JSON marshaling, so json:",string"
 	// does not transform defaults.
 	Default any `json:"default,omitempty"`

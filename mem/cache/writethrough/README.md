@@ -56,8 +56,8 @@ handles the commands on the `Control` port (see [Ports](#ports)).
   stages, the pause and drain flags, and the in-progress control command.
 - **Resources** — the backing `*mem.Storage` (required; at least `TotalByteSize`
   bytes). Destinations and mapping choices are immutable Spec configuration:
-  `RemotePorts`, `AddressMapperType`, `InterleavingSize`, `BankSize`, and range/
-  fallback fields. The private mapper is derived during Initialize.
+  `Bottom mem.AddressMapper` (destinations, interleaving size, and optional
+  range/fallback). Middleware routes directly through this Spec value.
 - **Ports** — the `Top`, `Bottom`, and `Control` ports.
 - **Middlewares** — `Ctrl` (control commands) and `Pipeline` (the data
   pipeline), run in that order every cycle.
@@ -76,7 +76,7 @@ spec := writethrough.Definition.DefaultSpec
 spec.WritePolicyType = "write-through"
 spec.TotalByteSize = 256 * mem.KB
 spec.WayAssociativity = 8
-spec.RemotePorts = []messaging.RemotePort{"DRAM.Top"}
+spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := writethrough.Definition.Builder().
     WithSimulation(sim).

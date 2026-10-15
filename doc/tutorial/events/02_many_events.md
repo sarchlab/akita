@@ -117,7 +117,10 @@ firstEvt := splitEvent{
 }
 engine.Schedule(firstEvt)
 
-err := engine.Run()
+if err := s.Initialize(); err != nil {
+    panic(err)
+}
+err := s.Run()
 ```
 
 Same shape as the previous example: build, get engine, register handler,

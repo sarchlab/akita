@@ -1,47 +1,51 @@
 package mem
 
 import (
-	"fmt"
+	"math"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("InterleavedAddressToPortMapper", func() {
-	var (
-		addressToPortMapper *InterleavedAddressPortMapper
-	)
+func TestAddressMapperRouting(t *testing.T) {
+	m := AddressMapper{Destinations: []messaging.RemotePort{"A", "B"}, InterleavingSize: 256}
+	require.NoError(t, m.Validate())
+	for address, want := range map[uint64]messaging.RemotePort{
+		0: "A", 255: "A", 256: "B", 511: "B", 512: "A", 768: "B", math.MaxUint64: "B",
+	} {
+		require.Equal(t, want, m.Find(address), "address %d", address)
+	}
+	m.RangeLow = 256
+	m.RangeHigh = 1024
+	m.Fallback = "Other"
+	require.NoError(t, m.Validate())
+	for address, want := range map[uint64]messaging.RemotePort{
+		255: "Other", 256: "B", 512: "A", 1023: "B", 1024: "Other",
+	} {
+		require.Equal(t, want, m.Find(address), "address %d", address)
+	}
+	m.Destinations = m.Destinations[:1]
+	m.InterleavingSize = 0
+	require.NoError(t, m.Validate())
+	require.Equal(t, messaging.RemotePort("A"), m.Find(768))
+	m.RangeHigh = 0
+	m.Fallback = ""
+	require.NoError(t, m.Validate())
+	require.Equal(t, messaging.RemotePort("A"), m.Find(math.MaxUint64))
+	t.Log("Interleaving selects A,B,A,B across successive 256-byte blocks; " +
+		"[256,1024) filters to Other outside both boundaries; " +
+		"a single unbounded destination needs no fallback")
+}
 
-	BeforeEach(func() {
-		addressToPortMapper = new(InterleavedAddressPortMapper)
-		addressToPortMapper.UseAddressSpaceLimitation = true
-		addressToPortMapper.LowAddress = 0
-		addressToPortMapper.HighAddress = 4 * GB
-		addressToPortMapper.InterleavingSize = 4096
-		addressToPortMapper.LowModules = make([]messaging.RemotePort, 0)
-		for i := 0; i < 6; i++ {
-			addressToPortMapper.LowModules = append(
-				addressToPortMapper.LowModules,
-				messaging.RemotePort(fmt.Sprintf("LowModule[%d].Port", i)),
-			)
-		}
-		addressToPortMapper.ModuleForOtherAddresses =
-			messaging.RemotePort("LowModuleOther.Port")
-	})
-
-	It("should find low module if address is in-space", func() {
-		Expect(addressToPortMapper.Find(0)).To(
-			BeIdenticalTo(addressToPortMapper.LowModules[0]))
-		Expect(addressToPortMapper.Find(4096)).To(
-			BeIdenticalTo(addressToPortMapper.LowModules[1]))
-		Expect(addressToPortMapper.Find(4097)).To(
-			BeIdenticalTo(addressToPortMapper.LowModules[1]))
-	})
-
-	It("should use a special module for all the addresses that does not fall "+
-		"in range", func() {
-		Expect(addressToPortMapper.Find(4 * GB)).To(
-			BeIdenticalTo(addressToPortMapper.ModuleForOtherAddresses))
-	})
-})
+func TestAddressMapperValidation(t *testing.T) {
+	for _, m := range []AddressMapper{
+		{}, {Destinations: []messaging.RemotePort{""}},
+		{Destinations: []messaging.RemotePort{"A", "B"}},
+		{Destinations: []messaging.RemotePort{"A"}, RangeLow: 4, RangeHigh: 4, Fallback: "F"},
+		{Destinations: []messaging.RemotePort{"A"}, RangeLow: 4, RangeHigh: 3, Fallback: "F"},
+		{Destinations: []messaging.RemotePort{"A"}, RangeHigh: 4},
+	} {
+		require.Error(t, m.Validate(), "%+v", m)
+	}
+}

@@ -123,7 +123,6 @@ func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec {
 
 func main() {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
-	engine := sim.Engine().(*timing.SerialEngine)
 
 	worker := Definition.Builder().
 		WithSimulation(sim).
@@ -137,7 +136,7 @@ func main() {
 
 	worker.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 

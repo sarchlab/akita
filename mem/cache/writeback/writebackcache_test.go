@@ -72,6 +72,7 @@ func plugNoopConn(comp *Comp) {
 // 64 sets of 4 ways of 64-byte blocks in a single bank, 4 requests per cycle.
 func stageTestSpec() Spec {
 	spec := Definition.DefaultSpec
+	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.Log2BlockSize = 6
 	spec.WayAssociativity = 4
 	spec.TotalByteSize = 64 * 4 * 64
@@ -125,7 +126,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	var (
 		engine              timing.Engine
 		sim                 timing.Simulation
-		addressToPortMapper *mem.SinglePortMapper
+		addressToPortMapper messaging.RemotePort
 		cacheComp           *Comp
 		m                   *pipelineMW
 		dramTop             messaging.Port
@@ -145,16 +146,13 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
 
-		addressToPortMapper = &mem.SinglePortMapper{
-			Port: dramTop.AsRemote(),
-		}
+		addressToPortMapper = dramTop.AsRemote()
 
 		cacheSpec := Definition.DefaultSpec
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheSpec.AddressMapperType = "single"
-		cacheSpec.RemotePorts = []messaging.RemotePort{addressToPortMapper.Port}
+		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		cacheComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(cacheSpec).

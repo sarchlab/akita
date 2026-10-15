@@ -98,8 +98,8 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
-	cacheSpec.AddressMapperType = "single"
-	cacheSpec.RemotePorts = []messaging.RemotePort{dramTop.AsRemote()}
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dramTop.AsRemote()}
 	cache := writeback.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(cacheSpec).

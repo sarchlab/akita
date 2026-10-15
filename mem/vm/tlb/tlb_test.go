@@ -34,8 +34,7 @@ var _ = Describe("TLB", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		spec.TranslationMapperType = "single"
-		spec.TranslationProviders = []messaging.RemotePort{remotePort}
+		spec.Bottom.Destinations = []messaging.RemotePort{remotePort}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
@@ -520,8 +519,8 @@ var _ = Describe("TLB Integration", func() {
 		agent = newIdealEndpoint("Agent")
 
 		routingSpec2 := Definition.DefaultSpec
-		routingSpec2.TranslationMapperType = "single"
-		routingSpec2.TranslationProviders = []messaging.RemotePort{lowModule.port.AsRemote()}
+
+		routingSpec2.Bottom.Destinations = []messaging.RemotePort{lowModule.port.AsRemote()}
 		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(routingSpec2).

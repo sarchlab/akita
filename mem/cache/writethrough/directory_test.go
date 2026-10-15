@@ -61,16 +61,15 @@ var _ = Describe("Directory", func() {
 
 		c = buildStageTestCache(
 			Spec{
-				AddressMapperType: "single",
-				RemotePorts:       []messaging.RemotePort{"DRAM"},
-				Freq:              1 * timing.GHz,
-				Log2BlockSize:     6,
-				NumReqPerCycle:    4,
-				WayAssociativity:  4,
-				NumMSHREntry:      4,
-				TotalByteSize:     4 * mem.KB, // 16 sets
-				NumBanks:          1,
-				WritePolicyType:   "write-around",
+				Freq:             1 * timing.GHz,
+				Log2BlockSize:    6,
+				NumReqPerCycle:   4,
+				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				TotalByteSize:    4 * mem.KB, // 16 sets
+				NumBanks:         1,
+				WritePolicyType:  "write-around",
+				Bottom:           mem.AddressMapper{Destinations: []messaging.RemotePort{"DRAM"}},
 			},
 			Resources{
 				Storage: mem.NewStorage(4 * mem.KB),

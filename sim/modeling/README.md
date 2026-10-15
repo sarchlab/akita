@@ -13,7 +13,7 @@ package-level `Definition`:
 
 | Struct | What it is | Supplied by |
 |---|---|---|
-| `Spec` | configuration: scalars, scalar arrays/slices, flat record slices | system builder (defaults in `Definition`) |
+| `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults in `Definition`) |
 | `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
@@ -31,10 +31,10 @@ objects.
 - **Spec** must be a plain struct whose fields are scalars (booleans, numbers,
   strings, and named types based on them, such as `timing.Freq`, a
   `messaging.RemotePort`, or an enum-like string type), scalar arrays/slices,
-  or slices of flat records such as `[]Link`. Each record field must be an
-  exported scalar with an explicit, unique JSON name. Records cannot contain
-  nested structs, slices, maps, pointers, or interfaces. Maps and standalone
-  nested structs are not allowed in Spec. `Build` copies the slices, so an instance
+  flat records such as `mem.AddressMapper`, or slices of records such as
+  `[]Link`. Record fields must be exported scalars or scalar slices with explicit,
+  unique JSON names. Records cannot contain nested records, maps, pointers, or
+  interfaces. `Build` copies every slice, including slices within records, so an instance
   never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
   after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
@@ -51,7 +51,7 @@ objects.
 `Build` runs both through `MustBeCheckpointable`. Both reject pointers,
 interfaces, channels, and functions, and two fields that share a JSON name
 (which `encoding/json` silently drops). `ValidateSpec` additionally rejects
-maps, standalone nested structs, and nested containers; `ValidateState`
+maps, records nested within records, and other nested containers; `ValidateState`
 allows them, with `string` or integer map keys.
 
 A Spec may hold a slice of scalars, such as the remote ports a unit talks to.

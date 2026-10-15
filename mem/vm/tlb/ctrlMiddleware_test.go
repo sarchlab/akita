@@ -23,8 +23,8 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		sim = testsim.New(engine, false)
 
 		routingSpec1 := Definition.DefaultSpec
-		routingSpec1.TranslationMapperType = "single"
-		routingSpec1.TranslationProviders = []messaging.RemotePort{"RemotePort"}
+
+		routingSpec1.Bottom.Destinations = []messaging.RemotePort{"RemotePort"}
 		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(routingSpec1).

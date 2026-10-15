@@ -97,7 +97,6 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 
 func main() {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
-	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Build bottom-up, so each level's Spec can name the port of the level
 	// below it.
@@ -137,7 +136,7 @@ func main() {
 	}
 
 	cli.TickLater()
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 

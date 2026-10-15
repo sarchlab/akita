@@ -211,7 +211,7 @@ func main() {
 
 	agentA.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 }

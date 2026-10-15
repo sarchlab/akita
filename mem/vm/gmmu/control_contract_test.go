@@ -20,7 +20,7 @@ func TestControlContract(t *testing.T) {
 		spec := Definition.DefaultSpec
 		spec.DeviceID = 0
 		spec.Latency = 1
-		spec.LowModule = messaging.RemotePort("LowModule")
+		spec.Bottom = messaging.RemotePort("LowModule")
 
 		comp := Definition.Builder().
 			WithSimulation(sim).

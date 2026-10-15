@@ -15,12 +15,6 @@ import (
 // destination ports.
 type dataTransferMW struct {
 	comp *Comp
-
-	// insideMapper and outsideMapper route each side's addresses to remote
-	// ports. newMiddlewares takes them from Resources; they are not
-	// checkpointed.
-	insideMapper  mem.AddressToPortMapper
-	outsideMapper mem.AddressToPortMapper
 }
 
 func (m *dataTransferMW) insidePort() messaging.Port {
@@ -64,21 +58,16 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 }
 
 // mapperFor returns the mapper for the "inside" or "outside" side.
-func (m *dataTransferMW) mapperFor(side string) mem.AddressToPortMapper {
-	var mapper mem.AddressToPortMapper
+func (m *dataTransferMW) mapperFor(side string) mem.AddressMapper {
+	var mapper mem.AddressMapper
 
 	switch side {
 	case "inside":
-		mapper = m.insideMapper
+		mapper = m.comp.Spec.Inside
 	case "outside":
-		mapper = m.outsideMapper
+		mapper = m.comp.Spec.Outside
 	default:
 		log.Panicf("unknown side %q", side)
-	}
-
-	if mapper == nil {
-		log.Panicf("datamover: no mapper for the %s side; "+
-			"configure Spec.InsidePorts and Spec.OutsidePorts", side)
 	}
 
 	return mapper

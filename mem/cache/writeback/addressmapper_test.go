@@ -37,17 +37,17 @@ func buildWired(res Resources, spec Spec) *Comp {
 	return builtComponent
 }
 
-// TestBuildMapsRemotePorts checks that Build turns Spec.AddressMapperType and
-// Spec.RemotePorts into the mapper the pipeline routes through.
+// TestBuildMapsRemotePorts checks routing directly through Spec.Bottom.
 func TestBuildMapsRemotePorts(t *testing.T) {
 	ports := []messaging.RemotePort{"DRAM0", "DRAM1"}
 
 	single := Definition.DefaultSpec
-	single.AddressMapperType = "single"
+	single.Bottom.Destinations = ports[:1]
 
 	interleaved := Definition.DefaultSpec
-	interleaved.AddressMapperType = "interleaved"
-	interleaved.InterleavingSize = 4096
+	interleaved.Bottom.Destinations = ports
+
+	interleaved.Bottom.InterleavingSize = 4096
 
 	cases := []struct {
 		name string
@@ -61,7 +61,6 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			c.spec.RemotePorts = ports
 			pipeline := buildWired(Resources{}, c.spec).
 				Middlewares.Pipeline
 			for addr, want := range c.want {
@@ -76,19 +75,19 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 // TestRestoreRejectsChangedRouting confirms destinations participate in the Spec hash.
 func TestRestoreRejectsChangedRouting(t *testing.T) {
 	spec := Definition.DefaultSpec
-	spec.RemotePorts = []messaging.RemotePort{"OldMemory.Top"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"OldMemory.Top"}
 	saved := buildWired(Resources{}, spec)
 	var checkpoint bytes.Buffer
 	if err := saved.SaveCheckpoint(&checkpoint); err != nil {
 		t.Fatal(err)
 	}
 	original := append([]byte(nil), checkpoint.Bytes()...)
-	spec.RemotePorts = []messaging.RemotePort{"NewMemory.Top"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"NewMemory.Top"}
 	rebuilt := buildWired(Resources{}, spec)
 	if err := rebuilt.LoadCheckpoint(&checkpoint); err == nil {
 		t.Fatal("accepted a different routing Spec")
 	}
-	spec.RemotePorts = []messaging.RemotePort{"OldMemory.Top"}
+	spec.Bottom.Destinations = []messaging.RemotePort{"OldMemory.Top"}
 	same := buildWired(Resources{}, spec)
 	if err := same.LoadCheckpoint(bytes.NewReader(original)); err != nil {
 		t.Fatal(err)
@@ -98,29 +97,16 @@ func TestRestoreRejectsChangedRouting(t *testing.T) {
 	}
 }
 
-// TestBuildRejectsIncompleteInterleaving checks the two ways an interleaved
-// mapper can be misconfigured: no remote ports defers to findPort's clear
-// panic, and a zero interleaving size fails at Build instead of dividing by
-// zero on the first miss.
+// TestBuildRejectsIncompleteInterleaving checks invalid routing at Build.
 func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 	spec := Definition.DefaultSpec
-	spec.AddressMapperType = "interleaved"
-	spec.InterleavingSize = 4096
 
-	noPorts := buildWired(Resources{}, spec).Middlewares.Pipeline
-	if mapper := noPorts.addressMapper; mapper != nil {
-		t.Errorf("mapper without remote ports = %v, want nil", mapper)
-	}
+	spec.Bottom.InterleavingSize = 4096
 
-	assertPanics(t, "no address mapper", func() {
-		noPorts.findPort(0)
-	})
-
-	spec.InterleavingSize = 0
-	assertPanics(t, "non-zero Spec.InterleavingSize", func() {
-		spec.RemotePorts = []messaging.RemotePort{"DRAM0"}
-		buildWired(Resources{}, spec)
-	})
+	assertPanics(t, "at least one destination", func() { buildWired(Resources{}, spec) })
+	spec.Bottom.InterleavingSize = 0
+	spec.Bottom.Destinations = []messaging.RemotePort{"DRAM0", "DRAM1"}
+	assertPanics(t, "positive InterleavingSize", func() { buildWired(Resources{}, spec) })
 }
 
 // TestBuildRequiresStorage checks that Build rejects a cache without a
@@ -128,8 +114,11 @@ func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 func TestBuildRequiresStorage(t *testing.T) {
 	assertPanics(t, "Resources.Storage is required", func() {
 		setupSim1 := akitasim.MakeBuilder().Build()
+		spec := Definition.DefaultSpec
+		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
 		builtComponent := Definition.Builder().
 			WithSimulation(setupSim1).
+			WithSpec(spec).
 			Build("Cache")
 		builtComponentPorts := makePorts("Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)

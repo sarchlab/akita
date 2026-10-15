@@ -43,8 +43,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		spec.AddressMapperType = "single"
-		spec.RemotePorts = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).

@@ -585,12 +585,12 @@ func buildDataMover(
 	dmSpec.BufferSize = pageSize
 	dmSpec.InsideByteGranularity = 64
 	dmSpec.OutsideByteGranularity = 64
-	dmSpec.InsideMapperType = "interleaved"
-	dmSpec.InsidePorts = memCtrlPorts
-	dmSpec.InsideInterleavingSize = shared.deviceStride
-	dmSpec.OutsideMapperType = "interleaved"
-	dmSpec.OutsidePorts = memCtrlPorts
-	dmSpec.OutsideInterleavingSize = shared.deviceStride
+
+	dmSpec.Inside.Destinations = memCtrlPorts
+	dmSpec.Inside.InterleavingSize = shared.deviceStride
+
+	dmSpec.Outside.Destinations = memCtrlPorts
+	dmSpec.Outside.InterleavingSize = shared.deviceStride
 	mover := datamover.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(dmSpec).

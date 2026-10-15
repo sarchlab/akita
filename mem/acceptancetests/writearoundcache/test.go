@@ -89,8 +89,8 @@ func buildEnvironment(
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
-	cacheSpec.AddressMapperType = "single"
-	cacheSpec.RemotePorts = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
 	writeAroundCache := writethrough.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(cacheSpec).

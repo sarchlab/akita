@@ -24,8 +24,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	remotePort := messaging.RemotePort("MMU")
 
 	routingSpec1 := Definition.DefaultSpec
-	routingSpec1.TranslationMapperType = "single"
-	routingSpec1.TranslationProviders = []messaging.RemotePort{remotePort}
+
+	routingSpec1.Bottom.Destinations = []messaging.RemotePort{remotePort}
 	tlbComp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(routingSpec1).

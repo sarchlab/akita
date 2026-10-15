@@ -77,8 +77,8 @@ var _ = Describe("Address Translator", func() {
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
-		spec.MemProviders = []messaging.RemotePort{messaging.RemotePort("MemPort")}
-		spec.TranslationProviders = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
 		t = Definition.Builder().
 			WithSimulation(sim).
