@@ -17,9 +17,8 @@ var Definition = ticking.Definition[Spec, state, modeling.None, Ports, middlewar
 		BufferSize:     128,
 		NumReqPerCycle: 4,
 	},
-	NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) middlewares {
-	return middlewares{Pipeline: &middleware{comp: c}}
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = middlewares{Pipeline: &middleware{comp: c}}
 }

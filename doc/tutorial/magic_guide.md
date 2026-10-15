@@ -236,7 +236,7 @@ ticking component, a tick every cycle — goes to each field of its
 `Middlewares` struct in order. You can splice in a custom stage — to inject a
 delay, drop a message, arbitrate differently, or add a probe that needs to run
 every cycle — by adding a field to `Middlewares` and creating it in
-`NewMiddlewares`. For the TLB:
+`Middlewares.Initialize`. For the TLB:
 
 ```go
 type Middlewares struct {
@@ -252,8 +252,8 @@ func (m *myProbe) Handle(_ timing.Event) bool {
     return false
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{
         Probe: &myProbe{comp: c},
         Ctrl:  &ctrlMiddleware{comp: c},
         TLB:   &tlbMiddleware{comp: c},
@@ -277,7 +277,7 @@ component's own code. The component gives the system builder an entry point,
 and the system builder calls it during assembly, before the simulation runs.
 There are two:
 
-- **From configuration.** The `Definition`'s `NewState` builds each instance's
+- **From configuration.** `State.Initialize` builds each instance's
   initial State from its Spec and Resources. A warm-up that a Spec field or a
   Resource can describe belongs here.
 - **From a package function.** The component's package exports a function

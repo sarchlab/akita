@@ -57,17 +57,15 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the cache.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz},
 }
 
-func newState(_ *Comp) State {
-	return State{Txns: map[uint64]txn{}}
+func (initialState *State) Initialize(_ *Comp) {
+	*initialState = State{Txns: map[uint64]txn{}}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Forward: &forwardMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Forward: &forwardMW{comp: c}}
 }
 
 type forwardMW struct {

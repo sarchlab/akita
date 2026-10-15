@@ -18,10 +18,9 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		Latency:             10,
 		MaxRequestsInFlight: 16,
 	},
-	NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("mmu: Resources.PageTable is required")
@@ -29,7 +28,7 @@ func newMiddlewares(c *Comp) middlewares {
 
 	validatePageTablePageSize(pt, c.Spec.Log2PageSize)
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl:        &ctrlMiddleware{comp: c},
 		Translation: &translationMW{comp: c},
 	}

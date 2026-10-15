@@ -48,18 +48,16 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the worker.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, NumJobs: 3, CyclesPerJob: 4},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz, NumJobs: 3, CyclesPerJob: 4},
 }
 
-// newState gives the worker all of its jobs up front.
-func newState(c *Comp) State {
-	return State{JobsLeft: c.Spec.NumJobs}
+// Initialize gives the worker all of its jobs up front.
+func (initialState *State) Initialize(c *Comp) {
+	*initialState = State{JobsLeft: c.Spec.NumJobs}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Work: &workerMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Work: &workerMW{comp: c}}
 }
 
 type workerMW struct {

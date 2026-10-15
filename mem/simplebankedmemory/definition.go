@@ -24,24 +24,22 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		BankSelectorKind:               "interleaved",
 		BankSelectorLog2InterleaveSize: 6,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
 	name, spec := c.Name(), c.Spec
 
-	return state{
+	*initialState = state{
 		Banks: buildInitialBanks(name, spec),
 	}
 }
 
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	if c.Resources.Storage == nil {
 		panic("simplebankedmemory: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},

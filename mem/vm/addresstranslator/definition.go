@@ -17,12 +17,14 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		Log2PageSize:   12,
 		DeviceID:       1,
 	},
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) middlewares {
-	return middlewares{
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+
+	*initialMiddlewares = middlewares{
 		Ctrl:            &ctrlMiddleware{comp: c},
 		ParseTranslate:  &parseTranslateMW{comp: c},
 		RespondPipeline: &respondPipelineMW{comp: c},

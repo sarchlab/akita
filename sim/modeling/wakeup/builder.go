@@ -13,7 +13,6 @@ import (
 // Builder builds instances of one wakeup component type. Obtain it with
 // Definition.Builder.
 type Builder[S, T, R, P, M any] struct {
-	def        Definition[S, T, R, P, M]
 	simulation timing.Simulation
 	spec       S
 	resources  R
@@ -51,19 +50,8 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 			typeName[S](), name))
 	}
 
-	if b.def.NewMiddlewares == nil {
-		panic(fmt.Sprintf("wakeup: %s: Definition has no NewMiddlewares",
-			typeName[S]()))
-	}
-
 	b.simulation.RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
-	if b.def.ValidateSpec != nil {
-		if err := b.def.ValidateSpec(b.spec); err != nil {
-			panic(fmt.Errorf("%s: %w", name, err))
-		}
-	}
-
 	c := &Component[S, T, R, P, M]{
 		wakeups: newScheduler(name, b.simulation),
 	}
@@ -71,17 +59,11 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 		b.simulation, name, b.spec, b.resources)
 
 	base.SetInitializer(&c.ComponentBase, func() {
-		if b.def.NewState != nil {
-			c.State = b.def.NewState(c)
-		}
-
-		c.Middlewares = b.def.NewMiddlewares(c)
+		base.InitializeElement(&c.State, c)
+		base.InitializeElement(&c.Middlewares, c)
 		c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
 	})
 
-	if b.def.ValidateSetup != nil {
-		base.SetSetupValidator(&c.ComponentBase, func() error { return b.def.ValidateSetup(c) })
-	}
 	base.Register(&c.ComponentBase)
 
 	return c

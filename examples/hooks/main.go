@@ -70,12 +70,11 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the ping agent.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Agent: &agentMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Agent: &agentMW{comp: c}}
 }
 
 type agentMW struct {

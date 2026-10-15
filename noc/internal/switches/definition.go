@@ -21,14 +21,17 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
-	ValidateSpec:   validateSpec,
-	ValidateSetup:  validateSetup,
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newState creates one port complex per port, sized by the port's link.
-func newState(c *Comp) state {
+// Initialize creates one port complex per port, sized by the port's link.
+func (initialState *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+	if err := validateSetup(c); err != nil {
+		panic(err)
+	}
+
 	ports := c.Ports.Links
 	links := c.Spec.Links
 
@@ -37,7 +40,7 @@ func newState(c *Comp) state {
 		state.PortComplexes[i] = newPortComplex(port, links[i])
 	}
 
-	return state
+	*initialState = state
 }
 
 func newPortComplex(port messaging.Port, link Link) portComplexState {
@@ -60,9 +63,9 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 	}
 }
 
-// newMiddlewares creates the middlewares. Both share the index from a port,
+// Initialize creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	table := routing.NewTable()
 	for _, route := range c.Spec.Routes {
 		table.DefineRoute(route.Destination, route.Output)
@@ -78,7 +81,7 @@ func newMiddlewares(c *Comp) middlewares {
 		}
 	}
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
 			portIndex:    portIndex,

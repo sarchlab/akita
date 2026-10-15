@@ -75,9 +75,11 @@ sw.Ports.Links = make([]messaging.Port, len(spec.Links))
 sw.BindPort("Links[0]", twowaybuffered.NewPort(1, 1))
 ```
 
-Build validates flat record shape and link parameters. Initialize checks
-`len(Spec.Links) == len(Ports.Links)` along with port bindings before creating
-any State or Middlewares. A mismatch returns an error, leaving setup editable.
+Build validates flat record shape. The State initializer checks link parameters
+and `len(Spec.Links) == len(Ports.Links)` before allocating port complexes.
+A mismatch panics and leaves the simulation unusable; correct the configuration
+and rebuild. Generic missing-port errors detected before element initialization
+still leave setup editable.
 Routing middleware derives its private table from `Spec.Routes` and
 `Spec.DefaultRoute`. There is no Resources routing override. The connector
 computes routes from planned port names before building switches, then binds

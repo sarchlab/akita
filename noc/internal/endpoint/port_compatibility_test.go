@@ -33,9 +33,6 @@ func TestRejectFrozenDeviceOwnerBeforeAttaching(t *testing.T) {
 	frozen := akitasim.MakeBuilder().Build()
 	def := ticking.Definition[Spec, modeling.None, modeling.None, Ports, modeling.None]{
 		DefaultSpec: Spec{Freq: timing.GHz},
-		NewMiddlewares: func(*ticking.Component[Spec, modeling.None, modeling.None, Ports, modeling.None]) modeling.None {
-			return modeling.None{}
-		},
 	}
 	owner := def.Builder().WithSimulation(frozen).Build("FrozenDevice")
 	late := twowaybuffered.NewPort(1, 1)

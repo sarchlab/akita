@@ -157,18 +157,7 @@ type idSpec struct {
 var idTickedDef = ticking.Definition[
 	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{
 	DefaultSpec: idSpec{Freq: timing.GHz},
-	NewMiddlewares: func(
-		*ticking.Component[idSpec, modeling.None, modeling.None, noPorts, noMiddlewares],
-	) noMiddlewares {
-		return noMiddlewares{}
-	},
 }
 
 var idWakeupDef = wakeup.Definition[
-	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{
-	NewMiddlewares: func(
-		*wakeup.Component[idSpec, modeling.None, modeling.None, noPorts, noMiddlewares],
-	) noMiddlewares {
-		return noMiddlewares{}
-	},
-}
+	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{}

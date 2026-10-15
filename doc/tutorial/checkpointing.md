@@ -137,7 +137,7 @@ your data in the right one of the five structs:
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
-| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `NewMiddlewares` |
+| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `Middlewares.Initialize` |
 
 ```go
 type Spec struct {

@@ -92,19 +92,17 @@ var Definition = ticking.Definition[
 	DefaultSpec: driverSpec{
 		Freq: 1 * timing.GHz,
 	},
-	NewState:       newDriverState,
-	NewMiddlewares: newDriverMiddlewares,
 }
 
-func newDriverState(_ *driver) driverState {
-	return driverState{
+func (initialState *driverState) Initialize(_ *driver) {
+	*initialState = driverState{
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
 }
 
-func newDriverMiddlewares(d *driver) driverMiddlewares {
-	return driverMiddlewares{Drive: &driverMW{d: d}}
+func (initialMiddlewares *driverMiddlewares) Initialize(d *driver) {
+	*initialMiddlewares = driverMiddlewares{Drive: &driverMW{d: d}}
 }
 
 func done(d *driver) bool {

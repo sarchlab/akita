@@ -21,8 +21,4 @@ type (
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Def is misnamed on purpose: the contract requires "Definition".
-var Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	NewMiddlewares: newMiddlewares,
-}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+var Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{}

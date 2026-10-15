@@ -82,14 +82,10 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 		NumLanes: 4,
 		Mode:     ModeFast,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newState(*Comp) State { return State{} }
-
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Control: &controlMW{comp: c}, Serve: &serveMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Control: &controlMW{comp: c}, Serve: &serveMW{comp: c}}
 }
 
 type controlMW struct{ comp *Comp }

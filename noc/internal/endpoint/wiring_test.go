@@ -27,7 +27,9 @@ func buildWiring(t *testing.T, declared, bound []messaging.RemotePort) (*akitasi
 func TestDeviceBindingOrderAndFreeze(t *testing.T) {
 	for _, bound := range [][]messaging.RemotePort{{"A"}, {"B", "A"}, {"A", "C"}} {
 		s, _ := buildWiring(t, []messaging.RemotePort{"A", "B"}, bound)
+		require.Panics(t, func() { _ = s.Initialize() })
 		require.Error(t, s.Initialize())
+		require.Error(t, s.Run())
 	}
 	s, ep := buildWiring(t, []messaging.RemotePort{"A", "B"}, []messaging.RemotePort{"A", "B"})
 	require.NoError(t, s.Initialize())
@@ -45,7 +47,7 @@ func TestCheckpointRejectsChangedDeviceOrder(t *testing.T) {
 	s2, ep2 := buildWiring(t, []messaging.RemotePort{"B", "A"}, []messaging.RemotePort{"B", "A"})
 	require.NoError(t, s2.Initialize())
 	require.Error(t, ep2.LoadCheckpoint(&checkpoint))
-	t.Log("Ordered device wiring is validated before initialization " +
+	t.Log("Ordered device wiring is validated during middleware initialization " +
 		"and changing the declared order invalidates the endpoint checkpoint")
 }
 func TestBindingRejectsUnownedDuplicateAndConnectedPorts(t *testing.T) {

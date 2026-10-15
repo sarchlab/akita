@@ -28,14 +28,15 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		WritePolicyType:       "write-around",
 		Bottom:                mem.AddressMapper{InterleavingSize: 4096},
 	},
-	NewState:       newState,
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newState returns a running cache with an empty directory, MSHR, and
+// Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+
 	spec := c.Spec
 
 	bankBufs := make([]queueing.Buffer[int], spec.NumBanks)
@@ -73,18 +74,18 @@ func newState(c *Comp) state {
 		&s.DirectoryState, spec.numSets(), spec.WayAssociativity,
 		spec.blockSize())
 
-	return s
+	*initialState = s
 }
 
-// newMiddlewares creates the cache's middlewares. The pipeline middleware
+// Initialize creates the cache's middlewares. The pipeline middleware
 // holds the storage and the pipeline stages.
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writethrough: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		Pipeline: newPipelineMW(
 			c, res.Storage),

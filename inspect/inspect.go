@@ -27,9 +27,10 @@
 //   - the middlewares, one per field of the Middlewares type argument, in the
 //     order the component runs them. Each must implement modeling.Middleware.
 //
-// NewState and NewMiddlewares must name functions, and NewMiddlewares is
-// required. A Definition that breaks these rules, or that is not a composite
-// literal, is an error rather than a silently incomplete schema.
+// Definition contains only DefaultSpec. Optional State and Middlewares
+// Initialize methods must use pointer receivers, accept *Comp, and return no
+// value. A Definition that breaks these rules, or that is not a composite literal,
+// is an error rather than a silently incomplete schema.
 //
 // The inspector loads packages with go/packages, which invokes the Go
 // toolchain on the target module but never runs package code. The

@@ -20,16 +20,20 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		FlitByteSize:      32,
 		EncodingOverhead:  0.25,
 	},
-	ValidateSpec:   validateSpec,
-	ValidateSetup:  validateSetup,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newMiddlewares creates behavior over the device ports bound to DeviceConnection.
-func newMiddlewares(c *Comp) middlewares {
+// Initialize creates behavior over the device ports bound to DeviceConnection.
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+	if err := validateSetup(c); err != nil {
+		panic(err)
+	}
+
 	devicePorts := c.Resources.devices.ports
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Outgoing: &outgoingMW{comp: c, devicePorts: devicePorts},
 		Incoming: &incomingMW{comp: c, devicePorts: devicePorts},
 	}

@@ -34,7 +34,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Spec S
 
 	// State is the instance's mutable runtime data. Only the component itself
-	// (its NewState and middlewares) writes it.
+	// (its State initializer and middlewares) writes it.
 	State T
 
 	// Resources holds the instance's references to shared objects, given to
@@ -49,13 +49,12 @@ type ComponentBase[S, T, R, P, M any] struct {
 	// receives goes to each field in declaration order.
 	Middlewares M
 
-	name          string
-	owner         modeling.Component
-	simulation    timing.Simulation
-	taskTracker   *tasks.Tracker
-	initialize    func()
-	validateSetup func() error
-	initialized   bool
+	name        string
+	owner       modeling.Component
+	simulation  timing.Simulation
+	taskTracker *tasks.Tracker
+	initialize  func()
+	initialized bool
 }
 
 // Init records the instance identity, simulation, Spec and Resources.
@@ -142,7 +141,7 @@ func OrderedMiddlewares(middlewares any) []modeling.Middleware {
 		fv := v.Field(i)
 		if isNilable(fv.Kind()) && fv.IsNil() {
 			panic(fmt.Sprintf(
-				"modeling: Middlewares field %s.%s is not set by NewMiddlewares",
+				"modeling: Middlewares field %s.%s is nil after initialization",
 				t, f.Name))
 		}
 
@@ -245,9 +244,6 @@ func (c *ComponentBase[S, T, R, P, M]) ValidateSetup() error {
 			failures = append(failures, fmt.Errorf("port %s has inconsistent ownership", slot))
 		}
 	})
-	if c.validateSetup != nil {
-		failures = append(failures, c.validateSetup())
-	}
 	return errors.Join(failures...)
 }
 
@@ -297,8 +293,3 @@ func cloneSpecValue(v reflect.Value) {
 
 // TaskTracker returns this component's optional simulation task service.
 func (c *ComponentBase[S, T, R, P, M]) TaskTracker() *tasks.Tracker { return c.taskTracker }
-
-// SetSetupValidator registers the definition's completed-wiring validation.
-func SetSetupValidator[S, T, R, P, M any](c *ComponentBase[S, T, R, P, M], validate func() error) {
-	c.validateSetup = validate
-}

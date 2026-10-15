@@ -18,14 +18,12 @@ func TestBuildCopiesRecordSlices(t *testing.T) {
 		Bottom   mem.AddressMapper   `json:"bottom"`
 		Mappings []mem.AddressMapper `json:"mappings"`
 	}
-	type comp = ticking.Component[spec, modeling.None, modeling.None, modeling.None, modeling.None]
 	def := ticking.Definition[spec, modeling.None, modeling.None, modeling.None, modeling.None]{
 		DefaultSpec: spec{
 			Freq:     timing.GHz,
 			Bottom:   mem.AddressMapper{Destinations: []messaging.RemotePort{"A"}},
 			Mappings: []mem.AddressMapper{{Destinations: []messaging.RemotePort{"B"}}},
 		},
-		NewMiddlewares: func(*comp) modeling.None { return modeling.None{} },
 	}
 	s := akitasim.MakeBuilder().Build()
 	a := def.Builder().WithSimulation(s).Build("A")

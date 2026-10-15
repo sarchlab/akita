@@ -20,7 +20,7 @@ import (
 //
 //   - Spec is the configuration given to Build.
 //   - State is the instance's mutable runtime data, saved in checkpoints.
-//     Only the component itself, its NewState and middlewares, writes it.
+//     Only the component itself, its State initializer and middlewares, writes it.
 //   - Resources holds the references to shared objects given to Build.
 //   - Ports holds the slots the system builder assigns with BindPort.
 //   - Middlewares holds the instance's behavior. Every event the instance

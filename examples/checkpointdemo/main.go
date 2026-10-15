@@ -67,12 +67,11 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the worker.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, Label: "demo"},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz, Label: "demo"},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Work: &workerMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Work: &workerMW{comp: c}}
 }
 
 // addWork queues n more items on the worker and starts it ticking. It is the

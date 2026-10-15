@@ -85,9 +85,6 @@ func (m *delayMW) Handle(e timing.Event) bool {
 
 var Definition = event.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{Latency: 10},
-	NewMiddlewares: func(c *Comp) Middlewares {
-		return Middlewares{Delay: &delayMW{comp: c}}
-	},
 }
 
 type req struct {
@@ -186,3 +183,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 }
 
 var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{req{}}})
+
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Delay: &delayMW{comp: c}}
+}

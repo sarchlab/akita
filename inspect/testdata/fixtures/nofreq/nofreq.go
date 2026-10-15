@@ -30,6 +30,4 @@ type Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the component through the alias.
-var Definition = Def{DefaultSpec: Spec{Depth: 8}, NewMiddlewares: newMiddlewares}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+var Definition = Def{DefaultSpec: Spec{Depth: 8}}

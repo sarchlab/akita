@@ -28,14 +28,15 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		MaxInflightEviction: 128,
 		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
 	},
-	NewState:       newState,
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newState returns a running cache with an empty directory, MSHR, and
+// Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+
 	spec := c.Spec
 
 	numBanks := spec.numBanks()
@@ -77,13 +78,13 @@ func newState(c *Comp) state {
 	cache.DirectoryReset(&s.DirectoryState,
 		spec.numSets(), spec.WayAssociativity, 1<<spec.Log2BlockSize)
 
-	return s
+	*initialState = s
 }
 
-// newMiddlewares creates the cache's middlewares. The control middlewares and
+// Initialize creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
 // and the ports' accessors.
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
@@ -95,7 +96,7 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 	pipeline.createInternalStages()
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl: &ctrlMiddleware{pipeline: pipeline},
 		Flusher: &controlMW{
 			comp:    c,

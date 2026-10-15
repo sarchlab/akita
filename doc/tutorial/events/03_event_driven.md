@@ -62,8 +62,11 @@ type Middlewares struct {
 type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-    DefaultSpec:    Spec{},
-    NewMiddlewares: newMiddlewares,
+    DefaultSpec: Spec{},
+}
+
+func (m *Middlewares) Initialize(c *Comp) {
+    m.Ping = &pingMW{comp: c}
 }
 ```
 

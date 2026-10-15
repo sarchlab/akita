@@ -22,12 +22,8 @@ type (
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 func makeDefinition() ticking.Definition[Spec, State, modeling.None, Ports, Middlewares] {
-	return ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-		NewMiddlewares: newMiddlewares,
-	}
+	return ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{}
 }
 
 // Definition is computed on purpose.
 var Definition = makeDefinition()
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

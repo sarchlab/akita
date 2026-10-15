@@ -26,8 +26,5 @@ var dynamicLanes = 4
 
 // Definition declares the component with a non-constant default.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{NumLanes: dynamicLanes},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{NumLanes: dynamicLanes},
 }
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

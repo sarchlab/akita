@@ -22,8 +22,4 @@ type (
 
 type Comp = ticking.Component[Spec, State, *Resources, Ports, Middlewares]
 
-var Definition = ticking.Definition[Spec, State, *Resources, Ports, Middlewares]{
-	NewMiddlewares: newMiddlewares,
-}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+var Definition = ticking.Definition[Spec, State, *Resources, Ports, Middlewares]{}

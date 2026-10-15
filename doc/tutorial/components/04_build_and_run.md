@@ -13,7 +13,6 @@ builds an instance from it and runs the engine.
 ```go
 var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
     DefaultSpec:    Spec{Freq: 1 * timing.GHz, WallDistance: 10},
-    NewMiddlewares: newMiddlewares,
 }
 ```
 
@@ -21,16 +20,15 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 configuration and its behaviour. Its type parameters are the five structs
 again, in the same order as in `Comp`.
 
-- `DefaultSpec` is the starting configuration. A system builder that wants
-  something different copies it, changes fields, and passes the result in.
-- `NewMiddlewares` is the function from the previous page; `Initialize` calls it
-  to create each instance's middlewares.
+`DefaultSpec` is the starting configuration. A system builder copies it, changes
+fields, and passes the result in. Keep it a keyed literal with constant leaves,
+because tooling reads it without running the package.
 
-An optional third field, `NewState`, returns an instance's initial State.
-The walker omits it and starts from the zero State: position 0, no steps.
-Keep the literal simple — keyed fields, constant values, and named
-functions — because tooling reads the `Definition` without running your
-code.
+The previous page defines `(*Middlewares).Initialize(c *Comp)`, which assembles
+behavior after wiring. The walker needs no State initializer: the zero State
+already means position 0 and no steps. Components needing allocated tables or
+nonzero state define `(*State).Initialize(c *Comp)` as well. The simulation calls
+State first, then Middlewares, once per component. Neither method returns a value.
 
 ## Building the Component
 
@@ -65,7 +63,7 @@ implements checkpoint save/load for the RNG. See
 `Build` validates the Spec and State shapes and registers the configured
 instance. It leaves State and Middlewares unset. After all components and
 connections are built and bound, call `s.Initialize()` once. Initialization
-validates wiring, freezes topology, and runs `NewState` and `NewMiddlewares`.
+validates wiring, freezes topology, and runs `State.Initialize` and `Middlewares.Initialize`.
 
 :::info The builder pattern
 

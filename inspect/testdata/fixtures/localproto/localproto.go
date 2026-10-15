@@ -49,8 +49,5 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the component.
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Width: 2},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Width: 2},
 }
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

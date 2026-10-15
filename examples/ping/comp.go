@@ -50,12 +50,11 @@ type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the ping component.
 var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Ping: &pingMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Ping: &pingMW{comp: c}}
 }
 
 // SchedulePing schedules a ping to be sent at the given time to the given

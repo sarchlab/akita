@@ -11,11 +11,14 @@ explicitly enables recording; a supplied path is used exactly and existing files
 are rejected. `WithTaskTracking` alone works in memory and leaves `VisTracer` nil.
 Custom engine injection is deferred to v5.2.
 
-Build components, bind ports/connections, then call `Initialize()`. Initialization
-validates the complete setup before creating State and Middlewares and freezes
-topology. Configuration-only checks belong at Build; checks requiring bound ports
-belong in initialization. The name remains Initialize because it also constructs
-runtime state. `Simulation.Run()` checks readiness. Direct `Engine.Run()` and
+Build components, bind ports/connections, then call `Initialize()`. Build checks
+structural Spec/State requirements and basic model prerequisites. Initialize
+checks generic port bindings before freezing topology, then invokes each
+component's optional State.Initialize and Middlewares.Initialize methods, in
+that order. Component-specific checks belong in the relevant initializer;
+a panic leaves the simulation unusable and requires rebuilding. Generic binding
+errors returned before initialization leave setup editable. The name remains
+Initialize because it also constructs runtime state. `Simulation.Run()` checks readiness. Direct `Engine.Run()` and
 `SerialEngine.RunUntil()` document initialization as a caller precondition and
 do not check it. RunUntil remains a concrete serial-engine API for deterministic
 checkpoint/testing boundaries, not part of Engine or Simulation.
@@ -33,15 +36,19 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
 - Resources holds shared live objects such as storage and page tables. It must
   not duplicate Spec routing through injected mappers or destination lists.
 - Ports holds bound local ports. `Spec.Links[i]` describes `Ports.Links[i]`.
-  Build checks link configuration; Initialize checks the length equality.
+  The State initializer checks link configuration and the length equality.
 - Middlewares implement behavior and may derive private lookup tables from Spec.
   Memory routing uses `Spec.Bottom.Find(address)` (or the corresponding port
   name) directly. Spec participates in checkpoint compatibility checks.
 
 Runtime validation, static inspection, literal default extraction, and schema
-output must accept the same Spec shapes. Definition.ValidateSpec checks values at
-Build; Definition.ValidateSetup checks binding-dependent invariants at Initialize
-before any State or Middlewares is created.
+output must accept the same Spec shapes. Definition contains only DefaultSpec.
+State and Middlewares may each define a pointer-receiver Initialize(*Comp)
+method with no return value. Omission preserves the zero value; middleware
+fields must still be valid, non-nil modeling.Middleware values after initialization.
+There are no Definition validator or creator callbacks. Spec and Resources are
+supplied through the builder; Ports are bound by the system builder. Initializers
+must not change Spec, Resources, Ports, or another component's State.
 
 ## Builders and packages
 

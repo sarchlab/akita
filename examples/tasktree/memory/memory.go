@@ -54,12 +54,11 @@ type Comp = ticking.Component[Spec, modeling.None, modeling.None, Ports, Middlew
 
 // Definition declares the memory.
 var Definition = ticking.Definition[Spec, modeling.None, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Serve: &serveMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Serve: &serveMW{comp: c}}
 }
 
 type serveMW struct {

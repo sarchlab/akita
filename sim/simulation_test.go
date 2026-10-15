@@ -438,11 +438,6 @@ type (
 var roundTripDef = ticking.Definition[
 	roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares]{
 	DefaultSpec: roundTripSpec{Freq: 1 * timing.GHz, Latency: 5},
-	NewMiddlewares: func(
-		*ticking.Component[roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares],
-	) noMiddlewares {
-		return noMiddlewares{}
-	},
 }
 
 // timeSetter handles an event by doing nothing, so running an event for it
@@ -544,9 +539,6 @@ func (m *resumeWorkerMW) Handle(timing.Event) bool {
 var resumeDef = ticking.Definition[
 	resumeSpec, resumeState, modeling.None, noPorts, resumeMWs]{
 	DefaultSpec: resumeSpec{Freq: 1 * timing.GHz, N: 1},
-	NewMiddlewares: func(c *resumeComp) resumeMWs {
-		return resumeMWs{Worker: &resumeWorkerMW{comp: c}}
-	},
 }
 
 func buildResumeSim() (*Simulation, *resumeComp) {
@@ -629,9 +621,6 @@ func (m *tickCountMW) Handle(timing.Event) bool {
 var tickCountDef = ticking.Definition[
 	tickCountSpec, tickCountState, modeling.None, noPorts, tickCountMWs]{
 	DefaultSpec: tickCountSpec{Freq: 1 * timing.GHz, Tag: 1},
-	NewMiddlewares: func(c *tickCountComp) tickCountMWs {
-		return tickCountMWs{Counter: &tickCountMW{comp: c}}
-	},
 }
 
 func buildTickCountSim() (*Simulation, *tickCountComp) {
@@ -709,9 +698,6 @@ func (m *wakeMW) Handle(timing.Event) bool {
 
 var wakeDef = wakeup.Definition[wakeSpec, wakeState, modeling.None, noPorts, wakeMWs]{
 	DefaultSpec: wakeSpec{Tag: 1},
-	NewMiddlewares: func(c *wakeComp) wakeMWs {
-		return wakeMWs{Counter: &wakeMW{comp: c}}
-	},
 }
 
 func buildWakeSim() (*Simulation, *wakeComp) {
@@ -759,3 +745,15 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 		Expect(dstC.State.Wakeups).To(Equal(1))
 	})
 })
+
+func (initialMiddlewares *resumeMWs) Initialize(c *resumeComp) {
+	*initialMiddlewares = resumeMWs{Worker: &resumeWorkerMW{comp: c}}
+}
+
+func (initialMiddlewares *tickCountMWs) Initialize(c *tickCountComp) {
+	*initialMiddlewares = tickCountMWs{Counter: &tickCountMW{comp: c}}
+}
+
+func (initialMiddlewares *wakeMWs) Initialize(c *wakeComp) {
+	*initialMiddlewares = wakeMWs{Counter: &wakeMW{comp: c}}
+}

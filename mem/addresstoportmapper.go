@@ -39,7 +39,7 @@ func (m AddressMapper) Find(address uint64) messaging.RemotePort {
 	return m.Destinations[(address/m.InterleavingSize)%uint64(len(m.Destinations))]
 }
 
-// Validate checks configuration before components are built.
+// Validate checks configuration. Component initializers call it before routing.
 func (m AddressMapper) Validate() error {
 	if len(m.Destinations) == 0 {
 		return fmt.Errorf("address mapper: at least one destination is required")

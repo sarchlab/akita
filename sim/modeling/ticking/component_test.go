@@ -68,15 +68,6 @@ type pokeEvent struct {
 
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{Freq: 1 * timing.GHz, Depth: 2},
-	NewState: func(c *Comp) State {
-		return State{Count: c.Spec.Depth}
-	},
-	NewMiddlewares: func(c *Comp) Middlewares {
-		return Middlewares{
-			First:  &recordMW{comp: c, name: "first"},
-			Second: &recordMW{comp: c, name: "second", counting: true},
-		}
-	},
 }
 
 func newSim() timing.Simulation {
@@ -131,7 +122,7 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 	}
 
 	if c.State.Count != 2 {
-		t.Errorf("NewState was not applied: Count = %d, want 2", c.State.Count)
+		t.Errorf("State.Initialize was not applied: Count = %d, want 2", c.State.Count)
 	}
 
 	c.Handle(ticking.MakeEvent(1, 0, "C"))
@@ -233,12 +224,11 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 	})
 
 	t.Run("unset middleware", func(t *testing.T) {
-		def := Definition
-		def.NewMiddlewares = func(c *Comp) Middlewares {
-			return Middlewares{First: &recordMW{comp: c}}
+		def := ticking.Definition[Spec, modeling.None, modeling.None, Ports, oneMiddleware]{
+			DefaultSpec: Definition.DefaultSpec,
 		}
 
-		mustPanic(t, "Second is not set by NewMiddlewares", func() {
+		mustPanic(t, "Only is nil after initialization", func() {
 			setupSim3 := newSim()
 			builtComponent := def.Builder().
 				WithSimulation(setupSim3).
@@ -259,13 +249,7 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 			N int `json:"n"`
 		}
 
-		def := ticking.Definition[noFreq, State, modeling.None, Ports, oneMiddleware]{
-			NewMiddlewares: func(
-				*ticking.Component[noFreq, State, modeling.None, Ports, oneMiddleware],
-			) oneMiddleware {
-				return oneMiddleware{Only: &recordMW{}}
-			},
-		}
+		def := ticking.Definition[noFreq, State, modeling.None, Ports, oneMiddleware]{}
 
 		mustPanic(t, "must have a Freq timing.Freq field", func() {
 			setupSim4 := newSim()
@@ -288,4 +272,15 @@ func TestBuildRejectsZeroFrequency(t *testing.T) {
 	mustPanic(t, `component "ZeroClock": Spec ticking_test.Spec has zero Freq`, func() {
 		Definition.Builder().WithSimulation(newSim()).WithSpec(Spec{Freq: 0}).Build("ZeroClock")
 	})
+}
+
+func (initialState *State) Initialize(c *Comp) {
+	*initialState = State{Count: c.Spec.Depth}
+}
+
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{
+		First:  &recordMW{comp: c, name: "first"},
+		Second: &recordMW{comp: c, name: "second", counting: true},
+	}
 }

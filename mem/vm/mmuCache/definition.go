@@ -20,18 +20,16 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		LatencyPerLevel: 100,
 		Log2PageSize:    12,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
 	spec := c.Spec
 
 	if spec.NumBlocks <= 0 {
 		panic("mmuCache: Spec.NumBlocks must be > 0")
 	}
 
-	return state{
+	*initialState = state{
 		CurrentState:          mmuCacheStateEnable,
 		Table:                 initSets(spec.NumLevels, spec.NumBlocks),
 		OutstandingBottomReqs: map[uint64]bool{},
@@ -39,8 +37,8 @@ func newState(c *Comp) state {
 	}
 }
 
-func newMiddlewares(c *Comp) middlewares {
-	return middlewares{
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = middlewares{
 		Ctrl:  &ctrlMiddleware{comp: c},
 		Cache: &mmuCacheMiddleware{comp: c},
 	}

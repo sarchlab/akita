@@ -11,12 +11,11 @@ import (
 // fields of Ports and Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name).
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{
 		Send:           &sendMW{comp: c},
 		ReceiveProcess: &receiveProcessMW{comp: c},
 	}

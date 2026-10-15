@@ -14,10 +14,10 @@ package-level `Definition`:
 | Struct | What it is | Supplied by |
 |---|---|---|
 | `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults in `Definition`) |
-| `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
+| `State` | mutable runtime data, saved in checkpoints | component (`State.Initialize`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
-| `Middlewares` | the behavior, one field per middleware | component (`NewMiddlewares`) |
+| `Middlewares` | the behavior, one field per middleware | component (`Middlewares.Initialize`) |
 
 The system builder is the code that assembles a simulation. It builds every
 instance with `Definition.Builder()...Build(name)`, then calls
@@ -38,7 +38,7 @@ objects.
   never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
   after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
-  JSON-serializable. Only the component writes it: its `NewState`, which may
+  JSON-serializable. Only the component writes it: its `State.Initialize`, which may
   read the Spec, Resources, and Ports, and its middlewares. A function in the
   component's own package may also write it while no event is running, for
   example to queue work before the simulation starts (`ping.SchedulePing`);
@@ -65,7 +65,7 @@ Other values that seem to belong in the Spec usually belong elsewhere:
   middleware routes directly through `mem.AddressMapper` values;
 - a reference to an external live object is a Resources field. A
   component's Resources are not part of its checkpoint: the rebuild supplies
-  them, and `NewMiddlewares` recomputes what it derives from them. A shared
+  them, and `Middlewares.Initialize` recomputes what it derives from them. A shared
   object they point to, such as a `mem.Storage` or a `vm.PageTable`, is a
   registered resource that checkpoints itself.
 
@@ -148,12 +148,24 @@ Pass `s` to every builder through `WithSimulation(s)`. This creates no recording
 or server by default, but always owns IDs, initialization, and entity inventory.
 The separate StandaloneSimulation context has been removed.
 
-### Validation hooks
+### Element initialization
 
-A Definition may supply `ValidateSpec func(Spec) error` for configuration checks
-that need only Spec. Build runs it before registering the component and panics
-on an error. It must not require later-bound ports.
-`ValidateSetup func(*Comp) error` runs during `Initialize`, alongside the generic
-port checks, before any State or Middlewares is created. A validation error
-leaves setup editable. For example, switches validate each `Spec.Links` record
-at Build, but compare its length with `Ports.Links` during Initialize.
+Definition contains only DefaultSpec. State and Middlewares may define
+pointer-receiver `Initialize(c *Comp)` methods; neither returns a value. Omit an
+initializer when the zero value works. All middleware fields must still implement
+modeling.Middleware and be non-nil after initialization; the framework does not
+automatically allocate pointer fields or inject component references.
+
+Simulation.Initialize first checks generic port bindings. Errors here leave setup
+editable. It then freezes topology and visits components in registration order,
+calling State.Initialize followed by Middlewares.Initialize for each component.
+Middlewares can therefore use their own component's initialized State and bound
+Ports. Do not change Spec, Resources, Ports, or another component's State.
+
+Put necessary component-specific checks at the start of the relevant initializer.
+An initializer panic leaves the simulation unusable; rebuild it instead of retrying.
+There is no separate Validator, ValidateSpec, or ValidateSetup callback on Definition,
+and no promise to collect all component-specific errors before initialization.
+Checkpoint restore overwrites State after normal initialization; it does not rerun
+initializers. Runtime shape checks and static inspection recognize the same element
+method signatures.

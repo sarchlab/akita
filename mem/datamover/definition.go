@@ -14,12 +14,14 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) middlewares {
-	return middlewares{
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+
+	*initialMiddlewares = middlewares{
 		Ctrl:      &ctrlMiddleware{comp: c},
 		CtrlParse: &ctrlParseMW{comp: c},
 		DataTransfer: &dataTransferMW{

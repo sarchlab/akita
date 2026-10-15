@@ -44,12 +44,11 @@ type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 // Definition declares the walker.
 var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, WallDistance: 10},
-	NewMiddlewares: newMiddlewares,
+	DefaultSpec: Spec{Freq: 1 * timing.GHz, WallDistance: 10},
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Walk: &walkMW{comp: c}}
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Walk: &walkMW{comp: c}}
 }
 
 type walkMW struct {

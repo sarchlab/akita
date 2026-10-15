@@ -18,23 +18,21 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		Width:         1,
 		CacheLineSize: 64,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newState returns an enabled controller with no in-flight access.
-func newState(_ *Comp) state {
-	return state{ControlState: memcontrolprotocol.StateEnabled}
+// Initialize creates an enabled controller with no in-flight access.
+func (initialState *state) Initialize(_ *Comp) {
+	*initialState = state{ControlState: memcontrolprotocol.StateEnabled}
 }
 
-// newMiddlewares creates the controller's middlewares. It panics if the system
+// Initialize creates the controller's middlewares. It panics if the system
 // builder did not supply a storage.
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	if c.Resources.Storage == nil {
 		panic("idealmemcontroller: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl:   &ctrlMiddleware{comp: c},
 		Memory: &memMiddleware{comp: c},
 	}

@@ -19,8 +19,13 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 	spec.Links[0].Latency = 99
 	require.Equal(t, 2, sw.Spec.Links[0].Latency)
 	require.Empty(t, sw.State.PortComplexes)
-	require.ErrorContains(t, s.Initialize(), "0 ports but 1 links")
+	require.PanicsWithError(t, "switches: 0 ports but 1 links in Spec.Links", func() { _ = s.Initialize() })
+	require.Error(t, s.Initialize())
+	require.Error(t, s.Run())
 	require.Empty(t, sw.State.PortComplexes)
+	s = sim.MakeBuilder().Build()
+	spec.Links[0].Latency = 2
+	sw = switches.Definition.Builder().WithSimulation(s).WithSpec(spec).Build("Switch")
 	sw.Ports.Links = make([]messaging.Port, 1)
 	port := twowaybuffered.NewPort(1, 1)
 	sw.BindPort("Links[0]", port)
@@ -29,11 +34,12 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 	require.Equal(t, 2, sw.State.PortComplexes[0].Latency)
 }
 
-func TestInvalidLinkRejectedAtBuild(t *testing.T) {
+func TestInvalidLinkRejectedAtInitialization(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	spec := switches.Definition.DefaultSpec
 	spec.Links = []switches.Link{{Remote: "Peer.Top", Latency: -1, NumInputChannel: 1, NumOutputChannel: 1}}
-	require.Panics(t, func() {
-		switches.Definition.Builder().WithSimulation(s).WithSpec(spec).Build("Switch")
-	})
+	sw := switches.Definition.Builder().WithSimulation(s).WithSpec(spec).Build("Switch")
+	sw.BindPort("Links[0]", twowaybuffered.NewPort(1, 1))
+	require.Panics(t, func() { _ = s.Initialize() })
+	require.Empty(t, sw.State.PortComplexes)
 }

@@ -13,12 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type initializationResources struct{ Calls *int }
+
 type initializationPorts struct{ Top messaging.Port }
 type initializationState struct {
 	SawConnection bool `json:"saw_connection"`
 }
 type initializationComp = ticking.Component[
-	tickCountSpec, initializationState, modeling.None, initializationPorts, modeling.None]
+	tickCountSpec, initializationState, initializationResources, initializationPorts, modeling.None]
 
 func TestExplicitBindingThenInitialization(t *testing.T) {
 	for _, parallel := range []bool{false, true} {
@@ -30,15 +32,11 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			s := builder.Build()
 			t.Cleanup(s.Terminate)
 			calls := 0
-			def := ticking.Definition[tickCountSpec, initializationState, modeling.None, initializationPorts, modeling.None]{
+			def := ticking.Definition[
+				tickCountSpec, initializationState, initializationResources, initializationPorts, modeling.None]{
 				DefaultSpec: tickCountSpec{Freq: timing.GHz},
-				NewState: func(c *initializationComp) initializationState {
-					calls++
-					return initializationState{SawConnection: c.Ports.Top.Connection() != nil}
-				},
-				NewMiddlewares: func(*initializationComp) modeling.None { return modeling.None{} },
 			}
-			c := def.Builder().WithSimulation(s).Build("GPU.SA.CU")
+			c := def.Builder().WithSimulation(s).WithResources(initializationResources{Calls: &calls}).Build("GPU.SA.CU")
 			require.Zero(t, calls)
 			require.ErrorContains(t, s.Run(), "Initialize")
 			path := filepath.Join(t.TempDir(), "snapshot.tar.gz")
@@ -66,4 +64,9 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 				"then observed the completed link and froze topology")
 		})
 	}
+}
+
+func (initialState *initializationState) Initialize(c *initializationComp) {
+	*c.Resources.Calls++
+	*initialState = initializationState{SawConnection: c.Ports.Top.Connection() != nil}
 }

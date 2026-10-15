@@ -46,7 +46,4 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 		StringNumber: 18446744073709551615, Fraction: 0.1, Choice: Escaped,
 		Lanes: []int{1, 2},
 	},
-	NewMiddlewares: newMiddlewares,
 }
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

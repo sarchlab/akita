@@ -32,6 +32,4 @@ type Def[S any] = ticking.Definition[S, State, modeling.None, Ports, Middlewares
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Definition declares the component through the generic alias.
-var Definition = Def[Spec]{DefaultSpec: Spec{Freq: timing.GHz, Depth: 4}, NewMiddlewares: newMiddlewares}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+var Definition = Def[Spec]{DefaultSpec: Spec{Freq: timing.GHz, Depth: 4}}

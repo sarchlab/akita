@@ -55,16 +55,14 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		TransactionQueueSize: 32,
 		CommandQueueCapacity: 8,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-// newState returns the State of a freshly built controller: empty queues and
+// Initialize creates the State of a freshly built controller: empty queues and
 // every bank closed.
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
 	spec := c.Spec
 
-	return state{
+	*initialState = state{
 		SubTransQueue: subTransQueueState{
 			Entries: []subTransRef{},
 		},
@@ -77,12 +75,12 @@ func newState(c *Comp) state {
 	}
 }
 
-// newMiddlewares checks the configuration and creates the middlewares. The
+// Initialize checks the configuration and creates the middlewares. The
 // immutable values derived from the Spec — the inter-command timing tables,
 // the command completion delays, and the controller strategies with their
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
-func newMiddlewares(c *Comp) middlewares {
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	spec := c.Spec
 	spec.mustBeSupported()
 
@@ -90,7 +88,7 @@ func newMiddlewares(c *Comp) middlewares {
 		panic("dram: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*initialMiddlewares = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},
 		Refresh: &refreshMiddleware{comp: c},

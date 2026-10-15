@@ -18,14 +18,12 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 		ReadLeft:   1000,
 		RandSeed:   1,
 	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) State {
+func (initialState *State) Initialize(c *Comp) {
 	spec := c.Spec
 
-	return State{
+	*initialState = State{
 		WriteLeft:       spec.WriteLeft,
 		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),
@@ -35,12 +33,12 @@ func newState(c *Comp) State {
 	}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
 	if c.Spec.LowModule == "" {
 		panic("memaccessagent: Spec.LowModule is required")
 	}
 
-	return Middlewares{
+	*initialMiddlewares = Middlewares{
 		Agent: &agentMiddleware{comp: c},
 	}
 }

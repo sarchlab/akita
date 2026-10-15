@@ -97,8 +97,8 @@ func TestRestoreRejectsChangedRouting(t *testing.T) {
 	}
 }
 
-// TestBuildRejectsIncompleteInterleaving checks invalid routing at Build.
-func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
+// TestInitializationRejectsIncompleteInterleaving checks invalid routing during initialization.
+func TestInitializationRejectsIncompleteInterleaving(t *testing.T) {
 	spec := Definition.DefaultSpec
 
 	spec.Bottom.InterleavingSize = 4096

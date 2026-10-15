@@ -29,11 +29,10 @@ and the package declares its `Definition`, in `definition.go`:
 ```go
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
     DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-    NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{
         Send:           &sendMW{comp: c},
         ReceiveProcess: &receiveProcessMW{comp: c},
     }

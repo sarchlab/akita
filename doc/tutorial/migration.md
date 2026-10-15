@@ -37,7 +37,7 @@ Bindings are one-time; rejected bindings leave existing wiring intact.
 
 `Initialize` checks every declared port before running any initializer.
 Missing ports and slice holes return an error and leave setup editable. After
-validation succeeds, topology freezes and `NewState`/`NewMiddlewares` run in
+validation succeeds, topology freezes and `State.Initialize`/`Middlewares.Initialize` run in
 component registration order. An initializer panic leaves that simulation
 unusable; rebuild it instead of retrying partially created runtime state.
 Initialize once before execution, checkpoint save/load, or seeding work that
@@ -82,7 +82,7 @@ spec.Bottom = mem.AddressMapper{
 
 A single destination receives every in-range address. Multiple destinations
 repeat every `InterleavingSize` bytes using the absolute address, without
-translating it. Build requires at least one nonempty destination and a positive
+translating it. Component initialization requires at least one nonempty destination and a positive
 interleaving size when there are multiple destinations. A configured range must
 have `RangeHigh > RangeLow` and a nonempty `Fallback`; addresses outside it use
 that fallback. With `RangeHigh == 0`, no fallback is required.
@@ -701,7 +701,7 @@ state.Counter++
 snapshot := comp.State
 ```
 
-The initial State comes from the `Definition`'s `NewState` (or is the zero
+The initial State comes from `State.Initialize` (or is the zero
 value), and loading a checkpoint replaces it wholesale. Only the component's
 own code writes it.
 
@@ -725,8 +725,7 @@ state.Value++                  // direct mutation, visible immediately
 - Remove any deep-copy logic between current/next state.
 - Mutate `State` in place through a pointer (`&m.comp.State`) from the
   component's middlewares; read a copy with `comp.State`.
-- For initialization, return the initial State from the `Definition`'s
-  `NewState`.
+- For initialization, assign through the receiver in `(*State).Initialize(c *Comp)`.
 - For checkpoint restore, write nothing: the component model's
   `LoadCheckpoint` replaces the State.
 
@@ -746,10 +745,10 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | Struct | What it is | Supplied by | Key rule |
 |--------|------------|-------------|----------|
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
-| **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
+| **State** | Mutable runtime data, saved in checkpoints | Component (`State.Initialize`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
-| **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
+| **Middlewares** | The behavior: one exported pointer field per middleware | Component (`Middlewares.Initialize`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
 so it accepts hooks and fires its own hook points (`InvokeHook`) without
@@ -818,11 +817,10 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
         BufferSize:     128,
         NumReqPerCycle: 4,
     },
-    NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{Pipeline: &middleware{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{Pipeline: &middleware{comp: c}}
 }
 ```
 
@@ -844,8 +842,7 @@ func (m *middleware) Handle(_ timing.Event) bool {
 }
 ```
 
-`DefaultSpec` must be a keyed literal with constant leaves, and `NewState` and
-`NewMiddlewares` must name functions, because the `inspect` package reads the
+`DefaultSpec` must be a keyed literal with constant leaves, because the `inspect` package reads the
 `Definition` without running the code. A one-line test keeps the static and
 runtime views in agreement:
 
@@ -901,7 +898,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - Pure data only: scalars, slices, arrays, maps with string or integer keys, and simple nested structs.
    - No live handles, functions, channels, or ports in State.
    - All cross‑references use stable identifiers (IDs), never in‑memory pointers.
-   - Written only by the component's own code: its `NewState`, its middlewares, and functions its package exports for the system builder (such as `ping.SchedulePing`).
+   - Written only by the component's own code: its `State.Initialize`, its middlewares, and functions its package exports for the system builder (such as `ping.SchedulePing`).
    - A checkpoint serializes the State; loading one replaces it wholesale.
 
 3. Resources (references supplied by the system builder)
@@ -914,7 +911,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
-   - Each middleware implements `Handle(e timing.Event) bool` and is an exported pointer field of `Middlewares`; the component passes every event to them in field order. Created in `NewMiddlewares`.
+   - Each middleware implements `Handle(e timing.Event) bool` and is an exported pointer field of `Middlewares`; the component passes every event to them in field order. Created in `Middlewares.Initialize`.
    - A middleware holds the component pointer and nothing mutable; everything that changes lives in State.
    - In a ticking component, prefer tick‑driven countdowns/backpressure over ad‑hoc scheduled events for simpler snapshots and determinism. When the behavior is naturally a set of timed events, use the event model instead.
 
@@ -996,10 +993,19 @@ components may derive lookup tables at initialization. Resources must not provid
 a second routing override.
 Resources are rebuilt separately; shared registered objects checkpoint themselves.
 
-Use Definition.ValidateSpec for configuration-only checks at Build. Use
-Definition.ValidateSetup for checks involving bound ports during Initialize,
-before any State or Middlewares is created. In particular, link count equality
-is an Initialize check, since Build precedes port binding.
+Move component-specific checks into `(*State).Initialize(c *Comp)` or
+`(*Middlewares).Initialize(c *Comp)`, before using the checked values. These methods
+run after generic port validation and topology freezing. A component-specific
+failure now panics during Initialize and requires rebuilding the simulation;
+it is no longer a Build-time check or a recoverable validation error.
+
+Remove Definition.NewState, NewMiddlewares, ValidateSpec, and ValidateSetup.
+Definition contains only DefaultSpec. Convert constructors that returned values
+into Initialize methods that assign through their pointer receiver. Either method
+may be omitted when the element's zero value works; nil middleware pointers still
+fail initialization. Do not mutate Spec, Resources, Ports, or another component's
+State from an initializer. Checkpoint data and middleware Handle signatures are
+unchanged by this migration.
 
 ### Migration Checklist
 
@@ -1009,8 +1015,8 @@ is an Initialize check, since Build precedes port binding.
 - Express strategy choices as scalars or flat configuration records. Records may contain scalar slices but cannot nest.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
 - Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>.<role>"` when it speaks a protocol role, where `<protocol>` is the import path of the package that defines the protocol. Reach ports as `comp.Ports.X`.
-- Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
-- Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
+- Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `(*Middlewares).Initialize(c *Comp)` method. Move any mutable middleware field into State.
+- Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and a `Definition` containing only `DefaultSpec`. Initialize State and Middlewares through their own optional methods.
 - Turn exported methods on the component into package functions that take `*Comp`.
 - In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.

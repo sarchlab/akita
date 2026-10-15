@@ -48,17 +48,16 @@ Notice the field type `comp *Comp` — this is the alias from the previous
 page standing in for
 `*ticking.Component[Spec, State, Resources, Ports, Middlewares]`.
 
-The component creates its middlewares itself, with a function that
-receives the instance being built:
+Middlewares initializes itself with a method that receives the wired component:
 
 ```go
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{Walk: &walkMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{Walk: &walkMW{comp: c}}
 }
 ```
 
-The next page hands this function to the component's `Definition`, and
-`Initialize` calls it once for each instance.
+The simulation calls this method once per instance during initialization, after
+State is initialized. Definition needs no callback registration.
 
 A few things to notice:
 

@@ -38,7 +38,7 @@
 //     Spec must have a Freq field of type timing.Freq, the clock the
 //     component ticks at.
 //   - State is the mutable runtime data. The component creates it with the
-//     Definition's NewState, or starts from the zero State, and only the
+//     State.Initialize, or starts from the zero State, and only the
 //     component's middlewares change it. It is saved in checkpoints.
 //   - Resources holds references to objects shared with other components,
 //     such as a backing storage. The system builder supplies them.
@@ -46,7 +46,7 @@
 //     field per port group. The system builder creates the port instances,
 //     choosing their buffer sizes, and binds them after Build.
 //   - Middlewares has one field per middleware. The component creates them
-//     with the Definition's NewMiddlewares, and they handle every event in
+//     with the Middlewares.Initialize, and they handle every event in
 //     field order. Middlewares hold only references; all mutable data lives
 //     in State, because only State is saved in checkpoints.
 //
@@ -58,8 +58,6 @@
 //
 //	var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 //	    DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-//	    NewState:       newState, // optional
-//	    NewMiddlewares: newMiddlewares,
 //	}
 //
 // The system builder builds an instance from it:

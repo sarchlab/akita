@@ -62,12 +62,9 @@ var expectedErrors = []struct {
 		`no protocol "github.com/sarchlab/akita/v5/mem/memprotocol" with role "owner"`},
 	{"malformed role tag", "fixtures/badroletag",
 		"want role=<protocol>.<role>"},
-	{"missing NewMiddlewares", "fixtures/nomiddlewares",
-		"must set NewMiddlewares"},
-	{"NewState held in a var", "fixtures/funcvar",
-		"NewState must name a function, not newState"},
-	{"NewMiddlewares as a literal", "fixtures/funclit",
-		"NewMiddlewares must name a function"},
+	{"value receiver initializer", "fixtures/valueinitializer", "must use a pointer receiver"},
+	{"invalid State initializer", "fixtures/badstateinitializer", "State.Initialize must have signature"},
+	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer", "Middlewares.Initialize must have signature"},
 	{"middleware without Handle", "fixtures/badmiddleware",
 		"implement modeling.Middleware"},
 }
@@ -172,6 +169,12 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 				got[i].Roles != nil {
 				t.Errorf("port %d = %+v, want %+v", i, got[i], want[i])
 			}
+		}
+	})
+
+	t.Run("omitted initializers", func(t *testing.T) {
+		if _, ok := byPkg[fixturePath("nomiddlewares")]; !ok {
+			t.Fatal("zero-value elements must not require initializers")
 		}
 	})
 

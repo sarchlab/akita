@@ -53,12 +53,6 @@ func (m *workMW) Handle(e timing.Event) bool {
 
 var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{Work: 2},
-	NewState: func(c *Comp) State {
-		return State{Work: c.Spec.Work}
-	},
-	NewMiddlewares: func(c *Comp) Middlewares {
-		return Middlewares{Worker: &workMW{comp: c}}
-	},
 }
 
 func build(sim timing.Simulation, spec Spec) *Comp {
@@ -139,4 +133,12 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	if err := other.LoadCheckpoint(bytes.NewReader(buf.Bytes())); err == nil {
 		t.Errorf("LoadCheckpoint into a different Spec succeeded, want an error")
 	}
+}
+
+func (initialState *State) Initialize(c *Comp) {
+	*initialState = State{Work: c.Spec.Work}
+}
+
+func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = Middlewares{Worker: &workMW{comp: c}}
 }

@@ -61,7 +61,7 @@
 // component's package, exactly as for a ticking component except that Spec
 // needs no Freq. The system builder, the code that assembles a simulation,
 // supplies the Spec, the Resources, and the Ports; the component creates its
-// State with NewState and its middlewares with NewMiddlewares. Middlewares
+// State and Middlewares through their Initialize methods. Middlewares
 // hold only references; all mutable data lives in State or in the pending
 // events, because only those are saved in checkpoints.
 //
@@ -71,8 +71,6 @@
 //
 //	var Definition = event.Definition[Spec, State, Resources, Ports, Middlewares]{
 //	    DefaultSpec:    Spec{Latency: 100},
-//	    NewState:       newState, // optional
-//	    NewMiddlewares: newMiddlewares,
 //	}
 //
 //	comp := mem.Definition.Builder().

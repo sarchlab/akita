@@ -21,15 +21,16 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		MSHRSize:       4,
 		Latency:        4,
 	},
-	NewState:       newState,
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) state {
+func (initialState *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(err)
+	}
+
 	spec := c.Spec
 
-	return state{
+	*initialState = state{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(spec.NumSets, spec.NumWays),
 		Pipeline: queueing.MakePipeline[pipelineTLBReqState](
@@ -40,8 +41,8 @@ func newState(c *Comp) state {
 	}
 }
 
-func newMiddlewares(c *Comp) middlewares {
-	return middlewares{
+func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+	*initialMiddlewares = middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		TLB:  &tlbMiddleware{comp: c},
 	}

@@ -42,6 +42,10 @@ func extractModelDefinition(
 	}
 	specType, resType, portsType, mwType := args[0], args[2], args[3], args[4]
 
+	if err := validateInitializers(pkg, lit, args); err != nil {
+		return nil, err
+	}
+
 	if err := validateSpecType(pkg, specType, index); err != nil {
 		return nil, err
 	}
@@ -112,8 +116,7 @@ func definitionTypeArgs(
 }
 
 // applyDefinitionFields walks the keyed fields of the Definition literal and
-// returns the evaluated DefaultSpec values. NewState and NewMiddlewares must
-// name functions.
+// returns the evaluated DefaultSpec values. Initialization belongs to the types.
 func applyDefinitionFields(
 	pkg *packages.Package, lit *ast.CompositeLit,
 ) (map[string]any, error) {
@@ -127,8 +130,6 @@ func applyDefinitionFields(
 		switch key {
 		case "DefaultSpec":
 			defaults, err = evalStructLiteral(pkg, value)
-		case "NewState", "NewMiddlewares", "ValidateSpec", "ValidateSetup":
-			err = functionRef(pkg, key, value)
 		default:
 			err = posErrorf(pkg, value.Pos(), "unsupported Definition field %q", key)
 		}
@@ -137,49 +138,7 @@ func applyDefinitionFields(
 		}
 	}
 
-	if _, ok := fields["NewMiddlewares"]; !ok {
-		return nil, posErrorf(pkg, lit.Pos(), "Definition must set NewMiddlewares")
-	}
-
 	return defaults, nil
-}
-
-// functionRef checks that a Definition function field names a function.
-func functionRef(pkg *packages.Package, field string, expr ast.Expr) error {
-	obj, err := identObject(pkg, expr)
-	if err != nil {
-		return posErrorf(pkg, expr.Pos(), "%s must name a function", field)
-	}
-
-	if _, ok := obj.(*types.Func); !ok {
-		return posErrorf(pkg, expr.Pos(), "%s must name a function, not %s",
-			field, obj.Name())
-	}
-
-	return nil
-}
-
-// identObject resolves an identifier or selector expression to the
-// package-level object it references.
-func identObject(pkg *packages.Package, expr ast.Expr) (types.Object, error) {
-	var ident *ast.Ident
-	switch e := expr.(type) {
-	case *ast.Ident:
-		ident = e
-	case *ast.SelectorExpr:
-		ident = e.Sel
-	default:
-		return nil, posErrorf(pkg, expr.Pos(),
-			"expected an identifier referencing a package-level declaration")
-	}
-
-	obj := pkg.TypesInfo.Uses[ident]
-	if obj == nil || obj.Pkg() == nil {
-		return nil, posErrorf(pkg, expr.Pos(),
-			"cannot resolve identifier %s", ident.Name)
-	}
-
-	return obj, nil
 }
 
 // resourcesOfType describes the fields of a Resources struct: the references
