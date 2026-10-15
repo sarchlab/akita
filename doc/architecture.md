@@ -41,6 +41,11 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
   Memory routing uses `Spec.Bottom.Find(address)` (or the corresponding port
   name) directly. Spec participates in checkpoint compatibility checks.
 
+Expose default configurations and presets as functions that return an independent
+value on each call. Do not store defaults or presets in exported mutable package
+variables. Any mutable collections in a returned configuration must be independent
+across calls.
+
 Runtime validation, static inspection, literal default extraction, and schema
 output must accept the same Spec shapes. A package declares a Comp alias for
 its component model and func DefaultSpec() Spec, which directly returns a keyed

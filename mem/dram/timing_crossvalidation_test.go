@@ -209,9 +209,9 @@ var _ = Describe("Timing Cross-Validation", func() {
 		}
 
 		specs := []specCase{
-			{"DDR4-2400", DDR4Spec},
-			{"DDR5-4800", DDR5Spec},
-			{"HBM2-2Gbps", HBM2Spec},
+			{"DDR4-2400", DDR4Spec()},
+			{"DDR5-4800", DDR5Spec()},
+			{"HBM2-2Gbps", HBM2Spec()},
 		}
 
 		for _, sc := range specs {
@@ -404,7 +404,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 		)
 
 		BeforeEach(func() {
-			spec = DDR4Spec
+			spec = DDR4Spec()
 			timing, cmdCycles = buildTimingForSpec(spec)
 			st = newStateForSpec(spec)
 		})
@@ -612,7 +612,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 		)
 
 		BeforeEach(func() {
-			spec = DDR4Spec
+			spec = DDR4Spec()
 			timing, cmdCycles = buildTimingForSpec(spec)
 			st = newStateForSpec(spec)
 		})
@@ -779,7 +779,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 	Describe("Tier 4: Bandwidth Sanity", func() {
 
 		It("DDR4-2400 streaming reads: 40-90% of 19.2 GB/s peak", func() {
-			spec := DDR4Spec
+			spec := DDR4Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:
@@ -804,7 +804,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 		})
 
 		It("HBM2-2Gbps streaming reads: 40-90% of 32 GB/s peak", func() {
-			spec := HBM2Spec
+			spec := HBM2Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:
@@ -825,7 +825,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 		})
 
 		It("DDR5-4800 streaming reads: 40-100% of 19.2 GB/s peak", func() {
-			spec := DDR5Spec
+			spec := DDR5Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:

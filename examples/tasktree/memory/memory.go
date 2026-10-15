@@ -57,8 +57,8 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Serve: &serveMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Serve: &serveMW{comp: c}}
 }
 
 type serveMW struct {

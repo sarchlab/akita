@@ -1079,20 +1079,22 @@ V5 ships with validated presets for common DRAM technologies:
 
 ```go
 // v5/mem/dram/presets.go
-dram.DDR4Spec   // DDR4-2400 (1200 MHz, BL8, 4 bank groups × 4 banks)
-dram.DDR5Spec   // DDR5-4800 (2400 MHz, BL16, 8 bank groups × 4 banks)
-dram.HBM2Spec   // HBM2-2Gbps (1000 MHz, BL4, 4 bank groups × 4 banks, 128-bit bus)
-dram.HBM3Spec   // HBM3-6.4Gbps (3200 MHz, BL8)
-dram.GDDR6Spec  // GDDR6-14Gbps (1750 MHz, BL16)
+dram.DDR4Spec()   // DDR4-2400 (1200 MHz, BL8, 4 bank groups × 4 banks)
+dram.DDR5Spec()   // DDR5-4800 (2400 MHz, BL16, 8 bank groups × 4 banks)
+dram.HBM2Spec()   // HBM2-2Gbps (1000 MHz, BL4, 4 bank groups × 4 banks, 128-bit bus)
+dram.HBM3Spec()   // HBM3-6.4Gbps (3200 MHz, BL8)
+dram.GDDR6Spec()  // GDDR6-14Gbps (1750 MHz, BL16)
 ```
 
 ### Usage
 
-A preset is a complete `dram.Spec`, including its `Freq`; copy it, change the
-fields you need, and pass it to `WithSpec`:
+Each preset function returns an independent, complete `dram.Spec`, including its
+`Freq`. Call the function, customize the result, and pass it to
+`modeling.MakeBuilder[*dram.Comp]`. Changes to one result do not affect later
+preset calls:
 
 ```go
-spec := dram.DDR4Spec
+spec := dram.DDR4Spec()
 spec.PagePolicy = dram.PagePolicyOpen
 
 storage := mem.NewStorage(4 * mem.GB)
@@ -1143,7 +1145,7 @@ ctrl := idealmemcontroller.New().
 **After (V5) — cycle-accurate DRAM:**
 ```go
 // V5: Bank-state machine with proper command sequencing.
-spec := dram.HBM2Spec
+spec := dram.HBM2Spec()
 spec.PagePolicy = dram.PagePolicyOpen
 
 ctrl := modeling.MakeBuilder[*dram.Comp](spec).

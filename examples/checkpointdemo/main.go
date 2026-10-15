@@ -70,8 +70,8 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz, Label: "demo"}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Work: &workerMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Work: &workerMW{comp: c}}
 }
 
 // addWork queues n more items on the worker and starts it ticking. It is the

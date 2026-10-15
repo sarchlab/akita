@@ -29,7 +29,7 @@ func DefaultSpec() Spec {
 
 // Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
@@ -53,7 +53,7 @@ func (initialState *state) Initialize(c *Comp) {
 		bankPostBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
-	s := state{
+	initial := state{
 		DirBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankBufs: bankBufs,
@@ -68,21 +68,21 @@ func (initialState *state) Initialize(c *Comp) {
 	}
 
 	cache.DirectoryReset(
-		&s.DirectoryState, spec.numSets(), spec.WayAssociativity,
+		&initial.DirectoryState, spec.numSets(), spec.WayAssociativity,
 		spec.blockSize())
 
-	*initialState = s
+	*s = initial
 }
 
 // Initialize creates the cache's middlewares. The pipeline middleware
 // holds the storage and the pipeline stages.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writethrough: Resources.Storage is required")
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		Pipeline: newPipelineMW(
 			c, res.Storage),

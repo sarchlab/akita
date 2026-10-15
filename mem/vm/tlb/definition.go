@@ -20,14 +20,14 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	spec := c.Spec
 
-	*initialState = state{
+	*s = state{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(spec.NumSets, spec.NumWays),
 		Pipeline: queueing.MakePipeline[pipelineTLBReqState](
@@ -38,8 +38,8 @@ func (initialState *state) Initialize(c *Comp) {
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = middlewares{
+func (m *middlewares) Initialize(c *Comp) {
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		TLB:  &tlbMiddleware{comp: c},
 	}

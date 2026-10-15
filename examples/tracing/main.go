@@ -52,12 +52,12 @@ func DefaultSpec() Spec {
 }
 
 // Initialize gives the worker all of its jobs up front.
-func (initialState *State) Initialize(c *Comp) {
-	*initialState = State{JobsLeft: c.Spec.NumJobs}
+func (s *State) Initialize(c *Comp) {
+	*s = State{JobsLeft: c.Spec.NumJobs}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Work: &workerMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Work: &workerMW{comp: c}}
 }
 
 type workerMW struct {

@@ -15,7 +15,7 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("mmu: Resources.PageTable is required")
@@ -23,7 +23,7 @@ func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 
 	validatePageTablePageSize(pt, c.Spec.Log2PageSize)
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:        &ctrlMiddleware{comp: c},
 		Translation: &translationMW{comp: c},
 	}

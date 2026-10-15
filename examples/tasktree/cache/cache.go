@@ -60,12 +60,12 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz}
 }
 
-func (initialState *State) Initialize(_ *Comp) {
-	*initialState = State{Txns: map[uint64]txn{}}
+func (s *State) Initialize(_ *Comp) {
+	*s = State{Txns: map[uint64]txn{}}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Forward: &forwardMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Forward: &forwardMW{comp: c}}
 }
 
 type forwardMW struct {

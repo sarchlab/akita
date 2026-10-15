@@ -53,8 +53,8 @@ func DefaultSpec() Spec {
 	return Spec{}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Ping: &pingMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Ping: &pingMW{comp: c}}
 }
 
 // SchedulePing schedules a ping to be sent at the given time to the given

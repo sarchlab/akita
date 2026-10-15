@@ -184,7 +184,7 @@ var _ = Describe("P0: close-page completion latency", func() {
 
 	It("maps the read variants to ReadDelay, not TRP", func() {
 		// Precondition: the bug is only observable when the two differ.
-		Expect(DDR4Spec.TRP).NotTo(Equal(cmdCycles[cmdKindRead]))
+		Expect(DDR4Spec().TRP).NotTo(Equal(cmdCycles[cmdKindRead]))
 
 		Expect(cmdCycles[cmdKindReadPrecharge]).
 			To(Equal(cmdCycles[cmdKindRead]))

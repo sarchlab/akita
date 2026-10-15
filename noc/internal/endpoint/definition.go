@@ -18,7 +18,7 @@ func DefaultSpec() Spec {
 }
 
 // Initialize creates behavior over the device ports bound to DeviceConnection.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
@@ -28,7 +28,7 @@ func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 
 	devicePorts := c.Resources.devices.ports
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Outgoing: &outgoingMW{comp: c, devicePorts: devicePorts},
 		Incoming: &incomingMW{comp: c, devicePorts: devicePorts},
 	}

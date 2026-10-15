@@ -48,10 +48,10 @@ func DefaultSpec() Spec {
 
 // Initialize creates the State of a freshly built controller: empty queues and
 // every bank closed.
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	spec := c.Spec
 
-	*initialState = state{
+	*s = state{
 		SubTransQueue: subTransQueueState{
 			Entries: []subTransRef{},
 		},
@@ -69,7 +69,7 @@ func (initialState *state) Initialize(c *Comp) {
 // the command completion delays, and the controller strategies with their
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	spec := c.Spec
 	spec.mustBeSupported()
 
@@ -77,7 +77,7 @@ func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 		panic("dram: Resources.Storage is required")
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},
 		Refresh: &refreshMiddleware{comp: c},

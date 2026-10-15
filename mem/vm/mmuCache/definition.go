@@ -17,14 +17,14 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	spec := c.Spec
 
 	if spec.NumBlocks <= 0 {
 		panic("mmuCache: Spec.NumBlocks must be > 0")
 	}
 
-	*initialState = state{
+	*s = state{
 		CurrentState:          mmuCacheStateEnable,
 		Table:                 initSets(spec.NumLevels, spec.NumBlocks),
 		OutstandingBottomReqs: map[uint64]bool{},
@@ -32,8 +32,8 @@ func (initialState *state) Initialize(c *Comp) {
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = middlewares{
+func (m *middlewares) Initialize(c *Comp) {
+	*m = middlewares{
 		Ctrl:  &ctrlMiddleware{comp: c},
 		Cache: &mmuCacheMiddleware{comp: c},
 	}

@@ -53,12 +53,12 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz, NumReqs: 1}
 }
 
-func (initialState *State) Initialize(_ *Comp) {
-	*initialState = State{InFlight: map[uint64]uint64{}}
+func (s *State) Initialize(_ *Comp) {
+	*s = State{InFlight: map[uint64]uint64{}}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Request: &requestMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Request: &requestMW{comp: c}}
 }
 
 type requestMW struct {

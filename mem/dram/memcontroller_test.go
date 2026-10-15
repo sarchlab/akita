@@ -285,7 +285,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR4 spec", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		ctrl := buildDRAM(sim, DDR4Spec, "DDR4Ctrl", 16)
+		ctrl := buildDRAM(sim, DDR4Spec(), "DDR4Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
@@ -299,7 +299,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR5 spec", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		ctrl := buildDRAM(sim, DDR5Spec, "DDR5Ctrl", 16)
+		ctrl := buildDRAM(sim, DDR5Spec(), "DDR5Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
@@ -312,7 +312,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM2 spec", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		ctrl := buildDRAM(sim, HBM2Spec, "HBM2Ctrl", 16)
+		ctrl := buildDRAM(sim, HBM2Spec(), "HBM2Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(4))
@@ -326,7 +326,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM3 spec", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		ctrl := buildDRAM(sim, HBM3Spec, "HBM3Ctrl", 16)
+		ctrl := buildDRAM(sim, HBM3Spec(), "HBM3Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
@@ -339,7 +339,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with GDDR6 spec", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		ctrl := buildDRAM(sim, GDDR6Spec, "GDDR6Ctrl", 16)
+		ctrl := buildDRAM(sim, GDDR6Spec(), "GDDR6Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
@@ -351,26 +351,26 @@ var _ = Describe("Predefined Specs", func() {
 	})
 
 	It("should preserve DDR4 timing parameters", func() {
-		Expect(DDR4Spec.TCL).To(Equal(16))
-		Expect(DDR4Spec.TRCD).To(Equal(16))
-		Expect(DDR4Spec.TRP).To(Equal(16))
-		Expect(DDR4Spec.TRAS).To(Equal(39))
+		Expect(DDR4Spec().TCL).To(Equal(16))
+		Expect(DDR4Spec().TRCD).To(Equal(16))
+		Expect(DDR4Spec().TRP).To(Equal(16))
+		Expect(DDR4Spec().TRAS).To(Equal(39))
 	})
 
 	It("should preserve DDR5 timing parameters", func() {
-		Expect(DDR5Spec.TCL).To(Equal(40))
-		Expect(DDR5Spec.TRCD).To(Equal(40))
-		Expect(DDR5Spec.TRP).To(Equal(40))
-		Expect(DDR5Spec.TRAS).To(Equal(76))
+		Expect(DDR5Spec().TCL).To(Equal(40))
+		Expect(DDR5Spec().TRCD).To(Equal(40))
+		Expect(DDR5Spec().TRP).To(Equal(40))
+		Expect(DDR5Spec().TRAS).To(Equal(76))
 	})
 
 	It("should preserve HBM3 timing parameters", func() {
-		Expect(HBM3Spec.TCL).To(Equal(36))
-		Expect(HBM3Spec.TRCD).To(Equal(36))
-		Expect(HBM3Spec.TRP).To(Equal(36))
-		Expect(HBM3Spec.TRAS).To(Equal(72))
-		Expect(HBM3Spec.TRCDRD).To(Equal(36))
-		Expect(HBM3Spec.TRCDWR).To(Equal(24))
+		Expect(HBM3Spec().TCL).To(Equal(36))
+		Expect(HBM3Spec().TRCD).To(Equal(36))
+		Expect(HBM3Spec().TRP).To(Equal(36))
+		Expect(HBM3Spec().TRAS).To(Equal(72))
+		Expect(HBM3Spec().TRCDRD).To(Equal(36))
+		Expect(HBM3Spec().TRCDWR).To(Equal(24))
 	})
 })
 
@@ -1075,7 +1075,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should build with spec and preserve page policy", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		specWithOpenPage := DDR4Spec
+		specWithOpenPage := DDR4Spec()
 		specWithOpenPage.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
 
@@ -1087,7 +1087,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should build with spec and preserve R/W queue config", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		specWithRW := DDR4Spec
+		specWithRW := DDR4Spec()
 		specWithRW.ReadQueueSize = 16
 		specWithRW.WriteQueueSize = 16
 		specWithRW.WriteHighWatermark = 12

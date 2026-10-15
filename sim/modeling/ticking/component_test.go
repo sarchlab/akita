@@ -273,12 +273,12 @@ func TestBuildRejectsZeroFrequency(t *testing.T) {
 	})
 }
 
-func (initialState *State) Initialize(c *Comp) {
-	*initialState = State{Count: c.Spec.Depth}
+func (s *State) Initialize(c *Comp) {
+	*s = State{Count: c.Spec.Depth}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{
 		First:  &recordMW{comp: c, name: "first"},
 		Second: &recordMW{comp: c, name: "second", counting: true},
 	}

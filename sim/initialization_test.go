@@ -63,7 +63,7 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 	}
 }
 
-func (initialState *initializationState) Initialize(c *initializationComp) {
+func (s *initializationState) Initialize(c *initializationComp) {
 	*c.Resources.Calls++
-	*initialState = initializationState{SawConnection: c.Ports.Top.Connection() != nil}
+	*s = initializationState{SawConnection: c.Ports.Top.Connection() != nil}
 }

@@ -28,6 +28,6 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 func DefaultSpec() Spec { return Spec{} }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Pipeline: &pipeline{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Pipeline: &pipeline{comp: c}}
 }

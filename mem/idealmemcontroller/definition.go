@@ -16,18 +16,18 @@ func DefaultSpec() Spec {
 }
 
 // Initialize creates an enabled controller with no in-flight access.
-func (initialState *state) Initialize(_ *Comp) {
-	*initialState = state{ControlState: memcontrolprotocol.StateEnabled}
+func (s *state) Initialize(_ *Comp) {
+	*s = state{ControlState: memcontrolprotocol.StateEnabled}
 }
 
 // Initialize creates the controller's middlewares. It panics if the system
 // builder did not supply a storage.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	if c.Resources.Storage == nil {
 		panic("idealmemcontroller: Resources.Storage is required")
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:   &ctrlMiddleware{comp: c},
 		Memory: &memMiddleware{comp: c},
 	}

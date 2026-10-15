@@ -16,18 +16,19 @@ import (
 //	writeDelay = tRL + burstCycle = 16 + 4 = 20
 //	tRC        = tRAS + tRP       = 39 + 16 = 55
 func buildDDR4TimingAndCycles() (dramTiming, map[commandKind]int) {
-	spec := DDR4Spec
+	spec := DDR4Spec()
 
 	return generateTiming(&spec), buildCmdCycles(&spec)
 }
 
 // newDDR4State creates a fresh State with DDR4 bank layout (1 rank, 4 bank groups, 4 banks).
 func newDDR4State() *state {
+	spec := DDR4Spec()
 	st := &state{
 		BankStates: initBankStatesFlat(
-			DDR4Spec.NumRank,
-			DDR4Spec.NumBankGroup,
-			DDR4Spec.NumBank,
+			spec.NumRank,
+			spec.NumBankGroup,
+			spec.NumBank,
 		),
 	}
 	return st
@@ -111,7 +112,8 @@ var _ = Describe("Timing Validation", func() {
 					Row:       100,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, st, bs, readCmd)
+			spec := DDR4Spec()
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
@@ -216,7 +218,8 @@ var _ = Describe("Timing Validation", func() {
 					Row:       10,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, st, bs, readCmd)
+			spec := DDR4Spec()
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})

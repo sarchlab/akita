@@ -13,6 +13,6 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = middlewares{Pipeline: &middleware{comp: c}}
+func (m *middlewares) Initialize(c *Comp) {
+	*m = middlewares{Pipeline: &middleware{comp: c}}
 }

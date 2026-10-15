@@ -13,19 +13,19 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialState *state) Initialize(_ *Comp) {
-	*initialState = state{
+func (s *state) Initialize(_ *Comp) {
+	*s = state{
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("gmmu: Resources.PageTable is required")
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Walk:    &walkMW{comp: c, pageTable: pt},
 		Respond: &respondMW{comp: c},

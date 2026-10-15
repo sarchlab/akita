@@ -21,20 +21,20 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	name, spec := c.Name(), c.Spec
 
-	*initialState = state{
+	*s = state{
 		Banks: buildInitialBanks(name, spec),
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	if c.Resources.Storage == nil {
 		panic("simplebankedmemory: Resources.Storage is required")
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},

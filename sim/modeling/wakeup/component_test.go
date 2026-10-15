@@ -135,10 +135,10 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	}
 }
 
-func (initialState *State) Initialize(c *Comp) {
-	*initialState = State{Work: c.Spec.Work}
+func (s *State) Initialize(c *Comp) {
+	*s = State{Work: c.Spec.Work}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Worker: &workMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Worker: &workMW{comp: c}}
 }

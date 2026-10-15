@@ -83,8 +83,8 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Control: &controlMW{comp: c}, Serve: &serveMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Control: &controlMW{comp: c}, Serve: &serveMW{comp: c}}
 }
 
 type controlMW struct{ comp *Comp }

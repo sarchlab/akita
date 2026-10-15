@@ -9,8 +9,8 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{
 		Send:           &sendMW{comp: c},
 		ReceiveProcess: &receiveProcessMW{comp: c},
 	}

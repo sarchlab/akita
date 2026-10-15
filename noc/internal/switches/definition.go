@@ -18,7 +18,7 @@ func DefaultSpec() Spec {
 }
 
 // Initialize creates one port complex per port, sized by the port's link.
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
@@ -34,7 +34,7 @@ func (initialState *state) Initialize(c *Comp) {
 		state.PortComplexes[i] = newPortComplex(port, links[i])
 	}
 
-	*initialState = state
+	*s = state
 }
 
 func newPortComplex(port messaging.Port, link Link) portComplexState {
@@ -59,7 +59,7 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 
 // Initialize creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	table := routing.NewTable()
 	for _, route := range c.Spec.Routes {
 		table.DefineRoute(route.Destination, route.Output)
@@ -75,7 +75,7 @@ func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 		}
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
 			portIndex:    portIndex,

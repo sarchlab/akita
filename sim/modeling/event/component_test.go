@@ -184,6 +184,6 @@ func TestCheckpointRoundTrip(t *testing.T) {
 
 var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{req{}}})
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Delay: &delayMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Delay: &delayMW{comp: c}}
 }

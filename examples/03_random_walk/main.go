@@ -48,8 +48,8 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz, WallDistance: 10}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
-	*initialMiddlewares = Middlewares{Walk: &walkMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Walk: &walkMW{comp: c}}
 }
 
 type walkMW struct {

@@ -29,7 +29,7 @@ func DefaultSpec() Spec {
 
 // Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func (initialState *state) Initialize(c *Comp) {
+func (s *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
@@ -52,7 +52,7 @@ func (initialState *state) Initialize(c *Comp) {
 		bankPostBufs[i] = queueing.MakeBuffer[int](laneWidth)
 	}
 
-	s := state{
+	initial := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
 		DirStageBuf:  queueing.MakeBuffer[int](spec.NumReqPerCycle),
@@ -72,16 +72,16 @@ func (initialState *state) Initialize(c *Comp) {
 		BankDownwardInflightTransCounts: make([]int, numBanks),
 	}
 
-	cache.DirectoryReset(&s.DirectoryState,
+	cache.DirectoryReset(&initial.DirectoryState,
 		spec.numSets(), spec.WayAssociativity, 1<<spec.Log2BlockSize)
 
-	*initialState = s
+	*s = initial
 }
 
 // Initialize creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
 // and the ports' accessors.
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
@@ -93,7 +93,7 @@ func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	}
 	pipeline.createInternalStages()
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{pipeline: pipeline},
 		Flusher: &controlMW{
 			comp:    c,

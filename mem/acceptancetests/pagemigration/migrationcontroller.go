@@ -161,15 +161,15 @@ func DefaultSpec() migSpec {
 	}
 }
 
-func (initialState *migState) Initialize(c *migrationController) {
-	*initialState = migState{
+func (s *migState) Initialize(c *migrationController) {
+	*s = migState{
 		Phase:     migIdle,
 		Countdown: c.Spec.Interval,
 	}
 }
 
-func (initialMiddlewares *migMiddlewares) Initialize(c *migrationController) {
-	*initialMiddlewares = migMiddlewares{
+func (m *migMiddlewares) Initialize(c *migrationController) {
+	*m = migMiddlewares{
 		Migration: &migMW{ctrl: c, res: c.Resources},
 	}
 }

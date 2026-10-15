@@ -16,12 +16,12 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialMiddlewares *middlewares) Initialize(c *Comp) {
+func (m *middlewares) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
 		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
-	*initialMiddlewares = middlewares{
+	*m = middlewares{
 		Ctrl:            &ctrlMiddleware{comp: c},
 		ParseTranslate:  &parseTranslateMW{comp: c},
 		RespondPipeline: &respondPipelineMW{comp: c},

@@ -93,15 +93,15 @@ func DefaultSpec() driverSpec {
 	}
 }
 
-func (initialState *driverState) Initialize(_ *driver) {
-	*initialState = driverState{
+func (s *driverState) Initialize(_ *driver) {
+	*s = driverState{
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
 }
 
-func (initialMiddlewares *driverMiddlewares) Initialize(d *driver) {
-	*initialMiddlewares = driverMiddlewares{Drive: &driverMW{d: d}}
+func (m *driverMiddlewares) Initialize(d *driver) {
+	*m = driverMiddlewares{Drive: &driverMW{d: d}}
 }
 
 func done(d *driver) bool {

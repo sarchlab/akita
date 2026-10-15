@@ -748,14 +748,14 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 	})
 })
 
-func (initialMiddlewares *resumeMWs) Initialize(c *resumeComp) {
-	*initialMiddlewares = resumeMWs{Worker: &resumeWorkerMW{comp: c}}
+func (m *resumeMWs) Initialize(c *resumeComp) {
+	*m = resumeMWs{Worker: &resumeWorkerMW{comp: c}}
 }
 
-func (initialMiddlewares *tickCountMWs) Initialize(c *tickCountComp) {
-	*initialMiddlewares = tickCountMWs{Counter: &tickCountMW{comp: c}}
+func (m *tickCountMWs) Initialize(c *tickCountComp) {
+	*m = tickCountMWs{Counter: &tickCountMW{comp: c}}
 }
 
-func (initialMiddlewares *wakeMWs) Initialize(c *wakeComp) {
-	*initialMiddlewares = wakeMWs{Counter: &wakeMW{comp: c}}
+func (m *wakeMWs) Initialize(c *wakeComp) {
+	*m = wakeMWs{Counter: &wakeMW{comp: c}}
 }

@@ -3,5 +3,5 @@
 // port from a backing mem.Storage (Resources.Storage, required) and accepts
 // control commands on its Control port. Build an instance with
 // modeling.MakeBuilder[*Comp](DefaultSpec()), starting from DefaultSpec() or a preset such
-// as DDR4Spec; see README.md.
+// as DDR4Spec(); see README.md.
 package dram

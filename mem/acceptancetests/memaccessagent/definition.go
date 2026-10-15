@@ -15,10 +15,10 @@ func DefaultSpec() Spec {
 	}
 }
 
-func (initialState *State) Initialize(c *Comp) {
+func (s *State) Initialize(c *Comp) {
 	spec := c.Spec
 
-	*initialState = State{
+	*s = State{
 		WriteLeft:       spec.WriteLeft,
 		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),
@@ -28,12 +28,12 @@ func (initialState *State) Initialize(c *Comp) {
 	}
 }
 
-func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
+func (m *Middlewares) Initialize(c *Comp) {
 	if c.Spec.LowModule == "" {
 		panic("memaccessagent: Spec.LowModule is required")
 	}
 
-	*initialMiddlewares = Middlewares{
+	*m = Middlewares{
 		Agent: &agentMiddleware{comp: c},
 	}
 }
