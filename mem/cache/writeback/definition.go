@@ -1,6 +1,8 @@
 package writeback
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -34,7 +36,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // transaction table, and empty stage buffers and pipelines.
 func (initialState *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	spec := c.Spec

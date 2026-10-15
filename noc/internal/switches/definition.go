@@ -26,10 +26,10 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // Initialize creates one port complex per port, sized by the port's link.
 func (initialState *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 	if err := validateSetup(c); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	ports := c.Ports.Links

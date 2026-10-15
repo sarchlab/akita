@@ -1,6 +1,8 @@
 package addresstranslator
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -21,7 +23,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 
 func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	*initialMiddlewares = middlewares{

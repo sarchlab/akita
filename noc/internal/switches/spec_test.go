@@ -19,7 +19,7 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 	spec.Links[0].Latency = 99
 	require.Equal(t, 2, sw.Spec.Links[0].Latency)
 	require.Empty(t, sw.State.PortComplexes)
-	require.PanicsWithError(t, "switches: 0 ports but 1 links in Spec.Links", func() { _ = s.Initialize() })
+	require.PanicsWithError(t, "Switch: switches: 0 ports but 1 links in Spec.Links", func() { _ = s.Initialize() })
 	require.Error(t, s.Initialize())
 	require.Error(t, s.Run())
 	require.Empty(t, sw.State.PortComplexes)

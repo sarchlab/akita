@@ -103,7 +103,7 @@ func TestInitializationRejectsIncompleteInterleaving(t *testing.T) {
 
 	spec.Bottom.InterleavingSize = 4096
 
-	assertPanics(t, "at least one destination", func() { buildWired(Resources{}, spec) })
+	assertPanics(t, "Cache: address mapper: at least one destination", func() { buildWired(Resources{}, spec) })
 	spec.Bottom.InterleavingSize = 0
 	spec.Bottom.Destinations = []messaging.RemotePort{"DRAM0", "DRAM1"}
 	assertPanics(t, "positive InterleavingSize", func() { buildWired(Resources{}, spec) })

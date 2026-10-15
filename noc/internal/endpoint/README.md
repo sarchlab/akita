@@ -8,8 +8,9 @@ Start with `Definition.DefaultSpec`, set `Spec.Devices` to the ordered remote
 addresses of the device ports, and build with
 `MakeBuilder().WithSimulation(s).WithSpec(spec).Build(name)`. Bind the network
 port with `ep.BindPort("NetworkPort", networkPort)`, then bind each device with
-`DeviceConnection(ep).BindPort(port)` in the declared order. Initialize validates
-the list before creating middleware and freezes further binding.
+`DeviceConnection(ep).BindPort(port)` in the declared order. Initialize freezes
+further binding, then validates the list before creating middleware. A device
+count, order, or connection mismatch panics and requires rebuilding the simulation.
 
 The device connection owns the bound-port list; Resources contains only the
 connection reference. Devices must be owned `*twowaybuffered.Port` values and

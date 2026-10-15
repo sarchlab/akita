@@ -25,10 +25,10 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // Initialize creates behavior over the device ports bound to DeviceConnection.
 func (initialMiddlewares *middlewares) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 	if err := validateSetup(c); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	devicePorts := c.Resources.devices.ports

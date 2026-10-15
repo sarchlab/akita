@@ -1,6 +1,8 @@
 package tlb
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -25,7 +27,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 
 func (initialState *state) Initialize(c *Comp) {
 	if err := validateSpec(c.Spec); err != nil {
-		panic(err)
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
 	}
 
 	spec := c.Spec
