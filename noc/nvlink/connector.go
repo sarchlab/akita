@@ -52,20 +52,20 @@ func MakeBuilder() Builder {
 		WithPCIeVersion(4, 16).WithNVLinkVersion(2)
 }
 
-func (c Builder) WithSimulation(sim timing.Simulation) Builder { c.simulation = sim; return c }
+func (b Builder) WithSimulation(sim timing.Simulation) Builder { b.simulation = sim; return b }
 
-func (c Builder) WithFreq(freq timing.Freq) Builder {
-	c.freq = freq
+func (b Builder) WithFreq(freq timing.Freq) Builder {
+	b.freq = freq
 
-	return c
+	return b
 }
 
-func (c Builder) WithPCIeBandwidth(bytePerSecond uint64) Builder {
-	c.pcieBandwidth = bytePerSecond
-	return c
+func (b Builder) WithPCIeBandwidth(bytePerSecond uint64) Builder {
+	b.pcieBandwidth = bytePerSecond
+	return b
 }
 
-func (c Builder) WithPCIeVersion(version int, width int) Builder {
+func (b Builder) WithPCIeVersion(version int, width int) Builder {
 	transferPerSecondTable := map[int]uint64{
 		1: 2 * (1 << 30),
 		2: 4 * (1 << 30),
@@ -77,38 +77,38 @@ func (c Builder) WithPCIeVersion(version int, width int) Builder {
 	transferPerSecond := transferPerSecondTable[version]
 	totalBandwidth := transferPerSecond * uint64(width) / 8
 
-	return c.WithPCIeBandwidth(totalBandwidth)
+	return b.WithPCIeBandwidth(totalBandwidth)
 }
 
-func (c Builder) WithPCIeSwitchLatency(numCycles int) Builder {
-	c.pcieSwitchLatency = numCycles
-	return c
+func (b Builder) WithPCIeSwitchLatency(numCycles int) Builder {
+	b.pcieSwitchLatency = numCycles
+	return b
 }
 
-func (c Builder) WithNVLinkBandwidth(bytePerSecond uint64) Builder {
-	c.nvlinkBandwidth = bytePerSecond
-	return c
+func (b Builder) WithNVLinkBandwidth(bytePerSecond uint64) Builder {
+	b.nvlinkBandwidth = bytePerSecond
+	return b
 }
 
-func (c Builder) WithNVLinkVersion(version int) Builder {
+func (b Builder) WithNVLinkVersion(version int) Builder {
 	switch version {
 	case 1:
-		c.nvlinkBandwidth = 2.5 * (1 << 30) * 8
+		b.nvlinkBandwidth = 2.5 * (1 << 30) * 8
 	case 2:
-		c.nvlinkBandwidth = 3.125 * (1 << 30) * 8
+		b.nvlinkBandwidth = 3.125 * (1 << 30) * 8
 	case 3:
-		c.nvlinkBandwidth = 6.25 * (1 << 30) * 8
+		b.nvlinkBandwidth = 6.25 * (1 << 30) * 8
 	default:
 		panic("NVLink version not supported.")
 	}
 
-	return c
+	return b
 }
 
-func (c Builder) WithNVLinkSwitchLatency(numCycle int) Builder {
-	c.nvlinkSwitchLatency = numCycle
+func (b Builder) WithNVLinkSwitchLatency(numCycle int) Builder {
+	b.nvlinkSwitchLatency = numCycle
 
-	return c
+	return b
 }
 
 // Build computes derived parameters and begins a new network.

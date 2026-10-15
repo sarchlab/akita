@@ -132,7 +132,7 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	}
 }
 
-func (c *roundTripDomain) NewID() uint64 { return c.ids.NewID() }
+func (d *roundTripDomain) NewID() uint64 { return d.ids.NewID() }
 
 func (d *roundTripDomain) TaskTracker() *tasks.Tracker {
 	return d.tracker
