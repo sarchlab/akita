@@ -25,15 +25,13 @@ specA.NumPings = 2
 specB := DefaultSpec()
 specB.Freq = 1 * timing.Hz
 
-agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
+agentA := modeling.MakeBuilder[*Comp](specA).
 	WithSimulation(sim).
-	WithSpec(specA).
 	Build("AgentA")
 agentA.BindPort("Out", outA)
 
-agentB := modeling.MakeBuilder[*Comp](DefaultSpec()).
+agentB := modeling.MakeBuilder[*Comp](specB).
 	WithSimulation(sim).
-	WithSpec(specB).
 	Build("AgentB")
 agentB.BindPort("Out", outB)
 
