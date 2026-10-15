@@ -57,10 +57,13 @@ connector := networkconnector.MakeBuilder().
 
 ### Infrastructure Packages
 
+The `internal` packages are connector implementation details and cannot be
+imported by applications.
+
 | Package | Description |
 |---------|-------------|
-| `switching/switches` | Switch components with input/output buffers and crossbar |
-| `switching/endpoint` | Network endpoints that fragment messages into flits |
+| `internal/switches` | Connector implementation: switches with input/output buffers and crossbar |
+| `internal/endpoint` | Connector implementation: endpoints that fragment messages into flits |
 | `routing` | Routing table abstraction |
 | `networkconnector` | Generic topology builder with Floyd-Warshall routing |
 

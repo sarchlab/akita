@@ -91,8 +91,12 @@ The former banked mapper panicked beyond its last bank; the unified mapper wraps
 across destinations. To bound a mapping, configure the range and fallback.
 Routing participates in the Spec hash; rebuild checkpoints after this API migration.
 
-Endpoints and switches moved from `noc/switching` to `noc/internal`.
+Endpoints and switches moved from
+`noc/networking/switching/{endpoint,switches}` to
+`noc/internal/{endpoint,switches}`.
 Applications build NoCs through `networkconnector`, `mesh`, `pcie`, or `nvlink`.
+Switch port names change from `Port[i]` to `Links[i]`, including in traces and
+monitoring output.
 Internally, endpoint device ports bind to `DeviceConnection(ep)`, and Initialize
 checks their ordered addresses against `Spec.Devices`. The endpoint stays a
 pass-through connection, preserving message sources and the existing hop count.
