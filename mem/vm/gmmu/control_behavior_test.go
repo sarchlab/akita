@@ -4,11 +4,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -40,7 +40,7 @@ var _ = Describe("GMMU control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.DeviceID = deviceID
 		// A latency larger than the in-flight count lets every delivered
 		// request be parsed into a walk before the first one finalizes, so
@@ -48,10 +48,9 @@ var _ = Describe("GMMU control behavior", func() {
 		spec.Latency = 10
 		spec.Bottom = lowModule
 
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(spec).
 			Build("GMMU")
 		compPorts := defaultPorts("GMMU")
 		comp.BindPort("Top", compPorts.Top)

@@ -75,13 +75,12 @@ type Middlewares struct {
 // Comp is the component.
 type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
-// Definition declares the component.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-	DefaultSpec: Spec{
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:     1 * timing.GHz,
 		NumLanes: 4,
 		Mode:     ModeFast,
-	},
+	}
 }
 
 func (initialMiddlewares *Middlewares) Initialize(c *Comp) {

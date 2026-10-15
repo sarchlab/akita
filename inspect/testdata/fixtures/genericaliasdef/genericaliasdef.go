@@ -1,5 +1,4 @@
-// Package genericaliasdef declares its definition through a generic type
-// alias. The inspector must see through the alias.
+// Package genericaliasdef declares Comp through a generic alias.
 package genericaliasdef
 
 import (
@@ -25,11 +24,11 @@ type (
 	Middlewares struct{}
 )
 
-// Def is a generic alias of the definition type.
-type Def[S any] = ticking.Definition[S, State, modeling.None, Ports, Middlewares]
+// Def is a generic alias of the component type.
+type Def[S any] = ticking.Component[S, State, modeling.None, Ports, Middlewares]
 
 // Comp is the component.
-type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = Def[Spec]
 
-// Definition declares the component through the generic alias.
-var Definition = Def[Spec]{DefaultSpec: Spec{Freq: timing.GHz, Depth: 4}}
+// DefaultSpec returns the default configuration.
+func DefaultSpec() Spec { return Spec{Freq: timing.GHz, Depth: 4} }

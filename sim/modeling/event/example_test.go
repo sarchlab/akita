@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -16,7 +16,7 @@ func Example() {
 	sim := akitasim.MakeBuilder().Build()
 	engine := sim.Engine().(*timing.SerialEngine)
 
-	delay := Definition.Builder().
+	delay := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		WithSpec(Spec{Latency: 10}).
 		Build("Delay")

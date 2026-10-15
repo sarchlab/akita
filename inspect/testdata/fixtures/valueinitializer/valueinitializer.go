@@ -9,6 +9,6 @@ import (
 type State struct{ Value int }
 type Comp = event.Component[modeling.None, State, modeling.None, modeling.None, modeling.None]
 
-var Definition = event.Definition[modeling.None, State, modeling.None, modeling.None, modeling.None]{}
+func DefaultSpec() modeling.None { return modeling.None{} }
 
 func (State) Initialize(*Comp) {}

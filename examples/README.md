@@ -38,7 +38,7 @@ until it drifts to ±10 from the origin, then prints the final position,
 step count, and simulated time. Smallest useful Akita simulation.
 
 **Key concepts**: the five structs of a component (`Spec`, `State`,
-`Resources`, `Ports`, `Middlewares`), the package-level `Definition`, the
+`Resources`, `Ports`, `Middlewares`), the package-level `DefaultSpec()` function, the
 `type Comp = ticking.Component[...]` alias, the
 `Handle(e timing.Event) bool` middleware contract, `TickLater` to start the
 loop, a seeded RNG supplied by the system builder as a `Resources` field.
@@ -57,7 +57,7 @@ messages. Each has two middlewares, run in order every tick:
 - **ReceiveProcess** — counts down the pings being answered and takes
   incoming messages.
 
-**Key concepts**: a component package (five structs plus `Definition`),
+**Key concepts**: a component package (five structs, a `Comp` alias, and `DefaultSpec()`),
 ports created by the system builder with `twowaybuffered.NewPort` and assigned
 with `BindPort` after Build, a `Spec` field naming a peer's port, `modelingtest.CheckTicking`.
 
@@ -191,6 +191,6 @@ cd tasktree && go run main.go
 | **Wakeup** | `wakeup.Component` | Idle most of the time and knows when it next has work | `ping` |
 | **Event** | `event.Component` | A set of distinct happenings, each with its own data and time | the `modeling/event` package example |
 
-All models share the five structs, the `Definition`, and the port and
+All models share the five structs, the `Comp` alias, `DefaultSpec()`, and the port and
 message infrastructure; they differ only in which events reach the
 middlewares. See the "Component Models" section of `modeling/README.md`.

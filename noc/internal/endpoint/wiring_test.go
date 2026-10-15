@@ -13,7 +13,7 @@ import (
 func buildWiring(t *testing.T, declared, bound []messaging.RemotePort) (*akitasim.Simulation, *Comp) {
 	t.Helper()
 	s := akitasim.MakeBuilder().Build()
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Devices = declared
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).Build("EP")
 	ep.BindPort("NetworkPort", twowaybuffered.NewPort(1, 1))

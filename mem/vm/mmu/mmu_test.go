@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -53,10 +54,9 @@ var _ = Describe("MMU", func() {
 	build := func(topBufSize int) {
 		sim = testsim.New(engine, false)
 
-		mmuComp = Definition.Builder().
+		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		mmuCompPorts := makePorts("MMU", topBufSize)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
@@ -229,10 +229,9 @@ var _ = Describe("MMU Integration", func() {
 
 		pageTable = vm.NewPageTable(12)
 
-		mmuComp = Definition.Builder().
+		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		mmuCompPorts := makePorts("MMU", 4096)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)

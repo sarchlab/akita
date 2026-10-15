@@ -1,29 +1,26 @@
 package writeback
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/messaging Port
-//go:generate mockgen -destination "mock_timing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/timing Engine
-
 import (
 	"log"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-
+	//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/messaging Port
+	//go:generate mockgen -destination "mock_timing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/timing Engine
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/sim/timing"
-
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestCache(t *testing.T) {
@@ -71,7 +68,7 @@ func plugNoopConn(comp *Comp) {
 // stageTestSpec returns the configuration the white-box stage tests share:
 // 64 sets of 4 ways of 64-byte blocks in a single bank, 4 requests per cycle.
 func stageTestSpec() Spec {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.Log2BlockSize = 6
 	spec.WayAssociativity = 4
@@ -87,9 +84,8 @@ func stageTestSpec() Spec {
 // stage under test directly rather than the component.
 func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
 	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
-		WithSpec(spec).
 		WithResources(res).
 		Build("Cache")
 	comp.BindPort("Top", ports.Top)
@@ -106,14 +102,13 @@ func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
 // buildIdealDRAM builds a 200-cycle ideal memory controller named "DRAM",
 // backed by storage, and returns its Top port.
 func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port {
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 1
 	dramSpec.Latency = 200
 	dramSpec.CacheLineSize = 64
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
-		WithSpec(dramSpec).
 		Build("DRAM")
 
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -148,14 +143,13 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		addressToPortMapper = dramTop.AsRemote()
 
-		cacheSpec := Definition.DefaultSpec
+		cacheSpec := DefaultSpec()
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
-		cacheComp = Definition.Builder().
+		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithSpec(cacheSpec).
 			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
 		cacheCompPorts := makePorts("Cache", 8)

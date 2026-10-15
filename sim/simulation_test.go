@@ -5,14 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/sim/timing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 type testResource struct {
@@ -435,9 +434,9 @@ type (
 	noMiddlewares struct{}
 )
 
-var roundTripDef = ticking.Definition[
-	roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares]{
-	DefaultSpec: roundTripSpec{Freq: 1 * timing.GHz, Latency: 5},
+// roundTripDefaultSpec returns the component's default configuration.
+func roundTripDefaultSpec() roundTripSpec {
+	return roundTripSpec{Freq: 1 * timing.GHz, Latency: 5}
 }
 
 // timeSetter handles an event by doing nothing, so running an event for it
@@ -465,7 +464,9 @@ var _ = Describe("Checkpoint round trip", func() {
 		// connection serializers are needed yet.
 		engine := sim.Engine().(*timing.SerialEngine)
 		engine.RegisterHandler("TimeSetter", timeSetter{})
-		comp := roundTripDef.Builder().WithSimulation(sim).Build("Comp")
+		comp := modeling.MakeBuilder[*ticking.Component[
+			roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares]](roundTripDefaultSpec()).
+			WithSimulation(sim).Build("Comp")
 		storage := mem.MakeStorageBuilder().
 			WithCapacity(4 * mem.KB).
 			WithSimulation(sim).
@@ -536,14 +537,14 @@ func (m *resumeWorkerMW) Handle(timing.Event) bool {
 	return true
 }
 
-var resumeDef = ticking.Definition[
-	resumeSpec, resumeState, modeling.None, noPorts, resumeMWs]{
-	DefaultSpec: resumeSpec{Freq: 1 * timing.GHz, N: 1},
+// resumeDefaultSpec returns the component's default configuration.
+func resumeDefaultSpec() resumeSpec {
+	return resumeSpec{Freq: 1 * timing.GHz, N: 1}
 }
 
 func buildResumeSim() (*Simulation, *resumeComp) {
 	sim := MakeBuilder().Build()
-	c := resumeDef.Builder().WithSimulation(sim).Build("Worker")
+	c := modeling.MakeBuilder[*resumeComp](resumeDefaultSpec()).WithSimulation(sim).Build("Worker")
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
@@ -618,14 +619,14 @@ func (m *tickCountMW) Handle(timing.Event) bool {
 	return false
 }
 
-var tickCountDef = ticking.Definition[
-	tickCountSpec, tickCountState, modeling.None, noPorts, tickCountMWs]{
-	DefaultSpec: tickCountSpec{Freq: 1 * timing.GHz, Tag: 1},
+// tickCountDefaultSpec returns the component's default configuration.
+func tickCountDefaultSpec() tickCountSpec {
+	return tickCountSpec{Freq: 1 * timing.GHz, Tag: 1}
 }
 
 func buildTickCountSim() (*Simulation, *tickCountComp) {
 	sim := MakeBuilder().Build()
-	c := tickCountDef.Builder().WithSimulation(sim).Build("Ticker")
+	c := modeling.MakeBuilder[*tickCountComp](tickCountDefaultSpec()).WithSimulation(sim).Build("Ticker")
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
@@ -696,13 +697,14 @@ func (m *wakeMW) Handle(timing.Event) bool {
 	return false
 }
 
-var wakeDef = wakeup.Definition[wakeSpec, wakeState, modeling.None, noPorts, wakeMWs]{
-	DefaultSpec: wakeSpec{Tag: 1},
+// wakeDefaultSpec returns the component's default configuration.
+func wakeDefaultSpec() wakeSpec {
+	return wakeSpec{Tag: 1}
 }
 
 func buildWakeSim() (*Simulation, *wakeComp) {
 	sim := MakeBuilder().Build()
-	c := wakeDef.Builder().WithSimulation(sim).Build("Waker")
+	c := modeling.MakeBuilder[*wakeComp](wakeDefaultSpec()).WithSimulation(sim).Build("Waker")
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}

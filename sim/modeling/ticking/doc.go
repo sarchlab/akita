@@ -33,7 +33,7 @@
 //
 //   - Spec is the configuration: scalars, scalar collections, flat records, and
 //     record slices. See modeling.ValidateSpec for the allowed record members.
-//     The component gives defaults in its Definition, and the system builder may
+//     The component gives defaults in DefaultSpec(), and the system builder may
 //     override them.
 //     Spec must have a Freq field of type timing.Freq, the clock the
 //     component ticks at.
@@ -52,17 +52,17 @@
 //
 // # Declaring and building a component
 //
-// The component package declares its Definition and a Comp alias:
+// The component package declares its DefaultSpec function and a Comp alias:
 //
 //	type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 //
-//	var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-//	    DefaultSpec:    Spec{Freq: 1 * timing.GHz},
+//	func DefaultSpec() Spec {
+//	    return Spec{Freq: 1 * timing.GHz}
 //	}
 //
-// The system builder builds an instance from it:
+// The system builder builds an instance from the returned configuration:
 //
-//	comp := cache.Definition.Builder().
+//	comp := modeling.MakeBuilder[*cache.Comp](cache.DefaultSpec()).
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    WithResources(res).

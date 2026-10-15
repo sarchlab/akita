@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -78,13 +78,12 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Latency = 5
 	dramSpec.Width = 4
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
-		WithSpec(dramSpec).
 		Build("DRAM")
 
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -92,7 +91,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 
 	dramTop := dram.Ports.Top
 
-	cacheSpec := writeback.Definition.DefaultSpec
+	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4
@@ -100,9 +99,8 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.NumReqPerCycle = 4
 
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dramTop.AsRemote()}
-	cache := writeback.Definition.Builder().
+	cache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(sim).
-		WithSpec(cacheSpec).
 		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 		Build("Cache")
 

@@ -3,13 +3,13 @@ package mmu
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -25,13 +25,12 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// A long walk latency keeps the walk genuinely in flight after a single
 	// parse tick, well short of completion.
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Latency = 100
 
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
-		WithSpec(spec).
 		Build("MMU")
 	compPorts := makePorts("MMU", 16)
 	comp.BindPort("Top", compPorts.Top)

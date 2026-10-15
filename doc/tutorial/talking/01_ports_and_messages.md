@@ -8,7 +8,7 @@ sidebar_position: 1
 ports, one middleware. A real simulation is a graph of components that
 exchange messages. This section shows the full pattern: **ports** for
 inter-component messages, **multiple middlewares** in one component, and a
-component that lives in **its own package**, declared by a `Definition` and
+component that lives in **its own package**, declared by a `Comp` alias, `DefaultSpec()`, and
 built by a system builder.
 
 The example is `examples/tickingping`, a two-component setup where Agent A
@@ -125,10 +125,10 @@ Two operations matter on a port:
   `Peek` looks without consuming, so you can decide you cannot handle a
   message yet and leave it; `Retrieve` is the commit.
 
-The next page shows the middlewares that call these, and the `Definition`
+The next page shows the middlewares that call these, and the default configuration
 that ties the component together.
 
 ## Where to Next
 
-Next: the component's **Definition** and the two middlewares that push and
+Next: the component's **default configuration** and the two middlewares that push and
 pull messages through its port.

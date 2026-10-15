@@ -1,5 +1,4 @@
-// Package wrongname is a synthetic component whose definition var violates
-// the naming contract. The inspector must reject it.
+// Package wrongname omits the required DefaultSpec function.
 package wrongname
 
 import (
@@ -20,5 +19,4 @@ type (
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Def is misnamed on purpose: the contract requires "Definition".
-var Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{}
+func Defaults() Spec { return Spec{} }

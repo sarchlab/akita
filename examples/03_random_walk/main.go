@@ -8,6 +8,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -42,9 +43,9 @@ type Middlewares struct {
 // Comp is the walker, a ticking component.
 type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
-// Definition declares the walker.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: 1 * timing.GHz, WallDistance: 10},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, WallDistance: 10}
 }
 
 func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
@@ -80,7 +81,7 @@ func (m *walkMW) Handle(_ timing.Event) bool {
 func main() {
 	s := sim.MakeBuilder().Build()
 
-	walker := Definition.Builder().
+	walker := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(s).
 		WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
 		Build("Walker")

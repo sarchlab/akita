@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Component is an instance of a ticking component type, built from its
-// Definition. It adds the clock to what the component models share.
+// Component is an instance of a ticking component type, built with modeling.MakeBuilder.
+// It adds the clock to what the component models share.
 //
 // Its exported fields, the five structs, come from the embedded
 // ComponentBase:

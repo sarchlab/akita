@@ -30,7 +30,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 
 	// Spec is the instance's configuration, given to Build. It is fixed from
 	// then on; Build copies its slices, so the instance shares none with
-	// DefaultSpec.
+	// the caller's Spec.
 	Spec S
 
 	// State is the instance's mutable runtime data. Only the component itself

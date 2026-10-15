@@ -4,13 +4,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -39,7 +39,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumReqPerCycle = 1
 		spec.NumBanks = 1
 		spec.NumMSHREntry = 8
@@ -51,9 +51,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.MaxNumConcurrentTrans = 16
 
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
 		compPorts := makePorts("L1Cache", 16)

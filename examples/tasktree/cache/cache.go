@@ -55,9 +55,9 @@ type Middlewares struct {
 // Comp is the cache, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the cache.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: 1 * timing.GHz},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz}
 }
 
 func (initialState *State) Initialize(_ *Comp) {

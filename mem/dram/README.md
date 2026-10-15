@@ -126,7 +126,7 @@ Activate → Read/Write → Precharge → (next row)
 ## Builder Pattern
 
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
-preset (or `Definition.DefaultSpec`), tweak the fields you need, and pass it in. Wiring is
+preset (or `DefaultSpec()`), tweak the fields you need, and pass it in. Wiring is
 supplied through `WithSimulation` (which provides the engine and registers the
 component), `WithResources` (the backing storage), and `component.BindPort` after Build (the port instances).
 
@@ -137,9 +137,8 @@ spec.PagePolicy = dram.PagePolicyOpen
 
 storage := mem.NewStorage(4 * mem.GB)
 
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
@@ -153,7 +152,7 @@ topPort := ctrl.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` or a preset (DDR4Spec, HBM2Spec, ...) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` or a preset (DDR4Spec, HBM2Spec, ...) |
 | `WithResources(Resources{Storage: s})` | Backing storage (required; no longer built internally) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
@@ -164,7 +163,7 @@ controller per channel), if `BurstLength` is 0, or if `Scheduler` or
 The storage is indexed by the global request address, so it must cover every
 address the controller serves. To cover the whole geometry of a Spec, size it
 to `NumCol × NumRow × DeviceWidth/8 × NumBank × BusWidth/DeviceWidth × NumRank
-× NumChannel` bytes (4 GiB for `Definition.DefaultSpec`); storage is allocated
+× NumChannel` bytes (4 GiB for `DefaultSpec()`); storage is allocated
 lazily, so a large capacity costs nothing until it is touched.
 
 ### Commonly Tweaked Spec Fields

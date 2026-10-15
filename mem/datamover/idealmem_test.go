@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -15,9 +16,8 @@ func buildIdealMem(
 	storage *mem.Storage,
 	name string,
 ) *idealmemcontroller.Comp {
-	builtComponent := idealmemcontroller.Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*idealmemcontroller.Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		Build(name)
 

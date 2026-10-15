@@ -1,23 +1,18 @@
 package memaccessagent
 
 import (
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the MemAccessAgent, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:       1 * timing.GHz,
 		MaxAddress: 1024 * 1024,
 		WriteLeft:  1000,
 		ReadLeft:   1000,
 		RandSeed:   1,
-	},
+	}
 }
 
 func (initialState *State) Initialize(c *Comp) {

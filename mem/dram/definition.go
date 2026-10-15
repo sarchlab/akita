@@ -1,23 +1,12 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the DRAM controller, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-//
-// Strategy and behavior selection is by configuration, not by injecting
-// objects: the scheduler and address mapper are chosen by the Spec.Scheduler /
-// Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and
-// refresh is a middleware. New strategies/behaviors are added in-tree and
-// registered — the model the reference simulators use.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                 1600 * timing.MHz,
 		Protocol:             int(protoDDR3),
 		TAL:                  0,
@@ -54,7 +43,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		NumCol:               1024,
 		TransactionQueueSize: 32,
 		CommandQueueCapacity: 8,
-	},
+	}
 }
 
 // Initialize creates the State of a freshly built controller: empty queues and

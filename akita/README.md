@@ -11,10 +11,10 @@ subcommands.
 
 Follow the [component tutorial](../doc/tutorial/components/01_what_is_a_component.md)
 and the runnable [examples](../examples/). A component declares Spec, State,
-Resources, Ports, Middlewares, and a package-level `Definition` using one of
+Resources, Ports, Middlewares, and a package-level `DefaultSpec()` function using one of
 `sim/modeling/ticking`, `sim/modeling/wakeup`, or `sim/modeling/event`.
 
-Build instances from the Definition, bind ports, and call
+Build with `modeling.MakeBuilder[*Comp](DefaultSpec())`, bind ports, and call
 `simulation.Initialize()` before seeding work or running. Add a
 `modelingtest.CheckTicking`, `CheckWakeup`, or `CheckEvent` test for the chosen
 model. The `inspect` Go package reads component definitions without running

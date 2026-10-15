@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -11,7 +12,7 @@ type Builder struct {
 }
 
 // MakeBuilder starts with the endpoint's default configuration.
-func MakeBuilder() Builder { return Builder{builder: Definition.Builder()} }
+func MakeBuilder() Builder { return Builder{builder: modeling.MakeBuilder[*Comp](DefaultSpec())} }
 
 // WithSimulation sets the owning simulation.
 func (b Builder) WithSimulation(s timing.Simulation) Builder {

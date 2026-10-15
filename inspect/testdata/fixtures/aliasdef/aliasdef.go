@@ -1,5 +1,4 @@
-// Package aliasdef declares its definition through a type alias. The
-// inspector must see through the alias.
+// Package aliasdef declares Comp through another type alias.
 package aliasdef
 
 import (
@@ -25,11 +24,11 @@ type (
 	Middlewares struct{}
 )
 
-// Def aliases the definition type.
-type Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]
+// Def aliases the component type.
+type Def = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Comp is the component.
-type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = Def
 
-// Definition declares the component through the alias.
-var Definition = Def{DefaultSpec: Spec{Freq: timing.GHz, Depth: 8}}
+// DefaultSpec returns the default configuration.
+func DefaultSpec() Spec { return Spec{Freq: timing.GHz, Depth: 8} }

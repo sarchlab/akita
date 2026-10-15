@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // buildWired builds a cache named "Cache" with the given spec and resources.
@@ -21,9 +21,8 @@ func buildWired(res Resources, spec Spec) *Comp {
 		res.Storage = mem.NewStorage(spec.TotalByteSize)
 	}
 
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(res).
 		Build("Cache")
 	builtComponentPorts := makePorts("Cache", 4)
@@ -41,10 +40,10 @@ func buildWired(res Resources, spec Spec) *Comp {
 func TestBuildMapsRemotePorts(t *testing.T) {
 	ports := []messaging.RemotePort{"DRAM0", "DRAM1"}
 
-	single := Definition.DefaultSpec
+	single := DefaultSpec()
 	single.Bottom.Destinations = ports[:1]
 
-	interleaved := Definition.DefaultSpec
+	interleaved := DefaultSpec()
 	interleaved.Bottom.Destinations = ports
 
 	interleaved.Bottom.InterleavingSize = 4096
@@ -74,7 +73,7 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 
 // TestRestoreRejectsChangedRouting confirms destinations participate in the Spec hash.
 func TestRestoreRejectsChangedRouting(t *testing.T) {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"OldMemory.Top"}
 	saved := buildWired(Resources{}, spec)
 	var checkpoint bytes.Buffer
@@ -99,7 +98,7 @@ func TestRestoreRejectsChangedRouting(t *testing.T) {
 
 // TestInitializationRejectsIncompleteInterleaving checks invalid routing during initialization.
 func TestInitializationRejectsIncompleteInterleaving(t *testing.T) {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 
 	spec.Bottom.InterleavingSize = 4096
 
@@ -114,11 +113,10 @@ func TestInitializationRejectsIncompleteInterleaving(t *testing.T) {
 func TestBuildRequiresStorage(t *testing.T) {
 	assertPanics(t, "Resources.Storage is required", func() {
 		setupSim1 := akitasim.MakeBuilder().Build()
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
-		builtComponent := Definition.Builder().
+		builtComponent := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(setupSim1).
-			WithSpec(spec).
 			Build("Cache")
 		builtComponentPorts := makePorts("Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)

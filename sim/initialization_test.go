@@ -32,11 +32,8 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			s := builder.Build()
 			t.Cleanup(s.Terminate)
 			calls := 0
-			def := ticking.Definition[
-				tickCountSpec, initializationState, initializationResources, initializationPorts, modeling.None]{
-				DefaultSpec: tickCountSpec{Freq: timing.GHz},
-			}
-			c := def.Builder().WithSimulation(s).WithResources(initializationResources{Calls: &calls}).Build("GPU.SA.CU")
+			def := modeling.MakeBuilder[*initializationComp](tickCountSpec{Freq: timing.GHz})
+			c := def.WithSimulation(s).WithResources(initializationResources{Calls: &calls}).Build("GPU.SA.CU")
 			require.Zero(t, calls)
 			require.ErrorContains(t, s.Run(), "Initialize")
 			path := filepath.Join(t.TempDir(), "snapshot.tar.gz")
@@ -56,7 +53,7 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.Same(t, conn, p.Connection())
 			require.NoError(t, s.Run())
 			require.Error(t, s.Initialize())
-			require.Panics(t, func() { def.Builder().WithSimulation(s).Build("Late") })
+			require.Panics(t, func() { def.WithSimulation(s).Build("Late") })
 			require.Panics(t, func() { c.BindPort("Top", twowaybuffered.NewPort(1, 1)) })
 			require.Panics(t, func() { direct.NewConnection("Late", s, timing.GHz) })
 			require.Panics(t, func() { conn.BindPort(twowaybuffered.NewPort(1, 1)) })

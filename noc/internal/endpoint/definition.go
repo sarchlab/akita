@@ -3,23 +3,18 @@ package endpoint
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the endpoint, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// MakeBuilder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:              1 * timing.GHz,
 		NumInputChannels:  1,
 		NumOutputChannels: 1,
 		FlitByteSize:      32,
 		EncodingOverhead:  0.25,
-	},
+	}
 }
 
 // Initialize creates behavior over the device ports bound to DeviceConnection.

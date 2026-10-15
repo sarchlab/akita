@@ -67,20 +67,19 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from
+`DefaultSpec()`); the engine and registration come from
 `WithSimulation`; storage comes from
 `WithResources`; the port instances come from `component.BindPort` after Build.
 
 ```go
-spec := writethrough.Definition.DefaultSpec
+spec := writethrough.DefaultSpec()
 spec.WritePolicyType = "write-through"
 spec.TotalByteSize = 256 * mem.KB
 spec.WayAssociativity = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
-cache := writethrough.Definition.Builder().
+cache := modeling.MakeBuilder[*writethrough.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(writethrough.Resources{
         Storage:       mem.NewStorage(spec.TotalByteSize),
     }).
@@ -97,7 +96,7 @@ topPort := cache.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. |
 | `WithResources(r)` | Backing storage (required). |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

@@ -11,8 +11,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Component is an instance of an event component type, built from its
-// Definition. It adds the scheduling of its own events to what the
+// Component is an instance of an event component type, built with modeling.MakeBuilder.
+// It adds the scheduling of its own events to what the
 // component models share.
 //
 // Its exported fields, the five structs, come from the embedded

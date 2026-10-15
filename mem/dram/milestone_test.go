@@ -74,7 +74,7 @@ var _ = Describe("DRAM admission milestones", func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 
-		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
+		memCtrl = buildDRAM(sim, DefaultSpec(), "MemCtrl", 16)
 		Expect(sim.Initialize()).To(Succeed())
 
 		topPort = memCtrl.Ports.Top
@@ -124,7 +124,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.TREFI = 1
 		spec.TRFC = 3
 

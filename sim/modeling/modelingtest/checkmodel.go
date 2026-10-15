@@ -15,13 +15,13 @@ import (
 )
 
 // CheckTicking asserts that the inspector's static view of the package that
-// declares the Spec type S matches a live ticking.Definition: the same
+// declares the Spec type S matches the component type and DefaultSpec() value: the same
 // defaults, the ports of P (with the same port groups), and the middlewares
 // of M in the same order. Every component adds one test calling it (or
 // CheckWakeup or CheckEvent), which turns "the static and runtime views
 // agree" into a CI guarantee instead of a convention.
 func CheckTicking[S, T, R, P, M any](
-	t *testing.T, def ticking.Definition[S, T, R, P, M],
+	t *testing.T, _ *ticking.Component[S, T, R, P, M], defaults S,
 ) {
 	t.Helper()
 	specType := reflect.TypeFor[S]()
@@ -32,23 +32,23 @@ func CheckTicking[S, T, R, P, M any](
 	if !ok || f.Type != reflect.TypeFor[timing.Freq]() {
 		t.Fatalf("Spec %s must have a Freq timing.Freq field", specType)
 	}
-	checkModel[S, P, M](t, schema.ModelTicking, def.DefaultSpec)
+	checkModel[S, P, M](t, schema.ModelTicking, defaults)
 }
 
-// CheckWakeup is CheckTicking for a wakeup.Definition.
+// CheckWakeup is CheckTicking for a wakeup.Component.
 func CheckWakeup[S, T, R, P, M any](
-	t *testing.T, def wakeup.Definition[S, T, R, P, M],
+	t *testing.T, _ *wakeup.Component[S, T, R, P, M], defaults S,
 ) {
 	t.Helper()
-	checkModel[S, P, M](t, schema.ModelWakeup, def.DefaultSpec)
+	checkModel[S, P, M](t, schema.ModelWakeup, defaults)
 }
 
-// CheckEvent is CheckTicking for an event.Definition.
+// CheckEvent is CheckTicking for an event.Component.
 func CheckEvent[S, T, R, P, M any](
-	t *testing.T, def event.Definition[S, T, R, P, M],
+	t *testing.T, _ *event.Component[S, T, R, P, M], defaults S,
 ) {
 	t.Helper()
-	checkModel[S, P, M](t, schema.ModelEvent, def.DefaultSpec)
+	checkModel[S, P, M](t, schema.ModelEvent, defaults)
 }
 
 func checkModel[S, P, M any](t *testing.T, model string, defaultSpec S) {

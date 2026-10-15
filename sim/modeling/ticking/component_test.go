@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -66,8 +65,9 @@ type pokeEvent struct {
 	timing.EventBase
 }
 
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: 1 * timing.GHz, Depth: 2},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, Depth: 2}
 }
 
 func newSim() timing.Simulation {
@@ -80,7 +80,7 @@ func newPort(name string) messaging.Port {
 
 func build(ports Ports) *Comp {
 	setupSim1 := newSim()
-	builtComponent := Definition.Builder().WithSimulation(setupSim1).Build("C")
+	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(setupSim1).Build("C")
 	builtComponentPorts := ports
 	builtComponent.BindPort("In", builtComponentPorts.In)
 	for i, p := range builtComponentPorts.Links {
@@ -135,7 +135,7 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 
 func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 	sim := newSim()
-	c := Definition.Builder().
+	c := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("C")
 	cPorts := Ports{In: newPort("C.In")}
@@ -189,10 +189,10 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		t.Errorf("restored Count = %d, want 7", restored.State.Count)
 	}
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Depth = 3
 	setupSim2 := newSim()
-	other := Definition.Builder().
+	other := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(setupSim2).
 		WithSpec(spec).
 		Build("C")
@@ -219,18 +219,17 @@ type oneMiddleware struct {
 func TestBuildRejectsBadShapes(t *testing.T) {
 	t.Run("no simulation", func(t *testing.T) {
 		mustPanic(t, "WithSimulation is required", func() {
-			Definition.Builder().Build("C")
+			modeling.MakeBuilder[*Comp](DefaultSpec()).Build("C")
 		})
 	})
 
 	t.Run("unset middleware", func(t *testing.T) {
-		def := ticking.Definition[Spec, modeling.None, modeling.None, Ports, oneMiddleware]{
-			DefaultSpec: Definition.DefaultSpec,
-		}
+		def := modeling.MakeBuilder[*ticking.Component[
+			Spec, modeling.None, modeling.None, Ports, oneMiddleware]](DefaultSpec())
 
 		mustPanic(t, "Only is nil after initialization", func() {
 			setupSim3 := newSim()
-			builtComponent := def.Builder().
+			builtComponent := def.
 				WithSimulation(setupSim3).
 				Build("C")
 			builtComponentPorts := Ports{In: newPort("C.In")}
@@ -249,11 +248,11 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 			N int `json:"n"`
 		}
 
-		def := ticking.Definition[noFreq, State, modeling.None, Ports, oneMiddleware]{}
+		def := modeling.MakeBuilder[*ticking.Component[noFreq, State, modeling.None, Ports, oneMiddleware]](noFreq{})
 
 		mustPanic(t, "must have a Freq timing.Freq field", func() {
 			setupSim4 := newSim()
-			builtComponent := def.Builder().
+			builtComponent := def.
 				WithSimulation(setupSim4).
 				Build("C")
 			builtComponentPorts := Ports{In: newPort("C.In")}
@@ -270,7 +269,7 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 
 func TestBuildRejectsZeroFrequency(t *testing.T) {
 	mustPanic(t, `component "ZeroClock": Spec ticking_test.Spec has zero Freq`, func() {
-		Definition.Builder().WithSimulation(newSim()).WithSpec(Spec{Freq: 0}).Build("ZeroClock")
+		modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(newSim()).WithSpec(Spec{Freq: 0}).Build("ZeroClock")
 	})
 }
 

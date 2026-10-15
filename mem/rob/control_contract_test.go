@@ -3,18 +3,18 @@ package rob
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Bottom = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
@@ -22,9 +22,8 @@ func TestControlContract(t *testing.T) {
 			return p
 		}
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("ROB")
 
 		comp.BindPort("Top", port("Top"))

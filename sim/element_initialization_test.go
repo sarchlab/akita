@@ -75,12 +75,12 @@ func (m *wakeMiddlewares) Initialize(c *wakeComp) {
 func buildElements(s *sim.Simulation, p *elementProbe) (*eventComp, *tickComp, *wakeComp) {
 	spec := elementSpec{Freq: timing.GHz, Initial: 7}
 	resources := elementResources{Probe: p}
-	ed := event.Definition[elementSpec, eventState, elementResources, elementPorts, eventMiddlewares]{DefaultSpec: spec}
-	td := ticking.Definition[elementSpec, tickState, elementResources, elementPorts, tickMiddlewares]{DefaultSpec: spec}
-	wd := wakeup.Definition[elementSpec, wakeState, elementResources, elementPorts, wakeMiddlewares]{DefaultSpec: spec}
-	return ed.Builder().WithSimulation(s).WithResources(resources).Build("Event"),
-		td.Builder().WithSimulation(s).WithResources(resources).Build("Ticking"),
-		wd.Builder().WithSimulation(s).WithResources(resources).Build("Wakeup")
+	ed := modeling.MakeBuilder[*eventComp](spec)
+	td := modeling.MakeBuilder[*tickComp](spec)
+	wd := modeling.MakeBuilder[*wakeComp](spec)
+	return ed.WithSimulation(s).WithResources(resources).Build("Event"),
+		td.WithSimulation(s).WithResources(resources).Build("Ticking"),
+		wd.WithSimulation(s).WithResources(resources).Build("Wakeup")
 }
 
 func TestElementInitializationOrderAndRestore(t *testing.T) {
@@ -134,11 +134,12 @@ func TestElementInitializationFailureRequiresRebuild(t *testing.T) {
 
 func TestZeroElementsNeedNoInitializers(t *testing.T) {
 	s := sim.MakeBuilder().Build()
-	def := event.Definition[modeling.None, modeling.None, modeling.None, modeling.None, modeling.None]{}
-	c := def.Builder().WithSimulation(s).Build("Zero")
+	def := modeling.MakeBuilder[*event.Component[
+		modeling.None, modeling.None, modeling.None, modeling.None, modeling.None]](modeling.None{})
+	c := def.WithSimulation(s).Build("Zero")
 	require.NoError(t, s.Initialize())
 	require.Equal(t, modeling.None{}, c.State)
 	require.Equal(t, modeling.None{}, c.Middlewares)
 	require.NoError(t, s.Run())
-	t.Log("Definition{} with zero State and Middlewares initializes and runs without callbacks or methods")
+	t.Log("A zero Spec, State and Middlewares component initializes and runs without callbacks or methods")
 }

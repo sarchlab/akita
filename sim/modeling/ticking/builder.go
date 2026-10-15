@@ -13,11 +13,18 @@ import (
 var freqType = reflect.TypeFor[timing.Freq]()
 
 // Builder builds instances of one ticking component type. Obtain it with
-// Definition.Builder.
+// modeling.MakeBuilder[*Comp](DefaultSpec()).
 type Builder[S, T, R, P, M any] struct {
 	simulation timing.Simulation
 	spec       S
 	resources  R
+}
+
+// MakeBuilder implements modeling.MakeBuilder for this component type.
+// The receiver is unused and may be nil; the returned builder has no runtime
+// state from an existing instance.
+func (*Component[S, T, R, P, M]) MakeBuilder(spec S) Builder[S, T, R, P, M] {
+	return Builder[S, T, R, P, M]{spec: spec}
 }
 
 // WithSimulation sets the simulation the instance belongs to and registers
@@ -29,7 +36,7 @@ func (b Builder[S, T, R, P, M]) WithSimulation(
 	return b
 }
 
-// WithSpec sets the configuration. Start from the definition's DefaultSpec.
+// WithSpec sets the configuration. Start from DefaultSpec().
 func (b Builder[S, T, R, P, M]) WithSpec(spec S) Builder[S, T, R, P, M] {
 	b.spec = spec
 	return b

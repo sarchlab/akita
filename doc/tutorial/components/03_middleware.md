@@ -57,7 +57,7 @@ func (m *Middlewares) Initialize(c *Comp) {
 ```
 
 The simulation calls this method once per instance during initialization, after
-State is initialized. Definition needs no callback registration.
+State is initialized. No callback registration is needed.
 
 A few things to notice:
 
@@ -86,5 +86,5 @@ A few things to notice:
 ## Where to Next
 
 The five structs and the middleware are all the pieces. The last page
-declares the component's **Definition**, builds an instance, and runs the
+declares the component's **default configuration**, builds an instance, and runs the
 simulation.

@@ -3,15 +3,14 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/sim/naming"
-
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/noc/routing"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -131,7 +130,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 ) (switchID int) {
 	switchID = len(c.switches)
 
-	spec := switches.Definition.DefaultSpec
+	spec := switches.DefaultSpec()
 	spec.Freq = c.defaultFreq
 
 	c.switches = append(c.switches, &switchNode{
@@ -195,7 +194,7 @@ func (c *Connector) createEndPoint(
 	swNode *switchNode,
 	epPort, swPort messaging.Port,
 ) *deviceNode {
-	epSpec := endpoint.Definition.DefaultSpec
+	epSpec := endpoint.DefaultSpec()
 	epSpec.Freq = c.defaultFreq
 	epSpec.FlitByteSize = c.flitSize
 	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel
@@ -331,9 +330,8 @@ func (c *Connector) BuildSwitches() {
 
 		node.spec.Links = node.links
 		node.spec.Routes, node.spec.DefaultRoute = node.table.Snapshot()
-		node.sw = switches.Definition.Builder().
+		node.sw = modeling.MakeBuilder[*switches.Comp](node.spec).
 			WithSimulation(c.simulation).
-			WithSpec(node.spec).
 			Build(node.name)
 		bindingPorts := switches.Ports{Links: node.ports}
 		for i, p := range bindingPorts.Links {

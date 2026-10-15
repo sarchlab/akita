@@ -3,8 +3,8 @@
 // Spec.WritePolicyType string field.
 //
 // The cache is a ticking component. The system builder builds it with
-// Definition.Builder(): configuration is supplied as a whole through WithSpec
-// (start from Definition.DefaultSpec), the engine and registration come from
+// modeling.MakeBuilder[*Comp](DefaultSpec()): configuration is supplied as a whole through WithSpec
+// (start from DefaultSpec()), the engine and registration come from
 // WithSimulation, the required shared storage is supplied through WithResources,
 // and routing is configured by Spec.Bottom.
 // and the Top, Bottom, and Control port instances, created with

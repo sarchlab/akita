@@ -11,12 +11,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/monitoring"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
-	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -54,22 +54,21 @@ func buildEnvironment(
 		Control: twowaybuffered.NewPort(16, 16),
 	}
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
 	agentSpec.LowModule = "Cache.Top"
-	agent := memaccessagent.Definition.Builder().
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
 	dram := buildDRAM(s)
 
-	cacheSpec := writeback.Definition.DefaultSpec
+	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.TotalByteSize = 16 * mem.KB
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4
@@ -77,9 +76,8 @@ func buildEnvironment(
 	cacheSpec.NumReqPerCycle = 16
 
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
-	writeBackCache := writeback.Definition.Builder().
+	writeBackCache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(s).
-		WithSpec(cacheSpec).
 		WithResources(writeback.Resources{Storage: mem.MakeStorageBuilder().
 			WithCapacity(cacheSpec.TotalByteSize).
 			WithSimulation(s).
@@ -107,9 +105,8 @@ func buildEnvironment(
 
 // buildDRAM builds and registers the backing ideal memory controller.
 func buildDRAM(s *sim.Simulation) *idealmemcontroller.Comp {
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 		WithSimulation(s).
-		WithSpec(idealmemcontroller.Definition.DefaultSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(4 * mem.GB).

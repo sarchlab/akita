@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -37,7 +38,7 @@ var _ = Describe("MMUCache control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096
@@ -45,9 +46,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),

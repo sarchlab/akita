@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -33,12 +34,11 @@ var _ = Describe("TLB control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 
 		spec.Bottom.Destinations = []messaging.RemotePort{remotePort}
-		tlbComp = Definition.Builder().
+		tlbComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)

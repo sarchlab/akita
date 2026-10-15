@@ -46,13 +46,12 @@ Invalidate and Flush are answered as unsupported.
 ## Builder Pattern
 
 ```go
-spec := mmu.Definition.DefaultSpec
+spec := mmu.DefaultSpec()
 spec.Latency = 100
 spec.AutoPageAllocation = true
 
-m := mmu.Definition.Builder().
+m := modeling.MakeBuilder[*mmu.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
 m.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -62,7 +61,7 @@ m.BindPort("Control", twowaybuffered.NewPort(4, 4))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

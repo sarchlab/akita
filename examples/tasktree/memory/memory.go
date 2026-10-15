@@ -52,9 +52,9 @@ type Middlewares struct {
 // Comp is the memory, a ticking component. It keeps no State.
 type Comp = ticking.Component[Spec, modeling.None, modeling.None, Ports, Middlewares]
 
-// Definition declares the memory.
-var Definition = ticking.Definition[Spec, modeling.None, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: 1 * timing.GHz},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz}
 }
 
 func (initialMiddlewares *Middlewares) Initialize(c *Comp) {

@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -51,15 +52,14 @@ var _ = Describe("Ideal Memory Controller", func() {
 	// the shared storage, and plugs a noopConn so its ports can be driven.
 	build := func(topBufSize int) {
 		sim = testsim.New(engine, false)
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		memController = Definition.Builder().
+		memController = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithSpec(spec).
 			Build("MemCtrl")
 		memControllerPorts := makePorts("MemCtrl", topBufSize)
 		memController.BindPort("Top", memControllerPorts.Top)

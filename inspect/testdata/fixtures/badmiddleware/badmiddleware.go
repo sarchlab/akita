@@ -26,7 +26,7 @@ func (p *pipeline) Tick() bool { return false }
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{}
+func DefaultSpec() Spec { return Spec{} }
 
 func (initialMiddlewares *Middlewares) Initialize(c *Comp) {
 	*initialMiddlewares = Middlewares{Pipeline: &pipeline{comp: c}}

@@ -69,11 +69,11 @@
 //
 //	type Comp = event.Component[Spec, State, Resources, Ports, Middlewares]
 //
-//	var Definition = event.Definition[Spec, State, Resources, Ports, Middlewares]{
-//	    DefaultSpec:    Spec{Latency: 100},
+//	func DefaultSpec() Spec {
+//	    return Spec{Latency: 100}
 //	}
 //
-//	comp := mem.Definition.Builder().
+//	comp := modeling.MakeBuilder[*mem.Comp](mem.DefaultSpec()).
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    Build("Mem")

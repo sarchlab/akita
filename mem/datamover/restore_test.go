@@ -5,20 +5,19 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
 	setupSim1 := akitasim.MakeBuilder().Build()
-	routingSpec1 := Definition.DefaultSpec
+	routingSpec1 := DefaultSpec()
 
 	routingSpec1.Inside.Destinations = []messaging.RemotePort{inside}
 
 	routingSpec1.Outside.Destinations = []messaging.RemotePort{outside}
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](routingSpec1).
 		WithSimulation(setupSim1).
-		WithSpec(routingSpec1).
 		Build("DataMover")
 	builtComponentPorts := makePorts("DataMover", 1, 1, 1, 1)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)

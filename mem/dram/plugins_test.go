@@ -33,7 +33,7 @@ func (t *cmdTracer) MilestoneAdded(m tasks.Milestone) {
 
 var _ = Describe("P1: strategy selection", func() {
 	It("selects the default strategies from a default spec", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		ctrl := newController(&spec)
 
 		Expect(ctrl.scheduler.Name()).To(Equal("FRFCFS"))
@@ -41,23 +41,23 @@ var _ = Describe("P1: strategy selection", func() {
 	})
 
 	It("derives the row policy from PagePolicy", func() {
-		open := Definition.DefaultSpec
+		open := DefaultSpec()
 		open.PagePolicy = PagePolicyOpen
 		Expect(newController(&open).rowPolicy.Name()).To(Equal("open"))
 
-		closed := Definition.DefaultSpec
+		closed := DefaultSpec()
 		closed.PagePolicy = PagePolicyClose
 		Expect(newController(&closed).rowPolicy.Name()).To(Equal("close"))
 	})
 
 	It("selects a scheduler by its Spec registry key", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Scheduler = "FRFCFS"
 		Expect(newController(&spec).scheduler.Name()).To(Equal("FRFCFS"))
 	})
 
 	It("panics on an unknown registry key", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Scheduler = "does-not-exist"
 		Expect(func() { newController(&spec) }).To(Panic())
 	})
@@ -65,7 +65,7 @@ var _ = Describe("P1: strategy selection", func() {
 
 var _ = Describe("P1: command tracing", func() {
 	It("records command milestones without changing results", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		tracer := newCmdTracer()
 
 		// Same workload, with and without the tracer.

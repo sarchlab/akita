@@ -42,11 +42,16 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
   name) directly. Spec participates in checkpoint compatibility checks.
 
 Runtime validation, static inspection, literal default extraction, and schema
-output must accept the same Spec shapes. Definition contains only DefaultSpec.
+output must accept the same Spec shapes. A package declares a Comp alias for
+its component model and func DefaultSpec() Spec, which directly returns a keyed
+Spec literal with constant leaves. The inspector reads those declarations without
+executing code; there is no component Definition variable or type.
+Build with `modeling.MakeBuilder[*Comp](DefaultSpec())`. The caller supplies the
+Spec explicitly; a package-level function is never discovered at runtime.
 State and Middlewares may each define a pointer-receiver Initialize(*Comp)
 method with no return value. Omission preserves the zero value; middleware
 fields must still be valid, non-nil modeling.Middleware values after initialization.
-There are no Definition validator or creator callbacks. Spec and Resources are
+There are no validator or creator registration callbacks. Spec and Resources are
 supplied through the builder; Ports are bound by the system builder. Initializers
 must not change Spec, Resources, Ports, or another component's State.
 

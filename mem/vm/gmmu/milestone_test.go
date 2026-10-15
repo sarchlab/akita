@@ -4,10 +4,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -112,15 +112,14 @@ var _ = Describe("GMMU milestones", func() {
 		sim = testsim.New(engine, true)
 		pageTable = vm.NewPageTable(12)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.Bottom = lowModulePort
 
-		gmmuComp = Definition.Builder().
+		gmmuComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(spec).
 			Build("GMMU")
 		gmmuCompPorts := defaultPorts("GMMU")
 		gmmuComp.BindPort("Top", gmmuCompPorts.Top)

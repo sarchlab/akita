@@ -12,6 +12,6 @@ type Ports struct{}
 type Middlewares struct{}
 type Comp = event.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-var Definition = event.Definition[Spec, State, modeling.None, Ports, Middlewares]{}
+func DefaultSpec() Spec { return Spec{} }
 
 func (*Middlewares) Initialize() {}

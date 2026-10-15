@@ -49,11 +49,11 @@
 //
 //	type Comp = wakeup.Component[Spec, State, Resources, Ports, Middlewares]
 //
-//	var Definition = wakeup.Definition[Spec, State, Resources, Ports, Middlewares]{
-//	    DefaultSpec:    Spec{Latency: 100},
+//	func DefaultSpec() Spec {
+//	    return Spec{Latency: 100}
 //	}
 //
-//	comp := agent.Definition.Builder().
+//	comp := modeling.MakeBuilder[*agent.Comp](agent.DefaultSpec()).
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    Build("Agent")

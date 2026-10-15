@@ -14,6 +14,6 @@ type (
 	Middlewares struct{}
 )
 
-var Definition = event.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{N: 1},
-}
+type Comp = event.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+func DefaultSpec() Spec { return Spec{N: 1} }

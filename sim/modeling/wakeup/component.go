@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Component is an instance of a wakeup component type, built from its
-// Definition. It adds wakeups to what the component models share.
+// Component is an instance of a wakeup component type, built with modeling.MakeBuilder.
+// It adds wakeups to what the component models share.
 //
 // Its exported fields, the five structs, come from the embedded
 // ComponentBase:

@@ -41,9 +41,9 @@ func (idleMW) Handle(timing.Event) bool { return false }
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: timing.GHz,
+func DefaultSpec() Spec {
+	return Spec{Freq: timing.GHz,
 		StringNumber: 18446744073709551615, Fraction: 0.1, Choice: Escaped,
 		Lanes: []int{1, 2},
-	},
+	}
 }

@@ -48,9 +48,9 @@ type Middlewares struct {
 // arrives or when a ping or response it holds becomes due.
 type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the ping component.
-var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{}
 }
 
 func (initialMiddlewares *Middlewares) Initialize(c *Comp) {

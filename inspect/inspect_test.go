@@ -31,6 +31,13 @@ var expectedErrors = []struct {
 	pkgSubstr string
 	msgSubstr string
 }{
+	{"defaultargs", "fixtures/defaultargs", "must have signature func DefaultSpec() Spec"},
+	{"defaultresult", "fixtures/defaultresult", "must have signature func DefaultSpec() Spec"},
+	{"defaultvar", "fixtures/defaultvar", "must be a package-level function"},
+	{"defaultstatements", "fixtures/defaultstatements", "must contain only return Spec{...}"},
+	{"defaultgeneric", "fixtures/defaultgeneric", "must have signature func DefaultSpec() Spec"},
+	{"missingcomp", "fixtures/missingcomp", "requires a Comp component type alias"},
+	{"genericcomp", "fixtures/genericcomp", "must have five concrete element types"},
 	{"custom IsZero", "fixtures/customzero", "spec.Value with custom IsZero"},
 	{"dash scalar", "fixtures/dashscalar", "spec.Hidden must not be tagged"},
 	{"missing ticking Freq", "fixtures/nofreq", "must have a Freq timing.Freq field"},
@@ -41,13 +48,13 @@ var expectedErrors = []struct {
 	{"nonfinite", "fixtures/nonfinite", "non-finite"},
 	{"non-constant default", "fixtures/nonconst",
 		"not statically analyzable"},
-	{"misnamed definition var", "fixtures/wrongname",
-		`must be named "Definition"`},
+	{"missing default function", "fixtures/wrongname",
+		"requires func DefaultSpec() Spec"},
 	{"unkeyed literal", "fixtures/unkeyed", "must be keyed"},
 	{"container field", "fixtures/containerfield",
 		"Spec fields must be scalars"},
 	{"computed definition", "fixtures/computed",
-		"must be initialized with a composite literal"},
+		"must contain only return Spec{...}"},
 	{"pointer definition", "fixtures/pointerdef", "not a pointer"},
 	{"container behind json dash", "fixtures/dashcontainer",
 		"Spec fields must be scalars"},
@@ -138,6 +145,7 @@ func TestInspect(t *testing.T) {
 // forms: through type aliases, with untyped ports, and with no ports.
 func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 	t.Helper()
+	checkNoExecution(t, byPkg)
 
 	t.Run("definitions declared through aliases", func(t *testing.T) {
 		for pkg, depth := range map[string]int64{
@@ -327,7 +335,7 @@ func checkError(t *testing.T, errs []error, pkgSubstr, msgSubstr string) {
 // TestModuleDiscovery inspects the whole module. Instead of pinning the
 // number of definitions, which changes with every new component, it checks
 // that the inspector extracts a definition from exactly the packages whose
-// source declares a package-level Definition var, so a definition it skips
+// source declares a Comp type alias, so a definition it skips
 // or cannot read still fails the test.
 func TestModuleDiscovery(t *testing.T) {
 	defs, errs := inspect.Inspect(inspect.Options{Dir: ".."}, "./...")
@@ -362,7 +370,7 @@ func TestModuleDiscovery(t *testing.T) {
 }
 
 // definitionDirs lists, sorted and relative to root, the package directories
-// in which a non-test Go file declares a package-level var named Definition.
+// in which a non-test Go file declares a type alias named Comp.
 // It skips what "./..." skips: testdata, directories starting with "." or
 // "_", nested modules, and files excluded by build constraints.
 func definitionDirs(t *testing.T, root string) []string {
@@ -422,8 +430,8 @@ func skipDir(path, name string) bool {
 	return err == nil
 }
 
-// declaresDefinition reports whether the Go file declares a package-level var
-// named Definition.
+// declaresDefinition reports whether the Go file declares a type alias
+// named Comp.
 func declaresDefinition(t *testing.T, path string) bool {
 	t.Helper()
 
@@ -435,15 +443,13 @@ func declaresDefinition(t *testing.T, path string) bool {
 
 	for _, decl := range file.Decls {
 		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.VAR {
+		if !ok || gen.Tok != token.TYPE {
 			continue
 		}
 
 		for _, spec := range gen.Specs {
-			for _, name := range spec.(*ast.ValueSpec).Names {
-				if name.Name == "Definition" {
-					return true
-				}
+			if spec.(*ast.TypeSpec).Name.Name == "Comp" {
+				return true
 			}
 		}
 	}
@@ -495,4 +501,15 @@ func checkFlatRecordFields(t *testing.T, def schema.Definition) {
 		field.Fields[1].Min == nil || *field.Fields[1].Min != 0 {
 		t.Fatalf("record fields = %+v", field.Fields)
 	}
+}
+
+func checkNoExecution(t *testing.T, byPkg map[string]schema.Definition) {
+	t.Helper()
+	t.Run("inspection does not execute package code", func(t *testing.T) {
+		def, ok := byPkg[fixturePath("noexecution")]
+		if !ok || len(def.Spec) != 1 || def.Spec[0].Default != int64(17) {
+			t.Fatalf("expected defaults from the package whose init panics; got %+v", def)
+		}
+		t.Log("Read DefaultSpec's N=17 without executing the package's panic in init")
+	})
 }

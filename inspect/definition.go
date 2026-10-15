@@ -17,70 +17,46 @@ const (
 	middlewareName = "Middleware"
 )
 
-// extractModel returns the extractor for the Definition literal of a
-// component model (modeling/ticking, modeling/wakeup, or modeling/event): a
-// component defined by five structs. The component type is identified by its
-// package, so its name is the package name. The Spec defaults come from the
-// literal; the Resources, Ports, and Middlewares come from the type
-// arguments.
-func extractModel(model string) func(
-	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
-) (*schema.Definition, error) {
-	return func(
-		pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
-	) (*schema.Definition, error) {
-		return extractModelDefinition(pkg, lit, index, model)
-	}
-}
-
+// extractModelDefinition reads the five element types from Comp and defaults
+// from DefaultSpec. The resulting schema is independent of the declaration syntax.
 func extractModelDefinition(
-	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex, model string,
+	pkg *packages.Package, component *types.Named, index pkgIndex, model string,
 ) (*schema.Definition, error) {
-	args, err := definitionTypeArgs(pkg, lit)
-	if err != nil {
-		return nil, err
+	args := make([]types.Type, 5)
+	for i := range args {
+		args[i] = component.TypeArgs().At(i)
 	}
 	specType, resType, portsType, mwType := args[0], args[2], args[3], args[4]
-
-	if err := validateInitializers(pkg, lit, args); err != nil {
+	if err := validateInitializers(pkg, component, args); err != nil {
 		return nil, err
 	}
-
 	if err := validateSpecType(pkg, specType, index); err != nil {
 		return nil, err
 	}
-
-	def := &schema.Definition{
-		Kind:  schema.KindComponent,
-		Model: model,
-		Name:  pkg.Types.Name(),
-	}
-
-	defaults, err := applyDefinitionFields(pkg, lit)
+	lit, err := defaultSpecLiteral(pkg, specType)
 	if err != nil {
 		return nil, err
 	}
-
+	defaults, err := evalStructLiteral(pkg, lit)
+	if err != nil {
+		return nil, err
+	}
+	def := &schema.Definition{Kind: schema.KindComponent, Model: model, Name: pkg.Types.Name()}
 	if def.Spec, err = structFields(pkg, specType, defaults, index); err != nil {
 		return nil, err
 	}
-
 	if err := validateFieldMetadata(pkg, specType, def.Spec); err != nil {
 		return nil, err
 	}
-
 	if def.Resources, err = resourcesOfType(pkg, lit, resType, index); err != nil {
 		return nil, err
 	}
-
 	if def.Ports, err = portsOfType(pkg, lit, portsType, index); err != nil {
 		return nil, err
 	}
-
 	if def.Middlewares, err = middlewaresOfType(pkg, lit, mwType, index); err != nil {
 		return nil, err
 	}
-
 	if model == schema.ModelTicking {
 		freq, _, _ := types.LookupFieldOrMethod(specType, false, pkg.Types, "Freq")
 		if freq == nil || qualifiedTypeName(types.Unalias(freq.Type())) != "github.com/sarchlab/akita/v5/sim/timing.Freq" {
@@ -88,57 +64,6 @@ func extractModelDefinition(
 		}
 	}
 	return def, nil
-}
-
-// definitionTypeArgs returns the five type arguments of the Definition
-// literal: Spec, State, Resources, Ports, and Middlewares.
-func definitionTypeArgs(
-	pkg *packages.Package, lit *ast.CompositeLit,
-) ([]types.Type, error) {
-	tv, ok := pkg.TypesInfo.Types[lit]
-	if !ok {
-		return nil, posErrorf(pkg, lit.Pos(), "cannot resolve Definition literal type")
-	}
-
-	named, ok := types.Unalias(tv.Type).(*types.Named)
-	if !ok || named.TypeArgs().Len() != 5 {
-		return nil, posErrorf(pkg, lit.Pos(),
-			"Definition literal must be instantiated with "+
-				"[Spec, State, Resources, Ports, Middlewares]")
-	}
-
-	args := make([]types.Type, 5)
-	for i := range args {
-		args[i] = named.TypeArgs().At(i)
-	}
-
-	return args, nil
-}
-
-// applyDefinitionFields walks the keyed fields of the Definition literal and
-// returns the evaluated DefaultSpec values. Initialization belongs to the types.
-func applyDefinitionFields(
-	pkg *packages.Package, lit *ast.CompositeLit,
-) (map[string]any, error) {
-	fields, err := keyedElements(pkg, lit)
-	if err != nil {
-		return nil, err
-	}
-
-	defaults := map[string]any{}
-	for key, value := range fields {
-		switch key {
-		case "DefaultSpec":
-			defaults, err = evalStructLiteral(pkg, value)
-		default:
-			err = posErrorf(pkg, value.Pos(), "unsupported Definition field %q", key)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return defaults, nil
 }
 
 // resourcesOfType describes the fields of a Resources struct: the references

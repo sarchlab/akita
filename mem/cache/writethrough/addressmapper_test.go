@@ -3,24 +3,23 @@ package writethrough
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/stretchr/testify/require"
 )
 
 // TestBuildMapsRemotePorts checks routing directly through Spec.Bottom.
 func TestBuildMapsRemotePorts(t *testing.T) {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 
 	spec.Bottom.InterleavingSize = 4096
 
 	setupSim1 := akitasim.MakeBuilder().Build()
 	spec.Bottom.Destinations = []messaging.RemotePort{"DRAM0", "DRAM1"}
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
-		WithSpec(spec).
 		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
 		Build("Cache")
 	compPorts := makePorts("Cache", 4)
@@ -45,11 +44,10 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 func TestBuildRequiresStorage(t *testing.T) {
 	require.PanicsWithValue(t, "writethrough: Resources.Storage is required", func() {
 		setupSim2 := akitasim.MakeBuilder().Build()
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
-		builtComponent := Definition.Builder().
+		builtComponent := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(setupSim2).
-			WithSpec(spec).
 			Build("Cache")
 		builtComponentPorts := makePorts("Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)

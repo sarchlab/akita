@@ -104,7 +104,7 @@ Akita follows semantic versioning within a major version. For the built-in
 components under `mem/` and `noc/`, the v5 promise covers how a simulator
 builds, wires, and reads them:
 
-- the `Definition` and its builder, and the `Comp` type name;
+- the `DefaultSpec()` function, `modeling.MakeBuilder`, and the `Comp` type name;
 - the Spec: field names, JSON names, meaning, and presets;
 - the Resources and the Ports field names;
 - protocol messages and roles;

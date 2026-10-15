@@ -41,7 +41,9 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 			sims := []*Simulation{buildIDTestSimulation(t, parallel), buildIDTestSimulation(t, parallel)}
 			handlers := make([]*allocatingHandler, 2)
 			for i, s := range sims {
-				comp := idTickedDef.Builder().WithSimulation(s).Build("Comp")
+				comp := modeling.MakeBuilder[*ticking.Component[
+					idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]](idTickedDefaultSpec()).
+					WithSimulation(s).Build("Comp")
 				if err := s.Initialize(); err != nil {
 					panic(err)
 				}
@@ -137,8 +139,12 @@ func TestConcurrentSimulationIDAllocation(t *testing.T) {
 
 func TestComponentsScheduleWithSharedSimulationIDs(t *testing.T) {
 	s := buildIDTestSimulation(t, false)
-	ticked := idTickedDef.Builder().WithSimulation(s).Build("Ticked")
-	woken := idWakeupDef.Builder().WithSimulation(s).Build("Woken")
+	ticked := modeling.MakeBuilder[*ticking.Component[
+		idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]](idTickedDefaultSpec()).
+		WithSimulation(s).Build("Ticked")
+	woken := modeling.MakeBuilder[*wakeup.Component[
+		idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]](idWakeupDefaultSpec()).
+		WithSimulation(s).Build("Woken")
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}
@@ -152,12 +158,12 @@ type idSpec struct {
 	Freq timing.Freq `json:"freq"`
 }
 
-// idTickedDef and idWakeupDef define the smallest components of the ticking
-// and wakeup models: no state, no ports, and no behavior.
-var idTickedDef = ticking.Definition[
-	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{
-	DefaultSpec: idSpec{Freq: timing.GHz},
+// idTickedDefaultSpec returns the component's default configuration.
+func idTickedDefaultSpec() idSpec {
+	return idSpec{Freq: timing.GHz}
 }
 
-var idWakeupDef = wakeup.Definition[
-	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{}
+// idWakeupDefaultSpec returns the component's default configuration.
+func idWakeupDefaultSpec() idSpec {
+	return idSpec{}
+}

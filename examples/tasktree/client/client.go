@@ -47,9 +47,9 @@ type Middlewares struct {
 // Comp is the client, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the client.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Freq: 1 * timing.GHz, NumReqs: 1},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, NumReqs: 1}
 }
 
 func (initialState *State) Initialize(_ *Comp) {

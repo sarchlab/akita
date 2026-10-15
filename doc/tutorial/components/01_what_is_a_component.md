@@ -38,19 +38,20 @@ structs, all declared in the component's package:
   middleware reads the Spec, mutates the State, optionally sends messages,
   and returns whether it made progress. For now one middleware is enough.
 
-A package-level variable named `Definition` ties the five together: it
-holds the default Spec and the function that creates the middlewares. The
-component's package declares the type; it does not build instances.
+A `Comp` type alias combines the five elements. A package-level `DefaultSpec()`
+function supplies configuration defaults; optional methods on State and
+Middlewares initialize those elements. The component's package declares the
+type; the system builder creates instances.
 
 ## The System Builder
 
 The code that assembles a simulation — usually `main`, or a test — is the
 **system builder**. It builds each component instance from the component's
-`Definition`, choosing its Spec, supplying its Resources, and creating its
+`Comp` type, choosing its Spec, supplying its Resources, and creating its
 ports. For the walker, that is a few lines in `main`:
 
 ```go
-walker := Definition.Builder().
+walker := modeling.MakeBuilder[*Comp](DefaultSpec()).
     WithSimulation(s).
     WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
     Build("Walker")
@@ -84,7 +85,7 @@ A ticking component's Go type is the generic
 `ticking.Component[Spec, State, Resources, Ports, Middlewares]`. The five
 type parameters are exactly the five structs above. Spelled out in full,
 that type is a mouthful and appears in many places — the middleware, the
-`Definition`, every helper.
+builder, every helper.
 
 The convention throughout Akita is to alias it once per package:
 

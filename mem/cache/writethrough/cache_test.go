@@ -4,15 +4,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
+	"github.com/sarchlab/akita/v5/mem"
 	. "github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -68,7 +67,7 @@ var _ = Describe("Cache", func() {
 		cuPort = newDriverPort("CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dram = idealmemcontroller.Definition.Builder().
+		dram = modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
@@ -80,12 +79,12 @@ var _ = Describe("Cache", func() {
 
 		// The system builder chooses the port buffer sizes. Control is
 		// unused here but every port must still be given.
-		routingSpec1 := Definition.DefaultSpec
+		routingSpec1 := DefaultSpec()
 
 		routingSpec1.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
-		c = Definition.Builder().
-			WithSimulation(sim).WithSpec(routingSpec1).
-			WithResources(Resources{Storage: mem.NewStorage(Definition.DefaultSpec.TotalByteSize)}).
+		c = modeling.MakeBuilder[*Comp](routingSpec1).
+			WithSimulation(sim).
+			WithResources(Resources{Storage: mem.NewStorage(DefaultSpec().TotalByteSize)}).
 			Build("Cache")
 
 		c.BindPort("Top", twowaybuffered.NewPort(4, 4))

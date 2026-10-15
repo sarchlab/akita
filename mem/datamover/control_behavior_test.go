@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -31,7 +32,7 @@ var _ = Describe("DataMover control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.BufferSize = 2048
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
@@ -41,9 +42,8 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.Inside.Destinations = []messaging.RemotePort{insideRemote}
 
 		spec.Outside.Destinations = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
-		dataMover = Definition.Builder().
+		dataMover = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("DataMover")
 		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 1024)
 		dataMover.BindPort("Top", dataMoverPorts.Top)

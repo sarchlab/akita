@@ -20,7 +20,7 @@ set of worked recipes.
 >
 > | Concept | Path | What it gives you |
 > |---|---|---|
-> | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `Definition.Builder()`, `WithResources` |
+> | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `modeling.MakeBuilder[*Comp](DefaultSpec())`, `WithResources` |
 > | Hooks | `v5/hooking/` | `Hook`, `HookCtx`, `AcceptHook` |
 > | Port hook points | `v5/messaging/port.go` | `HookPosPortMsgSend`, `HookPosPortMsgRecvd` |
 > | Ideal component example | `v5/mem/idealmemcontroller/` | A "perfect memory" variant |
@@ -114,7 +114,7 @@ top := twowaybuffered.NewPort(1024, 1024)
 control := twowaybuffered.NewPort(4, 4)
 
 // Real run:
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](dram.DefaultSpec()).
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
@@ -122,7 +122,7 @@ ctrl.BindPort("Top", top)
 ctrl.BindPort("Control", control)
 
 // Idealized run — same ports, drop-in:
-ctrl := idealmemcontroller.Definition.Builder().
+ctrl := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
     WithSimulation(sim).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("DRAM")
@@ -144,13 +144,12 @@ fields. Setting `latency = 0` or `capacity = 1<<30` at build time is not a
 hack — it is the intended way to reach an extreme operating point.
 
 ```go
-spec := tlb.Definition.DefaultSpec
+spec := tlb.DefaultSpec()
 spec.NumSets = 1
 spec.NumWays = 1 << 20 // effectively unbounded
 
-t := tlb.Definition.Builder().
+t := modeling.MakeBuilder[*tlb.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(res).
     Build("TLB")
 t.BindPort("Top", ports.Top)
@@ -209,13 +208,13 @@ replacement for a global lookup.
 pageTable := vm.NewPageTable(12)
 
 // Hand the SAME reference to every consumer at setup.
-m := mmu.Definition.Builder().
+m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
 m.BindPort("Top", mmuPorts.Top)
 m.BindPort("Control", mmuPorts.Control)
-g := gmmu.Definition.Builder().
+g := modeling.MakeBuilder[*gmmu.Comp](gmmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     Build("GMMU")
@@ -360,7 +359,7 @@ hook, which writes it). Nobody reaches into anybody's state.
 ```go
 // Your own counter type, and an Accesses field you add to mmu.Resources.
 accesses := &Counter{}
-m := mmu.Definition.Builder().
+m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable, Accesses: accesses}).
     Build("MMU")

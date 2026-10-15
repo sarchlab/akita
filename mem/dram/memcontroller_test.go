@@ -8,12 +8,13 @@ import (
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 var _ = Describe("Address Operations", func() {
 	It("should map address", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 
 		loc := newAddrMapping(&spec).mapAddress(0)
 		Expect(loc.Channel).To(Equal(uint64(0)))
@@ -207,7 +208,7 @@ var _ = Describe("DRAM Integration", func() {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 1024)
+		memCtrl = buildDRAM(sim, DefaultSpec(), "MemCtrl", 1024)
 	})
 
 	It("should read and write via direct connection", func() {
@@ -449,7 +450,7 @@ var _ = Describe("Open Page Policy", func() {
 
 	BeforeEach(func() {
 		ids = akitasim.MakeBuilder().Build()
-		defaultSpec := Definition.DefaultSpec
+		defaultSpec := DefaultSpec()
 		spec = &defaultSpec
 		st = &state{
 			Transactions: []transactionState{
@@ -1046,7 +1047,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should set page policy via builder", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
 
@@ -1057,7 +1058,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should set R/W queue sizes via builder", func() {
 		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.ReadQueueSize = 8
 		spec.WriteQueueSize = 8
 		spec.WriteHighWatermark = 6
@@ -1104,7 +1105,7 @@ var _ = Describe("Builder Configuration", func() {
 		sim := akitasim.MakeBuilder().Build()
 
 		Expect(func() {
-			builtComponent := Definition.Builder().
+			builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 				WithSimulation(sim).
 				Build("NoStorage")
 			builtComponentPorts := defaultPorts("NoStorage", 16)

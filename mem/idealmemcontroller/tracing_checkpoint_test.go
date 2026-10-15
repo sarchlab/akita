@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -38,9 +39,9 @@ func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*
 	}
 	s := b.Build()
 	t.Cleanup(s.Terminate)
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Latency, spec.Width = 5, 1
-	c := Definition.Builder().WithSimulation(s).WithSpec(spec).WithResources(Resources{
+	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(s).WithResources(Resources{
 		Storage: mem.MakeStorageBuilder().WithCapacity(1024).WithSimulation(s).Build("Storage"),
 	}).Build("Memory")
 	c.BindPort("Top", twowaybuffered.NewPort(8, 8))

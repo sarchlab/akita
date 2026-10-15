@@ -8,7 +8,7 @@ You have now seen both worlds: ticking components from the first section,
 and raw events scheduled directly on the engine from the previous two
 chapters. Akita has three component models, and two of them sit between
 those worlds: they wear the component shape (five structs and a
-`Definition`) but have no clock.
+`Comp` alias and `DefaultSpec()`) but have no clock.
 
 | Model | Runs when | Its middlewares |
 |---|---|---|
@@ -61,8 +61,8 @@ type Middlewares struct {
 
 type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-    DefaultSpec: Spec{},
+func DefaultSpec() Spec {
+    return Spec{}
 }
 
 func (m *Middlewares) Initialize(c *Comp) {
@@ -124,11 +124,11 @@ case pingReq:
 ```go
 sim := sim.MakeBuilder().Build()
 
-agentA := ping.Definition.Builder().
+agentA := modeling.MakeBuilder[*ping.Comp](ping.DefaultSpec()).
     WithSimulation(sim).
     Build("AgentA")
 agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
-agentB := ping.Definition.Builder().
+agentB := modeling.MakeBuilder[*ping.Comp](ping.DefaultSpec()).
     WithSimulation(sim).
     Build("AgentB")
 agentB.BindPort("Out", twowaybuffered.NewPort(16, 16))

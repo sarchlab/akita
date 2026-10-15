@@ -162,6 +162,6 @@ count climbs exponentially.
 So far events are bare functions over global state. The next chapter
 introduces **wakeup and event components**, the two component models
 besides ticking. They wear the component shape you already know from the
-first section — five structs and a `Definition` — but have no clock: they
+first section — five structs, a `Comp` alias, and `DefaultSpec()` — but have no clock: they
 run on demand instead of every cycle. They are the bridge between raw
 events and the default ticking components.

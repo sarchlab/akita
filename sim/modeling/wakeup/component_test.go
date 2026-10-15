@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -51,12 +50,13 @@ func (m *workMW) Handle(e timing.Event) bool {
 	return true
 }
 
-var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Work: 2},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Work: 2}
 }
 
 func build(sim timing.Simulation, spec Spec) *Comp {
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		WithSpec(spec).
 		Build("C")
@@ -82,7 +82,7 @@ func run(t *testing.T, sim timing.Simulation) {
 
 func TestRunsWhileMiddlewaresMakeProgress(t *testing.T) {
 	sim := newSim()
-	c := build(sim, Definition.DefaultSpec)
+	c := build(sim, DefaultSpec())
 
 	c.NotifyRecv(c.Ports.In)
 	run(t, sim)
@@ -112,7 +112,7 @@ func TestWakeAtWakesAtThatTime(t *testing.T) {
 }
 
 func TestCheckpointRoundTrip(t *testing.T) {
-	c := build(newSim(), Definition.DefaultSpec)
+	c := build(newSim(), DefaultSpec())
 	c.State.Work = 7
 
 	var buf bytes.Buffer
@@ -120,7 +120,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
-	restored := build(newSim(), Definition.DefaultSpec)
+	restored := build(newSim(), DefaultSpec())
 	if err := restored.LoadCheckpoint(bytes.NewReader(buf.Bytes())); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}

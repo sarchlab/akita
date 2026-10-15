@@ -22,4 +22,4 @@ type (
 
 type Comp = ticking.Component[Spec, State, *Resources, Ports, Middlewares]
 
-var Definition = ticking.Definition[Spec, State, *Resources, Ports, Middlewares]{}
+func DefaultSpec() Spec { return Spec{} }

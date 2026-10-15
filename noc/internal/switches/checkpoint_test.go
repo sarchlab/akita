@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestSwitchArbCursorRoundTrip guards that the switch's round-robin arbitration
@@ -22,7 +23,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
-	sw := switches.Definition.Builder().
+	sw := modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).
 		WithSimulation(s).
 		Build("Switch")
 	if err := s.Initialize(); err != nil {

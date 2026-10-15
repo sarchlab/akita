@@ -3,11 +3,11 @@ package tlb
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/stretchr/testify/require"
 )
@@ -15,12 +15,12 @@ import (
 func newSingleStageTLB(t *testing.T) *Comp {
 	t.Helper()
 	sim := akitasim.MakeBuilder().Build()
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Latency = 1
 	spec.NumReqPerCycle = 1
 
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
-	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("TLB")
+	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts("TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)
@@ -92,12 +92,12 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 // each request hold the pipeline entry for two cycles and halved throughput.
 func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
 	sim := akitasim.MakeBuilder().Build()
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Latency = 4
 	spec.NumReqPerCycle = 1
 
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
-	comp := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("TLB")
+	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts("TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)

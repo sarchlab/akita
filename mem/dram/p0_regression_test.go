@@ -99,7 +99,7 @@ func (h *p0Harness) collect() (
 
 var _ = Describe("P0: open-page panic regression", func() {
 	openPageSpec := func() Spec {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.PagePolicy = PagePolicyOpen
 		return spec
 	}
@@ -218,7 +218,7 @@ var _ = Describe("P0: channel guard", func() {
 		return func() {
 			sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-			spec := Definition.DefaultSpec
+			spec := DefaultSpec()
 			spec.NumChannel = numChannel
 			buildDRAM(sim, spec, "ChannelGuard", 16)
 			Expect(sim.Initialize()).To(Succeed())

@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/timing"
-
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,12 +27,12 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 	for _, latency := range []int{0, 1} {
 		t.Run(fmt.Sprintf("latency_%d", latency), func(t *testing.T) {
 			s := akitasim.MakeBuilder().WithTaskTracking().Build()
-			sw := Definition.Builder().WithSimulation(s).WithSpec(Spec{
+			sw := modeling.MakeBuilder[*Comp](Spec{
 				Freq:         timing.GHz,
 				DefaultRoute: "Switch.Links[0]",
 				Links: []Link{{Remote: "Destination", Latency: latency,
 					NumInputChannel: 1, NumOutputChannel: 1}},
-			}).Build("Switch")
+			}).WithSimulation(s).Build("Switch")
 			port := twowaybuffered.NewPort(1, 1)
 			sw.BindPort("Links[0]", port)
 			(&tracingTestConnection{}).BindPort(port)

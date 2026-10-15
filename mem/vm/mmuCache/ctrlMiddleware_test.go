@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -28,7 +29,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096
@@ -36,9 +37,8 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("MMUCache")
 		compPorts := defaultPorts("MMUCache")
 		comp.BindPort("Top", compPorts.Top)
@@ -193,7 +193,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	It("invalidates only entries matching the PID filter", func() {
 		// A two-way single-level cache so two PIDs can coexist in
 		// distinct ways and the filter's selectivity is observable.
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBlocks = 2
 		spec.NumLevels = 1
 		spec.PageSize = 4096
@@ -202,9 +202,8 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.LatencyPerLevel = 100
 
 		reg2 := akitasim.MakeBuilder().Build()
-		comp2 := Definition.Builder().
+		comp2 := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(reg2).
-			WithSpec(spec).
 			Build("MMUCache2")
 		comp2Ports := defaultPorts("MMUCache2")
 		comp2.BindPort("Top", comp2Ports.Top)

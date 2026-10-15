@@ -3,12 +3,12 @@ package tlb
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -23,12 +23,11 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	remotePort := messaging.RemotePort("MMU")
 
-	routingSpec1 := Definition.DefaultSpec
+	routingSpec1 := DefaultSpec()
 
 	routingSpec1.Bottom.Destinations = []messaging.RemotePort{remotePort}
-	tlbComp := Definition.Builder().
+	tlbComp := modeling.MakeBuilder[*Comp](routingSpec1).
 		WithSimulation(sim).
-		WithSpec(routingSpec1).
 		Build("TLB")
 	tlbCompPorts := defaultPorts("TLB")
 	tlbComp.BindPort("Top", tlbCompPorts.Top)

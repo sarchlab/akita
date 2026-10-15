@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -60,10 +60,10 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *admissionRecorde
 	t.Helper()
 	clock := &admissionClock{Engine: timing.NewSerialEngine()}
 	sim := testsim.New(clock, true)
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.MaxNumConcurrentTrans, spec.NumReqPerCycle = 1, 1
-	c := Definition.Builder().WithSimulation(sim).WithSpec(spec).
+	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).Build("Cache")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		p := twowaybuffered.NewPort(2, 2)
