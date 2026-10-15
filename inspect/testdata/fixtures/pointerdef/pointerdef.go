@@ -1,5 +1,4 @@
-// Package pointerdef declares its Definition as a pointer. The inspector must
-// reject it: the definition is a value.
+// Package pointerdef incorrectly declares Comp as a pointer alias.
 package pointerdef
 
 import (
@@ -15,10 +14,6 @@ type (
 	Middlewares struct{}
 )
 
-type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = *ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-var Definition = &ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	NewMiddlewares: newMiddlewares,
-}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+func DefaultSpec() Spec { return Spec{} }

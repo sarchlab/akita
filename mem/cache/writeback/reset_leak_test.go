@@ -3,13 +3,13 @@ package writeback
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
@@ -25,7 +25,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	storage := mem.NewStorage(1 * mem.MB)
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.TotalByteSize = 64 * 1024
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 16
@@ -36,9 +36,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.DirLatency = 1
 
 	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
 		Build("L1Cache")
 	compPorts := makePorts("L1Cache", 16)

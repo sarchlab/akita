@@ -65,19 +65,21 @@ The system builder then creates one unnamed port per link and binds each indexed
 slot. Finish all bindings before `simulation.Initialize()`.
 
 ```go
-spec := switches.Definition.DefaultSpec
+spec := switches.DefaultSpec()
 spec.Links = []switches.Link{
     {Remote: "Endpoint.Network", Latency: 1, NumInputChannel: 1, NumOutputChannel: 1},
 }
 spec.Routes = []routing.Route{{Destination: "Device.Top", Output: "Switch0.Links[0]"}}
-sw := switches.Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("Switch0")
+sw := modeling.MakeBuilder[*switches.Comp](spec).WithSimulation(sim).Build("Switch0")
 sw.Ports.Links = make([]messaging.Port, len(spec.Links))
 sw.BindPort("Links[0]", twowaybuffered.NewPort(1, 1))
 ```
 
-Build validates flat record shape and link parameters. Initialize checks
-`len(Spec.Links) == len(Ports.Links)` along with port bindings before creating
-any State or Middlewares. A mismatch returns an error, leaving setup editable.
+Build validates flat record shape. The State initializer checks link parameters
+and `len(Spec.Links) == len(Ports.Links)` before allocating port complexes.
+A mismatch panics and leaves the simulation unusable; correct the configuration
+and rebuild. Generic missing-port errors detected before element initialization
+still leave setup editable.
 Routing middleware derives its private table from `Spec.Routes` and
 `Spec.DefaultRoute`. There is no Resources routing override. The connector
 computes routes from planned port names before building switches, then binds

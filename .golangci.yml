@@ -3,6 +3,9 @@ version: "2"
 linters:
   default: all
   settings:
+    staticcheck:
+      checks:
+        - ST1016
     govet:
       disable:
         - inline
@@ -48,7 +51,6 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
-    - staticcheck
     - tagalign
     - tagliatelle
     - testifylint

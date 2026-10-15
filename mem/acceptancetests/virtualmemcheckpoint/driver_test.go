@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -85,26 +86,22 @@ type driverMiddlewares struct {
 type driver = ticking.Component[
 	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]
 
-// Definition declares the traffic driver, a ticking component. Build sets
-// Spec.NumOps from numOps.
-var Definition = ticking.Definition[
-	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]{
-	DefaultSpec: driverSpec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() driverSpec {
+	return driverSpec{
 		Freq: 1 * timing.GHz,
-	},
-	NewState:       newDriverState,
-	NewMiddlewares: newDriverMiddlewares,
+	}
 }
 
-func newDriverState(_ *driver) driverState {
-	return driverState{
+func (s *driverState) Initialize(_ *driver) {
+	*s = driverState{
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
 }
 
-func newDriverMiddlewares(d *driver) driverMiddlewares {
-	return driverMiddlewares{Drive: &driverMW{d: d}}
+func (m *driverMiddlewares) Initialize(d *driver) {
+	*m = driverMiddlewares{Drive: &driverMW{d: d}}
 }
 
 func done(d *driver) bool {
@@ -216,13 +213,12 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.NumOps = numOps
 
 	spec.LowModule = lowModule.AsRemote()
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*driver](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(driverResources{}).
 		Build("Driver")
 

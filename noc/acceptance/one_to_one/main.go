@@ -65,7 +65,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {
-		epSpec := endpoint.Definition.DefaultSpec
+		epSpec := endpoint.DefaultSpec()
 		epSpec.Freq = freq
 		epSpec.FlitByteSize = 8
 		epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("EP%d.NetworkPort", 2-i))

@@ -14,6 +14,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -71,26 +72,23 @@ type driverMiddlewares struct {
 type driver = ticking.Component[
 	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]
 
-// Definition declares the traffic driver, a ticking component.
-var Definition = ticking.Definition[
-	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]{
-	DefaultSpec: driverSpec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() driverSpec {
+	return driverSpec{
 		Freq:   1 * timing.GHz,
 		NumOps: numOps,
-	},
-	NewState:       newDriverState,
-	NewMiddlewares: newDriverMiddlewares,
+	}
 }
 
-func newDriverState(_ *driver) driverState {
-	return driverState{
+func (s *driverState) Initialize(_ *driver) {
+	*s = driverState{
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
 }
 
-func newDriverMiddlewares(d *driver) driverMiddlewares {
-	return driverMiddlewares{Drive: &driverMW{d: d}}
+func (m *driverMiddlewares) Initialize(d *driver) {
+	*m = driverMiddlewares{Drive: &driverMW{d: d}}
 }
 
 func done(d *driver) bool {
@@ -198,11 +196,10 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
-	routingSpec1 := Definition.DefaultSpec
+	routingSpec1 := DefaultSpec()
 	routingSpec1.LowModule = lowModule.AsRemote()
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*driver](routingSpec1).
 		WithSimulation(s).
-		WithSpec(routingSpec1).
 		WithResources(driverResources{}).
 		Build("Driver")
 
@@ -216,12 +213,11 @@ func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
 func buildSim() (*sim.Simulation, *driver) {
 	s := sim.MakeBuilder().Build()
 
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(s).
-		WithSpec(dramSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(1 * mem.MB).

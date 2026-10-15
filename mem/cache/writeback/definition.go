@@ -1,20 +1,17 @@
 package writeback
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the writeback cache, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                1 * timing.GHz,
 		NumReqPerCycle:      1,
 		Log2BlockSize:       6,
@@ -27,15 +24,16 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		MaxInflightFetch:    128,
 		MaxInflightEviction: 128,
 		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
-	},
-	NewState:       newState,
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-// newState returns a running cache with an empty directory, MSHR, and
+// Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) state {
+func (s *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+
 	spec := c.Spec
 
 	numBanks := spec.numBanks()
@@ -54,7 +52,7 @@ func newState(c *Comp) state {
 		bankPostBufs[i] = queueing.MakeBuffer[int](laneWidth)
 	}
 
-	s := state{
+	initial := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
 		DirStageBuf:  queueing.MakeBuffer[int](spec.NumReqPerCycle),
@@ -74,16 +72,16 @@ func newState(c *Comp) state {
 		BankDownwardInflightTransCounts: make([]int, numBanks),
 	}
 
-	cache.DirectoryReset(&s.DirectoryState,
+	cache.DirectoryReset(&initial.DirectoryState,
 		spec.numSets(), spec.WayAssociativity, 1<<spec.Log2BlockSize)
 
-	return s
+	*s = initial
 }
 
-// newMiddlewares creates the cache's middlewares. The control middlewares and
+// Initialize creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
 // and the ports' accessors.
-func newMiddlewares(c *Comp) middlewares {
+func (m *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
@@ -95,7 +93,7 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 	pipeline.createInternalStages()
 
-	return middlewares{
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{pipeline: pipeline},
 		Flusher: &controlMW{
 			comp:    c,

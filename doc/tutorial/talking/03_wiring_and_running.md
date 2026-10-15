@@ -17,23 +17,21 @@ sim := sim.MakeBuilder().Build()
 outA := twowaybuffered.NewPort(16, 16)
 outB := twowaybuffered.NewPort(16, 16)
 
-specA := Definition.DefaultSpec
+specA := DefaultSpec()
 specA.Freq = 1 * timing.Hz
 specA.PingDst = "AgentB.Out"
 specA.NumPings = 2
 
-specB := Definition.DefaultSpec
+specB := DefaultSpec()
 specB.Freq = 1 * timing.Hz
 
-agentA := Definition.Builder().
+agentA := modeling.MakeBuilder[*Comp](specA).
 	WithSimulation(sim).
-	WithSpec(specA).
 	Build("AgentA")
 agentA.BindPort("Out", outA)
 
-agentB := Definition.Builder().
+agentB := modeling.MakeBuilder[*Comp](specB).
 	WithSimulation(sim).
-	WithSpec(specB).
 	Build("AgentB")
 agentB.BindPort("Out", outB)
 
@@ -55,9 +53,9 @@ if err != nil {
 }
 ```
 
-This code is the package's `Example` test, so it writes `Definition` and
+This code is the package's `Example` test, so it writes `DefaultSpec()` and
 `Ports`; a system builder outside the package writes
-`tickingping.Definition` and `tickingping.Ports`.
+`tickingping.DefaultSpec()` and `tickingping.Ports`.
 
 The phases are explicit: configure the two Spec values, build the agents,
 bind each `Out` port, and attach both ports to the connection. `Initialize`
@@ -89,7 +87,7 @@ cycle.
 
 ## Key Concepts
 
-- **A component = five structs + a `Definition`.** The same shape as the
+- **A component = five structs + a `Comp` alias + `DefaultSpec()`.** The same shape as the
   single component, now with a port and a second middleware.
 - **The system builder owns the wiring.** It creates every port with
   `twowaybuffered.NewPort`, binds them with `component.BindPort`, and
@@ -100,7 +98,7 @@ cycle.
 - **Connections move messages.** Plug ports into a `direct.Connection` and
   any plugged port can reach any other.
 - **Components use builders; ports and connections use constructors.** Build
-  components with `Definition.Builder().WithX().Build(name)`. Create ports with
+  components with `modeling.MakeBuilder[*Comp](DefaultSpec()).WithX().Build(name)`. Create ports with
   `twowaybuffered.NewPort(in, out)` and connections with
   `direct.NewConnection(name, sim, freq)`.
 

@@ -22,7 +22,7 @@ var _ = Describe("Respond Stage", func() {
 		ports := makePorts("Cache", 4)
 		ports.Top = twowaybuffered.NewPort(1, 1)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 		mw = buildStageTestCache(
 			spec,

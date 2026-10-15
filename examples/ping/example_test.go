@@ -4,19 +4,20 @@ import (
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func Example_pingWithEvents() {
 	sim := akitasim.MakeBuilder().Build()
 
-	agentA := Definition.Builder().
+	agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentA")
 
 	agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
 
-	agentB := Definition.Builder().
+	agentB := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentB")
 

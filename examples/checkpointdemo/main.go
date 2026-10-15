@@ -65,14 +65,13 @@ type Middlewares struct {
 // Comp is the worker, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the worker.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, Label: "demo"},
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, Label: "demo"}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Work: &workerMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Work: &workerMW{comp: c}}
 }
 
 // addWork queues n more items on the worker and starts it ticking. It is the
@@ -118,7 +117,7 @@ func main() {
 	}()
 
 	engine := s.Engine().(*timing.SerialEngine)
-	worker := Definition.Builder().
+	worker := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(s).
 		Build("Worker")
 	if err := s.Initialize(); err != nil {

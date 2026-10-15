@@ -18,14 +18,14 @@ import (
 	"fmt"
 	"strings"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/examples/tasktree/cache"
 	"github.com/sarchlab/akita/v5/examples/tasktree/client"
 	"github.com/sarchlab/akita/v5/examples/tasktree/memory"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -82,12 +82,11 @@ func (t *treeTracer) print() {
 // buildCache builds a cache level that forwards its misses to lower, the Top
 // port of the level below.
 func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache.Comp {
-	spec := cache.Definition.DefaultSpec
+	spec := cache.DefaultSpec()
 	spec.Downstream = lower.AsRemote()
 
-	builtComponent := cache.Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*cache.Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		Build(name)
 
 	builtComponent.BindPort("Top", twowaybuffered.NewPort(4, 4))
@@ -100,7 +99,7 @@ func main() {
 
 	// Build bottom-up, so each level's Spec can name the port of the level
 	// below it.
-	mem := memory.Definition.Builder().
+	mem := modeling.MakeBuilder[*memory.Comp](memory.DefaultSpec()).
 		WithSimulation(sim).
 		Build("Memory")
 
@@ -109,11 +108,10 @@ func main() {
 	l2 := buildCache(sim, "L2", mem.Ports.Top)
 	l1 := buildCache(sim, "L1", l2.Ports.Top)
 
-	clientSpec := client.Definition.DefaultSpec
+	clientSpec := client.DefaultSpec()
 	clientSpec.Dst = l1.Ports.Top.AsRemote()
-	cli := client.Definition.Builder().
+	cli := modeling.MakeBuilder[*client.Comp](clientSpec).
 		WithSimulation(sim).
-		WithSpec(clientSpec).
 		Build("Client")
 
 	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))

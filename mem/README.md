@@ -95,7 +95,7 @@ mapper := mem.AddressMapper{
 }
 ```
 
-Build requires at least one nonempty destination and a positive
+Component initialization requires at least one nonempty destination and a positive
 `InterleavingSize` when there are multiple destinations. A single destination
 needs no interleaving size. Interleaving uses the absolute address and wraps
 across the destinations without translating the address.

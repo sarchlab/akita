@@ -23,7 +23,7 @@ func payloadMessage() messaging.Msg {
 
 func payloadFlits(msg messaging.Msg) []messaging.Msg {
 	var id uint64 = 100
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.FlitByteSize = 32
 	spec.EncodingOverhead = 0
 	return msgToFlits(func() uint64 { id++; return id }, msg, spec, "Sender.NetworkPort", "Switch.Port", 42)
@@ -80,7 +80,7 @@ func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 	device := twowaybuffered.NewPort(1, 1)
 	device.BindOwner(payloadOwner{"Receiver"}, "Receiver.Port")
 	network := twowaybuffered.NewPort(8, 8)
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Devices = []messaging.RemotePort{device.AsRemote()}
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).
 		Build("Endpoint")

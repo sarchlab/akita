@@ -2,18 +2,13 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the SimpleBankedMemory, a ticking component: its
-// default configuration and its behavior. Its ports and middlewares are the
-// fields of Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                           1 * timing.GHz,
 		NumBanks:                       4,
 		BankPipelineWidth:              1,
@@ -23,25 +18,23 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		Capacity:                       4 * mem.GB,
 		BankSelectorKind:               "interleaved",
 		BankSelectorLog2InterleaveSize: 6,
-	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-func newState(c *Comp) state {
+func (s *state) Initialize(c *Comp) {
 	name, spec := c.Name(), c.Spec
 
-	return state{
+	*s = state{
 		Banks: buildInitialBanks(name, spec),
 	}
 }
 
-func newMiddlewares(c *Comp) middlewares {
+func (m *middlewares) Initialize(c *Comp) {
 	if c.Resources.Storage == nil {
 		panic("simplebankedmemory: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*m = middlewares{
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},

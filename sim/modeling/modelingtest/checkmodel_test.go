@@ -18,12 +18,12 @@ import (
 )
 
 func TestCheckTickingSupportedDeclarations(t *testing.T) {
-	CheckTicking(t, fullcomp.Definition)
-	CheckTicking(t, flatlinks.Definition)
-	CheckTicking(t, scalars.Definition)
-	CheckTicking(t, zerodefaults.Definition)
-	CheckTicking(t, aliasdef.Definition)
-	CheckTicking(t, genericaliasdef.Definition)
+	CheckTicking(t, (*fullcomp.Comp)(nil), fullcomp.DefaultSpec())
+	CheckTicking(t, (*flatlinks.Comp)(nil), flatlinks.DefaultSpec())
+	CheckTicking(t, (*scalars.Comp)(nil), scalars.DefaultSpec())
+	CheckTicking(t, (*zerodefaults.Comp)(nil), zerodefaults.DefaultSpec())
+	CheckTicking(t, (*aliasdef.Comp)(nil), aliasdef.DefaultSpec())
+	CheckTicking(t, (*genericaliasdef.Comp)(nil), genericaliasdef.DefaultSpec())
 }
 
 func TestDefaultsDetectExactIntegerDrift(t *testing.T) {
@@ -46,7 +46,7 @@ func TestDefaultsDetectExactIntegerDrift(t *testing.T) {
 
 func TestCheckTickingRejectsMissingFreq(t *testing.T) {
 	if os.Getenv("AKITA_TEST_MISSING_FREQ") == "1" {
-		CheckTicking(t, nofreq.Definition)
+		CheckTicking(t, (*nofreq.Comp)(nil), nofreq.DefaultSpec())
 		return
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCheckTickingRejectsMissingFreq$")
@@ -55,4 +55,15 @@ func TestCheckTickingRejectsMissingFreq(t *testing.T) {
 	if err == nil || !strings.Contains(string(out), "must have a Freq timing.Freq field") {
 		t.Fatalf("CheckTicking must fail for missing Freq: %v\n%s", err, out)
 	}
+}
+
+func TestDefaultSpecReturnsIndependentCollections(t *testing.T) {
+	a, b := flatlinks.DefaultSpec(), flatlinks.DefaultSpec()
+	a.Bottom.Destinations[0] = "Changed"
+	a.Mappings[0].Destinations[0] = "Changed"
+	a.Links[0].Remote = "Changed"
+	if b.Bottom.Destinations[0] != "A" || b.Mappings[0].Destinations[0] != "C" || b.Links[0].Remote != "Peer.Top" {
+		t.Fatalf("DefaultSpec calls share collections: %+v", b)
+	}
+	t.Log("Separate DefaultSpec calls retain independent flat records and nested scalar slices")
 }

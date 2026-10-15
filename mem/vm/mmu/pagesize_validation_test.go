@@ -3,9 +3,9 @@ package mmu
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestPageSizeValidation tests that the MMU validates page table page size consistency
@@ -14,13 +14,12 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
-	matchingSpec := Definition.DefaultSpec
+	matchingSpec := DefaultSpec()
 	matchingSpec.Log2PageSize = 12 // 4KB pages
 
-	builder := Definition.Builder().
+	builder := modeling.MakeBuilder[*Comp](matchingSpec).
 		WithSimulation(sim).
-		WithResources(Resources{PageTable: pageTable}).
-		WithSpec(matchingSpec)
+		WithResources(Resources{PageTable: pageTable})
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
@@ -33,12 +32,11 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 2: Mismatched page sizes should panic
 	pageTable2 := vm.NewPageTable(12) // 4KB pages
-	mismatchedSpec := Definition.DefaultSpec
+	mismatchedSpec := DefaultSpec()
 	mismatchedSpec.Log2PageSize = 16 // 64KB pages
-	builder2 := Definition.Builder().
+	builder2 := modeling.MakeBuilder[*Comp](mismatchedSpec).
 		WithSimulation(sim).
-		WithResources(Resources{PageTable: pageTable2}).
-		WithSpec(mismatchedSpec)
+		WithResources(Resources{PageTable: pageTable2})
 
 	// This should panic
 	defer func() {
@@ -73,7 +71,7 @@ func TestPageTableRequired(t *testing.T) {
 		}
 	}()
 
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("NoPageTable")
 	builtComponentPorts := makePorts("NoPageTable", 4096)

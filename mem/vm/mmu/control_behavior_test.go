@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -34,10 +35,9 @@ var _ = Describe("MMU control behavior", func() {
 
 	build := func() {
 
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		compPorts := makePorts("MMU", 16)
 		comp.BindPort("Top", compPorts.Top)

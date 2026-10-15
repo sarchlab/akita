@@ -5,46 +5,44 @@ sidebar_position: 4
 # Building and Running
 
 With the five structs and the middleware defined, two steps remain: the
-component declares its `Definition`, and `main` — the system builder —
+component declares its `DefaultSpec()` function, and `main` — the system builder —
 builds an instance from it and runs the engine.
 
-## Declaring the Definition
+## Declaring default configuration
 
 ```go
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-    DefaultSpec:    Spec{Freq: 1 * timing.GHz, WallDistance: 10},
-    NewMiddlewares: newMiddlewares,
+func DefaultSpec() Spec {
+    return Spec{Freq: 1 * timing.GHz, WallDistance: 10}
 }
 ```
 
-`Definition` is the component type's one public declaration: its default
-configuration and its behaviour. Its type parameters are the five structs
-again, in the same order as in `Comp`.
+The `Comp` alias identifies the component's five element types. `DefaultSpec()`
+returns a fresh starting configuration. A system builder can change its fields
+and pass the result to `modeling.MakeBuilder[*Comp](spec)`.
 
-- `DefaultSpec` is the starting configuration. A system builder that wants
-  something different copies it, changes fields, and passes the result in.
-- `NewMiddlewares` is the function from the previous page; `Initialize` calls it
-  to create each instance's middlewares.
+Keep the function body to a single `return Spec{...}` with keyed fields and
+constant leaves, because tooling reads the returned literal without running the
+package. There is no separate `Definition` declaration.
 
-An optional third field, `NewState`, returns an instance's initial State.
-The walker omits it and starts from the zero State: position 0, no steps.
-Keep the literal simple — keyed fields, constant values, and named
-functions — because tooling reads the `Definition` without running your
-code.
+The previous page defines `(*Middlewares).Initialize(c *Comp)`, which assembles
+behavior after wiring. The walker needs no State initializer: the zero State
+already means position 0 and no steps. Components needing allocated tables or
+nonzero state define `(*State).Initialize(c *Comp)` as well. The simulation calls
+State first, then Middlewares, once per component. Neither method returns a value.
 
 ## Building the Component
 
 ```go
 s := sim.MakeBuilder().Build()
 
-walker := Definition.Builder().
+walker := modeling.MakeBuilder[*Comp](DefaultSpec()).
     WithSimulation(s).
     WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
     Build("Walker")
 ```
 
-`Definition.Builder()` returns a builder for this component type that
-starts from `DefaultSpec`, and `Build` returns a `*Comp`. Set the simulation
+`modeling.MakeBuilder[*Comp](DefaultSpec())` returns a builder for this component type that
+uses the returned Spec, and `Build` returns a `*Comp`. Set the simulation
 the instance belongs to, supply its Resources — here a random source seeded
 with `1`, so the output is reproducible — and build with a unique name. The
 walker keeps the default Spec, so there is no `WithSpec` call, and it has no
@@ -65,11 +63,11 @@ implements checkpoint save/load for the RNG. See
 `Build` validates the Spec and State shapes and registers the configured
 instance. It leaves State and Middlewares unset. After all components and
 connections are built and bound, call `s.Initialize()` once. Initialization
-validates wiring, freezes topology, and runs `NewState` and `NewMiddlewares`.
+validates wiring, freezes topology, and runs `State.Initialize` and `Middlewares.Initialize`.
 
 :::info The builder pattern
 
-`Definition.Builder().WithSimulation(…).WithResources(…).Build("Walker")` is
+`modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(…).WithResources(…).Build("Walker")` is
 the **builder pattern**: rather than one constructor with a long argument
 list, you assemble the component through a chain of small `WithX` calls and
 finish with `Build`. It reads top to bottom, and each setting is
@@ -82,9 +80,9 @@ partially configured builder is just a value you can stash and reuse.
 
 **Akita's convention.** Every component, from this walker to the DRAM
 controller, is built with the same shape:
-`Definition.Builder().WithSimulation(…).WithSpec(…).WithResources(…).Build(name)`.
+`modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(…).WithSpec(…).WithResources(…).Build(name)`.
 The whole configuration goes in as one `Spec` through `WithSpec` (there is
-no setter per Spec field), starting from `Definition.DefaultSpec`. That is
+no setter per Spec field), starting from `DefaultSpec()`. That is
 why the clock frequency lives in the Spec: `Build` reads `Freq` from it. The
 ports are assigned individually with `component.BindPort("Field", port)` after
 Build; the next section shows the system builder creating and binding them.
@@ -180,7 +178,7 @@ path (and the step count) changes.
 The simulated time, 53000 ps = 53 ns, equals 53 cycles at 1 GHz — that is
 the 52 walking steps plus one for the `TickLater` that started the clock.
 Try building the walker with a 100 MHz clock — copy
-`Definition.DefaultSpec`, set its `Freq` to `100 * timing.MHz`, and pass it
+`DefaultSpec()`, set its `Freq` to `100 * timing.MHz`, and pass it
 with `WithSpec` — and you will see 530 ns instead, with the step count
 unchanged. That is the whole point of a discrete-event simulator: the
 model's behaviour is defined by cycles, and the clock just dictates how
@@ -188,7 +186,7 @@ those cycles map to simulated time.
 
 ## Key Concepts
 
-- **A component is five structs and a `Definition`.** Spec is
+- **A component is five structs, a `Comp` alias, and `DefaultSpec()`.** Spec is
   configuration, State is runtime data, Resources are references to shared
   objects, Ports talk to other components, and Middlewares are the
   behaviour.
@@ -202,7 +200,7 @@ those cycles map to simulated time.
   the code. `modeling.None` fills the Resources slot when there are no
   shared objects.
 - **The system builder builds instances** with
-  `Definition.Builder()…Build(name)`; the component's package only declares
+  `modeling.MakeBuilder[*Comp](DefaultSpec())…Build(name)`; the component's package only declares
   the type.
 - **Progress drives the loop.** Return `true` from `Handle` to tick again
   next cycle; return `false` to stop. Outside events (`TickLater`, incoming

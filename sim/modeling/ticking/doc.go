@@ -33,12 +33,12 @@
 //
 //   - Spec is the configuration: scalars, scalar collections, flat records, and
 //     record slices. See modeling.ValidateSpec for the allowed record members.
-//     The component gives defaults in its Definition, and the system builder may
+//     The component gives defaults in DefaultSpec(), and the system builder may
 //     override them.
 //     Spec must have a Freq field of type timing.Freq, the clock the
 //     component ticks at.
 //   - State is the mutable runtime data. The component creates it with the
-//     Definition's NewState, or starts from the zero State, and only the
+//     State.Initialize, or starts from the zero State, and only the
 //     component's middlewares change it. It is saved in checkpoints.
 //   - Resources holds references to objects shared with other components,
 //     such as a backing storage. The system builder supplies them.
@@ -46,25 +46,23 @@
 //     field per port group. The system builder creates the port instances,
 //     choosing their buffer sizes, and binds them after Build.
 //   - Middlewares has one field per middleware. The component creates them
-//     with the Definition's NewMiddlewares, and they handle every event in
+//     with the Middlewares.Initialize, and they handle every event in
 //     field order. Middlewares hold only references; all mutable data lives
 //     in State, because only State is saved in checkpoints.
 //
 // # Declaring and building a component
 //
-// The component package declares its Definition and a Comp alias:
+// The component package declares its DefaultSpec function and a Comp alias:
 //
 //	type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 //
-//	var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
-//	    DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-//	    NewState:       newState, // optional
-//	    NewMiddlewares: newMiddlewares,
+//	func DefaultSpec() Spec {
+//	    return Spec{Freq: 1 * timing.GHz}
 //	}
 //
-// The system builder builds an instance from it:
+// The system builder builds an instance from the returned configuration:
 //
-//	comp := cache.Definition.Builder().
+//	comp := modeling.MakeBuilder[*cache.Comp](cache.DefaultSpec()).
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    WithResources(res).

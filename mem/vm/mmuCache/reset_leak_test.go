@@ -3,12 +3,12 @@ package mmuCache
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -21,7 +21,7 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.NumBlocks = 1
 	spec.NumLevels = 5
 	spec.PageSize = 4096
@@ -29,9 +29,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.NumReqPerCycle = 4
 	spec.LatencyPerLevel = 100
 
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{
 			LowModulePort: messaging.RemotePort("LowModule"),
 			UpModulePort:  messaging.RemotePort("UpModule"),

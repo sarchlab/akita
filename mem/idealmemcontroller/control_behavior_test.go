@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -27,15 +28,14 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Width = 4
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		memController = Definition.Builder().
+		memController = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithSpec(spec).
 			Build("MemCtrl")
 		memControllerPorts := makePorts("MemCtrl", 16)
 		memController.BindPort("Top", memControllerPorts.Top)

@@ -100,7 +100,7 @@ func ExampleNewTotalTimeTracer() {
 	// 12
 }
 
-func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }
+func (d *SampleDomain) NewID() uint64 { return d.sim.NewID() }
 
 func (d *SampleDomain) TaskTracker() *tasks.Tracker {
 	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()

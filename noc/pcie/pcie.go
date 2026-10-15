@@ -30,17 +30,17 @@ type Builder struct {
 
 func MakeBuilder() Builder { return Builder{freq: timing.GHz, switchLatency: 140}.WithVersion(4, 16) }
 
-func (c Builder) WithSimulation(sim timing.Simulation) Builder { c.simulation = sim; return c }
+func (b Builder) WithSimulation(sim timing.Simulation) Builder { b.simulation = sim; return b }
 
-func (c Builder) WithFreq(freq timing.Freq) Builder {
-	c.freq = freq
+func (b Builder) WithFreq(freq timing.Freq) Builder {
+	b.freq = freq
 
-	return c
+	return b
 }
 
-func (c Builder) WithBandwidth(bytePerSecond uint64) Builder { c.bandwidth = bytePerSecond; return c }
+func (b Builder) WithBandwidth(bytePerSecond uint64) Builder { b.bandwidth = bytePerSecond; return b }
 
-func (c Builder) WithVersion(version int, width int) Builder {
+func (b Builder) WithVersion(version int, width int) Builder {
 	linkBandwidthTable := map[int]uint64{
 		1: 2 * (1 << 30),
 		2: 4 * (1 << 30),
@@ -52,12 +52,12 @@ func (c Builder) WithVersion(version int, width int) Builder {
 	linkBandwidth := linkBandwidthTable[version]
 	totalBandwidth := linkBandwidth * uint64(width) / 8
 
-	return c.WithBandwidth(totalBandwidth)
+	return b.WithBandwidth(totalBandwidth)
 }
 
-func (c Builder) WithSwitchLatency(numCycles int) Builder {
-	c.switchLatency = numCycles
-	return c
+func (b Builder) WithSwitchLatency(numCycles int) Builder {
+	b.switchLatency = numCycles
+	return b
 }
 
 // Build computes derived parameters and begins a new network.

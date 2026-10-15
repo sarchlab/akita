@@ -10,11 +10,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -45,26 +45,24 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 	// controller's ports are created before the agent is built.
 	memCtrlTop := twowaybuffered.NewPort(16, 16)
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
 
 	agentSpec.LowModule = "Mem.Top"
-	agent := memaccessagent.Definition.Builder().
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
-	dramSpec := dram.Definition.DefaultSpec
+	dramSpec := dram.DefaultSpec()
 	dramSpec.Freq = 1 * timing.GHz
 
-	memCtrl := dram.Definition.Builder().
+	memCtrl := modeling.MakeBuilder[*dram.Comp](dramSpec).
 		WithSimulation(s).
-		WithSpec(dramSpec).
 		WithResources(dram.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(dramCapacity(dramSpec)).

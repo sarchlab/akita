@@ -3,13 +3,13 @@ package addresstranslator
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -33,16 +33,15 @@ var _ = Describe("Address Translator control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
 		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		t = Definition.Builder().
+		t = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("AddressTranslator")
 		tPorts := makePorts("AddressTranslator", 16)
 		t.BindPort("Top", tPorts.Top)

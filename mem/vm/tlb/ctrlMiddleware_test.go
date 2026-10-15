@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -22,12 +23,11 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		routingSpec1 := Definition.DefaultSpec
+		routingSpec1 := DefaultSpec()
 
 		routingSpec1.Bottom.Destinations = []messaging.RemotePort{"RemotePort"}
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](routingSpec1).
 			WithSimulation(sim).
-			WithSpec(routingSpec1).
 			Build("TLB")
 		compPorts := defaultPorts("TLB")
 		comp.BindPort("Top", compPorts.Top)

@@ -3,14 +3,13 @@ package dram
 import (
 	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 func TestDram(t *testing.T) {
@@ -63,9 +62,8 @@ func storageFor(spec Spec) *mem.Storage {
 // buildDRAM builds a DRAM controller named name from spec, backed by a
 // storage that covers its geometry, with ports of the given buffer size.
 func buildDRAM(sim timing.Simulation, spec Spec, name string, bufSize int) *Comp {
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{Storage: storageFor(spec)}).
 		Build(name)
 	builtComponentPorts := defaultPorts(name, bufSize)

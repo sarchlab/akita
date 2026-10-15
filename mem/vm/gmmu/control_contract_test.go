@@ -3,11 +3,11 @@ package gmmu
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestControlContract verifies the GMMU satisfies the universal verbs.
@@ -17,14 +17,13 @@ func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.Bottom = messaging.RemotePort("LowModule")
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{
 				PageTable: vm.NewPageTable(spec.Log2PageSize),
 			}).

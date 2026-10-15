@@ -3,33 +3,32 @@ package endpoint
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the endpoint, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// MakeBuilder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:              1 * timing.GHz,
 		NumInputChannels:  1,
 		NumOutputChannels: 1,
 		FlitByteSize:      32,
 		EncodingOverhead:  0.25,
-	},
-	ValidateSpec:   validateSpec,
-	ValidateSetup:  validateSetup,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-// newMiddlewares creates behavior over the device ports bound to DeviceConnection.
-func newMiddlewares(c *Comp) middlewares {
+// Initialize creates behavior over the device ports bound to DeviceConnection.
+func (m *middlewares) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+	if err := validateSetup(c); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+
 	devicePorts := c.Resources.devices.ports
 
-	return middlewares{
+	*m = middlewares{
 		Outgoing: &outgoingMW{comp: c, devicePorts: devicePorts},
 		Incoming: &incomingMW{comp: c, devicePorts: devicePorts},
 	}

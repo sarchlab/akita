@@ -45,28 +45,28 @@ type Builder struct {
 
 func MakeBuilder() Builder { return Builder{freq: timing.GHz, flitSize: 16, linkTransferPerCycle: 1} }
 
-func (c Builder) WithSimulation(sim timing.Simulation) Builder { c.simulation = sim; return c }
+func (b Builder) WithSimulation(sim timing.Simulation) Builder { b.simulation = sim; return b }
 
-func (c Builder) WithFreq(freq timing.Freq) Builder {
-	c.freq = freq
+func (b Builder) WithFreq(freq timing.Freq) Builder {
+	b.freq = freq
 
-	return c
+	return b
 }
 
-func (c Builder) WithSwitchLatency(numCycles int) Builder {
-	c.switchLatency = numCycles
-	return c
+func (b Builder) WithSwitchLatency(numCycles int) Builder {
+	b.switchLatency = numCycles
+	return b
 }
 
-func (c Builder) WithBandwidth(transferPerCycle float64) Builder {
-	c.linkTransferPerCycle = transferPerCycle
-	return c
+func (b Builder) WithBandwidth(transferPerCycle float64) Builder {
+	b.linkTransferPerCycle = transferPerCycle
+	return b
 }
 
-func (c Builder) WithFlitSize(size int) Builder {
-	c.flitSize = size
+func (b Builder) WithFlitSize(size int) Builder {
+	b.flitSize = size
 
-	return c
+	return b
 }
 
 // Build computes derived parameters and begins a new network.

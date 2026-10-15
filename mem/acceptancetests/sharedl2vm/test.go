@@ -46,6 +46,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -152,13 +153,12 @@ func buildMemCtrl(
 	s *sim.Simulation,
 	combinedRange uint64,
 ) *idealmemcontroller.Comp {
-	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
+	memCtrlSpec := idealmemcontroller.DefaultSpec()
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
 	memCtrlSpec.CacheLineSize = 64
-	memCtrl := idealmemcontroller.Definition.Builder().
+	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
-		WithSpec(memCtrlSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: newStorage(s, ptBase+combinedRange+mem.MB,
 				"MemCtrl.Storage"),
@@ -175,16 +175,15 @@ func buildL2Cache(
 	s *sim.Simulation,
 	memCtrl *idealmemcontroller.Comp,
 ) *writeback.Comp {
-	l2Spec := writeback.Definition.DefaultSpec
+	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
-	l2Cache := writeback.Definition.Builder().
+	l2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
 		WithSimulation(s).
-		WithSpec(l2Spec).
 		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
@@ -199,13 +198,12 @@ func buildMMU(
 	s *sim.Simulation,
 	pageTable vm.PageTable,
 ) *mmu.Comp {
-	mmuSpec := mmu.Definition.DefaultSpec
+	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
-	ioMMU := mmu.Definition.Builder().
+	ioMMU := modeling.MakeBuilder[*mmu.Comp](mmuSpec).
 		WithSimulation(s).
-		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
@@ -219,16 +217,15 @@ func buildL2TLB(
 	s *sim.Simulation,
 	ioMMU *mmu.Comp,
 ) *tlb.Comp {
-	l2TLBSpec := tlb.Definition.DefaultSpec
+	l2TLBSpec := tlb.DefaultSpec()
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 
 	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
-	l2TLB := tlb.Definition.Builder().
+	l2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
 		WithSimulation(s).
-		WithSpec(l2TLBSpec).
 		Build("L2TLB")
 
 	l2TLB.BindPort("Top", newPort("L2TLB.Top"))
@@ -269,7 +266,7 @@ func buildL1Cache(
 	suffix string,
 	l2Cache *writeback.Comp,
 ) *writethrough.Comp {
-	l1Spec := writethrough.Definition.DefaultSpec
+	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 
@@ -277,9 +274,8 @@ func buildL1Cache(
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
 		l2Cache.Ports.Top.AsRemote(),
 	}
-	l1Cache := writethrough.Definition.Builder().
+	l1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
 		WithSimulation(s).
-		WithSpec(l1Spec).
 		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, name+".Storage")}).
 		Build(name)
 
@@ -295,7 +291,7 @@ func buildL1TLB(
 	suffix string,
 	l2TLB *tlb.Comp,
 ) *tlb.Comp {
-	l1TLBSpec := tlb.Definition.DefaultSpec
+	l1TLBSpec := tlb.DefaultSpec()
 	l1TLBSpec.NumWays = 8
 	l1TLBSpec.NumSets = 8
 	l1TLBSpec.Log2PageSize = 12
@@ -304,9 +300,8 @@ func buildL1TLB(
 	name := "L1TLB" + suffix
 
 	l1TLBSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
-	l1TLB := tlb.Definition.Builder().
+	l1TLB := modeling.MakeBuilder[*tlb.Comp](l1TLBSpec).
 		WithSimulation(s).
-		WithSpec(l1TLBSpec).
 		Build(name)
 
 	l1TLB.BindPort("Top", newPort(name+".Top"))
@@ -322,7 +317,7 @@ func buildAddressTranslator(
 	l1Cache *writethrough.Comp,
 	l1TLB *tlb.Comp,
 ) *addresstranslator.Comp {
-	atSpec := addresstranslator.Definition.DefaultSpec
+	atSpec := addresstranslator.DefaultSpec()
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 
@@ -331,9 +326,8 @@ func buildAddressTranslator(
 	atSpec.Bottom.Destinations = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
 
 	atSpec.Translation.Destinations = []messaging.RemotePort{l1TLB.Ports.Top.AsRemote()}
-	at := addresstranslator.Definition.Builder().
+	at := modeling.MakeBuilder[*addresstranslator.Comp](atSpec).
 		WithSimulation(s).
-		WithSpec(atSpec).
 		Build(name)
 
 	at.BindPort("Top", newPort(name+".Top"))
@@ -349,15 +343,14 @@ func buildROB(
 	suffix string,
 	at *addresstranslator.Comp,
 ) *rob.Comp {
-	robSpec := rob.Definition.DefaultSpec
+	robSpec := rob.DefaultSpec()
 	robSpec.NumReqPerCycle = 4
 	robSpec.Bottom = at.Ports.Top.AsRemote()
 
 	name := "ROB" + suffix
 
-	builtComponent := rob.Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*rob.Comp](robSpec).
 		WithSimulation(s).
-		WithSpec(robSpec).
 		Build(name)
 
 	builtComponent.BindPort("Top", newPort(name+".Top"))
@@ -372,7 +365,7 @@ func buildAgent(
 	robComp *rob.Comp,
 	seed int64,
 ) *memaccessagent.MemAccessAgent {
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.AddressOffset = uint64(index) * agentStride()
 	agentSpec.ReadLeft = *numAccessFlag
@@ -381,9 +374,8 @@ func buildAgent(
 
 	name := fmt.Sprintf("MemAccessAgent[%d]", index)
 	agentSpec.LowModule = robComp.Ports.Top.AsRemote()
-	agent := memaccessagent.Definition.Builder().
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
 		Build(name)
 
 	agent.BindPort("Mem", newPort(name+".Mem"))

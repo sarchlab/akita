@@ -75,22 +75,21 @@ The number of sets is not configured directly: it is
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
+Start from `DefaultSpec()`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides
 the engine and registers the component), `WithResources` (the backing storage
 only), and `component.BindPort` after Build (the port instances).
 
 ```go
-spec := writeback.Definition.DefaultSpec
+spec := writeback.DefaultSpec()
 spec.TotalByteSize = 64 * mem.KB
 spec.WayAssociativity = 4
 spec.Log2BlockSize = 6 // 64-byte lines
 spec.NumMSHREntry = 16
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
-cache := writeback.Definition.Builder().
+cache := modeling.MakeBuilder[*writeback.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(writeback.Resources{
         Storage:             mem.NewStorage(spec.TotalByteSize),
     }).
@@ -105,7 +104,7 @@ topPort := cache.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{...})` | Backing storage (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

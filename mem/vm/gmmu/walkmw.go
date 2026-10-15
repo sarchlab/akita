@@ -18,7 +18,7 @@ import (
 type walkMW struct {
 	comp *Comp
 
-	// pageTable is Resources.PageTable, taken by newMiddlewares.
+	// pageTable is Resources.PageTable, taken by Middlewares.Initialize.
 	pageTable vm.PageTable
 }
 

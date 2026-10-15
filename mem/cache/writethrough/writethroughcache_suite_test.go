@@ -4,10 +4,9 @@ import (
 	"log"
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -46,9 +45,8 @@ func buildStageTestCache(
 	spec Spec, res Resources, ports Ports, state state,
 ) *pipelineMW {
 	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
-		WithSpec(spec).
 		WithResources(res).
 		Build("Cache")
 	comp.BindPort("Top", ports.Top)

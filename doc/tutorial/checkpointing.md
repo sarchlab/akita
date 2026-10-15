@@ -15,7 +15,7 @@ components. The whole user-facing surface is small:
 | --- | --- |
 | make messages checkpointable | a protocol: `messaging.DefineProtocol(...)` as a package-level `var` |
 | make an event checkpointable | `timing.RegisterEvent(MyEvent{})` in an `init()` |
-| make a component checkpointable | declare it with a component model — five structs and a `Definition` — and keep all mutable data in `State` (the model does the rest) |
+| make a component checkpointable | declare it with a component model — five structs, a `Comp` alias, and `DefaultSpec()` — and keep all mutable data in `State` (the model does the rest) |
 | take / restore a checkpoint | `sim.SaveCheckpoint(path)` / `sim.LoadCheckpoint(path)` |
 
 There is **no** custom marshalling to write, no wire format to learn, and no
@@ -137,7 +137,7 @@ your data in the right one of the five structs:
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
-| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `NewMiddlewares` |
+| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `Middlewares.Initialize` |
 
 ```go
 type Spec struct {
@@ -182,7 +182,7 @@ silently drops colliding fields, so `Build` rejects them.
 
 ### The builder validates this for you — loudly
 
-`Definition.Builder()…Build(name)` runs `ValidateSpec`/`ValidateState` and
+`modeling.MakeBuilder[*Comp](DefaultSpec())…Build(name)` runs `ValidateSpec`/`ValidateState` and
 **panics** at construction if the Spec or State cannot be checkpointed. In
 particular, a struct whose state is entirely **unexported** and that has no
 `MarshalJSON` serializes as `{}` and would silently lose its contents — the

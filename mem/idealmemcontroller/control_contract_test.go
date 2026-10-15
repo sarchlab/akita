@@ -3,10 +3,10 @@ package idealmemcontroller
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestControlContract verifies the ideal memory controller satisfies
@@ -17,15 +17,14 @@ func TestControlContract(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		storage := mem.NewStorage(1 * mem.MB)
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithSpec(spec).
 			Build("MemCtrl")
 		compPorts := makePorts("MemCtrl", 16)
 		comp.BindPort("Top", compPorts.Top)

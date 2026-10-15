@@ -3,13 +3,13 @@ package addresstranslator
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -20,16 +20,15 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Log2PageSize = 12
 	spec.Freq = 1
 
 	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
 	spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-	at := Definition.Builder().
+	at := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		Build("AddressTranslator")
 	atPorts := makePorts("AddressTranslator", 16)
 	at.BindPort("Top", atPorts.Top)

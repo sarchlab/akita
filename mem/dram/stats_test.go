@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -99,11 +100,10 @@ var _ = Describe("DRAM Statistics", func() {
 
 		conn := direct.NewConnection("StatsConn", sim, timing.GHz)
 
-		spec := dram.Definition.DefaultSpec
+		spec := dram.DefaultSpec()
 		spec.Freq = 1 * timing.GHz
-		dramComp := dram.Definition.Builder().
+		dramComp := modeling.MakeBuilder[*dram.Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("StatsDRAM")
 

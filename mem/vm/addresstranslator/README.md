@@ -53,14 +53,13 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 ## Builder Pattern
 
 ```go
-spec := addresstranslator.Definition.DefaultSpec
+spec := addresstranslator.DefaultSpec()
 spec.DeviceID = 1
 spec.Translation.Destinations = []messaging.RemotePort{"MMU.Top"}
 spec.Bottom.Destinations = []messaging.RemotePort{"Cache.Top"}
 
-at := addresstranslator.Definition.Builder().
+at := modeling.MakeBuilder[*addresstranslator.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     Build("AddressTranslator")
 at.BindPort("Top", twowaybuffered.NewPort(4, 4))
 at.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
@@ -71,7 +70,7 @@ at.BindPort("Control", twowaybuffered.NewPort(1, 1))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{})` | Optional empty Resources |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

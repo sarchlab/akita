@@ -20,7 +20,7 @@ set of worked recipes.
 >
 > | Concept | Path | What it gives you |
 > |---|---|---|
-> | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `Definition.Builder()`, `WithResources` |
+> | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `modeling.MakeBuilder[*Comp](DefaultSpec())`, `WithResources` |
 > | Hooks | `v5/hooking/` | `Hook`, `HookCtx`, `AcceptHook` |
 > | Port hook points | `v5/messaging/port.go` | `HookPosPortMsgSend`, `HookPosPortMsgRecvd` |
 > | Ideal component example | `v5/mem/idealmemcontroller/` | A "perfect memory" variant |
@@ -114,7 +114,7 @@ top := twowaybuffered.NewPort(1024, 1024)
 control := twowaybuffered.NewPort(4, 4)
 
 // Real run:
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](dram.DefaultSpec()).
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
@@ -122,7 +122,7 @@ ctrl.BindPort("Top", top)
 ctrl.BindPort("Control", control)
 
 // Idealized run — same ports, drop-in:
-ctrl := idealmemcontroller.Definition.Builder().
+ctrl := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
     WithSimulation(sim).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("DRAM")
@@ -144,13 +144,12 @@ fields. Setting `latency = 0` or `capacity = 1<<30` at build time is not a
 hack — it is the intended way to reach an extreme operating point.
 
 ```go
-spec := tlb.Definition.DefaultSpec
+spec := tlb.DefaultSpec()
 spec.NumSets = 1
 spec.NumWays = 1 << 20 // effectively unbounded
 
-t := tlb.Definition.Builder().
+t := modeling.MakeBuilder[*tlb.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(res).
     Build("TLB")
 t.BindPort("Top", ports.Top)
@@ -209,13 +208,13 @@ replacement for a global lookup.
 pageTable := vm.NewPageTable(12)
 
 // Hand the SAME reference to every consumer at setup.
-m := mmu.Definition.Builder().
+m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
 m.BindPort("Top", mmuPorts.Top)
 m.BindPort("Control", mmuPorts.Control)
-g := gmmu.Definition.Builder().
+g := modeling.MakeBuilder[*gmmu.Comp](gmmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     Build("GMMU")
@@ -236,7 +235,7 @@ ticking component, a tick every cycle — goes to each field of its
 `Middlewares` struct in order. You can splice in a custom stage — to inject a
 delay, drop a message, arbitrate differently, or add a probe that needs to run
 every cycle — by adding a field to `Middlewares` and creating it in
-`NewMiddlewares`. For the TLB:
+`Middlewares.Initialize`. For the TLB:
 
 ```go
 type Middlewares struct {
@@ -252,8 +251,8 @@ func (m *myProbe) Handle(_ timing.Event) bool {
     return false
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{
         Probe: &myProbe{comp: c},
         Ctrl:  &ctrlMiddleware{comp: c},
         TLB:   &tlbMiddleware{comp: c},
@@ -277,7 +276,7 @@ component's own code. The component gives the system builder an entry point,
 and the system builder calls it during assembly, before the simulation runs.
 There are two:
 
-- **From configuration.** The `Definition`'s `NewState` builds each instance's
+- **From configuration.** `State.Initialize` builds each instance's
   initial State from its Spec and Resources. A warm-up that a Spec field or a
   Resource can describe belongs here.
 - **From a package function.** The component's package exports a function
@@ -360,7 +359,7 @@ hook, which writes it). Nobody reaches into anybody's state.
 ```go
 // Your own counter type, and an Accesses field you add to mmu.Resources.
 accesses := &Counter{}
-m := mmu.Definition.Builder().
+m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable, Accesses: accesses}).
     Build("MMU")

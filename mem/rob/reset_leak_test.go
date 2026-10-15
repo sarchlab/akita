@@ -3,13 +3,13 @@ package rob
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
@@ -19,7 +19,7 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.BufferSize = 4
 	spec.NumReqPerCycle = 2
 	spec.Bottom = messaging.RemotePort("BottomUnit")
@@ -32,9 +32,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	topPort := port("Top")
 	ctrlPort := port("Control")
 
-	rob := Definition.Builder().
+	rob := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		Build("Rob")
 
 	rob.BindPort("Top", topPort)

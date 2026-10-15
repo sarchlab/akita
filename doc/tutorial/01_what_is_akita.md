@@ -47,7 +47,7 @@ test scaffolding.
 - **A deterministic engine** with serial and parallel implementations.
 - **Three component models** — ticking, wakeup, and event — that share one
   shape: five structs (Spec, State, Resources, Ports, Middlewares) and a
-  `Definition`. Configuration is separate from runtime data, and both are
+  `Comp` alias and `DefaultSpec()` function. Configuration is separate from runtime data, and both are
   JSON-serializable for checkpointing.
 - **A ports and connections layer** with realistic timing, including a
   zero-latency `direct.Connection` for simple topologies and a `noc/`
@@ -82,7 +82,7 @@ Each chapter is one runnable example. You can read the code, run it, and
 modify it. The chapters build on each other:
 
 1. **Create a component** — the default Akita pattern. Write a ticking
-   component — its five structs and its `Definition` — built up a few lines
+   component — its five structs, `Comp` alias, and `DefaultSpec()` — built up a few lines
    at a time.
 2. **Make components talk to each other** — add ports and messages, and
    connect two components so they can communicate.

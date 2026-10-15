@@ -3,13 +3,13 @@ package writethrough
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
@@ -25,7 +25,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	storage := mem.NewStorage(4 * mem.GB)
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.NumReqPerCycle = 1
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 8
@@ -37,9 +37,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.MaxNumConcurrentTrans = 16
 
 	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
 		Build("L1Cache")
 	compPorts := makePorts("L1Cache", 16)
@@ -147,7 +146,7 @@ type resetEndCounter struct {
 func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 
 func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Lower"}
 	pipeline := buildStageTestCache(spec, Resources{
 		Storage: mem.NewStorage(1 * mem.MB),

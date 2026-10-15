@@ -8,19 +8,19 @@ package holds what the models share.
 
 ## Five Structs
 
-A component type is five structs, all declared in its package, plus a
-package-level `Definition`:
+A component type is five structs, all declared in its package, combined by a `Comp` alias, plus a
+package-level `DefaultSpec()` function:
 
 | Struct | What it is | Supplied by |
 |---|---|---|
-| `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults in `Definition`) |
-| `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
+| `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults returned by `DefaultSpec()`) |
+| `State` | mutable runtime data, saved in checkpoints | component (`State.Initialize`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
-| `Middlewares` | the behavior, one field per middleware | component (`NewMiddlewares`) |
+| `Middlewares` | the behavior, one field per middleware | component (`Middlewares.Initialize`) |
 
 The system builder is the code that assembles a simulation. It builds every
-instance with `Definition.Builder()...Build(name)`, then calls
+instance with `modeling.MakeBuilder[*Comp](DefaultSpec())...Build(name)`, then calls
 `component.BindPort("Field", port)` and `connection.BindPort(port)`.
 `simulation.Initialize()` validates wiring, freezes topology, and creates State
 and Middlewares. Configure plain Spec structs before Build; seed runtime work
@@ -35,10 +35,10 @@ objects.
   `[]Link`. Record fields must be exported scalars or scalar slices with explicit,
   unique JSON names. Records cannot contain nested records, maps, pointers, or
   interfaces. `Build` copies every slice, including slices within records, so an instance
-  never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
+  never shares one with the caller's Spec. The instance's `Spec` field is fixed
   after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
-  JSON-serializable. Only the component writes it: its `NewState`, which may
+  JSON-serializable. Only the component writes it: its `State.Initialize`, which may
   read the Spec, Resources, and Ports, and its middlewares. A function in the
   component's own package may also write it while no event is running, for
   example to queue work before the simulation starts (`ping.SchedulePing`);
@@ -65,7 +65,7 @@ Other values that seem to belong in the Spec usually belong elsewhere:
   middleware routes directly through `mem.AddressMapper` values;
 - a reference to an external live object is a Resources field. A
   component's Resources are not part of its checkpoint: the rebuild supplies
-  them, and `NewMiddlewares` recomputes what it derives from them. A shared
+  them, and `Middlewares.Initialize` recomputes what it derives from them. A shared
   object they point to, such as a `mem.Storage` or a `vm.PageTable`, is a
   registered resource that checkpoints itself.
 
@@ -109,7 +109,7 @@ Each package doc shows how to declare and build a component of its model.
   their own scheduler next to the event it schedules; `ticking.Scheduler` is
   exported for connections written by hand, such as `direct.Connection`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
-  the inspector's static view of a package matches its `Definition`;
+  the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.
 - Every model's `Component` has the same five fields — `Spec`, `State`,
   `Resources`, `Ports`, and `Middlewares` — and the same methods — `Name`,
@@ -148,12 +148,25 @@ Pass `s` to every builder through `WithSimulation(s)`. This creates no recording
 or server by default, but always owns IDs, initialization, and entity inventory.
 The separate StandaloneSimulation context has been removed.
 
-### Validation hooks
+### Element initialization
 
-A Definition may supply `ValidateSpec func(Spec) error` for configuration checks
-that need only Spec. Build runs it before registering the component and panics
-on an error. It must not require later-bound ports.
-`ValidateSetup func(*Comp) error` runs during `Initialize`, alongside the generic
-port checks, before any State or Middlewares is created. A validation error
-leaves setup editable. For example, switches validate each `Spec.Links` record
-at Build, but compare its length with `Ports.Links` during Initialize.
+The Comp alias identifies the five element types. DefaultSpec() supplies defaults.
+State and Middlewares may define
+pointer-receiver `Initialize(c *Comp)` methods; neither returns a value. Omit an
+initializer when the zero value works. All middleware fields must still implement
+modeling.Middleware and be non-nil after initialization; the framework does not
+automatically allocate pointer fields or inject component references.
+
+Simulation.Initialize first checks generic port bindings. Errors here leave setup
+editable. It then freezes topology and visits components in registration order,
+calling State.Initialize followed by Middlewares.Initialize for each component.
+Middlewares can therefore use their own component's initialized State and bound
+Ports. Do not change Spec, Resources, Ports, or another component's State.
+
+Put necessary component-specific checks at the start of the relevant initializer.
+An initializer panic leaves the simulation unusable; rebuild it instead of retrying.
+There is no separate validator or creator registration callback,
+and no promise to collect all component-specific errors before initialization.
+Checkpoint restore overwrites State after normal initialization; it does not rerun
+initializers. Runtime shape checks and static inspection recognize the same element
+method signatures.

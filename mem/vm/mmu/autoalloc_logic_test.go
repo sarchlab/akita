@@ -3,9 +3,9 @@ package mmu
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestAutoPageAllocationLogic tests the core auto page allocation functionality
@@ -13,12 +13,11 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -80,13 +79,12 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 func TestPhysicalPageAllocator(t *testing.T) {
 	sim := akitasim.MakeBuilder().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -129,9 +127,8 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 	// Create MMU with auto page allocation disabled (default)
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
-		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -150,12 +147,11 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)

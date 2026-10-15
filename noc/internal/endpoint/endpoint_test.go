@@ -49,7 +49,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().Owner().Return(nil)
 		networkPort.EXPECT().BindOwner(gomock.Any(), "EndPoint.NetworkPort")
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Devices = []messaging.RemotePort{devicePort.AsRemote()}
 		spec.Freq = 1
 		spec.FlitByteSize = 32

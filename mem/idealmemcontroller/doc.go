@@ -2,7 +2,7 @@
 // controller, which has a fixed latency and unlimited concurrency.
 //
 // The controller is a ticking component. The system builder builds it with
-// Definition.Builder(), supplying the backing storage in Resources (required)
+// modeling.MakeBuilder[*Comp](DefaultSpec()), supplying the backing storage in Resources (required)
 // and the Top and Control port instances, created with twowaybuffered.NewPort, with
 // BindPort after construction.
 package idealmemcontroller

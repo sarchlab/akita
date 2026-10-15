@@ -11,12 +11,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/monitoring"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
-	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -54,22 +54,20 @@ func buildEnvironment(
 		Control: twowaybuffered.NewPort(16, 16),
 	}
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
 	agentSpec.LowModule = "Cache.Top"
-	agent := memaccessagent.Definition.Builder().
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 		WithSimulation(s).
-		WithSpec(idealmemcontroller.Definition.DefaultSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(4 * mem.GB).
@@ -81,7 +79,7 @@ func buildEnvironment(
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
 	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
-	cacheSpec := writethrough.Definition.DefaultSpec
+	cacheSpec := writethrough.DefaultSpec()
 	cacheSpec.WritePolicyType = "write-evict"
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.NumMSHREntry = 4
@@ -91,9 +89,8 @@ func buildEnvironment(
 	cacheSpec.BankLatency = 20
 
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
-	writeEvictCache := writethrough.Definition.Builder().
+	writeEvictCache := modeling.MakeBuilder[*writethrough.Comp](cacheSpec).
 		WithSimulation(s).
-		WithSpec(cacheSpec).
 		WithResources(writethrough.Resources{Storage: mem.MakeStorageBuilder().
 			WithCapacity(cacheSpec.TotalByteSize).
 			WithSimulation(s).

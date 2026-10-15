@@ -3,9 +3,6 @@ package memcontrolprotocol_test
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-	"github.com/stretchr/testify/require"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -13,10 +10,13 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-3 cross-component sequence tests: it drives a real
@@ -75,12 +75,11 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 
 	remote := messaging.RemotePort("MMU")
 
-	routingSpec1 := tlb.Definition.DefaultSpec
+	routingSpec1 := tlb.DefaultSpec()
 
 	routingSpec1.Bottom.Destinations = []messaging.RemotePort{remote}
-	comp := tlb.Definition.Builder().
+	comp := modeling.MakeBuilder[*tlb.Comp](routingSpec1).
 		WithSimulation(sim).
-		WithSpec(routingSpec1).
 		Build("TLB")
 
 	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -380,7 +379,7 @@ func buildWritebackForSequence(
 
 	storage := mem.NewStorage(1 * mem.MB)
 
-	spec := writeback.Definition.DefaultSpec
+	spec := writeback.DefaultSpec()
 	spec.TotalByteSize = 64 * 1024
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 16
@@ -391,9 +390,8 @@ func buildWritebackForSequence(
 	spec.DirLatency = 1
 
 	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
-	comp := writeback.Definition.Builder().
+	comp := modeling.MakeBuilder[*writeback.Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(writeback.Resources{Storage: storage}).
 		Build("L1Cache")
 

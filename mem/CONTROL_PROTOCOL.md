@@ -333,7 +333,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    }
 
    // during assembly:
-   comp := mycomp.Definition.Builder().
+   comp := modeling.MakeBuilder[*mycomp.Comp](mycomp.DefaultSpec()).
        // ...
        Build("MyComp")
 

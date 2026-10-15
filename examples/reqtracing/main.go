@@ -20,12 +20,12 @@ package main
 import (
 	"fmt"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/examples/reqtracing/client"
 	"github.com/sarchlab/akita/v5/examples/reqtracing/server"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -35,19 +35,18 @@ func main() {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	// Build the server first, so the client's Spec can name its port.
-	srv := server.Definition.Builder().
+	srv := modeling.MakeBuilder[*server.Comp](server.DefaultSpec()).
 		WithSimulation(sim).
 		Build("Server")
 
 	srv.BindPort("Out", twowaybuffered.NewPort(4, 4))
 
-	clientSpec := client.Definition.DefaultSpec
+	clientSpec := client.DefaultSpec()
 	clientSpec.Dst = srv.Ports.Out.AsRemote()
 	clientSpec.NumReqs = 3
 
-	cli := client.Definition.Builder().
+	cli := modeling.MakeBuilder[*client.Comp](clientSpec).
 		WithSimulation(sim).
-		WithSpec(clientSpec).
 		Build("Client")
 
 	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))

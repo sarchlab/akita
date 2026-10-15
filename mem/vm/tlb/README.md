@@ -48,15 +48,14 @@ are tracked by the shared `mshr` package.
 ## Builder Pattern
 
 ```go
-spec := tlb.Definition.DefaultSpec
+spec := tlb.DefaultSpec()
 spec.NumSets = 64
 spec.NumWays = 4
 spec.MSHRSize = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"MMU.Top"}
 
-t := tlb.Definition.Builder().
+t := modeling.MakeBuilder[*tlb.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     Build("L2TLB")
 t.BindPort("Top", twowaybuffered.NewPort(4, 4))
 t.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
@@ -66,7 +65,7 @@ t.BindPort("Control", twowaybuffered.NewPort(4, 4))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{})` | Optional empty Resources |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

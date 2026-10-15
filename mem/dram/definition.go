@@ -1,23 +1,12 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the DRAM controller, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-//
-// Strategy and behavior selection is by configuration, not by injecting
-// objects: the scheduler and address mapper are chosen by the Spec.Scheduler /
-// Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and
-// refresh is a middleware. New strategies/behaviors are added in-tree and
-// registered — the model the reference simulators use.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                 1600 * timing.MHz,
 		Protocol:             int(protoDDR3),
 		TAL:                  0,
@@ -54,17 +43,15 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		NumCol:               1024,
 		TransactionQueueSize: 32,
 		CommandQueueCapacity: 8,
-	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-// newState returns the State of a freshly built controller: empty queues and
+// Initialize creates the State of a freshly built controller: empty queues and
 // every bank closed.
-func newState(c *Comp) state {
+func (s *state) Initialize(c *Comp) {
 	spec := c.Spec
 
-	return state{
+	*s = state{
 		SubTransQueue: subTransQueueState{
 			Entries: []subTransRef{},
 		},
@@ -77,12 +64,12 @@ func newState(c *Comp) state {
 	}
 }
 
-// newMiddlewares checks the configuration and creates the middlewares. The
+// Initialize checks the configuration and creates the middlewares. The
 // immutable values derived from the Spec — the inter-command timing tables,
 // the command completion delays, and the controller strategies with their
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
-func newMiddlewares(c *Comp) middlewares {
+func (m *middlewares) Initialize(c *Comp) {
 	spec := c.Spec
 	spec.mustBeSupported()
 
@@ -90,7 +77,7 @@ func newMiddlewares(c *Comp) middlewares {
 		panic("dram: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},
 		Refresh: &refreshMiddleware{comp: c},

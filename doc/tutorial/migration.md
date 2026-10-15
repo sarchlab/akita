@@ -14,9 +14,9 @@ next instance. Build components with their final full names and Resources,
 then bind ports and connections. Finally initialize the shared simulation:
 
 ```go
-spec := rob.Definition.DefaultSpec
+spec := rob.DefaultSpec()
 spec.BufferSize = 8
-r := rob.Definition.Builder().WithSimulation(s).WithSpec(spec).Build("GPU.ROB")
+r := modeling.MakeBuilder[*rob.Comp](spec).WithSimulation(s).Build("GPU.ROB")
 r.BindPort("Top", twowaybuffered.NewPort(8, 8))
 r.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
 r.BindPort("Control", twowaybuffered.NewPort(1, 1))
@@ -37,7 +37,7 @@ Bindings are one-time; rejected bindings leave existing wiring intact.
 
 `Initialize` checks every declared port before running any initializer.
 Missing ports and slice holes return an error and leave setup editable. After
-validation succeeds, topology freezes and `NewState`/`NewMiddlewares` run in
+validation succeeds, topology freezes and `State.Initialize`/`Middlewares.Initialize` run in
 component registration order. An initializer panic leaves that simulation
 unusable; rebuild it instead of retrying partially created runtime state.
 Initialize once before execution, checkpoint save/load, or seeding work that
@@ -82,7 +82,7 @@ spec.Bottom = mem.AddressMapper{
 
 A single destination receives every in-range address. Multiple destinations
 repeat every `InterleavingSize` bytes using the absolute address, without
-translating it. Build requires at least one nonempty destination and a positive
+translating it. Component initialization requires at least one nonempty destination and a positive
 interleaving size when there are multiple destinations. A configured range must
 have `RangeHigh > RangeLow` and a nonempty `Fallback`; addresses outside it use
 that fallback. With `RangeHigh == 0`, no fallback is required.
@@ -144,7 +144,7 @@ checkpoint encoding are unchanged.
 Direct connections use a constructor, just like ports. Pass an explicit frequency
 (`timing.GHz` preserves the former default); the constructor registers the
 connection and its event handler with the simulation. Neither ports nor direct
-connections use the component `Definition` and builder API.
+connections use the component builder.
 
 The NoC connector creates only buffered ports and ideal direct connections.
 Remove `WithPortFactory` calls; `PortFactory` is removed. Device ports attached
@@ -226,7 +226,7 @@ initialize fresh trackers for both remaining and already in-flight requests.
 3. [Unified Control Protocol](#3-unified-control-protocol)
 4. [Event Serialization: Handler() → HandlerID()](#4-event-serialization-handler--handlerid)
 5. [Single-State Update](#5-single-state-update)
-6. [Component Models: Five Structs + Definition](#6-component-model)
+6. [Component Models: Five Structs](#6-component-model)
 7. [DRAM Improvements](#7-dram-improvements)
 8. [Port Creation API](#8-port-creation-api)
 9. [Queueing](#9-queueing)
@@ -701,7 +701,7 @@ state.Counter++
 snapshot := comp.State
 ```
 
-The initial State comes from the `Definition`'s `NewState` (or is the zero
+The initial State comes from `State.Initialize` (or is the zero
 value), and loading a checkpoint replaces it wholesale. Only the component's
 own code writes it.
 
@@ -725,8 +725,7 @@ state.Value++                  // direct mutation, visible immediately
 - Remove any deep-copy logic between current/next state.
 - Mutate `State` in place through a pointer (`&m.comp.State`) from the
   component's middlewares; read a copy with `comp.State`.
-- For initialization, return the initial State from the `Definition`'s
-  `NewState`.
+- For initialization, assign through the receiver in `(*State).Initialize(c *Comp)`.
 - For checkpoint restore, write nothing: the component model's
   `LoadCheckpoint` replaces the State.
 
@@ -737,7 +736,7 @@ state.Value++                  // direct mutation, visible immediately
 **Motivation:** In V4 every component was a hand-written struct: it embedded
 the engine's ticking base, created its own ports in a per-package builder, and
 implemented a single per-tick method. V5 defines every component the same way
-— five structs and a `Definition` in a package of its own — and a **component
+— five structs, a `Comp` alias, and `DefaultSpec()` in a package of its own — and a **component
 model** supplies everything else: scheduling, port binding, registration, and
 checkpointing. See "Defining Components in V5" below for the full philosophy.
 
@@ -745,11 +744,11 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 
 | Struct | What it is | Supplied by | Key rule |
 |--------|------------|-------------|----------|
-| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
-| **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
+| **Spec** | Configuration | System builder (defaults in `DefaultSpec()`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
+| **State** | Mutable runtime data, saved in checkpoints | Component (`State.Initialize`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
-| **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
+| **Middlewares** | The behavior: one exported pointer field per middleware | Component (`Middlewares.Initialize`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
 so it accepts hooks and fires its own hook points (`InvokeHook`) without
@@ -757,8 +756,7 @@ affecting simulation logic.
 
 ### Three Component Models
 
-Each model is a sub-package of `modeling` with the same shape — a `Definition`,
-a `Builder`, and a generic `Component` over the five structs. They differ only
+Each model is a sub-package of `modeling` with the same shape — a `Builder` and a generic `Component` over the five structs. They differ only
 in which events reach the middlewares:
 
 | Model | Events that reach the middlewares | Use it for |
@@ -808,21 +806,20 @@ type Middlewares struct {
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 ```
 
-and its `Definition`:
+and its defaults and initialization:
 
 ```go
 // mem/rob/definition.go
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-    DefaultSpec: Spec{
+func DefaultSpec() Spec {
+    return Spec{
         Freq:           1 * timing.GHz,
         BufferSize:     128,
         NumReqPerCycle: 4,
-    },
-    NewMiddlewares: newMiddlewares,
+    }
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{Pipeline: &middleware{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{Pipeline: &middleware{comp: c}}
 }
 ```
 
@@ -844,15 +841,15 @@ func (m *middleware) Handle(_ timing.Event) bool {
 }
 ```
 
-`DefaultSpec` must be a keyed literal with constant leaves, and `NewState` and
-`NewMiddlewares` must name functions, because the `inspect` package reads the
-`Definition` without running the code. A one-line test keeps the static and
+`DefaultSpec()` must directly return a keyed Spec literal with constant leaves.
+The `inspect` package reads that return statement and the `Comp` alias without
+running the package. A one-line test keeps the static and
 runtime views in agreement:
 
 ```go
 // mem/rob/definition_test.go
-func TestDefinitionMatchesSource(t *testing.T) {
-    modelingtest.CheckTicking(t, Definition)
+func TestComponentMatchesSource(t *testing.T) {
+    modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())
 }
 ```
 
@@ -867,12 +864,11 @@ The **system builder** — the code that assembles a simulation — creates ever
 port and builds the instance:
 
 ```go
-spec := rob.Definition.DefaultSpec
+spec := rob.DefaultSpec()
 spec.Bottom = bottomUnit.AsRemote()
 
-r := rob.Definition.Builder().
+r := modeling.MakeBuilder[*rob.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     Build("ROB")
 r.BindPort("Top", twowaybuffered.NewPort(4, 4))
 r.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
@@ -887,7 +883,7 @@ after wiring. Access ports through fields such as `r.Ports.Top`.
 
 ### Defining Components in V5: Philosophy and Patterns
 
-V5 unifies how components are modeled and wired. Each component type is five structs — Spec, State, Resources, Ports, and Middlewares — and a `Definition`, declared in a package of its own; a component model turns them into a running component. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
+V5 unifies how components are modeled and wired. Each component type is five structs — Spec, State, Resources, Ports, and Middlewares — and a `Comp` alias and `DefaultSpec()` function, declared in a package of its own; a component model turns them into a running component. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
 
 #### Core Principles
 
@@ -895,13 +891,13 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps or nested records.
    - Routing dependencies are plain values such as `Bottom mem.AddressMapper`; its destinations and parameters fully specify the behavior.
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
-   - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
+   - Defaults live in `DefaultSpec()`; the system builder calls it, changes fields, and passes the result to `WithSpec`.
 
 2. State (mutable runtime data)
    - Pure data only: scalars, slices, arrays, maps with string or integer keys, and simple nested structs.
    - No live handles, functions, channels, or ports in State.
    - All cross‑references use stable identifiers (IDs), never in‑memory pointers.
-   - Written only by the component's own code: its `NewState`, its middlewares, and functions its package exports for the system builder (such as `ping.SchedulePing`).
+   - Written only by the component's own code: its `State.Initialize`, its middlewares, and functions its package exports for the system builder (such as `ping.SchedulePing`).
    - A checkpoint serializes the State; loading one replaces it wholesale.
 
 3. Resources (references supplied by the system builder)
@@ -914,7 +910,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
-   - Each middleware implements `Handle(e timing.Event) bool` and is an exported pointer field of `Middlewares`; the component passes every event to them in field order. Created in `NewMiddlewares`.
+   - Each middleware implements `Handle(e timing.Event) bool` and is an exported pointer field of `Middlewares`; the component passes every event to them in field order. Created in `Middlewares.Initialize`.
    - A middleware holds the component pointer and nothing mutable; everything that changes lives in State.
    - In a ticking component, prefer tick‑driven countdowns/backpressure over ad‑hoc scheduled events for simpler snapshots and determinism. When the behavior is naturally a set of timed events, use the event model instead.
 
@@ -940,7 +936,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Determinism and Introspection
 
 - Determinism: avoid non‑deterministic IDs or iteration order; snapshot ID generators; canonicalize map iteration by sorting.
-- Introspection: `comp.Spec` holds the effective Spec and `comp.State` can be dumped for debugging; the `inspect` package reads each `Definition`, its ports, and their roles without running the code.
+- Introspection: `comp.Spec` holds the effective Spec and `comp.State` can be dumped for debugging; the `inspect` package reads each `Comp` alias, `DefaultSpec()`, ports, and roles without running the code.
 - Tracing/metrics: attach as hooks; avoid embedding tracing in business logic.
 
 #### Testing and Mocks
@@ -948,12 +944,12 @@ V5 unifies how components are modeled and wired. Each component type is five str
 - Favor local interfaces inside the component package to reduce external coupling (e.g., `Storage`, `AddressConverter`, `StateAccessor`).
 - Generate mocks from local interfaces for unit tests; avoid importing remote mocks.
 - Drive behavior via ticks and ports; avoid requiring real engines or networks in unit tests. `modelingtest.Tick(comp)` hands every middleware of a ticking component one tick and reports whether any made progress, without scheduling the next one, so a test steps the component cycle by cycle.
-- Add a `modelingtest.CheckTicking(t, Definition)` test (or `CheckWakeup`, `CheckEvent`) to every component package.
+- Add a `modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())` test (or `CheckWakeup`, `CheckEvent`) to every component package.
 
 #### Example: Ideal Memory Controller (V5)
 
 - Spec
-  - `Freq`, `Width`, `Latency`, `CacheLineSize`; defaults in `Definition.DefaultSpec`.
+  - `Freq`, `Width`, `Latency`, `CacheLineSize`; defaults in `DefaultSpec()`.
 
 - State
   - Pure data transactions with countdowns (`InflightTransactions`); no ports or live pointers.
@@ -996,10 +992,21 @@ components may derive lookup tables at initialization. Resources must not provid
 a second routing override.
 Resources are rebuilt separately; shared registered objects checkpoint themselves.
 
-Use Definition.ValidateSpec for configuration-only checks at Build. Use
-Definition.ValidateSetup for checks involving bound ports during Initialize,
-before any State or Middlewares is created. In particular, link count equality
-is an Initialize check, since Build precedes port binding.
+Move component-specific checks into `(*State).Initialize(c *Comp)` or
+`(*Middlewares).Initialize(c *Comp)`, before using the checked values. These methods
+run after generic port validation and topology freezing. A component-specific
+failure now panics during Initialize and requires rebuilding the simulation;
+it is no longer a Build-time check or a recoverable validation error.
+
+Remove the model Definition type and package-level Definition variable, including
+its NewState, NewMiddlewares, ValidateSpec, and ValidateSetup callbacks. Move the
+default literal into func DefaultSpec() Spec and build with
+`modeling.MakeBuilder[*Comp](DefaultSpec())`. Convert constructors that returned values
+into Initialize methods that assign through their pointer receiver. Either method
+may be omitted when the element's zero value works; nil middleware pointers still
+fail initialization. Do not mutate Spec, Resources, Ports, or another component's
+State from an initializer. Checkpoint data and middleware Handle signatures are
+unchanged by this migration.
 
 ### Migration Checklist
 
@@ -1009,11 +1016,11 @@ is an Initialize check, since Build precedes port binding.
 - Express strategy choices as scalars or flat configuration records. Records may contain scalar slices but cannot nest.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
 - Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>.<role>"` when it speaks a protocol role, where `<protocol>` is the import path of the package that defines the protocol. Reach ports as `comp.Ports.X`.
-- Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
-- Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
+- Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `(*Middlewares).Initialize(c *Comp)` method. Move any mutable middleware field into State.
+- Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `func DefaultSpec() Spec { return Spec{...} }`. Initialize State and Middlewares through their own optional methods.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
-- In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
+- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
+- In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())` test.
 
 ---
 
@@ -1072,27 +1079,28 @@ V5 ships with validated presets for common DRAM technologies:
 
 ```go
 // v5/mem/dram/presets.go
-dram.DDR4Spec   // DDR4-2400 (1200 MHz, BL8, 4 bank groups × 4 banks)
-dram.DDR5Spec   // DDR5-4800 (2400 MHz, BL16, 8 bank groups × 4 banks)
-dram.HBM2Spec   // HBM2-2Gbps (1000 MHz, BL4, 4 bank groups × 4 banks, 128-bit bus)
-dram.HBM3Spec   // HBM3-6.4Gbps (3200 MHz, BL8)
-dram.GDDR6Spec  // GDDR6-14Gbps (1750 MHz, BL16)
+dram.DDR4Spec()   // DDR4-2400 (1200 MHz, BL8, 4 bank groups × 4 banks)
+dram.DDR5Spec()   // DDR5-4800 (2400 MHz, BL16, 8 bank groups × 4 banks)
+dram.HBM2Spec()   // HBM2-2Gbps (1000 MHz, BL4, 4 bank groups × 4 banks, 128-bit bus)
+dram.HBM3Spec()   // HBM3-6.4Gbps (3200 MHz, BL8)
+dram.GDDR6Spec()  // GDDR6-14Gbps (1750 MHz, BL16)
 ```
 
 ### Usage
 
-A preset is a complete `dram.Spec`, including its `Freq`; copy it, change the
-fields you need, and pass it to `WithSpec`:
+Each preset function returns an independent, complete `dram.Spec`, including its
+`Freq`. Call the function, customize the result, and pass it to
+`modeling.MakeBuilder[*dram.Comp]`. Changes to one result do not affect later
+preset calls:
 
 ```go
-spec := dram.DDR4Spec
+spec := dram.DDR4Spec()
 spec.PagePolicy = dram.PagePolicyOpen
 
 storage := mem.NewStorage(4 * mem.GB)
 
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
@@ -1137,12 +1145,11 @@ ctrl := idealmemcontroller.New().
 **After (V5) — cycle-accurate DRAM:**
 ```go
 // V5: Bank-state machine with proper command sequencing.
-spec := dram.HBM2Spec
+spec := dram.HBM2Spec()
 spec.PagePolicy = dram.PagePolicyOpen
 
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 ctrl.BindPort("Top", twowaybuffered.NewPort(4, 4))
@@ -1173,9 +1180,8 @@ cache := cachebuilder.New().
 ```go
 // V5: the component declares its ports as the fields of its Ports struct;
 // the system builder creates each port and passes them all to Build.
-cache := writeback.Definition.Builder().
+cache := modeling.MakeBuilder[*writeback.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(writeback.Resources{Storage: storage}).
     Build("Cache")
 cache.BindPort("Top", twowaybuffered.NewPort(4, 4))
@@ -1246,7 +1252,7 @@ and validation rules do not support the V5 component models. There are no
 `akita component-lint` or `akita component-create` commands.
 
 For V5, follow the [component tutorial](components/01_what_is_a_component.md),
-use a package-level `Definition`, and add the appropriate
+use a package-level `DefaultSpec()` function, and add the appropriate
 `modelingtest.CheckTicking`, `CheckWakeup`, or `CheckEvent` test. The `inspect`
 package reads component definitions without constructing a simulation.
 

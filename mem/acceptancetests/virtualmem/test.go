@@ -15,14 +15,14 @@ import (
 	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -56,16 +56,15 @@ func setupTest(
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
 	ioMMU, tlb, l2TLB := buildTranslationHierarchy(s)
 
-	atSpec := addresstranslator.Definition.DefaultSpec
+	atSpec := addresstranslator.DefaultSpec()
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 
 	atSpec.Bottom.Destinations = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
 
 	atSpec.Translation.Destinations = []messaging.RemotePort{tlb.Ports.Top.AsRemote()}
-	at := addresstranslator.Definition.Builder().
+	at := modeling.MakeBuilder[*addresstranslator.Comp](atSpec).
 		WithSimulation(s).
-		WithSpec(atSpec).
 		Build("AT")
 
 	at.BindPort("Top", newPort("AT.Top"))
@@ -77,15 +76,14 @@ func setupTest(
 	// the trace exercises the ROB instrumentation end-to-end.
 	robComp := buildROB(s, at.Ports.Top.AsRemote())
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
 	agentSpec.LowModule = robComp.Ports.Top.AsRemote()
-	agent = memaccessagent.Definition.Builder().
+	agent = modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", newPort("MemAccessAgent.Mem"))
@@ -108,13 +106,12 @@ func setupTest(
 // buildROB builds a reorder buffer that forwards every access to bottomUnit
 // (the address translator's Top port) and reorders the responses back.
 func buildROB(s *sim.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
-	robSpec := rob.Definition.DefaultSpec
+	robSpec := rob.DefaultSpec()
 	robSpec.NumReqPerCycle = 4
 	robSpec.Bottom = bottomUnit
 
-	builtComponent := rob.Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*rob.Comp](robSpec).
 		WithSimulation(s).
-		WithSpec(robSpec).
 		Build("ROB")
 
 	builtComponent.BindPort("Top", newPort("ROB.Top"))
@@ -129,13 +126,12 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	*writeback.Comp,
 	*idealmemcontroller.Comp,
 ) {
-	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
+	memCtrlSpec := idealmemcontroller.DefaultSpec()
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
 	memCtrlSpec.CacheLineSize = 64
-	memCtrl := idealmemcontroller.Definition.Builder().
+	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
-		WithSpec(memCtrlSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: newStorage(s, 4*mem.GB, "MemCtrl.Storage"),
 		}).
@@ -144,16 +140,15 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
 	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
 
-	l2Spec := writeback.Definition.DefaultSpec
+	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
-	L2Cache := writeback.Definition.Builder().
+	L2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
 		WithSimulation(s).
-		WithSpec(l2Spec).
 		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
@@ -161,16 +156,15 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	L2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
 	L2Cache.BindPort("Control", newPort("L2Cache.Control"))
 
-	l1Spec := writethrough.Definition.DefaultSpec
+	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
 		L2Cache.Ports.Top.AsRemote(),
 	}
-	L1Cache := writethrough.Definition.Builder().
+	L1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
 		WithSimulation(s).
-		WithSpec(l1Spec).
 		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage")}).
 		Build("L1Cache")
 
@@ -191,13 +185,12 @@ func buildTranslationHierarchy(
 ) {
 	pageTable := setupPageTable(*maxAddressFlag, s)
 
-	mmuSpec := mmu.Definition.DefaultSpec
+	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
-	IoMMU := mmu.Definition.Builder().
+	IoMMU := modeling.MakeBuilder[*mmu.Comp](mmuSpec).
 		WithSimulation(s).
-		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
@@ -206,32 +199,30 @@ func buildTranslationHierarchy(
 
 	L2TLBMapper := IoMMU.Ports.Top.AsRemote()
 
-	l2TLBSpec := tlb.Definition.DefaultSpec
+	l2TLBSpec := tlb.DefaultSpec()
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 
 	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{L2TLBMapper}
-	L2TLB := tlb.Definition.Builder().
+	L2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
 		WithSimulation(s).
-		WithSpec(l2TLBSpec).
 		Build("L2TLB")
 
 	L2TLB.BindPort("Top", newPort("L2TLB.Top"))
 	L2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
 	L2TLB.BindPort("Control", newPort("L2TLB.Control"))
 
-	tlbSpec := tlb.Definition.DefaultSpec
+	tlbSpec := tlb.DefaultSpec()
 	tlbSpec.NumWays = 8
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
 
 	tlbSpec.Bottom.Destinations = []messaging.RemotePort{L2TLB.Ports.Top.AsRemote()}
-	TLB := tlb.Definition.Builder().
+	TLB := modeling.MakeBuilder[*tlb.Comp](tlbSpec).
 		WithSimulation(s).
-		WithSpec(tlbSpec).
 		Build("TLB")
 
 	TLB.BindPort("Top", newPort("TLB.Top"))

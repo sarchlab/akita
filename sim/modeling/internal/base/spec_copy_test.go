@@ -18,20 +18,18 @@ func TestBuildCopiesRecordSlices(t *testing.T) {
 		Bottom   mem.AddressMapper   `json:"bottom"`
 		Mappings []mem.AddressMapper `json:"mappings"`
 	}
-	type comp = ticking.Component[spec, modeling.None, modeling.None, modeling.None, modeling.None]
-	def := ticking.Definition[spec, modeling.None, modeling.None, modeling.None, modeling.None]{
-		DefaultSpec: spec{
-			Freq:     timing.GHz,
-			Bottom:   mem.AddressMapper{Destinations: []messaging.RemotePort{"A"}},
-			Mappings: []mem.AddressMapper{{Destinations: []messaging.RemotePort{"B"}}},
-		},
-		NewMiddlewares: func(*comp) modeling.None { return modeling.None{} },
+	defaults := spec{
+		Freq:     timing.GHz,
+		Bottom:   mem.AddressMapper{Destinations: []messaging.RemotePort{"A"}},
+		Mappings: []mem.AddressMapper{{Destinations: []messaging.RemotePort{"B"}}},
 	}
+	def := modeling.MakeBuilder[*ticking.Component[
+		spec, modeling.None, modeling.None, modeling.None, modeling.None]](defaults)
 	s := akitasim.MakeBuilder().Build()
-	a := def.Builder().WithSimulation(s).Build("A")
-	b := def.Builder().WithSimulation(s).Build("B")
-	def.DefaultSpec.Bottom.Destinations[0] = "Changed"
-	def.DefaultSpec.Mappings[0].Destinations[0] = "Changed"
+	a := def.WithSimulation(s).Build("A")
+	b := def.WithSimulation(s).Build("B")
+	defaults.Bottom.Destinations[0] = "Changed"
+	defaults.Mappings[0].Destinations[0] = "Changed"
 	require.Equal(t, messaging.RemotePort("A"), a.Spec.Bottom.Find(0))
 	require.Equal(t, messaging.RemotePort("B"), a.Spec.Mappings[0].Find(0))
 	a.Spec.Mappings[0].Destinations[0] = "ChangedInstance"

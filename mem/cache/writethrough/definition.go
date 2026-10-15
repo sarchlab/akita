@@ -1,20 +1,17 @@
 package writethrough
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the writethrough, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                  1 * timing.GHz,
 		NumReqPerCycle:        4,
 		Log2BlockSize:         6,
@@ -27,15 +24,16 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		DirLatency:            2,
 		WritePolicyType:       "write-around",
 		Bottom:                mem.AddressMapper{InterleavingSize: 4096},
-	},
-	NewState:       newState,
-	ValidateSpec:   validateSpec,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-// newState returns a running cache with an empty directory, MSHR, and
+// Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) state {
+func (s *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+
 	spec := c.Spec
 
 	bankBufs := make([]queueing.Buffer[int], spec.NumBanks)
@@ -55,7 +53,7 @@ func newState(c *Comp) state {
 		bankPostBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
-	s := state{
+	initial := state{
 		DirBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankBufs: bankBufs,
@@ -70,21 +68,21 @@ func newState(c *Comp) state {
 	}
 
 	cache.DirectoryReset(
-		&s.DirectoryState, spec.numSets(), spec.WayAssociativity,
+		&initial.DirectoryState, spec.numSets(), spec.WayAssociativity,
 		spec.blockSize())
 
-	return s
+	*s = initial
 }
 
-// newMiddlewares creates the cache's middlewares. The pipeline middleware
+// Initialize creates the cache's middlewares. The pipeline middleware
 // holds the storage and the pipeline stages.
-func newMiddlewares(c *Comp) middlewares {
+func (m *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writethrough: Resources.Storage is required")
 	}
 
-	return middlewares{
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		Pipeline: newPipelineMW(
 			c, res.Storage),

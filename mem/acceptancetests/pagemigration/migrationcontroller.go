@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -153,25 +154,22 @@ type migMiddlewares struct {
 type migrationController = ticking.Component[
 	migSpec, migState, migResources, migPorts, migMiddlewares]
 
-// Definition declares the migration controller, a ticking component.
-var Definition = ticking.Definition[
-	migSpec, migState, migResources, migPorts, migMiddlewares]{
-	DefaultSpec: migSpec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() migSpec {
+	return migSpec{
 		Freq: 1 * timing.GHz,
-	},
-	NewState:       newMigState,
-	NewMiddlewares: newMigMiddlewares,
+	}
 }
 
-func newMigState(c *migrationController) migState {
-	return migState{
+func (s *migState) Initialize(c *migrationController) {
+	*s = migState{
 		Phase:     migIdle,
 		Countdown: c.Spec.Interval,
 	}
 }
 
-func newMigMiddlewares(c *migrationController) migMiddlewares {
-	return migMiddlewares{
+func (m *migMiddlewares) Initialize(c *migrationController) {
+	*m = migMiddlewares{
 		Migration: &migMW{ctrl: c, res: c.Resources},
 	}
 }
@@ -581,7 +579,7 @@ func buildDataMover(
 		memCtrlPorts[d] = mc.Ports.Top.AsRemote()
 	}
 
-	dmSpec := datamover.Definition.DefaultSpec
+	dmSpec := datamover.DefaultSpec()
 	dmSpec.BufferSize = pageSize
 	dmSpec.InsideByteGranularity = 64
 	dmSpec.OutsideByteGranularity = 64
@@ -591,9 +589,8 @@ func buildDataMover(
 
 	dmSpec.Outside.Destinations = memCtrlPorts
 	dmSpec.Outside.InterleavingSize = shared.deviceStride
-	mover := datamover.Definition.Builder().
+	mover := modeling.MakeBuilder[*datamover.Comp](dmSpec).
 		WithSimulation(s).
-		WithSpec(dmSpec).
 		Build("DataMover")
 
 	mover.BindPort("Top", newPort("DataMover.Top"))
@@ -610,7 +607,7 @@ func buildMigrationController(
 	chains []agentChain,
 	mover *datamover.Comp,
 ) *migrationController {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Interval = *migrateIntervalFlag
 	spec.NumPages = shared.numPages
 	spec.DeviceStride = shared.deviceStride
@@ -621,9 +618,8 @@ func buildMigrationController(
 	}
 	collectControlTargets(&res, shared, chains)
 
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*migrationController](spec).
 		WithSimulation(s).
-		WithSpec(spec).
 		WithResources(res).
 		Build("MigrationController")
 
@@ -666,3 +662,6 @@ func collectControlTargets(
 	res.AllTargets = append(res.AllTargets, res.ROBTargets...)
 	res.AllTargets = append(res.AllTargets, res.RestTargets...)
 }
+
+// Comp identifies the component type for static inspection.
+type Comp = migrationController

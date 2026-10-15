@@ -4,14 +4,13 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
-
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -67,7 +66,7 @@ var _ = Describe("Switch", func() {
 
 		routingTable = NewMockTable(mockCtrl)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Freq = 1
 
 		for _, p := range []*MockPort{port1, port2} {
@@ -85,9 +84,8 @@ var _ = Describe("Switch", func() {
 		}
 
 		spec.Links = []Link{link(remote1), link(remote2)}
-		sw = Definition.Builder().
+		sw = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("Switch")
 		swPorts := Ports{Links: []messaging.Port{port1, port2}}
 		for i, p := range swPorts.Links {

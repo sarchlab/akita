@@ -47,19 +47,17 @@ type Middlewares struct {
 // Comp is the client, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the client.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, NumReqs: 1},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, NumReqs: 1}
 }
 
-func newState(_ *Comp) State {
-	return State{InFlight: map[uint64]uint64{}}
+func (s *State) Initialize(_ *Comp) {
+	*s = State{InFlight: map[uint64]uint64{}}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Request: &requestMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Request: &requestMW{comp: c}}
 }
 
 type requestMW struct {

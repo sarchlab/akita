@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -31,13 +30,9 @@ func TestRejectUnsupportedDevicePortsBeforeAttaching(t *testing.T) {
 
 func TestRejectFrozenDeviceOwnerBeforeAttaching(t *testing.T) {
 	frozen := akitasim.MakeBuilder().Build()
-	def := ticking.Definition[Spec, modeling.None, modeling.None, Ports, modeling.None]{
-		DefaultSpec: Spec{Freq: timing.GHz},
-		NewMiddlewares: func(*ticking.Component[Spec, modeling.None, modeling.None, Ports, modeling.None]) modeling.None {
-			return modeling.None{}
-		},
-	}
-	owner := def.Builder().WithSimulation(frozen).Build("FrozenDevice")
+	def := modeling.MakeBuilder[*ticking.Component[
+		Spec, modeling.None, modeling.None, Ports, modeling.None]](Spec{Freq: timing.GHz})
+	owner := def.WithSimulation(frozen).Build("FrozenDevice")
 	late := twowaybuffered.NewPort(1, 1)
 	owner.BindPort("NetworkPort", late)
 	require.NoError(t, frozen.Initialize())

@@ -22,9 +22,6 @@ type Spec struct {
 }
 type Comp = ticking.Component[Spec, modeling.None, modeling.None, modeling.None, modeling.None]
 
-var Definition = ticking.Definition[Spec, modeling.None, modeling.None, modeling.None, modeling.None]{
-	DefaultSpec:    Spec{Bottom: Routing{Destinations: []string{"A", "B"}, Size: 64}, Mappings: []Routing{{Destinations: []string{"C"}}}, Freq: timing.GHz, Links: []Link{{Remote: "Peer.Top", Latency: 3}, {Remote: "Other.Top"}}},
-	NewMiddlewares: newMiddlewares,
+func DefaultSpec() Spec {
+	return Spec{Bottom: Routing{Destinations: []string{"A", "B"}, Size: 64}, Mappings: []Routing{{Destinations: []string{"C"}}}, Freq: timing.GHz, Links: []Link{{Remote: "Peer.Top", Latency: 3}, {Remote: "Other.Top"}}}
 }
-
-func newMiddlewares(*Comp) modeling.None { return modeling.None{} }

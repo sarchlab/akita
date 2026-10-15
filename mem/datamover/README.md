@@ -73,21 +73,20 @@ type DataMoveRsp struct {
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from
+`DefaultSpec()`); the engine and registration come from
 `WithSimulation`; side destinations and mapping parameters come from Spec; port
 instances come from `component.BindPort` after Build.
 
 ```go
-spec := datamover.Definition.DefaultSpec
+spec := datamover.DefaultSpec()
 spec.BufferSize = 4096
 spec.InsideByteGranularity = 64
 spec.OutsideByteGranularity = 64
 spec.Inside.Destinations = []messaging.RemotePort{"L2.Top"}
 spec.Outside.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
-mover := datamover.Definition.Builder().
+mover := modeling.MakeBuilder[*datamover.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     Build("DMA")
 mover.BindPort("Top", twowaybuffered.NewPort(16, 16))
 mover.BindPort("Inside", twowaybuffered.NewPort(16, 16))
@@ -102,7 +101,7 @@ ctrlPort := mover.Ports.Control
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. |
 | `WithResources(r)` | Optional empty Resources. |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

@@ -4,11 +4,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -94,14 +94,13 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 		addressToPortMapper := dramTop.AsRemote()
 
-		cacheSpec := Definition.DefaultSpec
+		cacheSpec := DefaultSpec()
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
-		cacheComp = Definition.Builder().
+		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithSpec(cacheSpec).
 			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
 		cacheCompPorts := makePorts("Cache", 8)

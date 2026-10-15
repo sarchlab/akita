@@ -1,15 +1,15 @@
 package simplebankedmemory
 
 import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 // These tests cover bank selection when the memory is one of several
@@ -52,7 +52,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 	// withBankConv returns a spec whose bank selection strips the 128 B/4-way
 	// controller interleaving for element 1.
 	withBankConv := func() Spec {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
 		spec.BankAddrConvKind = "interleaving"
@@ -63,7 +63,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 	}
 
 	It("collapses onto a fraction of banks without the bank conversion", func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
 		// No bank conversion: selection runs on the strided global address.
@@ -116,7 +116,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBanks = 4
 		spec.StageLatency = 2
 		spec.BankSelectorLog2InterleaveSize = 6
@@ -126,9 +126,8 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		spec.BankAddrTotalNumOfElements = 4
 		spec.BankAddrCurrentElementIndex = 1
 
-		memComp = Definition.Builder().
+		memComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
 			Build("MemBank")
 		memCompPorts := makePorts("MemBank", 8, 16)

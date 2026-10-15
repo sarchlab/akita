@@ -3,11 +3,11 @@ package mmu
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // TestControlContract verifies the MMU satisfies the universal verbs.
@@ -17,9 +17,8 @@ func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
-			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{PageTable: vm.NewPageTable(12)}).
 			Build("MMU")
 		compPorts := makePorts("MMU", 16)

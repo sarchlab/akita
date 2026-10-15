@@ -78,7 +78,7 @@ also runs on the request's global address.
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
+Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component), `WithResources` (the backing storage, required), and
 `component.BindPort` after Build (the port instances). The component does not build a storage of its
@@ -86,7 +86,7 @@ own: the system builder creates one, usually sized by `Spec.Capacity`, and may
 share it with other components. `Build` panics if `Resources.Storage` is nil.
 
 ```go
-spec := simplebankedmemory.Definition.DefaultSpec
+spec := simplebankedmemory.DefaultSpec()
 spec.NumBanks = 4
 spec.BankPipelineWidth = 2
 spec.BankPipelineDepth = 3
@@ -98,9 +98,8 @@ storage := mem.MakeStorageBuilder().
     WithSimulation(sim).
     Build("MyMemCtrl.Storage")
 
-memCtrl := simplebankedmemory.Definition.Builder().
+memCtrl := modeling.MakeBuilder[*simplebankedmemory.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     Build("MyMemCtrl")
 memCtrl.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -112,7 +111,7 @@ topPort := memCtrl.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{Storage: s})` | Backing storage (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
@@ -152,7 +151,7 @@ strip the inter-controller interleaving, so bank selection runs on a contiguous
 global (these fields never affect storage):
 
 ```go
-spec := simplebankedmemory.Definition.DefaultSpec
+spec := simplebankedmemory.DefaultSpec()
 spec.NumBanks = 16
 spec.BankSelectorLog2InterleaveSize = 6 // 64 B bank stride
 

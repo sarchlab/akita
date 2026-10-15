@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -102,7 +103,7 @@ var _ = Describe("Cache milestones", func() {
 		cuPort = newDriverPort("CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dram = idealmemcontroller.Definition.Builder().
+		dram = modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
@@ -112,13 +113,12 @@ var _ = Describe("Cache milestones", func() {
 
 		addressToPortMapper := dram.Ports.Top.AsRemote()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.WritePolicyType = policy
 
 		spec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
-		c = Definition.Builder().
+		c = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
 			Build("Cache")
 

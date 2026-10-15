@@ -1,22 +1,16 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the tickingping component, a ticking component: its
-// default configuration and its behavior. Its ports and middlewares are the
-// fields of Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name).
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{
 		Send:           &sendMW{comp: c},
 		ReceiveProcess: &receiveProcessMW{comp: c},
 	}

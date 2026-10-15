@@ -6,29 +6,26 @@ import (
 	"github.com/sarchlab/akita/v5/noc/routing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the switch, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name), then binds one port per link in Ports.Links
-// and the matching links in Spec.Links; tooling reads the same
-// declaration statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq: 1 * timing.GHz,
-	},
-	ValidateSpec:   validateSpec,
-	ValidateSetup:  validateSetup,
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+	}
 }
 
-// newState creates one port complex per port, sized by the port's link.
-func newState(c *Comp) state {
+// Initialize creates one port complex per port, sized by the port's link.
+func (s *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+	if err := validateSetup(c); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+
 	ports := c.Ports.Links
 	links := c.Spec.Links
 
@@ -37,7 +34,7 @@ func newState(c *Comp) state {
 		state.PortComplexes[i] = newPortComplex(port, links[i])
 	}
 
-	return state
+	*s = state
 }
 
 func newPortComplex(port messaging.Port, link Link) portComplexState {
@@ -60,9 +57,9 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 	}
 }
 
-// newMiddlewares creates the middlewares. Both share the index from a port,
+// Initialize creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
-func newMiddlewares(c *Comp) middlewares {
+func (m *middlewares) Initialize(c *Comp) {
 	table := routing.NewTable()
 	for _, route := range c.Spec.Routes {
 		table.DefineRoute(route.Destination, route.Output)
@@ -78,7 +75,7 @@ func newMiddlewares(c *Comp) middlewares {
 		}
 	}
 
-	return middlewares{
+	*m = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
 			portIndex:    portIndex,

@@ -3,12 +3,12 @@ package writeback
 import (
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 type ccNoopConn struct {
@@ -27,7 +27,7 @@ func TestControlContract(t *testing.T) {
 
 		storage := mem.NewStorage(1 * mem.MB)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.TotalByteSize = 64 * 1024
 		spec.NumBanks = 1
 		spec.NumMSHREntry = 4
@@ -38,9 +38,8 @@ func TestControlContract(t *testing.T) {
 		spec.DirLatency = 1
 
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
 		compPorts := makePorts("L1Cache", 4)
