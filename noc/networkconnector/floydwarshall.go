@@ -38,7 +38,6 @@ func (r FloydWarshallRouter) floydWarshallInit(
 
 			if i == j {
 				table[i][j].distance = 0
-				table[i][j].nextHop = &remotes[0]
 
 				continue
 			}
@@ -82,6 +81,9 @@ func (r FloydWarshallRouter) tableToRoute(table [][]routeInfo, nodes []Node) {
 			}
 
 			remote := table[i][j].nextHop
+			if remote == nil {
+				panic("networkconnector: unreachable destination " + epNode.Name() + " from " + swNode.Name())
+			}
 			for _, p := range epNode.ports {
 				swNode.Table().
 					DefineRoute(p.AsRemote(), remote.localAddress())

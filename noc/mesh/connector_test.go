@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
-	// . "github.com/onsi/gomega"
+	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/mesh"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -30,8 +30,8 @@ var _ = Describe("Connector", func() {
 
 		// 8,8,2 is the default capacity
 		connector.AddTile([3]int{8, 8, 2}, []messaging.Port{port})
+		Expect(sim.Initialize()).To(Succeed())
 
-		connector.EstablishNetwork()
 	})
 })
 

@@ -32,19 +32,17 @@ func (r Remote) Bandwidth(_ int) float64 {
 // Node represents an endpoint or a switch.
 type Node interface {
 	ListRemotes() []Remote
-	Table() routing.Table
+	Table() *routing.Table
 	Name() string
 }
 
-// switchNode is a switch of the network. Its ports and links are collected as
-// devices and switches are connected; the switch itself is built from them by
-// EstablishRoute.
+// switchNode owns setup-time wiring for a switch built by AddSwitch.
 type switchNode struct {
 	name    string
-	spec    switches.Spec
-	table   routing.Table
+	network *Connector
+	table   *routing.Table
 	ports   []messaging.Port
-	links   []switches.Link
+	ends    []LinkEndSwitchParameter
 	sw      *switches.Comp
 	remotes []Remote
 }
@@ -57,39 +55,38 @@ func (sn *switchNode) Name() string {
 	return sn.name
 }
 
-func (sn *switchNode) Table() routing.Table {
+func (sn *switchNode) Table() *routing.Table {
 	return sn.table
 }
 
-// addPort creates the switch's next port and the link behind it, and returns
-// the port and the link's index. remote may be empty and set later, once the
-// port at the other end exists.
-func (sn *switchNode) addPort(
-	remote messaging.RemotePort,
-	param LinkEndSwitchParameter,
-) (messaging.Port, int) {
-	if sn.sw != nil {
-		panic(fmt.Sprintf("networkconnector: switch %s is already built", sn.name))
-	}
-
-	port := twowaybuffered.NewPort(param.OutgoingBufSize, param.OutgoingBufSize)
-
+// addPort binds immediately, so every address comes from a bound port.
+func (sn *switchNode) addPort(param LinkEndSwitchParameter) messaging.Port {
+	sn.network.simulation.RequireSetup()
+	port := twowaybuffered.NewPort(param.IncomingBufSize, param.OutgoingBufSize)
+	sn.sw.BindPort(fmt.Sprintf("Links[%d]", len(sn.ports)), port)
 	sn.ports = append(sn.ports, port)
-	sn.links = append(sn.links, switches.Link{
-		Remote:           remote,
-		Latency:          param.Latency,
-		NumInputChannel:  param.NumInputChannel,
-		NumOutputChannel: param.NumOutputChannel,
-	})
-
-	return port, len(sn.links) - 1
+	sn.ends = append(sn.ends, param)
+	return port
 }
 
+func (sn *switchNode) Links() []switches.Link {
+	links := make([]switches.Link, len(sn.ports))
+	for i, remote := range sn.remotes {
+		p := sn.ends[i]
+		links[i] = switches.Link{Remote: remote.RemotePort.AsRemote(), Latency: p.Latency,
+			NumInputChannel: p.NumInputChannel, NumOutputChannel: p.NumOutputChannel}
+	}
+	return links
+}
+
+func (sn *switchNode) Routes() switches.RoutingTable { return sn.network.routes[sn.name] }
+
 type deviceNode struct {
-	ports    []messaging.Port
-	endPoint *endpoint.Comp
-	sw       *switchNode
-	remote   Remote
+	ports     []messaging.Port
+	parameter DeviceToSwitchLinkParameter
+	endPoint  *endpoint.Comp
+	sw        *switchNode
+	remote    Remote
 }
 
 func (dn *deviceNode) ListRemotes() []Remote {
@@ -100,27 +97,12 @@ func (dn *deviceNode) Name() string {
 	return dn.endPoint.Name()
 }
 
-func (dn *deviceNode) Table() routing.Table {
+func (dn *deviceNode) Table() *routing.Table {
 	return nil
 }
 
-// Router can help establish the routes of a network.
-type Router interface {
-	EstablishRoute(nodes []Node)
-}
+// Router computes setup-time routes during Initialize. Changing tables after
+// initialization is not supported.
+type Router interface{ EstablishRoute(nodes []Node) }
 
-func (sn *switchNode) portAddress(port messaging.Port) messaging.RemotePort {
-	for i, p := range sn.ports {
-		if p == port {
-			return messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", sn.name, i))
-		}
-	}
-	panic("networkconnector: port does not belong to switch")
-}
-
-func (r Remote) localAddress() messaging.RemotePort {
-	if sw, ok := r.LocalNode.(*switchNode); ok {
-		return sw.portAddress(r.LocalPort)
-	}
-	return r.LocalPort.AsRemote()
-}
+func (r Remote) localAddress() messaging.RemotePort { return r.LocalPort.AsRemote() }

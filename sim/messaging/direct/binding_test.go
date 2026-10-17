@@ -30,6 +30,7 @@ func TestConnectionBindingIsOneTimeAndAtomic(t *testing.T) {
 	require.Panics(t, func() { p.BindConnection((*Connection)(nil)) })
 	require.Nil(t, p.Connection())
 	a.BindPort(p)
+
 	require.Panics(t, func() { a.BindPort(p) })
 	require.Panics(t, func() { b.BindPort(p) })
 	require.Len(t, a.ports.ports, 1)

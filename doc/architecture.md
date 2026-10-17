@@ -33,10 +33,13 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
   slices, including those within records.
 - State holds mutable runtime data and is checkpointed. Mutable state must not
   hide on a middleware.
-- Resources holds shared live objects such as storage and page tables. It must
-  not duplicate Spec routing through injected mappers or destination lists.
-- Ports holds bound local ports. `Spec.Links[i]` describes `Ports.Links[i]`.
-  The State initializer checks link configuration and the length equality.
+- Resources holds shared live objects such as storage and page tables. Public
+  components must not duplicate Spec routing through injected mappers or destination
+  lists. Internal NoC components reference completed network wiring: routes and
+  peers are derived at Initialize; changing routing tables afterwards is not supported.
+- Ports holds bound local ports. Internal NoC port groups grow during setup.
+  Their link-end settings belong to network assembly and are checked at Initialize;
+  switch pipeline latency and admission/ejection widths retain their per-port meaning.
 - Middlewares implement behavior and may derive private lookup tables from Spec.
   Memory routing uses `Spec.Bottom.Find(address)` (or the corresponding port
   name) directly. Spec participates in checkpoint compatibility checks.
@@ -74,9 +77,22 @@ connector. Reusing a builder creates independent networks without reset methods.
 
 NoCs are assembled through the public `networkconnector`, `mesh`, `pcie`, and
 `nvlink` connectors. Endpoint and switch implementation packages live under
-`noc/internal`. Endpoints remain pass-through device connections: their ordered
-`Spec.Devices` must match their bound device ports at Initialize, without adding
-a buffer or link hop. Other NoC packages live directly below `noc`, without a
+`noc/internal`. Endpoints remain pass-through device connections: their bound device order
+sets arbitration order. At Initialize, the endpoint reads the bound address of
+the peer port supplied through Resources. No device-facing buffer or link hop is added. Connect calls finish wiring; no connector finalization call is needed.
+Routes are computed from actual bound ports in network setup validation, which
+returns errors for unreachable destinations and routing loops before component
+initialization. Custom setup routers remain supported; `routing.Table` is a
+concrete type. Changing tables after Initialize is not supported.
+One topology resource per network fingerprints wiring, port/device binding order,
+link-end settings, link parameters and computed routes for checkpoint compatibility.
+Type names are not part of this record. These fingerprints replace routing fields
+in internal NoC Specs; rebuild old checkpoints. Networks assembled directly without
+a connector must register their own topology record. Switch arbitration follows
+binding order. Runtime route changes require a future checkpointed-state design.
+Non-ideal transport and bandwidth-unit unification
+remain #502/#542 follow-ups; physical transport latency is distinct from switch
+pipeline latency. Other NoC packages live directly below `noc`, without a
 `networking` layer. The cache
 package is `mem/cache/writethrough`; it retains write-around, write-evict, and
 write-through policies. Group packages by responsibility and avoid redundant

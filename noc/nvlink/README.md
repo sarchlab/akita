@@ -24,7 +24,7 @@ switch, and connects the device switch to a PCIe switch toward the host.
 All links are ideal direct connections at the default network frequency;
 non-ideal latency and per-link bandwidth are not modeled. Although routing
 uses a `BandwidthFirstRouter`, every link reports infinite bandwidth, so it
-cannot prefer NVLink based on bandwidth. `EstablishRoute` populates reachable
+cannot prefer NVLink based on bandwidth. `simulation.Initialize()` populates reachable
 paths without that guarantee. These limitations are tracked in
 [#502](https://github.com/sarchlab/akita/issues/502).
 
@@ -42,7 +42,6 @@ func (c *Connector) AddPCIeSwitch() (switchID int)
 func (c *Connector) ConnectSwitchesWithPCIeLink(switchAID, switchBID int)
 func (c *Connector) PlugInDevice(pcieSwitchID int, devicePorts []messaging.Port) (deviceID int)
 func (c *Connector) ConnectDevicesWithNVLink(deviceA, deviceB, numLink int)
-func (c *Connector) EstablishRoute()
 ```
 
 `PlugInDevice` returns a `deviceID` used by `ConnectDevicesWithNVLink` to join
@@ -97,10 +96,10 @@ dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.Ports.Net})
 
 connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // numLink currently has no timing effect
 
-connector.EstablishRoute()
+if err := sim.Initialize(); err != nil { panic(err) }
 ```
 
-After `EstablishRoute`, the network can carry host-device and device-device
+After `simulation.Initialize()`, the network can carry host-device and device-device
 traffic through the assembled topology. Do not use this connector to compare
 PCIe and NVLink bandwidth until the link-model limitations above are resolved.
 

@@ -24,7 +24,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 	}()
 
 	sw := modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).
-		WithSimulation(s).
+		WithSimulation(s).WithResources(switches.Resources{Wiring: &fixtureWiring{}}).
 		Build("Switch")
 	if err := s.Initialize(); err != nil {
 		panic(err)

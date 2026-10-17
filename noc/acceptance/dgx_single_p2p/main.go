@@ -91,8 +91,6 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	connector.ConnectDevicesWithNVLink(2, 6, 1)
 	connector.ConnectDevicesWithNVLink(3, 7, 1)
 
-	connector.EstablishRoute()
-
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[7])
 }

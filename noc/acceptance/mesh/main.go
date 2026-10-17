@@ -51,8 +51,6 @@ func main() {
 		}
 	}
 
-	connector.EstablishNetwork()
-
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}

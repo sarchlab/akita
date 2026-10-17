@@ -1,22 +1,20 @@
-# mesh — 2D/3D Mesh and Torus Network-on-Chip
+# mesh — 2D/3D Mesh Network-on-Chip
 
-Package `mesh` provides a connector that builds a mesh (or torus) network
+Package `mesh` provides a connector that builds a rectangular mesh network
 topology for the Akita simulation framework. Within `noc`, it constructs the
 switches, links, and routing tables that move messages between components laid
 out on a 2D or 3D grid of tiles.
 
 ## How It Works
 
-A `Connector` lays out tiles on a grid of up to three dimensions. Each tile
-holds one or more device ports and is backed by a switch. When the network is
-established, the connector:
-
-1. Creates one switch per occupied tile and connects each tile's device ports
-   to its switch.
-2. Wires neighboring switches together with bidirectional links along the
-   left/right (X), top/bottom (Y), and front/back (Z) directions.
-3. Installs a `meshRoutingTable` on every switch that performs
-   dimension-ordered (Z, then Y, then X) routing toward the destination tile.
+A `Connector` grows a rectangular grid from the origin to the largest added
+coordinates, including empty transit tiles. Each AddTile immediately creates new
+switches/endpoints and wires neighboring switches along X, Y and Z. Repeated
+calls append devices to the same tile. `simulation.Initialize()` derives Z-then-Y-
+then-X dimension-order routing from the finished bindings. There is no separate
+finalization call. Runtime arbitration follows deterministic port binding order;
+contention timing can differ from v4 and between assembly orders.
+Internal port indices also reflect assembly order.
 
 The configured frequency, flit size, and switch latency affect the network
 components. Links currently use ideal direct connections at the network's
@@ -38,16 +36,12 @@ type Connector struct { /* ... */ }
 func MakeBuilder() Builder
 func (b Builder) Build(name string) *Connector
 func (c *Connector) AddTile(loc [3]int, ports []messaging.Port)
-func (c *Connector) EstablishNetwork()
 ```
 
 `AddTile` places device ports at grid coordinate `loc` (negative coordinates
 are rejected; calling it twice for the same coordinate merges the ports). The
-grid grows automatically beyond its default `8x8x2` capacity as tiles are
-added. `EstablishNetwork` then creates the switches, links, and routing tables.
-
-The internal `meshRoutingTable` (in `mesh_routing_table.go`) resolves each
-destination port to its tile and returns the next-hop port.
+grid grows to include the requested coordinates during that call. All wiring
+must finish before Initialize; later AddTile calls are rejected.
 
 ## Builder Pattern
 
@@ -87,7 +81,7 @@ connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.Ports.Net})
 connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.Ports.Net})
 connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.Ports.Net})
 
-connector.EstablishNetwork()
+if err := sim.Initialize(); err != nil { panic(err) }
 ```
 
 Once established, a message sent from one tile's port with its `Dst` set to a

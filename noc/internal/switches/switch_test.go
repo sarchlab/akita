@@ -21,7 +21,7 @@ var _ = Describe("Switch", func() {
 		sim          timing.Simulation
 		port1, port2 *MockPort
 		dstPort      *MockPort
-		routingTable *MockTable
+		routingTable *MockRoutingTable
 		sw           *Comp
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
@@ -64,7 +64,7 @@ var _ = Describe("Switch", func() {
 			Return(messaging.RemotePort("DstPort")).
 			AnyTimes()
 
-		routingTable = NewMockTable(mockCtrl)
+		routingTable = NewMockRoutingTable(mockCtrl)
 
 		spec := DefaultSpec()
 		spec.Freq = 1
@@ -83,9 +83,10 @@ var _ = Describe("Switch", func() {
 			}
 		}
 
-		spec.Links = []Link{link(remote1), link(remote2)}
+		wiring := &testWiring{links: []Link{link(remote1), link(remote2)},
+			table: routingTable}
 		sw = modeling.MakeBuilder[*Comp](spec).
-			WithSimulation(sim).
+			WithSimulation(sim).WithResources(Resources{Wiring: wiring}).
 			Build("Switch")
 		swPorts := Ports{Links: []messaging.Port{port1, port2}}
 		for i, p := range swPorts.Links {

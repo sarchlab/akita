@@ -132,8 +132,3 @@ func (c *Connector) PlugInDevice(baseSwitchID int, devicePorts []messaging.Port)
 			},
 		})
 }
-
-// EstablishRoute populates the routing tables in the network.
-func (c *Connector) EstablishRoute() {
-	c.connector.EstablishRoute()
-}

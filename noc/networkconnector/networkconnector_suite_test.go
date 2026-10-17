@@ -53,7 +53,6 @@ var _ = Describe("Connector", func() {
 				})
 		}
 
-		connector.EstablishRoute()
 	})
 
 	It("should establish route in a small tree", func() {
@@ -119,7 +118,6 @@ var _ = Describe("Connector", func() {
 				})
 		}
 
-		connector.EstablishRoute()
 	})
 
 	It("should establish route in a large tree", func() {
@@ -185,7 +183,6 @@ var _ = Describe("Connector", func() {
 				})
 		}
 
-		connector.EstablishRoute()
 	})
 })
 
