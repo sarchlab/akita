@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -33,23 +33,15 @@ var _ = Describe("Address Translator control behavior", func() {
 	)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
-		resources := Resources{
-			MemProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("MemPort"),
-			},
-			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("TranslationProvider"),
-			},
-		}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		t = Definition.Builder().
+		t = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(resources).
 			Build("AddressTranslator")
 		tPorts := makePorts("AddressTranslator", 16)
 		t.BindPort("Top", tPorts.Top)
@@ -151,7 +143,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		build()
 	})
 

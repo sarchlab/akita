@@ -143,7 +143,7 @@ type Rsp struct {
 |                              | Pause | Drain | Enable | Reset | Invalidate | Flush |
 | ---------------------------- | ----- | ----- | ------ | ----- | ---------- | ----- |
 | `cache/writeback`            | ✓     | ✓     | ✓      | ✓     | ✓          | ✓     |
-| `cache/writethroughcache`    | ✓     | ✓     | ✓      | ✓     | ✓          | no-op |
+| `cache/writethrough`    | ✓     | ✓     | ✓      | ✓     | ✓          | no-op |
 | `vm/tlb`                     | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
 | `vm/mmuCache`                | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
 | `vm/mmu`                     | ✓     | ✓     | ✓      | ✓     | —          | —     |
@@ -162,7 +162,7 @@ Error: "unsupported"`).
 The matrix corresponds directly to the `VerbSupport` each component
 declares to `memcontrolprotocol.RunContract`:
 
-- `cache/writeback`, `cache/writethroughcache` → `memcontrolprotocol.CacheLike()`
+- `cache/writeback`, `cache/writethrough` → `memcontrolprotocol.CacheLike()`
   (Universal + Invalidate + Flush).
 - `vm/tlb`, `vm/mmuCache` → `memcontrolprotocol.TranslationCacheLike()`
   (Universal + Invalidate; Flush is **not** supported because
@@ -278,7 +278,7 @@ flushing).
   marks exactly those clean; clean lines and blocks outside the filter
   stay valid.
 
-**`cache/writethroughcache`** — `CacheLike`; two bools `State.IsPaused`
+**`cache/writethrough`** — `CacheLike`; two bools `State.IsPaused`
 and `State.IsDraining`.
 - Drain acks once every transaction is retired (`Removed`).
 - Reset resets the directory and MSHR and clears transactions and
@@ -333,7 +333,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    }
 
    // during assembly:
-   comp := mycomp.Definition.Builder().
+   comp := modeling.MakeBuilder[*mycomp.Comp](mycomp.DefaultSpec()).
        // ...
        Build("MyComp")
 

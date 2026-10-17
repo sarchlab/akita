@@ -3,6 +3,7 @@ package idealmemcontroller
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -50,16 +51,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 	// build constructs a controller with the given Top-port buffer size, injects
 	// the shared storage, and plugs a noopConn so its ports can be driven.
 	build := func(topBufSize int) {
-		sim = modeling.NewStandaloneSimulation(engine)
-		spec := Definition.DefaultSpec
+		sim = testsim.New(engine, false)
+		spec := DefaultSpec()
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		memController = Definition.Builder().
+		memController = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
-			WithSpec(spec).
 			Build("MemCtrl")
 		memControllerPorts := makePorts("MemCtrl", topBufSize)
 		memController.BindPort("Top", memControllerPorts.Top)
@@ -90,7 +90,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build(16)
 	})

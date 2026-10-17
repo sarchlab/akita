@@ -70,7 +70,7 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 	os.Remove(dbFile)
 	defer os.Remove(dbFile)
 
-	recorder := datarecording.NewDataRecorder(path)
+	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
 	r := newTopologyRecorder(recorder)
 
 	components := []Component{
@@ -107,7 +107,7 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 	os.Remove(dbFile)
 	defer os.Remove(dbFile)
 
-	recorder := datarecording.NewDataRecorder(path)
+	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
 	r := newTopologyRecorder(recorder)
 
 	connA := &namedConnection{name: "ConnA"}

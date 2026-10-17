@@ -73,7 +73,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	spec := m.comp.Spec
 	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(vmprotocol.TranslationRsp).Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Resources.MemProviderMapper)
+		m.comp.Spec.Bottom)
 
 	if !m.bottomPort().CanSend() {
 		return false

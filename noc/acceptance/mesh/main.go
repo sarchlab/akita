@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/mesh"
+	"github.com/sarchlab/akita/v5/noc/mesh"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -33,11 +33,9 @@ func main() {
 	engine := sim.Engine()
 
 	freq := 1 * timing.GHz
-	connector := mesh.NewConnector().
+	connector := mesh.MakeBuilder().
 		WithSimulation(sim).
-		WithFreq(freq)
-
-	connector.CreateNetwork("Mesh")
+		WithFreq(freq).Build("Mesh")
 
 	for x := 0; x < meshWidth; x++ {
 		for y := 0; y < meshHeight; y++ {

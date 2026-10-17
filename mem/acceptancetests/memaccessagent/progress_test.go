@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -20,19 +21,19 @@ func (p *countingTracker) IncrementInProgress(n uint64)      { p.started += n; p
 func (p *countingTracker) MoveInProgressToFinished(n uint64) { p.inProgress -= n; p.finished += n }
 
 func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
-	engine := timing.NewSerialEngine()
-	s := modeling.NewStandaloneSimulation(engine)
-	controller := idealmemcontroller.Definition.Builder().WithSimulation(s).
+	s := akitasim.MakeBuilder().Build()
+	engine := s.Engine().(*timing.SerialEngine)
+	controller := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: mem.NewStorage(4096)}).
 		Build("Mem")
 
 	controller.BindPort("Top", twowaybuffered.NewPort(4, 4))
 	controller.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
-	spec := memaccessagent.Definition.DefaultSpec
+	spec := memaccessagent.DefaultSpec()
 	spec.MaxAddress, spec.WriteLeft, spec.ReadLeft = 4096, 8, 8
-	agent := memaccessagent.Definition.Builder().WithSimulation(s).WithSpec(spec).
-		WithResources(memaccessagent.Resources{LowModule: controller.Ports.Top}).
+	spec.LowModule = controller.Ports.Top.AsRemote()
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](spec).WithSimulation(s).
 		Build("Agent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(4, 4))

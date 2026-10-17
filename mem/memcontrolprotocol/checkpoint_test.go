@@ -9,11 +9,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // This file is the Layer-3 end-to-end checkpoint-correctness test. It wires
@@ -74,17 +74,16 @@ func (h *cacheOverDRAM) tick() {
 func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	t.Helper()
 
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Latency = 5
 	dramSpec.Width = 4
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
-		WithSpec(dramSpec).
 		Build("DRAM")
 
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -92,21 +91,17 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 
 	dramTop := dram.Ports.Top
 
-	cacheSpec := writeback.Definition.DefaultSpec
+	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
-	cache := writeback.Definition.Builder().
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dramTop.AsRemote()}
+	cache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(sim).
-		WithSpec(cacheSpec).
-		WithResources(writeback.Resources{
-			Storage: mem.NewStorage(cacheSpec.TotalByteSize),
-			AddressToPortMapper: &mem.SinglePortMapper{
-				Port: dramTop.AsRemote(),
-			},
-		}).
+		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 		Build("Cache")
 
 	cache.BindPort("Top", twowaybuffered.NewPort(256, 256))

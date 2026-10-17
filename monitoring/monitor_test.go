@@ -18,12 +18,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -135,7 +136,7 @@ func (c *sliceFieldComponent) NotifyPortFree(messaging.Port) {}
 
 func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 	engine := &fakeEngine{}
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(engine))
+	monitor := newTestMonitorWithSimulation(testsim.New(engine, false))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/engine/state", nil)
@@ -238,7 +239,7 @@ func requestFieldValue(
 }
 
 func newSliceFieldMonitor(values []int) *Monitor {
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
+	monitor := newTestMonitorWithSimulation(testsim.New(&fakeEngine{}, false))
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", values))
 
 	return monitor
@@ -359,7 +360,7 @@ func TestExecutionInfoReadsExecInfoTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.tracePath = dbPath
 
 	recorder := httptest.NewRecorder()
@@ -397,7 +398,7 @@ func TestTraceStorageReportsDatabaseAndDiskSpace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.tracePath = dbPath
 
 	recorder := httptest.NewRecorder()
@@ -440,7 +441,7 @@ func TestTraceStorageReportsDatabaseAndDiskSpace(t *testing.T) {
 }
 
 func TestApiModeReturnsLiveJSON(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/mode", nil)
@@ -460,7 +461,7 @@ func TestApiModeReturnsLiveJSON(t *testing.T) {
 
 func TestNowReportsEngineCurrentTime(t *testing.T) {
 	engine := &fakeEngine{now: timing.VTimeInPicoSec(1234)}
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(engine))
+	monitor := newTestMonitorWithSimulation(testsim.New(engine, false))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/now", nil)
@@ -480,7 +481,7 @@ func TestNowReportsEngineCurrentTime(t *testing.T) {
 
 func TestRunInvokesEngineRun(t *testing.T) {
 	engine := &fakeEngine{runReady: make(chan struct{})}
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(engine))
+	monitor := newTestMonitorWithSimulation(testsim.New(engine, false))
 
 	monitor.run(httptest.NewRecorder(),
 		httptest.NewRequest(http.MethodPost, "/api/run", nil))
@@ -500,7 +501,7 @@ func TestRunInvokesEngineRun(t *testing.T) {
 }
 
 func TestListComponentsReturnsRegisteredNames(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.RegisterComponent(newSliceFieldComponent("alpha", nil))
 	monitor.RegisterComponent(newSliceFieldComponent("beta", nil))
 
@@ -519,7 +520,7 @@ func TestListComponentsReturnsRegisteredNames(t *testing.T) {
 }
 
 func TestListComponentDetailsReturns404ForUnknown(t *testing.T) {
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
+	monitor := newTestMonitorWithSimulation(testsim.New(&fakeEngine{}, false))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet,
@@ -533,7 +534,7 @@ func TestListComponentDetailsReturns404ForUnknown(t *testing.T) {
 }
 
 func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
+	monitor := newTestMonitorWithSimulation(testsim.New(&fakeEngine{}, false))
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", []int{1, 2}))
 
 	recorder := httptest.NewRecorder()
@@ -576,7 +577,7 @@ func (c *tickableComponent) NotifyPortFree(messaging.Port) {}
 func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	tickable := newTickableComponent("ticker")
 	monitor.RegisterComponent(tickable)
 
@@ -595,7 +596,7 @@ func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
 }
 
 func TestTickReturns405ForNonTickingComponent(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", nil))
 
 	recorder := httptest.NewRecorder()
@@ -610,7 +611,7 @@ func TestTickReturns405ForNonTickingComponent(t *testing.T) {
 }
 
 func TestTickReturns404ForUnknownComponent(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/tick/missing", nil)
@@ -623,8 +624,8 @@ func TestTickReturns404ForUnknownComponent(t *testing.T) {
 }
 
 func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
-	monitor := NewMonitor()
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "progress")).WithMonitor(monitor).Build()
+	monitor := MakeBuilder().Build()
+	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "progress") + ".sqlite3").WithMonitor(monitor).Build()
 	defer s.Terminate()
 
 	requireEmpty := func() {
@@ -724,7 +725,7 @@ type bufferRsp struct {
 }
 
 func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.RegisterComponent(newBufferOnlyComponent("low", 10, 1))
 	monitor.RegisterComponent(newBufferOnlyComponent("high", 4, 3))
 	monitor.RegisterComponent(newBufferOnlyComponent("mid", 4, 2))
@@ -750,7 +751,7 @@ func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
 }
 
 func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.RegisterComponent(newBufferOnlyComponent("a", 10, 5))
 	monitor.RegisterComponent(newBufferOnlyComponent("b", 10, 7))
 	monitor.RegisterComponent(newBufferOnlyComponent("c", 10, 3))
@@ -776,7 +777,7 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 }
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	comp := newPortedComponent("Comp")
 	monitor.RegisterComponent(comp)
 	monitor.RegisterPort(comp.port)
@@ -802,7 +803,7 @@ func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 }
 
 func TestHangDetectorBuffersRejectsInvalidSort(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,
@@ -818,7 +819,7 @@ func newTestDBTracer(t *testing.T) *tracing.DBTracer {
 	t.Helper()
 
 	recorder := datarecording.NewDataRecorder(
-		filepath.Join(t.TempDir(), "tracer"))
+		filepath.Join(t.TempDir(), "tracer") + ".sqlite3")
 	t.Cleanup(func() {
 		_ = recorder.Close()
 	})
@@ -827,7 +828,7 @@ func newTestDBTracer(t *testing.T) *tracing.DBTracer {
 }
 
 func TestTraceLifecycleRoundtripsStartEndStatus(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.visTracer = newTestDBTracer(t)
 
 	assertTracing := func(expected bool) {
@@ -872,7 +873,7 @@ func TestTraceLifecycleRoundtripsStartEndStatus(t *testing.T) {
 }
 
 func TestTraceStartEndRequirePOST(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	monitor.visTracer = newTestDBTracer(t)
 
 	for _, tc := range []struct {
@@ -893,7 +894,7 @@ func TestTraceStartEndRequirePOST(t *testing.T) {
 }
 
 func TestTraceHandlersWhenTracerUnset(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 
 	recorder := httptest.NewRecorder()
 	monitor.apiTraceIsTracing(recorder,
@@ -930,7 +931,7 @@ func TestTraceHandlersWhenTracerUnset(t *testing.T) {
 }
 
 func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 
 	// Cover both the default path and the gc=1 path that forces a collection.
 	for _, query := range []string{"", "?gc=1"} {
@@ -972,7 +973,7 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 	}
 	defer pprof.StopCPUProfile()
 
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/profile?seconds=1", nil)
 
@@ -983,5 +984,3 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 			http.StatusConflict, recorder.Code)
 	}
 }
-
-func (*fakeEngine) SetRunGuard(func() error) {}

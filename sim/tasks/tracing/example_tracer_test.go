@@ -3,8 +3,9 @@ package tracing_test
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -57,7 +58,7 @@ func (d *SampleDomain) End() {
 // Example for how to use standard tracers
 func ExampleNewTotalTimeTracer() {
 	timeTeller := &SampleTimeTeller{}
-	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking(),
+	domain := &SampleDomain{sim: akitasim.MakeBuilder().WithTaskTracking().Build(),
 		HookableBase: &hooking.HookableBase{},
 		timeTeller:   timeTeller,
 	}
@@ -99,7 +100,7 @@ func ExampleNewTotalTimeTracer() {
 	// 12
 }
 
-func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }
+func (d *SampleDomain) NewID() uint64 { return d.sim.NewID() }
 
 func (d *SampleDomain) TaskTracker() *tasks.Tracker {
 	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()

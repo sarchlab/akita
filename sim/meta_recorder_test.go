@@ -25,7 +25,7 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 	defer os.Remove(dbFile)
 
 	clock := &fakeTimeTeller{now: 10}
-	recorder := datarecording.NewDataRecorder(path)
+	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
 	metaRecorder := newMetaRecorder(recorder, clock)
 
 	values := readExecInfo(t, dbFile)

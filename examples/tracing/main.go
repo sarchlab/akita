@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -45,20 +46,18 @@ type Middlewares struct {
 // Comp is the worker, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the worker.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, NumJobs: 3, CyclesPerJob: 4},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, NumJobs: 3, CyclesPerJob: 4}
 }
 
-// newState gives the worker all of its jobs up front.
-func newState(c *Comp) State {
-	return State{JobsLeft: c.Spec.NumJobs}
+// Initialize gives the worker all of its jobs up front.
+func (s *State) Initialize(c *Comp) {
+	*s = State{JobsLeft: c.Spec.NumJobs}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Work: &workerMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Work: &workerMW{comp: c}}
 }
 
 type workerMW struct {
@@ -98,10 +97,9 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-	worker := Definition.Builder().
+	worker := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("Worker")
 	if err := sim.Initialize(); err != nil {
@@ -119,7 +117,7 @@ func main() {
 
 	worker.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 

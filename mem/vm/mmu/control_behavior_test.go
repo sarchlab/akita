@@ -3,6 +3,7 @@ package mmu
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -34,10 +35,9 @@ var _ = Describe("MMU control behavior", func() {
 
 	build := func() {
 
-		comp = Definition.Builder().
+		comp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		compPorts := makePorts("MMU", 16)
 		comp.BindPort("Top", compPorts.Top)
@@ -96,7 +96,7 @@ var _ = Describe("MMU control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build()
 	})

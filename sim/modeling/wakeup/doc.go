@@ -41,7 +41,7 @@
 // component's package, exactly as for a ticking component except that Spec
 // needs no Freq. The system builder, the code that assembles a simulation,
 // supplies the Spec, the Resources, and the Ports; the component creates its
-// State with NewState and its middlewares with NewMiddlewares. Middlewares
+// State and Middlewares through their Initialize methods. Middlewares
 // hold only references; all mutable data lives in State, because only State
 // is saved in checkpoints.
 //
@@ -49,13 +49,11 @@
 //
 //	type Comp = wakeup.Component[Spec, State, Resources, Ports, Middlewares]
 //
-//	var Definition = wakeup.Definition[Spec, State, Resources, Ports, Middlewares]{
-//	    DefaultSpec:    Spec{Latency: 100},
-//	    NewState:       newState, // optional
-//	    NewMiddlewares: newMiddlewares,
+//	func DefaultSpec() Spec {
+//	    return Spec{Latency: 100}
 //	}
 //
-//	comp := agent.Definition.Builder().
+//	comp := modeling.MakeBuilder[*agent.Comp](agent.DefaultSpec()).
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
 //	    Build("Agent")

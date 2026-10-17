@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/internal/testsim"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"go.uber.org/mock/gomock"
 )
@@ -12,7 +14,6 @@ import (
 func TestNewConnectionUsesExplicitFrequency(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockEngine(ctrl)
-	engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 	engine.EXPECT().RegisterHandler("Link", gomock.Any())
 	engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(250))
 	engine.EXPECT().Schedule(gomock.Any()).Do(func(evt timing.Event) {
@@ -23,13 +24,13 @@ func TestNewConnectionUsesExplicitFrequency(t *testing.T) {
 		t.Log("500 MHz connection schedules a secondary tick at 2000 ps from 250 ps")
 	})
 
-	s := modeling.NewStandaloneSimulation(engine)
+	s := testsim.New(engine, false)
 	conn := NewConnection("Link", s, 500*timing.MHz)
 	conn.NotifySend()
 }
 
 func TestNewConnectionCheckpointFrequency(t *testing.T) {
-	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	s := akitasim.MakeBuilder().Build()
 	conn := NewConnection("Source", s, 500*timing.MHz)
 	conn.State.NextPortID = 3
 	var saved bytes.Buffer

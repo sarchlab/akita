@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -81,18 +82,16 @@ func (m *delayMW) Handle(e timing.Event) bool {
 	return true
 }
 
-var Definition = event.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec: Spec{Latency: 10},
-	NewMiddlewares: func(c *Comp) Middlewares {
-		return Middlewares{Delay: &delayMW{comp: c}}
-	},
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Latency: 10}
 }
 
 type req struct {
 }
 
 func build(sim timing.Simulation, spec Spec) *Comp {
-	builtComponent := Definition.Builder().
+	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		WithSpec(spec).
 		Build("C")
@@ -105,12 +104,12 @@ func build(sim timing.Simulation, spec Spec) *Comp {
 }
 
 func newSim() timing.Simulation {
-	return modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	return akitasim.MakeBuilder().Build()
 }
 
 func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 	sim := newSim()
-	c := build(sim, Definition.DefaultSpec)
+	c := build(sim, DefaultSpec())
 
 	c.Ports.In.Deliver(messaging.Msg{ID: 1, Payload: req{}})
 	c.Ports.In.Deliver(messaging.Msg{ID: 2, Payload: req{}})
@@ -129,8 +128,8 @@ func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 // they are for the same component. The component must still handle them one
 // at a time.
 func TestSimultaneousEventsAreHandledOneAtATime(t *testing.T) {
-	sim := modeling.NewStandaloneSimulation(timing.NewParallelEngine())
-	c := build(sim, Definition.DefaultSpec)
+	sim := akitasim.MakeBuilder().WithParallelEngine().Build()
+	c := build(sim, DefaultSpec())
 
 	const n = 1000
 	for i := range n {
@@ -147,7 +146,7 @@ func TestSimultaneousEventsAreHandledOneAtATime(t *testing.T) {
 }
 
 func TestScheduleRejectsAnotherHandlersEvent(t *testing.T) {
-	c := build(newSim(), Definition.DefaultSpec)
+	c := build(newSim(), DefaultSpec())
 
 	defer func() {
 		r := recover()
@@ -160,7 +159,7 @@ func TestScheduleRejectsAnotherHandlersEvent(t *testing.T) {
 }
 
 func TestCheckpointRoundTrip(t *testing.T) {
-	c := build(newSim(), Definition.DefaultSpec)
+	c := build(newSim(), DefaultSpec())
 	c.State.Done = []done{{ID: 7, At: 3}}
 
 	var buf bytes.Buffer
@@ -168,7 +167,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
-	restored := build(newSim(), Definition.DefaultSpec)
+	restored := build(newSim(), DefaultSpec())
 	if err := restored.LoadCheckpoint(bytes.NewReader(buf.Bytes())); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -184,3 +183,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 }
 
 var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{req{}}})
+
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Delay: &delayMW{comp: c}}
+}

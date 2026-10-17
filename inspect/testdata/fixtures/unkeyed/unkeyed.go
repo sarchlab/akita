@@ -21,10 +21,4 @@ type (
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition uses a positional Spec literal on purpose.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{1},
-	NewMiddlewares: newMiddlewares,
-}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+func DefaultSpec() Spec { return Spec{1} }

@@ -26,10 +26,10 @@
       "default": 4
     },
     {
-      "name": "BottomUnit",
-      "json_name": "bottom_unit",
+      "name": "Bottom",
+      "json_name": "bottom",
       "type": "github.com/sarchlab/akita/v5/sim/messaging.RemotePort",
-      "doc": "BottomUnit is the remote port of the unit that the reorder buffer\nforwards requests to. The reorder buffer rewrites the Dst of every\nshadow request to this value.",
+      "doc": "Bottom is the remote port of the unit that the reorder buffer\nforwards requests to. The reorder buffer rewrites the Dst of every\nshadow request to this value.",
       "default": ""
     }
   ],

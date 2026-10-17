@@ -5,17 +5,22 @@ import (
 	"maps"
 
 	"github.com/rs/xid"
+	"github.com/sarchlab/akita/v5/internal/simconfig"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
+type engineOption = simconfig.EngineOption
+
 // Builder can be used to build a simulation.
 type Builder struct {
+	engineOption
 	parallelEngine    bool
 	monitor           Monitor
-	outputFileName    string
+	outputPath        string
 	visTracingOnStart bool
 	taskTracking      bool
 	recordSource      bool
@@ -36,9 +41,13 @@ func (b Builder) WithParallelEngine() Builder {
 	return b
 }
 
-// WithOutputFileName sets the custom output file name for the data recorder.
-func (b Builder) WithOutputFileName(filename string) Builder {
-	b.outputFileName = filename
+// WithOutputPath enables recording at the exact path. Build panics if the file
+// already exists; it never overwrites an existing recording.
+func (b Builder) WithOutputPath(path string) Builder {
+	if path == "" {
+		panic("simulation: output path cannot be empty")
+	}
+	b.outputPath = path
 	return b
 }
 
@@ -85,13 +94,14 @@ func (b Builder) WithoutSourceRecording() Builder {
 	return b
 }
 
-// Build builds the simulation.
+// Build creates runtime services. Recording and monitoring are opt-in; a plain
+// Build creates no files or listeners. Assemble components and call Initialize
+// before Run.
 func (b Builder) Build() *Simulation {
 	s := b.createSimulation()
 
 	b.createDataRecorder(s)
 	b.createEngine(s)
-	s.engine.SetRunGuard(s.setup.Ready)
 	b.createIDGenerator(s)
 	b.createMetaRecorder(s)
 	b.createSourceRecorder(s)
@@ -124,6 +134,9 @@ func (b Builder) createSourceRecorder(s *Simulation) {
 // The data itself is written at Terminate, once every component, port, and
 // connection has been registered.
 func (b Builder) createTopologyRecorder(s *Simulation) {
+	if s.dataRecorder == nil {
+		return
+	}
 	s.topologyRecorder = newTopologyRecorder(s.dataRecorder)
 }
 
@@ -136,15 +149,26 @@ func (b Builder) createSimulation() *Simulation {
 }
 
 func (b Builder) createDataRecorder(s *Simulation) {
-	outputPath := b.outputFileName
+	if b.outputPath == "" && !b.visTracingOnStart && b.monitor == nil {
+		return
+	}
+	outputPath := b.outputPath
 	if outputPath == "" {
-		outputPath = "akita_sim_" + s.id
+		outputPath = "akita_sim_" + s.id + ".sqlite3"
 	}
 	s.outputPath = outputPath
 	s.dataRecorder = datarecording.NewDataRecorder(outputPath)
 }
 
 func (b Builder) createEngine(s *Simulation) {
+	if engine := simconfig.Engine(&b.engineOption); engine != nil {
+		s.engine = engine
+		if named, ok := engine.(naming.Named); ok {
+			s.registerEntity(named)
+		}
+		return
+	}
+
 	if b.parallelEngine {
 		engine := timing.NewParallelEngine()
 		s.engine = engine
@@ -164,11 +188,14 @@ func (b Builder) createIDGenerator(s *Simulation) {
 }
 
 func (b Builder) createMetaRecorder(s *Simulation) {
+	if s.dataRecorder == nil {
+		return
+	}
 	s.metaRecorder = newMetaRecorder(s.dataRecorder, s.engine)
 }
 
 func (b Builder) createVisTracer(s *Simulation) {
-	if s.taskTracker == nil {
+	if s.taskTracker == nil || s.dataRecorder == nil {
 		return
 	}
 

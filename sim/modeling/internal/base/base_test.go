@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -51,7 +53,7 @@ func (s *recordingSim) RegisterComponent(c naming.Named) {
 
 func newRecordingSim() *recordingSim {
 	return &recordingSim{
-		Simulation: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+		Simulation: akitasim.MakeBuilder().Build(),
 	}
 }
 

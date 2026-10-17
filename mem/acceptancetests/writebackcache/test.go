@@ -11,11 +11,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -30,7 +31,7 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 func buildEnvironment(
 	seed int64,
 ) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	monitor := monitoring.NewMonitor()
+	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
@@ -53,40 +54,34 @@ func buildEnvironment(
 		Control: twowaybuffered.NewPort(16, 16),
 	}
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
-	agent := memaccessagent.Definition.Builder().
+	agentSpec.LowModule = "Cache.Top"
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
-		WithResources(memaccessagent.Resources{LowModule: cachePorts.Top}).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
 	dram := buildDRAM(s)
 
-	addressToPortMapper := new(mem.SinglePortMapper)
-	addressToPortMapper.Port = dram.Ports.Top.AsRemote()
-
-	cacheSpec := writeback.Definition.DefaultSpec
+	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.TotalByteSize = 16 * mem.KB
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 4
 	cacheSpec.NumReqPerCycle = 16
-	writeBackCache := writeback.Definition.Builder().
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
+	writeBackCache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(s).
-		WithSpec(cacheSpec).
-		WithResources(writeback.Resources{
-			Storage: mem.MakeStorageBuilder().
-				WithCapacity(cacheSpec.TotalByteSize).
-				WithSimulation(s).
-				Build("Cache.Storage"),
-			AddressToPortMapper: addressToPortMapper,
-		}).
+		WithResources(writeback.Resources{Storage: mem.MakeStorageBuilder().
+			WithCapacity(cacheSpec.TotalByteSize).
+			WithSimulation(s).
+			Build("Cache.Storage")}).
 		Build("Cache")
 	writeBackCachePorts := cachePorts
 	writeBackCache.BindPort("Top", writeBackCachePorts.Top)
@@ -110,9 +105,8 @@ func buildEnvironment(
 
 // buildDRAM builds and registers the backing ideal memory controller.
 func buildDRAM(s *sim.Simulation) *idealmemcontroller.Comp {
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 		WithSimulation(s).
-		WithSpec(idealmemcontroller.Definition.DefaultSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(4 * mem.GB).

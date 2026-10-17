@@ -1,57 +1,64 @@
 package mem
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
-// AddressToPortMapper helps a cache unit or a akita to find the low module that
-// should hold the data at a certain address
+// AddressToPortMapper locates the destination that serves an address.
 type AddressToPortMapper interface {
 	Find(address uint64) messaging.RemotePort
 }
 
-// SinglePortMapper is used when a unit is connected with only one
-// low module
-type SinglePortMapper struct {
-	Port messaging.RemotePort
+// AddressMapper is immutable address-routing configuration. A single destination
+// receives every in-range address; multiple destinations repeat in address order.
+// Find requires a configuration that has passed Validate.
+type AddressMapper struct {
+	Destinations []messaging.RemotePort `json:"destinations"`
+	// InterleavingSize is the block size; required with multiple destinations.
+	InterleavingSize uint64 `json:"interleaving_size"`
+	// RangeLow is inclusive. RangeHigh is exclusive; zero disables filtering.
+	RangeLow  uint64 `json:"range_low"`
+	RangeHigh uint64 `json:"range_high"`
+	// Fallback receives addresses outside a configured range.
+	Fallback messaging.RemotePort `json:"fallback"`
 }
 
-// Find simply returns the solo unit that it connects to
-func (f *SinglePortMapper) Find(address uint64) messaging.RemotePort {
-	return f.Port
-}
+var _ AddressToPortMapper = AddressMapper{}
 
-// InterleavedAddressPortMapper helps find the low module when the low modules
-// maintains interleaved address space
-type InterleavedAddressPortMapper struct {
-	UseAddressSpaceLimitation bool
-	LowAddress                uint64
-	HighAddress               uint64
-	InterleavingSize          uint64
-	LowModules                []messaging.RemotePort
-	ModuleForOtherAddresses   messaging.RemotePort
-}
-
-// Find returns the low module that has the data at provided address
-func (f *InterleavedAddressPortMapper) Find(address uint64) messaging.RemotePort {
-	if f.UseAddressSpaceLimitation &&
-		(address >= f.HighAddress || address < f.LowAddress) {
-		return f.ModuleForOtherAddresses
+// Find selects a destination without translating the address. Interleaving uses
+// the absolute address, even when RangeLow is nonzero.
+func (m AddressMapper) Find(address uint64) messaging.RemotePort {
+	if m.RangeHigh != 0 && (address < m.RangeLow || address >= m.RangeHigh) {
+		return m.Fallback
 	}
-
-	number := address / f.InterleavingSize % uint64(len(f.LowModules))
-
-	return f.LowModules[number]
+	if len(m.Destinations) == 1 {
+		return m.Destinations[0]
+	}
+	return m.Destinations[(address/m.InterleavingSize)%uint64(len(m.Destinations))]
 }
 
-// BankedAddressPortMapper defines the lower level modules by address banks
-type BankedAddressPortMapper struct {
-	BankSize   uint64
-	LowModules []messaging.RemotePort
-}
-
-// Find returns the port that can provide the data.
-func (f *BankedAddressPortMapper) Find(address uint64) messaging.RemotePort {
-	i := address / f.BankSize
-	return f.LowModules[i]
+// Validate checks configuration. Component initializers call it before routing.
+func (m AddressMapper) Validate() error {
+	if len(m.Destinations) == 0 {
+		return fmt.Errorf("address mapper: at least one destination is required")
+	}
+	for i, dst := range m.Destinations {
+		if dst == "" {
+			return fmt.Errorf("address mapper: destination %d is empty", i)
+		}
+	}
+	if len(m.Destinations) > 1 && m.InterleavingSize == 0 {
+		return fmt.Errorf("address mapper: multiple destinations require a positive InterleavingSize")
+	}
+	if m.RangeHigh != 0 {
+		if m.RangeHigh <= m.RangeLow {
+			return fmt.Errorf("address mapper: RangeHigh must exceed RangeLow")
+		}
+		if m.Fallback == "" {
+			return fmt.Errorf("address mapper: a configured range requires Fallback")
+		}
+	}
+	return nil
 }

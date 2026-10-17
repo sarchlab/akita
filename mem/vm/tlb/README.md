@@ -22,8 +22,8 @@ flow through a fixed-latency pipeline before lookup:
    - **MSHR hit**: an outstanding miss already covers this `(PID, VAddr)`, so the
      request is attached to the existing MSHR entry.
    - **Miss**: an MSHR entry is allocated and a `vmprotocol.TranslationReq` is forwarded
-     on the `Bottom` port to the translation provider resolved by the
-     `TranslationProviderMapper`.
+     on the `Bottom` port to the translation provider resolved by
+     the Spec routing value.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
    the page, and replay every request queued in the matching MSHR entry back to
    `Top`.
@@ -37,9 +37,8 @@ are tracked by the shared `mshr` package.
 - `State` — mutable runtime data: per-set blocks and LRU order, MSHR entries, the
   request pipeline, and flush bookkeeping. The TLB runs a small state machine:
   `enable`, `drain`, `pause`, and `flush`.
-- `Resources` — external wiring; holds the `TranslationProviderMapper`
-  (`mem.AddressToPortMapper`) used to locate the downstream provider for a
-  virtual address.
+- `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom).
+  Middleware calls their `Find` methods directly; Resources has no routing override.
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands) and `TLB` (lookup, misses, and
   responses), run in that order every cycle.
@@ -49,17 +48,14 @@ are tracked by the shared `mshr` package.
 ## Builder Pattern
 
 ```go
-spec := tlb.Definition.DefaultSpec
+spec := tlb.DefaultSpec()
 spec.NumSets = 64
 spec.NumWays = 4
 spec.MSHRSize = 8
+spec.Bottom.Destinations = []messaging.RemotePort{"MMU.Top"}
 
-t := tlb.Definition.Builder().
+t := modeling.MakeBuilder[*tlb.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
-    WithResources(tlb.Resources{
-        TranslationProviderMapper: mmuMapper,
-    }).
     Build("L2TLB")
 t.BindPort("Top", twowaybuffered.NewPort(4, 4))
 t.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
@@ -69,8 +65,8 @@ t.BindPort("Control", twowaybuffered.NewPort(4, 4))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithResources(Resources{})` | Optional empty Resources |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports

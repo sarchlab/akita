@@ -1,6 +1,4 @@
-// Package computed is a synthetic component whose Definition is returned by
-// a function instead of written as a literal. The inspector must reject it:
-// only a literal can be read without executing the package.
+// Package computed returns computed defaults, which static inspection rejects.
 package computed
 
 import (
@@ -21,13 +19,6 @@ type (
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-func makeDefinition() ticking.Definition[Spec, State, modeling.None, Ports, Middlewares] {
-	return ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-		NewMiddlewares: newMiddlewares,
-	}
-}
+func makeSpec() Spec { return Spec{} }
 
-// Definition is computed on purpose.
-var Definition = makeDefinition()
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+func DefaultSpec() Spec { return makeSpec() }

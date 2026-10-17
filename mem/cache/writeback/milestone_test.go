@@ -3,7 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -85,28 +85,23 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim = testsim.New(engine, true)
 
 		agentPort = newDriverPort("Agent.Top", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
 
-		addressToPortMapper := &mem.SinglePortMapper{
-			Port: dramTop.AsRemote(),
-		}
+		addressToPortMapper := dramTop.AsRemote()
 
-		cacheSpec := Definition.DefaultSpec
+		cacheSpec := DefaultSpec()
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheComp = Definition.Builder().
+		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
+		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithSpec(cacheSpec).
-			WithResources(Resources{
-				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
-				AddressToPortMapper: addressToPortMapper,
-			}).
+			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
 		cacheCompPorts := makePorts("Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)

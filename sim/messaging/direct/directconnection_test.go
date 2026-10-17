@@ -5,12 +5,14 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	gomock "go.uber.org/mock/gomock"
@@ -44,9 +46,8 @@ var _ = Describe("DirectConnection", func() {
 		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
-		engine.EXPECT().SetRunGuard(gomock.Any()).AnyTimes()
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		connection = NewConnection("Direct", sim, timing.GHz)
 
 		port1.EXPECT().Owner().Return(&agent{}).AnyTimes()
@@ -177,7 +178,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		connection = NewConnection("Conn", sim, timing.GHz)
 		agents = nil
 		for i := 0; i < numAgents; i++ {
@@ -232,8 +233,8 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 
 	numAgents := 100
 	numMsgsPerAgent := 1000
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 	connection := NewConnection("Conn", sim, timing.GHz)
 	agents := make([]*agent, 0, numAgents)
 

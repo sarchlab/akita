@@ -14,7 +14,7 @@ import (
 func TestTrackingEnablementAndRunBoundary(t *testing.T) {
 	for _, mode := range []string{"disabled", "explicit", "recording", "monitor"} {
 		t.Run(mode, func(t *testing.T) {
-			b := sim.MakeBuilder().WithoutSourceRecording().WithOutputFileName(filepath.Join(t.TempDir(), "trace"))
+			b := sim.MakeBuilder().WithoutSourceRecording().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3")
 			switch mode {
 			case "explicit":
 				b = b.WithTaskTracking()
@@ -41,7 +41,7 @@ func TestTrackingEnablementAndRunBoundary(t *testing.T) {
 }
 
 func TestDisabledTrackingCreatesNoTraceTables(t *testing.T) {
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "disabled")).Build()
+	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "disabled") + ".sqlite3").Build()
 	s.Terminate()
 
 	db, err := sql.Open("sqlite", s.TraceDBPath())
@@ -56,7 +56,7 @@ func TestDisabledTrackingCreatesNoTraceTables(t *testing.T) {
 
 func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 	s := sim.MakeBuilder().WithTaskTracking().
-		WithOutputFileName(filepath.Join(t.TempDir(), "manual")).Build()
+		WithOutputPath(filepath.Join(t.TempDir(), "manual") + ".sqlite3").Build()
 	defer s.Terminate()
 	require.Nil(t, s.Monitor())
 	require.NotNil(t, s.VisTracer())
@@ -83,7 +83,7 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 	require.Equal(t, "Agent.req_in", location)
 	require.Equal(t, float64(10), start)
 	require.Equal(t, float64(20), end)
-	t.Logf("WithTaskTracking alone: StartTracing recorded task %d through the tracker at %s over [%v,%v]",
+	t.Logf("WithTaskTracking and WithOutputPath: StartTracing recorded task %d through the tracker at %s over [%v,%v]",
 		id, location, start, end)
 }
 

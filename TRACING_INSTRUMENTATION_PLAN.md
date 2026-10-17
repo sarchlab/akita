@@ -221,7 +221,7 @@ uniform.
 **Applied to all 12 sites** (`endInflightTasks` in each): `mem/rob/middleware.go`
 (replaced the old forget-only `forgetInflightReceiverIDs`, which never `EndTask`ed
 the `req_in` nor finalized the shadow `req_out`), `mem/vm/tlb`,
-`mem/vm/addresstranslator`, `mem/cache/writeback`, `mem/cache/writethroughcache`,
+`mem/vm/addresstranslator`, `mem/cache/writeback`, `mem/cache/writethrough`,
 `mem/datamover`, `mem/vm/mmu`, `mem/vm/gmmu`, `mem/dram`, `mem/idealmemcontroller`,
 `mem/simplebankedmemory`, and `mem/vm/mmuCache` (its existing `endInflightReqs`
 refactored onto the shared helpers, dropping the throwaway-message
@@ -301,7 +301,7 @@ mem component (one PR, parallel per-component changes), each with a new
 |---|---|---|---|
 | TLB | `hardware_resource`/`.pipeline` | yes (`req_in` moved to retrieve; the 3 late `TraceReqReceive` removed) | — |
 | writeback | `hardware_resource`/`.dir_stage_buf` | yes (`.dir_pipeline`) | fixed unconditional `write-mshr-hit` tag |
-| writethroughcache | `hardware_resource`/`.trans`, `/.dir_buf` | yes (`.dir_pipeline`) | added missing `write-hit` tag |
+| writethrough | `hardware_resource`/`.trans`, `/.dir_buf` | yes (`.dir_pipeline`) | added missing `write-hit` tag |
 | MMU | `hardware_resource`/`.walk` | — | — |
 | gMMU | Top `hardware_resource`/`.walk`; Bottom `network_busy`/Top-port | — | — |
 | DRAM | `queue`/`.SubTransQueue` | — | refresh stall now `hardware_resource`/`.refresh` on the sub-trans |
@@ -323,7 +323,7 @@ remote-fetch `data`/`dependency` processing milestones — incremental polish.
 components that record none, so blocked-time is attributable end-to-end.
 
 **Scope / high-value milestones.**
-- **Caches** (writeback, writethroughcache): `hardware_resource` (MSHR full,
+- **Caches** (writeback, writethrough): `hardware_resource` (MSHR full,
   write-buffer/intake admission), `network_busy` (Top/Bottom `!CanSend`),
   `data`/`dependency` (waiting on the downstream fetch/eviction response),
   `queue` (bank/dir buffer waits).

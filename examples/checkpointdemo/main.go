@@ -65,14 +65,13 @@ type Middlewares struct {
 // Comp is the worker, a ticking component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the worker.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz, Label: "demo"},
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz, Label: "demo"}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Work: &workerMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Work: &workerMW{comp: c}}
 }
 
 // addWork queues n more items on the worker and starts it ticking. It is the
@@ -118,7 +117,7 @@ func main() {
 	}()
 
 	engine := s.Engine().(*timing.SerialEngine)
-	worker := Definition.Builder().
+	worker := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(s).
 		Build("Worker")
 	if err := s.Initialize(); err != nil {
@@ -127,7 +126,7 @@ func main() {
 
 	switch *mode {
 	case "save":
-		runBatch(engine, worker, batch1)
+		runBatch(s, worker, batch1)
 		report("save", "phase 1 done", engine, worker)
 
 		if err := s.SaveCheckpoint(*ckpt); err != nil {
@@ -135,7 +134,7 @@ func main() {
 		}
 		fmt.Printf("[save] checkpoint written to %s\n", *ckpt)
 
-		runBatch(engine, worker, batch2)
+		runBatch(s, worker, batch2)
 		report("save", "FINAL", engine, worker)
 
 	case "load":
@@ -144,7 +143,7 @@ func main() {
 		}
 		report("load", "resumed", engine, worker)
 
-		runBatch(engine, worker, batch2)
+		runBatch(s, worker, batch2)
 		report("load", "FINAL", engine, worker)
 
 	default:
@@ -154,9 +153,9 @@ func main() {
 }
 
 // runBatch queues a batch of work and runs the engine until it goes quiescent.
-func runBatch(engine *timing.SerialEngine, worker *Comp, n int) {
+func runBatch(s *sim.Simulation, worker *Comp, n int) {
 	addWork(worker, n)
-	if err := engine.Run(); err != nil {
+	if err := s.Run(); err != nil {
 		panic(err)
 	}
 }

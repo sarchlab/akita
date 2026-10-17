@@ -4,22 +4,20 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestAutoPageAllocationLogic tests the core auto page allocation functionality
 func TestAutoPageAllocationLogic(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -79,16 +77,14 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 
 // TestPhysicalPageAllocator tests the physical page allocation algorithm
 func TestPhysicalPageAllocator(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -127,14 +123,12 @@ func TestPhysicalPageAllocator(t *testing.T) {
 
 // TestAutoPageAllocationDisabled tests behavior when auto page allocation is disabled
 func TestAutoPageAllocationDisabled(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation disabled (default)
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
-		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)
@@ -150,16 +144,14 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 // TestAutoPageAllocationEnabled tests that auto page allocation is properly enabled
 func TestAutoPageAllocationEnabled(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Create MMU with auto page allocation enabled
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	mmu := Definition.Builder().
+	mmu := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
 	mmuPorts := makePorts("TestMMU", 4096)

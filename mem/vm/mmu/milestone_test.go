@@ -3,7 +3,7 @@ package mmu
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -74,13 +74,12 @@ var _ = Describe("MMU milestones", func() {
 
 	BeforeEach(func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim = testsim.New(engine, true)
 		pageTable = vm.NewPageTable(12)
 
-		mmuComp = Definition.Builder().
+		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		mmuCompPorts := makePorts("MMU", 16)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)

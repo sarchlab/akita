@@ -1,7 +1,6 @@
 package memcontrolprotocol_test
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -11,12 +10,13 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-3 cross-component sequence tests: it drives a real
@@ -71,16 +71,15 @@ func driveCtrl(
 // address) -> Enable, and confirm only the filtered entry was dropped (it
 // now misses to Bottom) while the other still hits.
 func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	remote := messaging.RemotePort("MMU")
 
-	comp := tlb.Definition.Builder().
+	routingSpec1 := tlb.DefaultSpec()
+
+	routingSpec1.Bottom.Destinations = []messaging.RemotePort{remote}
+	comp := modeling.MakeBuilder[*tlb.Comp](routingSpec1).
 		WithSimulation(sim).
-		WithSpec(tlb.Definition.DefaultSpec).
-		WithResources(tlb.Resources{
-			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
-		}).
 		Build("TLB")
 
 	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -376,11 +375,11 @@ func buildWritebackForSequence(
 ) (*writeback.Comp, *mem.Storage, messaging.Port, messaging.Port) {
 	t.Helper()
 
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+
 	storage := mem.NewStorage(1 * mem.MB)
 
-	spec := writeback.Definition.DefaultSpec
+	spec := writeback.DefaultSpec()
 	spec.TotalByteSize = 64 * 1024
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 16
@@ -390,15 +389,10 @@ func buildWritebackForSequence(
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
-	comp := writeback.Definition.Builder().
+	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+	comp := modeling.MakeBuilder[*writeback.Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
-		WithResources(writeback.Resources{
-			Storage: storage,
-			AddressToPortMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("LowerCache"),
-			},
-		}).
+		WithResources(writeback.Resources{Storage: storage}).
 		Build("L1Cache")
 
 	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))

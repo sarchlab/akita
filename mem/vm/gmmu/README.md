@@ -21,7 +21,7 @@ The GMMU is configured with a `DeviceID` and is driven by two middlewares
    - If `page.DeviceID == DeviceID` (local), it finalizes the walk and returns a
      `vmprotocol.TranslationRsp` on `Top`.
    - Otherwise it forwards a `vmprotocol.TranslationReq` on the `Bottom` port to the
-     configured `LowModule`, remembering the transaction by request ID.
+     configured `Bottom`, remembering the transaction by request ID.
 
 ### respondMW — bottom→top path
 
@@ -31,7 +31,7 @@ remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `DeviceID`, `Log2PageSize`, walk
-  `Latency`, `MaxRequestsInFlight`, and the `LowModule` remote port.
+  `Latency`, `MaxRequestsInFlight`, and the `Bottom` remote port.
 - `State` — mutable runtime data: in-flight walks, the map of remote memory
   requests awaiting responses, and per-device page-access tracking.
 - `Resources` — shared wiring; holds the `vm.PageTable`, which is required.
@@ -43,7 +43,7 @@ remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
+Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component), `WithResources` (the page table, required), and
 `component.BindPort` after Build (the port instances). The GMMU does not build a page table of its
@@ -52,18 +52,17 @@ own: the system builder creates one, usually with page size
 if `Resources.PageTable` is nil.
 
 ```go
-spec := gmmu.Definition.DefaultSpec
+spec := gmmu.DefaultSpec()
 spec.DeviceID = 1
-spec.LowModule = mmuPort
+spec.Bottom = mmuPort
 
 pageTable := vm.MakePageTableBuilder().
     WithLog2PageSize(spec.Log2PageSize).
     WithSimulation(sim).
     Build("GMMU.PageTable")
 
-g := gmmu.Definition.Builder().
+g := modeling.MakeBuilder[*gmmu.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     Build("GMMU")
 g.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -74,7 +73,7 @@ g.BindPort("Control", twowaybuffered.NewPort(16, 16))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

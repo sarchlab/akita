@@ -3,7 +3,7 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -28,21 +28,16 @@ var _ = Describe("TLB", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		tlbComp = Definition.Builder().
+		spec.Bottom.Destinations = []messaging.RemotePort{remotePort}
+		tlbComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: remotePort,
-				},
-			}).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)
@@ -516,21 +511,18 @@ var _ = Describe("TLB Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		connection = makeDirectConnection(sim)
 
 		lowModule = newIdealEndpoint("LowModule")
 		agent = newIdealEndpoint("Agent")
 
-		tlbComp = Definition.Builder().
+		routingSpec2 := DefaultSpec()
+
+		routingSpec2.Bottom.Destinations = []messaging.RemotePort{lowModule.port.AsRemote()}
+		tlbComp = modeling.MakeBuilder[*Comp](routingSpec2).
 			WithSimulation(sim).
-			WithSpec(Definition.DefaultSpec).
-			WithResources(Resources{
-				TranslationProviderMapper: &mem.SinglePortMapper{
-					Port: lowModule.port.AsRemote(),
-				},
-			}).
 			Build("TLB")
 		tlbCompPorts := defaultPorts("TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)

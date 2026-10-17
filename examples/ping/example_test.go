@@ -1,6 +1,7 @@
 package ping
 
 import (
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -8,16 +9,15 @@ import (
 )
 
 func Example_pingWithEvents() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
-	agentA := Definition.Builder().
+	agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentA")
 
 	agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
 
-	agentB := Definition.Builder().
+	agentB := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentB")
 
@@ -34,7 +34,7 @@ func Example_pingWithEvents() {
 	SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 	SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 	// Output:

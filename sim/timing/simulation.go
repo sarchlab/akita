@@ -15,7 +15,7 @@ type Simulation interface {
 	RequireNameAvailable(name string)
 
 	// Registration adds elements to the simulation's inventory for checkpointing,
-	// lookup, tracing, and monitoring. Standalone contexts retain the inventory for initialization.
+	// lookup, tracing, and monitoring.
 	RegisterComponent(c naming.Named)
 	RegisterConnection(c naming.Named)
 	RegisterResource(c naming.Named)

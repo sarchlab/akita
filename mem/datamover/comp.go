@@ -13,20 +13,20 @@ import (
 
 // Spec contains immutable configuration for the data mover.
 type Spec struct {
+	// Inside routing configuration.
+	Inside mem.AddressMapper `json:"inside"`
+
+	// Outside routing configuration.
+	Outside mem.AddressMapper `json:"outside"`
+
 	Freq                   timing.Freq `json:"freq"`
 	BufferSize             uint64      `json:"buffer_size"`
 	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
 	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
 }
 
-// Resources holds the data mover's wiring. The data mover owns no storage; it
-// moves data between external memory controllers. The inside/outside mappers
-// describe which remote port serves a given address on each side. They are
-// not checkpointed: the setup that rebuilds the data mover supplies them.
-type Resources struct {
-	InsideMapper  mem.AddressToPortMapper
-	OutsideMapper mem.AddressToPortMapper
-}
+// Resources is empty; routing configuration belongs to Spec.
+type Resources struct{}
 
 // Ports holds the data mover's ports.
 type Ports struct {

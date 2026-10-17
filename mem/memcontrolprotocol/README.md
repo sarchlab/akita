@@ -53,10 +53,10 @@ reply with `Success: false, Error: ErrUnsupported`.
 | Matrix                     | Components                                                                               | Extra verbs            |
 | -------------------------- | --------------------------------------------------------------------------------------- | ---------------------- |
 | `Universal()`              | dram, idealmemcontroller, simplebankedmemory, mmu, gmmu, addresstranslator, rob, datamover | —                      |
-| `CacheLike()`              | cache/writeback, cache/writethroughcache                                                | Invalidate, Flush*     |
+| `CacheLike()`              | cache/writeback, cache/writethrough                                                | Invalidate, Flush*     |
 | `TranslationCacheLike()`   | vm/tlb, vm/mmuCache                                                                      | Invalidate             |
 
-\* On `writethroughcache`, Flush is supported but a no-op (no dirty
+\* On `writethrough`, Flush is supported but a no-op (no dirty
 data); it acks `Success: true` immediately.
 
 ## Adding the contract to a component
@@ -67,7 +67,7 @@ Each component package adds one test that builds the component and calls
 ```go
 func TestControlContract(t *testing.T) {
     build := func() *memcontrolprotocol.Harness {
-        comp := Definition.Builder().WithSimulation(sim). /* ... */ .Build("MyComp")
+        comp := modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(sim). /* ... */ .Build("MyComp")
         return &memcontrolprotocol.Harness{
             Comp: comp,
             Sim:  sim,

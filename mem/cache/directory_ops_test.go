@@ -9,7 +9,7 @@ import (
 // TestDirectorySetID_FullCoverageBehindInterleaver is the regression test for
 // issue #402: a cache placed behind a low-bit interleaver must still reach
 // every one of its sets. For each geometry it walks the addresses an
-// InterleavedAddressPortMapper would route to a single slice (those with
+// AddressMapper would route to a single slice (those with
 // address/stripe % numSlices == 0) across the footprint needed to fill that
 // slice, and asserts the set index covers all numSets. A naive low-bit index —
 // or a fixed-shift XOR fold — leaves a fraction of the sets unreachable here.

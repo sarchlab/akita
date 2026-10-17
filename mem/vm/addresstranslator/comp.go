@@ -15,6 +15,12 @@ import (
 
 // Spec contains immutable configuration for the AddressTranslator.
 type Spec struct {
+	// Mem routing configuration.
+	Bottom mem.AddressMapper `json:"bottom"`
+
+	// Translation routing configuration.
+	Translation mem.AddressMapper `json:"translation"`
+
 	Freq           timing.Freq `json:"freq"`
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
@@ -51,12 +57,8 @@ type middlewares struct {
 	RespondPipeline *respondPipelineMW
 }
 
-// Resources holds the external wiring referenced by the AddressTranslator. The
-// mappers tell the translator where to send memory and translation requests.
-type Resources struct {
-	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
-	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
-}
+// Resources is empty; routing configuration belongs to Spec.
+type Resources struct{}
 
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {

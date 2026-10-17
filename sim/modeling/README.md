@@ -8,19 +8,19 @@ package holds what the models share.
 
 ## Five Structs
 
-A component type is five structs, all declared in its package, plus a
-package-level `Definition`:
+A component type is five structs, all declared in its package, combined by a `Comp` alias, plus a
+package-level `DefaultSpec()` function:
 
 | Struct | What it is | Supplied by |
 |---|---|---|
-| `Spec` | configuration: scalars and slices of scalars | system builder (defaults in `Definition`) |
-| `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
+| `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults returned by `DefaultSpec()`) |
+| `State` | mutable runtime data, saved in checkpoints | component (`State.Initialize`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
-| `Middlewares` | the behavior, one field per middleware | component (`NewMiddlewares`) |
+| `Middlewares` | the behavior, one field per middleware | component (`Middlewares.Initialize`) |
 
 The system builder is the code that assembles a simulation. It builds every
-instance with `Definition.Builder()...Build(name)`, then calls
+instance with `modeling.MakeBuilder[*Comp](DefaultSpec())...Build(name)`, then calls
 `component.BindPort("Field", port)` and `connection.BindPort(port)`.
 `simulation.Initialize()` validates wiring, freezes topology, and creates State
 and Middlewares. Configure plain Spec structs before Build; seed runtime work
@@ -30,13 +30,15 @@ objects.
 
 - **Spec** must be a plain struct whose fields are scalars (booleans, numbers,
   strings, and named types based on them, such as `timing.Freq`, a
-  `messaging.RemotePort`, or an enum-like string type) or slices of scalars,
-  such as the list of remote ports a unit talks to, whose length depends on the
-  system. No maps or nested structs. `Build` copies the slices, so an instance
-  never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
+  `messaging.RemotePort`, or an enum-like string type), scalar arrays/slices,
+  flat records such as `mem.AddressMapper`, or slices of records such as
+  `[]Link`. Record fields must be exported scalars or scalar slices with explicit,
+  unique JSON names. Records cannot contain nested records, maps, pointers, or
+  interfaces. `Build` copies every slice, including slices within records, so an instance
+  never shares one with the caller's Spec. The instance's `Spec` field is fixed
   after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
-  JSON-serializable. Only the component writes it: its `NewState`, which may
+  JSON-serializable. Only the component writes it: its `State.Initialize`, which may
   read the Spec, Resources, and Ports, and its middlewares. A function in the
   component's own package may also write it while no event is running, for
   example to queue work before the simulation starts (`ping.SchedulePing`);
@@ -49,7 +51,7 @@ objects.
 `Build` runs both through `MustBeCheckpointable`. Both reject pointers,
 interfaces, channels, and functions, and two fields that share a JSON name
 (which `encoding/json` silently drops). `ValidateSpec` additionally rejects
-maps, nested structs, and slices of anything but scalars; `ValidateState`
+maps, records nested within records, and other nested containers; `ValidateState`
 allows them, with `string` or integer map keys.
 
 A Spec may hold a slice of scalars, such as the remote ports a unit talks to.
@@ -59,10 +61,11 @@ Other values that seem to belong in the Spec usually belong elsewhere:
   single scalar;
 - a value derived from other Spec fields is an unexported Spec method, not a
   field;
-- a reference to an external object, or something derived only from one (the
-  address mapper that routes to lower memory), is a Resources field. A
+- destination addresses and address-mapping choices belong in Spec; memory
+  middleware routes directly through `mem.AddressMapper` values;
+- a reference to an external live object is a Resources field. A
   component's Resources are not part of its checkpoint: the rebuild supplies
-  them, and `NewMiddlewares` recomputes what it derives from them. A shared
+  them, and `Middlewares.Initialize` recomputes what it derives from them. A shared
   object they point to, such as a `mem.Storage` or a `vm.PageTable`, is a
   registered resource that checkpoints itself.
 
@@ -106,7 +109,7 @@ Each package doc shows how to declare and build a component of its model.
   their own scheduler next to the event it schedules; `ticking.Scheduler` is
   exported for connections written by hand, such as `direct.Connection`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
-  the inspector's static view of a package matches its `Definition`;
+  the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.
 - Every model's `Component` has the same five fields — `Spec`, `State`,
   `Resources`, `Ports`, and `Middlewares` — and the same methods — `Name`,
@@ -135,13 +138,35 @@ owns the counter, so two components share one ID sequence even though they
 have different names. Independent simulations have separate
 sequences.
 
-For isolated tests or small examples, create a lightweight context once:
+Use the same entry point for tests, examples, and full simulations:
 
 ```go
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+s := sim.MakeBuilder().Build()
 ```
 
-Pass `sim` to each builder through `WithSimulation(sim)`. This context performs
-no entity registration or recording. Use `sim.MakeBuilder().Build()`
-when automatic checkpoint inventory, recording, or monitoring is needed.
+Pass `s` to every builder through `WithSimulation(s)`. This creates no recording
+or server by default, but always owns IDs, initialization, and entity inventory.
+The separate StandaloneSimulation context has been removed.
+
+### Element initialization
+
+The Comp alias identifies the five element types. DefaultSpec() supplies defaults.
+State and Middlewares may define
+pointer-receiver `Initialize(c *Comp)` methods; neither returns a value. Omit an
+initializer when the zero value works. All middleware fields must still implement
+modeling.Middleware and be non-nil after initialization; the framework does not
+automatically allocate pointer fields or inject component references.
+
+Simulation.Initialize first checks generic port bindings. Errors here leave setup
+editable. It then freezes topology and visits components in registration order,
+calling State.Initialize followed by Middlewares.Initialize for each component.
+Middlewares can therefore use their own component's initialized State and bound
+Ports. Do not change Spec, Resources, Ports, or another component's State.
+
+Put necessary component-specific checks at the start of the relevant initializer.
+An initializer panic leaves the simulation unusable; rebuild it instead of retrying.
+There is no separate validator or creator registration callback,
+and no promise to collect all component-specific errors before initialization.
+Checkpoint restore overwrites State after normal initialization; it does not rerun
+initializers. Runtime shape checks and static inspection recognize the same element
+method signatures.

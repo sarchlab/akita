@@ -7,10 +7,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation into the GMMU until it
@@ -26,19 +26,18 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		vAddr     = uint64(0x10000000)
 	)
 
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+
 	pageTable := vm.NewPageTable(12)
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.DeviceID = deviceID
 	spec.Latency = 1
-	spec.LowModule = lowModule
+	spec.Bottom = lowModule
 
-	comp := Definition.Builder().
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
-		WithSpec(spec).
 		Build("GMMU")
 	compPorts := defaultPorts("GMMU")
 	comp.BindPort("Top", compPorts.Top)

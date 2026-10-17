@@ -2,33 +2,17 @@
 // kinds) from Go source without executing it, and emits them in the schema of
 // package inspect/schema.
 //
-// A component package declares a package-level var named Definition of a
-// component model's Definition type: ticking.Definition, wakeup.Definition, or
-// event.Definition (packages modeling/ticking, modeling/wakeup, and
-// modeling/event). The same value drives the component at runtime, so the
-// emitted schema cannot drift from runtime behavior. From it the inspector
-// reads:
+// A component package declares type Comp as an alias of an instantiated
+// ticking.Component, wakeup.Component, or event.Component. It also declares
+// func DefaultSpec() Spec, whose only statement returns a keyed Spec literal
+// with constant leaves. The inspector reads both declarations without executing
+// the function. The Comp alias supplies the model and five element types; the
+// returned literal supplies defaults. Resources, port roles/groups, middleware
+// order, field metadata, and Spec shape rules retain the same schema.
 //
-//   - the model, from the Definition type, and the name, which is the
-//     package name because a component type is identified by its package;
-//   - the Spec fields, from the Spec type argument, with their docs, units,
-//     choices, and `akita:"min=<n>,max=<n>"` tag metadata, and the
-//     defaults the DefaultSpec literal assigns. The literal must be keyed and
-//     have constant leaves (a slice field's literal lists constants), and
-//     Spec fields must be scalars or slices of scalars with distinct JSON
-//     names;
-//   - the Resources fields, from the Resources type argument, a struct;
-//   - the ports, one per field of the Ports type argument: a messaging.Port
-//     field is a port, a []messaging.Port field a port group, and an
-//     `akita:"role=<protocol>.<role>"` tag names the protocol roles it speaks,
-//     each of which must be declared with messaging.DefineProtocol in the
-//     component's package or a package it depends on;
-//   - the middlewares, one per field of the Middlewares type argument, in the
-//     order the component runs them. Each must implement modeling.Middleware.
-//
-// NewState and NewMiddlewares must name functions, and NewMiddlewares is
-// required. A Definition that breaks these rules, or that is not a composite
-// literal, is an error rather than a silently incomplete schema.
+// Optional State and Middlewares Initialize methods must have pointer receivers,
+// accept *Comp, and return no value. Invalid declarations produce an error, not
+// an incomplete schema. The component's package identifies its type.
 //
 // The inspector loads packages with go/packages, which invokes the Go
 // toolchain on the target module but never runs package code. The

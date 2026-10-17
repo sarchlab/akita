@@ -5,9 +5,10 @@ import (
 	"math/rand"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestRandStateMatchesMathRand checks that the agent's random source draws
@@ -38,10 +39,11 @@ func TestRandStateMatchesMathRand(t *testing.T) {
 }
 
 func buildAgent() *Comp {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-	builtComponent := Definition.Builder().
+	setupSim1 := akitasim.MakeBuilder().Build()
+	routingSpec1 := DefaultSpec()
+	routingSpec1.LowModule = messaging.RemotePort("Memory.Top")
+	builtComponent := modeling.MakeBuilder[*Comp](routingSpec1).
 		WithSimulation(setupSim1).
-		WithResources(Resources{LowModule: twowaybuffered.NewPort(1, 1)}).
 		Build("Agent")
 
 	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))

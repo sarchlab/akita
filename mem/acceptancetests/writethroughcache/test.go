@@ -9,13 +9,14 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
+	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -30,7 +31,7 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 func buildEnvironment(
 	seed int64,
 ) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	monitor := monitoring.NewMonitor()
+	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
@@ -47,28 +48,26 @@ func buildEnvironment(
 
 	// The agent sends to the cache's Top port, so the cache's ports are
 	// created before the agent is built.
-	cachePorts := writethroughcache.Ports{
+	cachePorts := writethrough.Ports{
 		Top:     twowaybuffered.NewPort(16, 16),
 		Bottom:  twowaybuffered.NewPort(16, 16),
 		Control: twowaybuffered.NewPort(16, 16),
 	}
 
-	agentSpec := memaccessagent.Definition.DefaultSpec
+	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.RandSeed = seed
-	agent := memaccessagent.Definition.Builder().
+	agentSpec.LowModule = "Cache.Top"
+	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
 		WithSimulation(s).
-		WithSpec(agentSpec).
-		WithResources(memaccessagent.Resources{LowModule: cachePorts.Top}).
 		Build("MemAccessAgent")
 
 	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
 
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 		WithSimulation(s).
-		WithSpec(idealmemcontroller.Definition.DefaultSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(4 * mem.GB).
@@ -80,10 +79,7 @@ func buildEnvironment(
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
 	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
-	addressToPortMapper := new(mem.SinglePortMapper)
-	addressToPortMapper.Port = dram.Ports.Top.AsRemote()
-
-	cacheSpec := writethroughcache.Definition.DefaultSpec
+	cacheSpec := writethrough.DefaultSpec()
 	cacheSpec.WritePolicyType = "write-through"
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.NumMSHREntry = 4
@@ -91,16 +87,14 @@ func buildEnvironment(
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
-	writeThroughCache := writethroughcache.Definition.Builder().
+
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
+	writeThroughCache := modeling.MakeBuilder[*writethrough.Comp](cacheSpec).
 		WithSimulation(s).
-		WithSpec(cacheSpec).
-		WithResources(writethroughcache.Resources{
-			Storage: mem.MakeStorageBuilder().
-				WithCapacity(cacheSpec.TotalByteSize).
-				WithSimulation(s).
-				Build("Cache.Storage"),
-			AddressMapper: addressToPortMapper,
-		}).
+		WithResources(writethrough.Resources{Storage: mem.MakeStorageBuilder().
+			WithCapacity(cacheSpec.TotalByteSize).
+			WithSimulation(s).
+			Build("Cache.Storage")}).
 		Build("Cache")
 	writeThroughCachePorts := cachePorts
 	writeThroughCache.BindPort("Top", writeThroughCachePorts.Top)

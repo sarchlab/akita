@@ -46,7 +46,7 @@ checkpoint saves and restores. The two differ in what they may hold:
 
 | | Allowed field types |
 |---|---|
-| **Spec** | Scalars (`bool`, integers, floats, `string`, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) and slices or arrays of scalars. |
+| **Spec** | Scalars (`bool`, integers, floats, `string`, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`), scalar slices/arrays, flat records, and slices of flat records. Record members may be scalars or scalar slices with explicit JSON names. |
 | **State** | Scalars, plus slices, arrays, maps with string or integer keys, and nested structs. |
 
 Neither may hold pointers, interfaces, channels, or functions. A reference to
@@ -61,15 +61,17 @@ belong elsewhere:
 
 - **One value repeated per unit**, such as the same register count for every
   SIMD: use a single scalar.
-- **A reference to another object**, or something derived only from one,
-  such as the address mapper that picks which lower memory serves an
-  address: put it in Resources. Resources are not checkpointed; the system
-  builder that rebuilds the simulation supplies them again, and the
-  component's `NewMiddlewares` recomputes anything derived from them.
+- **Routing configuration**, such as the destinations and interleaving size used
+  to pick lower memory: use a `mem.AddressMapper` value in Spec under the port's
+  name, for example `Bottom`. Middleware calls its `Find` method directly.
+- **A reference to a shared live object**, such as storage or a page table:
+  put it in Resources. The system builder supplies that object again when
+  rebuilding a simulation.
 
-`Build` checks these rules and panics if the Spec has a map, nested struct,
-pointer, or interface field, or a slice or array of anything but scalars, or
-if the State cannot be checkpointed.
+`Build` rejects maps, pointers, interfaces, and unsupported nested containers
+in Spec. Flat record fields and slices of flat records are allowed; records
+contain only exported scalars or scalar slices with explicit JSON names. Build
+also checks that State can be checkpointed.
 
 ## Resources — Shared Objects
 

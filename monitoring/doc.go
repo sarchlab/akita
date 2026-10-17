@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	monitor := monitoring.NewMonitor().WithPortNumber(8080)
+//	monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 //	s := sim.MakeBuilder().WithMonitor(monitor).Build()
 //	defer s.Terminate()
 package monitoring

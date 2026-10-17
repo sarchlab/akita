@@ -78,16 +78,35 @@ conv := mem.InterleavingConverter{
 internal := conv.ConvertExternalToInternal(externalAddr)
 ```
 
-### AddressToPortMapper
+### AddressMapper
 
-Maps a memory address to the `messaging.RemotePort` of the component responsible
-for that address:
+`mem.AddressMapper` selects the `messaging.RemotePort` responsible for an
+address. Store it in the component's Spec under the routed port name, such as
+`Bottom`, `Translation`, `Inside`, or `Outside`. The `AddressToPortMapper`
+interface remains available.
 
-| Mapper | Use Case |
-|--------|----------|
-| `SinglePortMapper` | Single downstream module |
-| `InterleavedAddressPortMapper` | Interleaved address distribution |
-| `BankedAddressPortMapper` | Banked address distribution |
+```go
+mapper := mem.AddressMapper{
+    Destinations:     []messaging.RemotePort{"DRAM0.Top", "DRAM1.Top"},
+    InterleavingSize: 256,
+    RangeLow:         1024, // inclusive
+    RangeHigh:        4096, // exclusive; zero disables filtering
+    Fallback:         "OtherMemory.Top",
+}
+```
+
+Component initialization requires at least one nonempty destination and a positive
+`InterleavingSize` when there are multiple destinations. A single destination
+needs no interleaving size. Interleaving uses the absolute address and wraps
+across the destinations without translating the address.
+
+An optional `[RangeLow, RangeHigh)` range requires `RangeHigh > RangeLow` and a
+nonempty `Fallback`; addresses outside the range go to that fallback. Setting
+`RangeHigh` to zero disables filtering and requires no fallback, including for
+an unbounded single destination.
+
+See the [migration guide](../doc/tutorial/migration.md#construction-binding-and-initialization)
+for the removed concrete mapper types and checkpoint compatibility changes.
 
 ## Sub-Packages
 

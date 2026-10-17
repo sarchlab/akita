@@ -1,12 +1,13 @@
 package direct
 
 import (
+	"testing"
+
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type bindingOwner struct{}
@@ -15,7 +16,7 @@ func (*bindingOwner) NotifyRecv(messaging.Port)     {}
 func (*bindingOwner) NotifyPortFree(messaging.Port) {}
 
 func TestConnectionBindingIsOneTimeAndAtomic(t *testing.T) {
-	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+	s := akitasim.MakeBuilder().Build()
 	a := NewConnection("A", s, timing.GHz)
 	b := NewConnection("B", s, timing.GHz)
 	p := twowaybuffered.NewPort(1, 1)

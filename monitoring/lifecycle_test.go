@@ -16,11 +16,11 @@ import (
 
 func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "live")
-	monitor := NewMonitor()
+	monitor := MakeBuilder().Build()
 	if monitor.httpServer != nil || monitor.simulation != nil {
 		t.Fatal("constructor bound a simulation or opened a listener")
 	}
-	s := sim.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
+	s := sim.MakeBuilder().WithOutputPath(output + ".sqlite3").WithMonitor(monitor).Build()
 	if monitor.simulation != s || monitor.engine != s.Engine() || monitor.visTracer != s.VisTracer() {
 		t.Fatal("monitor was not bound to the simulation services")
 	}
@@ -71,12 +71,12 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 }
 
 func TestMonitorRejectsRepeatedStart(t *testing.T) {
-	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "live")).Build()
+	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "live") + ".sqlite3").Build()
 	defer s.Terminate()
-	m := NewMonitor()
+	m := MakeBuilder().Build()
 	m.Start(s)
 	defer m.Stop()
-	other := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "other")).Build()
+	other := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "other") + ".sqlite3").Build()
 	defer other.Terminate()
 	server := m.httpServer
 	assertRejected := func() {
@@ -98,7 +98,7 @@ func TestMonitorRejectsRepeatedStart(t *testing.T) {
 }
 
 func TestProgressBarBeforeStartPanicsClearly(t *testing.T) {
-	m := NewMonitor()
+	m := MakeBuilder().Build()
 	defer func() {
 		if got := recover(); got != "monitoring: CreateProgressBar requires a started monitor" {
 			t.Fatalf("unexpected panic: %v", got)

@@ -46,20 +46,19 @@ levels.
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
+Start from `DefaultSpec()`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
 engine and registers the component), `WithResources` (the low- and up-module
 remote ports), and `component.BindPort` after Build (the port instances).
 
 ```go
-spec := mmuCache.Definition.DefaultSpec
+spec := mmuCache.DefaultSpec()
 spec.NumLevels = 4
 spec.NumBlocks = 16
 spec.LatencyPerLevel = 50
 
-c := mmuCache.Definition.Builder().
+c := modeling.MakeBuilder[*mmuCache.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(mmuCache.Resources{
         LowModulePort: mmuPort,
         UpModulePort:  tlbPort,
@@ -73,7 +72,7 @@ c.BindPort("Control", twowaybuffered.NewPort(16, 16))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak (`NumBlocks` must be > 0) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak (`NumBlocks` must be > 0) |
 | `WithResources(Resources{...})` | External wiring (low- and up-module remote ports) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

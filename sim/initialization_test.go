@@ -13,34 +13,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type initializationResources struct{ Calls *int }
+
 type initializationPorts struct{ Top messaging.Port }
 type initializationState struct {
 	SawConnection bool `json:"saw_connection"`
 }
 type initializationComp = ticking.Component[
-	tickCountSpec, initializationState, modeling.None, initializationPorts, modeling.None]
+	tickCountSpec, initializationState, initializationResources, initializationPorts, modeling.None]
 
 func TestExplicitBindingThenInitialization(t *testing.T) {
 	for _, parallel := range []bool{false, true} {
 		t.Run(map[bool]string{false: "serial", true: "parallel"}[parallel], func(t *testing.T) {
-			builder := MakeBuilder().WithoutSourceRecording().WithOutputFileName(filepath.Join(t.TempDir(), "trace"))
+			builder := MakeBuilder().WithoutSourceRecording().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3")
 			if parallel {
 				builder = builder.WithParallelEngine()
 			}
 			s := builder.Build()
 			t.Cleanup(s.Terminate)
 			calls := 0
-			def := ticking.Definition[tickCountSpec, initializationState, modeling.None, initializationPorts, modeling.None]{
-				DefaultSpec: tickCountSpec{Freq: timing.GHz},
-				NewState: func(c *initializationComp) initializationState {
-					calls++
-					return initializationState{SawConnection: c.Ports.Top.Connection() != nil}
-				},
-				NewMiddlewares: func(*initializationComp) modeling.None { return modeling.None{} },
-			}
-			c := def.Builder().WithSimulation(s).Build("GPU.SA.CU")
+			def := modeling.MakeBuilder[*initializationComp](tickCountSpec{Freq: timing.GHz})
+			c := def.WithSimulation(s).WithResources(initializationResources{Calls: &calls}).Build("GPU.SA.CU")
 			require.Zero(t, calls)
-			require.ErrorContains(t, s.Engine().Run(), "Initialize")
+			require.ErrorContains(t, s.Run(), "Initialize")
 			path := filepath.Join(t.TempDir(), "snapshot.tar.gz")
 			require.ErrorContains(t, s.SaveCheckpoint(path), "Initialize")
 			require.NoFileExists(t, path)
@@ -56,9 +51,9 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.Equal(t, "GPU.SA.CU.Top", p.Name())
 			require.Same(t, c, p.Owner())
 			require.Same(t, conn, p.Connection())
-			require.NoError(t, s.Engine().Run())
+			require.NoError(t, s.Run())
 			require.Error(t, s.Initialize())
-			require.Panics(t, func() { def.Builder().WithSimulation(s).Build("Late") })
+			require.Panics(t, func() { def.WithSimulation(s).Build("Late") })
 			require.Panics(t, func() { c.BindPort("Top", twowaybuffered.NewPort(1, 1)) })
 			require.Panics(t, func() { direct.NewConnection("Late", s, timing.GHz) })
 			require.Panics(t, func() { conn.BindPort(twowaybuffered.NewPort(1, 1)) })
@@ -66,4 +61,9 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 				"then observed the completed link and froze topology")
 		})
 	}
+}
+
+func (s *initializationState) Initialize(c *initializationComp) {
+	*c.Resources.Calls++
+	*s = initializationState{SawConnection: c.Ports.Top.Connection() != nil}
 }

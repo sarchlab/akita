@@ -30,11 +30,11 @@ type ComponentBase[S, T, R, P, M any] struct {
 
 	// Spec is the instance's configuration, given to Build. It is fixed from
 	// then on; Build copies its slices, so the instance shares none with
-	// DefaultSpec.
+	// the caller's Spec.
 	Spec S
 
 	// State is the instance's mutable runtime data. Only the component itself
-	// (its NewState and middlewares) writes it.
+	// (its State initializer and middlewares) writes it.
 	State T
 
 	// Resources holds the instance's references to shared objects, given to
@@ -141,7 +141,7 @@ func OrderedMiddlewares(middlewares any) []modeling.Middleware {
 		fv := v.Field(i)
 		if isNilable(fv.Kind()) && fv.IsNil() {
 			panic(fmt.Sprintf(
-				"modeling: Middlewares field %s.%s is not set by NewMiddlewares",
+				"modeling: Middlewares field %s.%s is nil after initialization",
 				t, f.Name))
 		}
 
@@ -265,28 +265,30 @@ func (c *ComponentBase[S, T, R, P, M]) RequireInitialized() {
 	}
 }
 
-// cloneSpec returns spec with its own copy of every slice field, so an
-// instance shares no slice with the Definition's DefaultSpec or with the value
-// given to WithSpec. A Spec holds only scalars and slices of scalars, so
-// copying the slices copies everything.
+// cloneSpec copies every slice, including scalar slices within flat records.
+// The Spec validator excludes pointers, maps, and other reference containers.
 func cloneSpec[S any](spec S) S {
-	v := reflect.ValueOf(&spec).Elem()
-	if v.Kind() != reflect.Struct {
-		return spec
-	}
-
-	for i := range v.NumField() {
-		f := v.Field(i)
-		if f.Kind() != reflect.Slice || f.IsNil() || !f.CanSet() {
-			continue
-		}
-
-		c := reflect.MakeSlice(f.Type(), f.Len(), f.Len())
-		reflect.Copy(c, f)
-		f.Set(c)
-	}
-
+	cloneSpecValue(reflect.ValueOf(&spec).Elem())
 	return spec
+}
+
+func cloneSpecValue(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Struct:
+		for i := range v.NumField() {
+			cloneSpecValue(v.Field(i))
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			return
+		}
+		copied := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		reflect.Copy(copied, v)
+		v.Set(copied)
+		for i := range v.Len() {
+			cloneSpecValue(v.Index(i))
+		}
+	}
 }
 
 // TaskTracker returns this component's optional simulation task service.

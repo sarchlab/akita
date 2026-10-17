@@ -89,7 +89,10 @@ under `"printer"`.
 ### 5. Running
 
 ```go
-err := engine.Run()
+if err := s.Initialize(); err != nil {
+    panic(err)
+}
+err := s.Run()
 if err != nil {
     panic(err)
 }

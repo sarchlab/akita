@@ -15,7 +15,7 @@ components. The whole user-facing surface is small:
 | --- | --- |
 | make messages checkpointable | a protocol: `messaging.DefineProtocol(...)` as a package-level `var` |
 | make an event checkpointable | `timing.RegisterEvent(MyEvent{})` in an `init()` |
-| make a component checkpointable | declare it with a component model — five structs and a `Definition` — and keep all mutable data in `State` (the model does the rest) |
+| make a component checkpointable | declare it with a component model — five structs, a `Comp` alias, and `DefaultSpec()` — and keep all mutable data in `State` (the model does the rest) |
 | take / restore a checkpoint | `sim.SaveCheckpoint(path)` / `sim.LoadCheckpoint(path)` |
 
 There is **no** custom marshalling to write, no wire format to learn, and no
@@ -133,11 +133,11 @@ your data in the right one of the five structs:
 
 | Struct | Holds | Checkpoint treatment |
 | --- | --- | --- |
-| `Spec` | immutable config (scalars and slices of scalars) | hashed and **compared** on load, not restored |
+| `Spec` | immutable config (scalars, scalar collections, flat records and record slices) | hashed and **compared** on load, not restored |
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
-| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `NewMiddlewares` |
+| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `Middlewares.Initialize` |
 
 ```go
 type Spec struct {
@@ -171,7 +171,9 @@ they are saved too — register each event type it schedules (see *Events*
 above).
 
 `Spec` may contain only scalars (booleans, numbers, strings, and named types
-based on them) and slices or arrays of scalars. No maps or nested structs. `State` is more
+based on them), scalar slices/arrays, flat records, and slices of flat records.
+Record fields may be scalars or scalar slices with explicit JSON names. No maps
+or records nested inside records. `State` is more
 permissive: nested structs, slices, arrays, and maps (with string or integer
 keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs;
 in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.
@@ -180,7 +182,7 @@ silently drops colliding fields, so `Build` rejects them.
 
 ### The builder validates this for you — loudly
 
-`Definition.Builder()…Build(name)` runs `ValidateSpec`/`ValidateState` and
+`modeling.MakeBuilder[*Comp](DefaultSpec())…Build(name)` runs `ValidateSpec`/`ValidateState` and
 **panics** at construction if the Spec or State cannot be checkpointed. In
 particular, a struct whose state is entirely **unexported** and that has no
 `MarshalJSON` serializes as `{}` and would silently lose its contents — the

@@ -23,8 +23,8 @@ func (m *agentMiddleware) memPort() messaging.Port {
 	return m.comp.Ports.Mem
 }
 
-func (m *agentMiddleware) lowModule() messaging.Port {
-	return m.comp.Resources.LowModule
+func (m *agentMiddleware) lowModule() messaging.RemotePort {
+	return m.comp.Spec.LowModule
 }
 
 // Handle updates the states of the agent and issues new read and write
@@ -178,7 +178,7 @@ func (m *agentMiddleware) doRead() bool {
 		PID:            1},
 		ID:  m.comp.NewID(),
 		Src: m.memPort().AsRemote(),
-		Dst: m.lowModule().AsRemote(),
+		Dst: m.lowModule(),
 
 		TrafficBytes: 12,
 		TrafficClass: "memprotocol.ReadReq"}
@@ -261,7 +261,7 @@ func (m *agentMiddleware) doWrite() bool {
 		Data:    writeData},
 		ID:  m.comp.NewID(),
 		Src: m.memPort().AsRemote(),
-		Dst: m.lowModule().AsRemote(),
+		Dst: m.lowModule(),
 
 		TrafficBytes: len(writeData) + 12,
 		TrafficClass: "memprotocol.WriteReq"}

@@ -23,6 +23,9 @@ const (
 
 // Spec contains immutable configuration for the writeback cache.
 type Spec struct {
+	// Lower memory routing configuration.
+	Bottom mem.AddressMapper `json:"bottom"`
+
 	Freq             timing.Freq `json:"freq"`
 	NumReqPerCycle   int         `json:"num_req_per_cycle"`
 	Log2BlockSize    uint64      `json:"log2_block_size"`
@@ -37,12 +40,6 @@ type Spec struct {
 	WriteBufferCapacity int    `json:"write_buffer_capacity"`
 	MaxInflightFetch    int    `json:"max_inflight_fetch"`
 	MaxInflightEviction int    `json:"max_inflight_eviction"`
-
-	// AddressMapperType ("single" or "interleaved") and InterleavingSize
-	// describe how to route to Resources.RemotePorts when no
-	// Resources.AddressToPortMapper is injected.
-	AddressMapperType string `json:"address_mapper_type"`
-	InterleavingSize  uint64 `json:"interleaving_size"`
 }
 
 // numSets returns the number of sets in the directory,
@@ -358,19 +355,8 @@ func (t *transactionState) hasReqMeta() bool {
 	return t.HasRead || t.HasWrite || t.HasFlush
 }
 
-// Resources holds the shared resources and wiring referenced by the writeback
-// cache, supplied by the system builder.
-type Resources struct {
-	// Storage is the data array. It is required; size it to hold at least
-	// Spec.TotalByteSize bytes.
-	Storage *mem.Storage
-
-	// AddressToPortMapper routes fetches and evictions to lower memory. When
-	// it is not supplied, the cache creates one from Spec.AddressMapperType
-	// over RemotePorts. Only one of the two needs to be supplied.
-	AddressToPortMapper mem.AddressToPortMapper
-	RemotePorts         []messaging.RemotePort
-}
+// Resources holds live shared storage; routing configuration belongs to Spec.
+type Resources struct{ Storage *mem.Storage }
 
 // Comp is the writeback cache component, a ticking component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

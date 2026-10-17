@@ -13,12 +13,18 @@ import (
 var freqType = reflect.TypeFor[timing.Freq]()
 
 // Builder builds instances of one ticking component type. Obtain it with
-// Definition.Builder.
+// modeling.MakeBuilder[*Comp](DefaultSpec()).
 type Builder[S, T, R, P, M any] struct {
-	def        Definition[S, T, R, P, M]
 	simulation timing.Simulation
 	spec       S
 	resources  R
+}
+
+// MakeBuilder implements modeling.MakeBuilder for this component type.
+// The receiver is unused and may be nil; the returned builder has no runtime
+// state from an existing instance.
+func (*Component[S, T, R, P, M]) MakeBuilder(spec S) Builder[S, T, R, P, M] {
+	return Builder[S, T, R, P, M]{spec: spec}
 }
 
 // WithSimulation sets the simulation the instance belongs to and registers
@@ -30,7 +36,7 @@ func (b Builder[S, T, R, P, M]) WithSimulation(
 	return b
 }
 
-// WithSpec sets the configuration. Start from the definition's DefaultSpec.
+// WithSpec sets the configuration. Start from DefaultSpec().
 func (b Builder[S, T, R, P, M]) WithSpec(spec S) Builder[S, T, R, P, M] {
 	b.spec = spec
 	return b
@@ -53,14 +59,8 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 			typeName[S](), name))
 	}
 
-	if b.def.NewMiddlewares == nil {
-		panic(fmt.Sprintf("ticking: %s: Definition has no NewMiddlewares",
-			typeName[S]()))
-	}
-
 	b.simulation.RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
-
 	c := &Component[S, T, R, P, M]{
 		ticks: NewScheduler(name, b.simulation, specFreq(name, b.spec)),
 	}
@@ -68,11 +68,8 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 		b.simulation, name, b.spec, b.resources)
 
 	base.SetInitializer(&c.ComponentBase, func() {
-		if b.def.NewState != nil {
-			c.State = b.def.NewState(c)
-		}
-
-		c.Middlewares = b.def.NewMiddlewares(c)
+		base.InitializeElement(&c.State, c)
+		base.InitializeElement(&c.Middlewares, c)
 		c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
 	})
 

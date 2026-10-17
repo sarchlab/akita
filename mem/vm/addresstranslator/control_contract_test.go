@@ -3,11 +3,10 @@ package addresstranslator
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestControlContract verifies the address translator satisfies the
@@ -15,25 +14,17 @@ import (
 // unsupported — the translator holds no cache of memory.
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
-		spec := Definition.DefaultSpec
+		sim := akitasim.MakeBuilder().Build()
+
+		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
-		resources := Resources{
-			MemProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("MemPort"),
-			},
-			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("TranslationProvider"),
-			},
-		}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(resources).
 			Build("AddressTranslator")
 		compPorts := makePorts("AddressTranslator", topBufSize)
 		comp.BindPort("Top", compPorts.Top)

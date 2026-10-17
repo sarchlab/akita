@@ -7,21 +7,21 @@ import (
 	"log"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/sim/timing"
-
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestCache(t *testing.T) {
@@ -69,7 +69,8 @@ func plugNoopConn(comp *Comp) {
 // stageTestSpec returns the configuration the white-box stage tests share:
 // 64 sets of 4 ways of 64-byte blocks in a single bank, 4 requests per cycle.
 func stageTestSpec() Spec {
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
+	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.Log2BlockSize = 6
 	spec.WayAssociativity = 4
 	spec.TotalByteSize = 64 * 4 * 64
@@ -83,10 +84,9 @@ func stageTestSpec() Spec {
 // drives, with its ports plugged into noop connections. The test ticks the
 // stage under test directly rather than the component.
 func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
-	setupSim1 := modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking()
-	comp := Definition.Builder().
+	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
+	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
-		WithSpec(spec).
 		WithResources(res).
 		Build("Cache")
 	comp.BindPort("Top", ports.Top)
@@ -103,14 +103,13 @@ func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
 // buildIdealDRAM builds a 200-cycle ideal memory controller named "DRAM",
 // backed by storage, and returns its Top port.
 func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port {
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 1
 	dramSpec.Latency = 200
 	dramSpec.CacheLineSize = 64
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
-		WithSpec(dramSpec).
 		Build("DRAM")
 
 	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -123,7 +122,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	var (
 		engine              timing.Engine
 		sim                 timing.Simulation
-		addressToPortMapper *mem.SinglePortMapper
+		addressToPortMapper messaging.RemotePort
 		cacheComp           *Comp
 		m                   *pipelineMW
 		dramTop             messaging.Port
@@ -135,7 +134,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		agentPort = newDriverPort("Agent.Top", 8)
 		controlAgentPort = newDriverPort("Agent.Control", 8)
@@ -143,21 +142,16 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
 
-		addressToPortMapper = &mem.SinglePortMapper{
-			Port: dramTop.AsRemote(),
-		}
+		addressToPortMapper = dramTop.AsRemote()
 
-		cacheSpec := Definition.DefaultSpec
+		cacheSpec := DefaultSpec()
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheComp = Definition.Builder().
+		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
+		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithSpec(cacheSpec).
-			WithResources(Resources{
-				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
-				AddressToPortMapper: addressToPortMapper,
-			}).
+			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
 		cacheCompPorts := makePorts("Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)

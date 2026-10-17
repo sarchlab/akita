@@ -14,6 +14,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -38,8 +39,9 @@ func bytesToUint32(b []byte) uint32 { return binary.LittleEndian.Uint32(b) }
 // traffic driver. State is fully serialized; there is no hidden runtime field,
 // so the checkpoint captures everything the driver needs to resume.
 type driverSpec struct {
-	Freq   timing.Freq `json:"freq"`
-	NumOps int         `json:"num_ops"`
+	LowModule messaging.RemotePort `json:"low_module"`
+	Freq      timing.Freq          `json:"freq"`
+	NumOps    int                  `json:"num_ops"`
 }
 
 type driverState struct {
@@ -53,10 +55,7 @@ type driverState struct {
 }
 
 // driverResources holds the driver's external wiring.
-type driverResources struct {
-	// LowModule is the memory port the driver sends requests to.
-	LowModule messaging.Port
-}
+type driverResources struct{}
 
 // driverPorts holds the driver's ports.
 type driverPorts struct {
@@ -73,26 +72,23 @@ type driverMiddlewares struct {
 type driver = ticking.Component[
 	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]
 
-// Definition declares the traffic driver, a ticking component.
-var Definition = ticking.Definition[
-	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]{
-	DefaultSpec: driverSpec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() driverSpec {
+	return driverSpec{
 		Freq:   1 * timing.GHz,
 		NumOps: numOps,
-	},
-	NewState:       newDriverState,
-	NewMiddlewares: newDriverMiddlewares,
+	}
 }
 
-func newDriverState(_ *driver) driverState {
-	return driverState{
+func (s *driverState) Initialize(_ *driver) {
+	*s = driverState{
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
 }
 
-func newDriverMiddlewares(d *driver) driverMiddlewares {
-	return driverMiddlewares{Drive: &driverMW{d: d}}
+func (m *driverMiddlewares) Initialize(d *driver) {
+	*m = driverMiddlewares{Drive: &driverMW{d: d}}
 }
 
 func done(d *driver) bool {
@@ -158,7 +154,7 @@ func (m *driverMW) sendNext() bool {
 			Data:    uint32ToBytes(valueForOp(idx))},
 			ID:  m.d.NewID(),
 			Src: port.AsRemote(),
-			Dst: m.d.Resources.LowModule.AsRemote()}
+			Dst: m.d.Spec.LowModule}
 
 		req.TrafficBytes = len(req.Payload.(memprotocol.WriteReq).Data) + 12
 		req.TrafficClass = "memprotocol.WriteReq"
@@ -185,7 +181,7 @@ func (m *driverMW) sendNext() bool {
 			PID:            1},
 			ID:  m.d.NewID(),
 			Src: port.AsRemote(),
-			Dst: m.d.Resources.LowModule.AsRemote(),
+			Dst: m.d.Spec.LowModule,
 
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
@@ -200,10 +196,11 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
-	builtComponent := Definition.Builder().
+	routingSpec1 := DefaultSpec()
+	routingSpec1.LowModule = lowModule.AsRemote()
+	builtComponent := modeling.MakeBuilder[*driver](routingSpec1).
 		WithSimulation(s).
-		WithSpec(Definition.DefaultSpec).
-		WithResources(driverResources{LowModule: lowModule}).
+		WithResources(driverResources{}).
 		Build("Driver")
 
 	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
@@ -216,12 +213,11 @@ func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
 func buildSim() (*sim.Simulation, *driver) {
 	s := sim.MakeBuilder().Build()
 
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
-	dram := idealmemcontroller.Definition.Builder().
+	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(s).
-		WithSpec(dramSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(1 * mem.MB).

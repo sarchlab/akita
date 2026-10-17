@@ -3,6 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -33,7 +34,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	const blockSize = 64 // 1 << Log2BlockSize(6)
 
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.TotalByteSize = 64 * 1024
 		spec.NumBanks = 1
 		spec.NumMSHREntry = 16
@@ -43,15 +44,10 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		comp = Definition.Builder().
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
+		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(Resources{
-				Storage: storage,
-				AddressToPortMapper: &mem.SinglePortMapper{
-					Port: messaging.RemotePort("LowerCache"),
-				},
-			}).
+			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
 		compPorts := makePorts("L1Cache", 16)
 		comp.BindPort("Top", compPorts.Top)
@@ -144,7 +140,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})

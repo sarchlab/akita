@@ -5,9 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestControlContract verifies the GMMU satisfies the universal verbs.
@@ -15,16 +15,15 @@ import (
 // a private cache of memory.
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
-		spec := Definition.DefaultSpec
+		sim := akitasim.MakeBuilder().Build()
+
+		spec := DefaultSpec()
 		spec.DeviceID = 0
 		spec.Latency = 1
-		spec.LowModule = messaging.RemotePort("LowModule")
+		spec.Bottom = messaging.RemotePort("LowModule")
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(Resources{
 				PageTable: vm.NewPageTable(spec.Log2PageSize),
 			}).

@@ -4,17 +4,16 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096
@@ -22,9 +21,8 @@ func TestControlContract(t *testing.T) {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("MMUCache")
 		compPorts := defaultPorts("MMUCache")
 		comp.BindPort("Top", compPorts.Top)

@@ -3,6 +3,7 @@ package rob
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
@@ -56,9 +57,8 @@ var _ = Describe("Reorder Buffer", func() {
 		bottomPort = port("Bottom", bottomBufSize)
 		ctrlPort = port("Control", ctrlBufSize)
 
-		rob = Definition.Builder().
+		rob = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("Rob")
 
 		rob.BindPort("Top", topPort)
@@ -105,11 +105,11 @@ var _ = Describe("Reorder Buffer", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
-		spec := Definition.DefaultSpec
+		sim = testsim.New(engine, false)
+		spec := DefaultSpec()
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
-		spec.BottomUnit = bottomUnitRemote
+		spec.Bottom = bottomUnitRemote
 		topBufSize = 4
 		bottomBufSize = 4
 		ctrlBufSize = 2

@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/pcie"
+	"github.com/sarchlab/akita/v5/noc/pcie"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -56,13 +56,10 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		agents = append(agents, agent)
 	}
 
-	pcieConnector := pcie.NewConnector()
-	pcieConnector = pcieConnector.
+	pcieConnector := pcie.MakeBuilder().
 		WithSimulation(s).
-		WithFrequency(1*timing.GHz).
-		WithVersion(4, 16)
-
-	pcieConnector.CreateNetwork("PCIe")
+		WithFreq(1*timing.GHz).
+		WithVersion(4, 16).Build("PCIe")
 	rootComplexID := pcieConnector.AddRootComplex(agents[0].AgentPorts)
 
 	switch1ID := pcieConnector.AddSwitch(rootComplexID)

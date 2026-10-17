@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -65,18 +65,22 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {
-		epSpec := endpoint.Definition.DefaultSpec
+		epSpec := endpoint.DefaultSpec()
 		epSpec.Freq = freq
 		epSpec.FlitByteSize = 8
 		epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("EP%d.NetworkPort", 2-i))
 
-		ep := endpoint.Definition.Builder().
+		for _, port := range agents[i].AgentPorts {
+			epSpec.Devices = append(epSpec.Devices, port.AsRemote())
+		}
+		ep := endpoint.MakeBuilder().
 			WithSimulation(s).
 			WithSpec(epSpec).
-			WithResources(endpoint.Resources{DevicePorts: agents[i].AgentPorts}).
 			Build(name)
 		ep.BindPort("NetworkPort", netPorts[i])
-		endpoint.ConnectDevices(ep)
+		for _, port := range agents[i].AgentPorts {
+			endpoint.DeviceConnection(ep).BindPort(port)
+		}
 	}
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)

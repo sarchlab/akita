@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
+	"github.com/sarchlab/akita/v5/noc/nvlink"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -56,10 +56,8 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		agents = append(agents, agent)
 	}
 
-	connector := nvlink.NewConnector().
-		WithSimulation(s)
-
-	connector.CreateNetwork("Network")
+	connector := nvlink.MakeBuilder().
+		WithSimulation(s).Build("Network")
 
 	rootComplexID := connector.AddRootComplex(agents[8].AgentPorts)
 	switch1ID := connector.AddPCIeSwitch()

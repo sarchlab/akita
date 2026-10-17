@@ -13,6 +13,9 @@ import (
 
 // Spec contains immutable configuration for the TLB.
 type Spec struct {
+	// Translation routing configuration.
+	Bottom mem.AddressMapper `json:"bottom"`
+
 	Freq           timing.Freq `json:"freq"`
 	NumSets        int         `json:"num_sets"`
 	NumWays        int         `json:"num_ways"`
@@ -48,12 +51,8 @@ type middlewares struct {
 	TLB *tlbMiddleware
 }
 
-// Resources holds the external objects wired into the TLB. The translation
-// provider mapper resolves the remote port that serves the translation for a
-// given virtual address.
-type Resources struct {
-	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
-}
+// Resources is empty; routing configuration belongs to Spec.
+type Resources struct{}
 
 const (
 	tlbStateEnable = "enable"
@@ -196,19 +195,6 @@ func mshrIsEmpty(entries []mshrEntryState) bool {
 
 func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool {
 	return mshr.IsPresent(entries, pid, vAddr)
-}
-
-// --- Free function for address mapping ---
-
-func findTranslationPort(
-	mapper mem.AddressToPortMapper,
-	vAddr uint64,
-) messaging.RemotePort {
-	if mapper == nil {
-		panic("no translation provider mapper configured")
-	}
-
-	return mapper.Find(vAddr)
 }
 
 // Comp is the TLB component.

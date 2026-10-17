@@ -3,10 +3,10 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -72,9 +72,9 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	BeforeEach(func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim = testsim.New(engine, true)
 
-		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
+		memCtrl = buildDRAM(sim, DefaultSpec(), "MemCtrl", 16)
 		Expect(sim.Initialize()).To(Succeed())
 
 		topPort = memCtrl.Ports.Top
@@ -120,11 +120,11 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 	It("charges a refresh milestone to the sub-trans that issues "+
 		"after a refresh window", func() {
 		engine := &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim := testsim.New(engine, true)
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.TREFI = 1
 		spec.TRFC = 3
 

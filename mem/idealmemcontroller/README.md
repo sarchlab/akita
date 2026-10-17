@@ -68,13 +68,13 @@ the shared store at the request's global address.
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
+Start from `DefaultSpec()`, tweak the fields you need, and pass the
 whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
 engine and registers the component), `WithResources` (the backing storage,
 required), and `component.BindPort` after Build (the port instances).
 
 ```go
-spec := idealmemcontroller.Definition.DefaultSpec
+spec := idealmemcontroller.DefaultSpec()
 spec.Latency = 50
 
 storage := mem.MakeStorageBuilder().
@@ -82,9 +82,8 @@ storage := mem.MakeStorageBuilder().
     WithSimulation(sim).
     Build("IdealMem.Storage")
 
-ctrl := idealmemcontroller.Definition.Builder().
+ctrl := modeling.MakeBuilder[*idealmemcontroller.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("IdealMem")
 ctrl.BindPort("Top", twowaybuffered.NewPort(16, 16))
@@ -96,7 +95,7 @@ topPort := ctrl.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{Storage: s})` | Backing storage, possibly shared (required) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 

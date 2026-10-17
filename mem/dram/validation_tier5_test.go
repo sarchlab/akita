@@ -77,7 +77,7 @@ type akitaResult struct {
 // canonical oracle config (DDR4, refresh off, given page policy) and returns
 // the issued command counts and the average read latency in DRAM cycles.
 func runAkita(s scenario) akitaResult {
-	spec := DDR4Spec
+	spec := DDR4Spec()
 	if s.PagePolicy == "open" {
 		spec.PagePolicy = PagePolicyOpen
 	} else {

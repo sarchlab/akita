@@ -28,6 +28,7 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 	"github.com/sarchlab/akita/v5/monitoring/static"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -50,8 +51,10 @@ type Monitor struct {
 	port       int
 	engine     timing.Engine
 	simulation timing.Simulation
-	visTracer  *tracing.DBTracer
-	tracePath  string
+	// Execution uses Simulation.Run; the engine provides timing and controls.
+	runSimulation func() error
+	visTracer     *tracing.DBTracer
+	tracePath     string
 
 	// Internal state.
 	started          bool
@@ -63,13 +66,16 @@ type Monitor struct {
 	fs               http.FileSystem
 }
 
-// NewMonitor creates an unbound monitor with default settings. It opens no
-// listener until Start is called, normally by sim.Builder.WithMonitor.
-func NewMonitor() *Monitor {
-	return &Monitor{
-		fs:           static.Assets(),
-		progressBars: []*ProgressBar{},
-	}
+// Builder configures a monitor without opening a listener.
+type Builder struct{ port int }
+
+// MakeBuilder returns a monitor builder using an automatically selected port.
+func MakeBuilder() Builder { return Builder{} }
+
+// Build creates an independent monitor. Start opens its listener when attached
+// to a simulation with sim.Builder.WithMonitor.
+func (b Builder) Build() *Monitor {
+	return &Monitor{port: b.port, fs: static.Assets(), progressBars: []*ProgressBar{}}
 }
 
 // Start permanently binds the monitor to s and starts live monitoring.
@@ -81,15 +87,15 @@ func (m *Monitor) Start(s *sim.Simulation) {
 	}
 	m.started = true
 	m.simulation = s
+	m.runSimulation = s.Run
 	m.engine = s.Engine()
 	m.visTracer = s.VisTracer()
 	m.tracePath = s.TraceDBPath()
 	m.startServer()
 }
 
-// WithPortNumber sets the port number for the monitoring server. Returns the
-// Monitor for method chaining.
-func (m *Monitor) WithPortNumber(port int) *Monitor {
+// WithPortNumber selects the server port; values below 1000 select a random port.
+func (b Builder) WithPortNumber(port int) Builder {
 	if port < 1000 {
 		fmt.Fprintf(os.Stderr,
 			"Port number %d is assigned to the server, "+
@@ -99,9 +105,9 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 		port = 0
 	}
 
-	m.port = port
+	b.port = port
 
-	return m
+	return b
 }
 
 // RegisterComponent registers a component with the monitor so its internal
@@ -420,7 +426,7 @@ func (m *Monitor) now(w http.ResponseWriter, r *http.Request) {
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	go func() {
-		err := m.engine.Run()
+		err := m.runSimulation()
 		if err != nil {
 			log.Printf("simulation run failed: %v", err)
 		}
@@ -1045,7 +1051,7 @@ func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", absPath)
+	db, err := sql.Open("sqlite", sqlitepath.URI(absPath, "ro"))
 	if err != nil {
 		return nil, err
 	}

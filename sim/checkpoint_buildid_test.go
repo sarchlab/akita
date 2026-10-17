@@ -11,7 +11,7 @@ func TestCheckpointAutomaticBuildIdentity(t *testing.T) {
 	build := func(t *testing.T, label string) *Simulation {
 		t.Helper()
 		s := MakeBuilder().
-			WithOutputFileName(filepath.Join(t.TempDir(), label)).Build()
+			WithOutputPath(filepath.Join(t.TempDir(), label) + ".sqlite3").Build()
 		t.Cleanup(s.Terminate)
 		require.NoError(t, s.Initialize())
 		return s

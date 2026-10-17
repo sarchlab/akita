@@ -3,7 +3,8 @@ package ticking
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -12,8 +13,6 @@ type testEngine struct {
 	now       timing.VTimeInPicoSec
 	scheduled []timing.Event
 }
-
-func (*testEngine) SetRunGuard(func() error) {}
 
 func (e *testEngine) CurrentTime() timing.VTimeInPicoSec {
 	return e.now
@@ -25,7 +24,7 @@ func (e *testEngine) Schedule(event timing.Event) {
 
 func newTestScheduler(secondary bool) (*Scheduler, *testEngine) {
 	engine := &testEngine{now: timing.VTimeInPicoSec(10000)}
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := testsim.New(engine, false)
 
 	if secondary {
 		return NewSecondaryScheduler("TC", sim, 1*timing.GHz), engine

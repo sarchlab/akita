@@ -20,7 +20,7 @@ type initializer interface {
 	InitializeComponent()
 }
 
-// Setup is shared by full and standalone simulations. Assembly is single-threaded.
+// Setup tracks initialization of a simulation. Assembly is single-threaded.
 type Setup struct {
 	entities []naming.Named
 	names    map[string]bool

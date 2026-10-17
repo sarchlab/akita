@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
@@ -66,14 +67,13 @@ type Middlewares struct {
 // Comp is the ping agent, a ticking component. Both agents use this type.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// Definition declares the ping agent.
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-	NewMiddlewares: newMiddlewares,
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{Freq: 1 * timing.GHz}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{Agent: &agentMW{comp: c}}
+func (m *Middlewares) Initialize(c *Comp) {
+	*m = Middlewares{Agent: &agentMW{comp: c}}
 }
 
 type agentMW struct {
@@ -175,21 +175,20 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 }
 
 func main() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Choose buffer sizes; binding below assigns each port its name.
 	outA := twowaybuffered.NewPort(4, 4)
 	outB := twowaybuffered.NewPort(4, 4)
 
-	agentA := Definition.Builder().
+	agentA := modeling.MakeBuilder[*Comp](Spec{Freq: 1 * timing.GHz, PingDst: "AgentB.Out", NumPings: 1}).
 		WithSimulation(sim).
-		WithSpec(Spec{Freq: 1 * timing.GHz, PingDst: "AgentB.Out", NumPings: 1}).
 		Build("AgentA")
 
 	agentA.BindPort("Out", outA)
 
-	agentB := Definition.Builder().
+	agentB := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentB")
 
@@ -209,7 +208,7 @@ func main() {
 
 	agentA.TickLater()
 
-	if err := engine.Run(); err != nil {
+	if err := sim.Run(); err != nil {
 		panic(err)
 	}
 }

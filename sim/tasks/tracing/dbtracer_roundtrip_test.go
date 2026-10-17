@@ -5,19 +5,20 @@ import (
 	"testing"
 
 	"database/sql"
+	"path/filepath"
+
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"path/filepath"
 )
 
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
 // a real emit -> persist cycle.
 type roundTripDomain struct {
-	sim timing.Simulation
+	ids     timing.IDGenerator
+	tracker *tasks.Tracker
 	*hooking.HookableBase
 	name string
 	now  timing.VTimeInPicoSec
@@ -54,8 +55,8 @@ func writeRoundTripTrace(t *testing.T) string {
 	os.Remove(dbFile)
 	t.Cleanup(func() { os.Remove(dbFile) })
 
-	recorder := datarecording.NewDataRecorder(dbName)
-	domain := &roundTripDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()).WithTaskTracking(),
+	recorder := datarecording.NewDataRecorder(dbName + ".sqlite3")
+	domain := &roundTripDomain{tracker: tasks.NewTracker(),
 		HookableBase: &hooking.HookableBase{},
 		name:         "GPU[0].L1Cache",
 	}
@@ -131,15 +132,15 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	}
 }
 
-func (c *roundTripDomain) NewID() uint64 { return c.sim.NewID() }
+func (d *roundTripDomain) NewID() uint64 { return d.ids.NewID() }
 
 func (d *roundTripDomain) TaskTracker() *tasks.Tracker {
-	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()
+	return d.tracker
 }
 
 func TestDBRecordsCompleteEndWithoutStartOrHistory(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "late")
-	backend := datarecording.NewDataRecorder(base)
+	backend := datarecording.NewDataRecorder(base + ".sqlite3")
 	clock := &testTimeTeller{}
 	tracer := NewDBTracer(clock, backend)
 	task := tasks.Task{ID: 10, MsgID: 5, ParentID: 2, Kind: tasks.KindReqIn, What: "late",

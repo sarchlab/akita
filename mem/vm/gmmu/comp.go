@@ -15,7 +15,7 @@ type Spec struct {
 	Log2PageSize        uint64               `json:"log2_page_size"`
 	Latency             int                  `json:"latency"`
 	MaxRequestsInFlight int                  `json:"max_requests_in_flight"`
-	LowModule           messaging.RemotePort `json:"low_module"`
+	Bottom              messaging.RemotePort `json:"bottom"`
 }
 
 // pageState captures vm.Page fields in a serializable form.
@@ -115,7 +115,7 @@ type Ports struct {
 	// Top receives translation requests and returns their responses.
 	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
 
-	// Bottom sends translation requests for remote pages to the LowModule.
+	// Bottom sends translation requests for remote pages to the Bottom.
 	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
 
 	// Control receives enable, pause, drain, and reset commands.

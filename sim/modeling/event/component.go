@@ -11,8 +11,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Component is an instance of an event component type, built from its
-// Definition. It adds the scheduling of its own events to what the
+// Component is an instance of an event component type, built with modeling.MakeBuilder.
+// It adds the scheduling of its own events to what the
 // component models share.
 //
 // Its exported fields, the five structs, come from the embedded
@@ -20,7 +20,7 @@ import (
 //
 //   - Spec is the configuration given to Build.
 //   - State is the instance's mutable runtime data, saved in checkpoints.
-//     Only the component itself, its NewState and middlewares, writes it.
+//     Only the component itself, its State initializer and middlewares, writes it.
 //   - Resources holds the references to shared objects given to Build.
 //   - Ports holds the slots the system builder assigns with BindPort.
 //   - Middlewares holds the instance's behavior. Every event the instance

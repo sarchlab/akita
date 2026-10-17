@@ -3,6 +3,7 @@ package mmu
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
@@ -51,12 +52,11 @@ var _ = Describe("MMU", func() {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
-		mmuComp = Definition.Builder().
+		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		mmuCompPorts := makePorts("MMU", topBufSize)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
@@ -75,7 +75,7 @@ var _ = Describe("MMU", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build(4096)
 	})
@@ -225,14 +225,13 @@ var _ = Describe("MMU Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		pageTable = vm.NewPageTable(12)
 
-		mmuComp = Definition.Builder().
+		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 		mmuCompPorts := makePorts("MMU", 4096)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)

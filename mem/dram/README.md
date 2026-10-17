@@ -7,13 +7,16 @@ inter-command timing constraints.
 
 ## Supported Protocols
 
-| Preset | Variable | Frequency | Bus Width | Burst Length |
+| Preset | Function | Frequency | Bus Width | Burst Length |
 |---|---|---|---|---|
-| DDR4-2400 | `DDR4Spec` | 1200 MHz | 64-bit | 8 |
-| DDR5-4800 | `DDR5Spec` | 2400 MHz | 32-bit | 16 |
-| HBM2-2Gbps | `HBM2Spec` | 1000 MHz | 128-bit | 4 |
-| HBM3-6.4Gbps | `HBM3Spec` | 3200 MHz | 64-bit | 8 |
-| GDDR6-14Gbps | `GDDR6Spec` | 1750 MHz | 32-bit | 16 |
+| DDR4-2400 | `DDR4Spec()` | 1200 MHz | 64-bit | 8 |
+| DDR5-4800 | `DDR5Spec()` | 2400 MHz | 32-bit | 16 |
+| HBM2-2Gbps | `HBM2Spec()` | 1000 MHz | 128-bit | 4 |
+| HBM3-6.4Gbps | `HBM3Spec()` | 3200 MHz | 64-bit | 8 |
+| GDDR6-14Gbps | `GDDR6Spec()` | 1750 MHz | 32-bit | 16 |
+
+Each preset function returns an independent `Spec`. Customize the returned value;
+later calls retain the original preset values.
 
 Additional protocol constants: `DDR3`, `GDDR5`, `GDDR5X`, `LPDDR`, `LPDDR3`,
 `LPDDR4`, `LPDDR5`, `HBM`, `HMC`, `HBM3E`.
@@ -125,21 +128,21 @@ Activate → Read/Write → Precharge → (next row)
 
 ## Builder Pattern
 
-All scalar configuration is supplied as a whole through `WithSpec`. Start from a
-preset (or `Definition.DefaultSpec`), tweak the fields you need, and pass it in. Wiring is
+Supply configuration as a whole `Spec` to `modeling.MakeBuilder[*dram.Comp]`.
+Call a preset function (or `DefaultSpec()`), tweak the returned fields, and pass
+the value to the builder. Wiring is
 supplied through `WithSimulation` (which provides the engine and registers the
 component), `WithResources` (the backing storage), and `component.BindPort` after Build (the port instances).
 
 ```go
-spec := dram.DDR4Spec
+spec := dram.DDR4Spec()
 spec.Freq = 1200 * timing.MHz
 spec.PagePolicy = dram.PagePolicyOpen
 
 storage := mem.NewStorage(4 * mem.GB)
 
-ctrl := dram.Definition.Builder().
+ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
@@ -153,7 +156,7 @@ topPort := ctrl.Ports.Top
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` or a preset (DDR4Spec, HBM2Spec, ...) |
+| `WithSpec(s)` | Override the builder configuration with a complete Spec, for example when reusing a builder. |
 | `WithResources(Resources{Storage: s})` | Backing storage (required; no longer built internally) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
@@ -164,7 +167,7 @@ controller per channel), if `BurstLength` is 0, or if `Scheduler` or
 The storage is indexed by the global request address, so it must cover every
 address the controller serves. To cover the whole geometry of a Spec, size it
 to `NumCol × NumRow × DeviceWidth/8 × NumBank × BusWidth/DeviceWidth × NumRank
-× NumChannel` bytes (4 GiB for `Definition.DefaultSpec`); storage is allocated
+× NumChannel` bytes (4 GiB for `DefaultSpec()`); storage is allocated
 lazily, so a large capacity costs nothing until it is touched.
 
 ### Commonly Tweaked Spec Fields

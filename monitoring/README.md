@@ -8,7 +8,7 @@ Akita simulations.
 Monitoring is opt-in. Construct a monitor and pass it to the simulation builder:
 
 ```go
-monitor := monitoring.NewMonitor().WithPortNumber(8080)
+monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().WithMonitor(monitor).Build()
 defer s.Terminate()
 
@@ -18,7 +18,7 @@ monitor.CompleteProgressBar(bar)
 ```
 
 Import `github.com/sarchlab/akita/v5/monitoring` and
-`github.com/sarchlab/akita/v5/sim`. `NewMonitor()` opens no listener and does not
+`github.com/sarchlab/akita/v5/sim`. `MakeBuilder().Build()` opens no listener and does not
 bind a simulation. `Build()` calls `Start(s)` after initializing the engine,
 tracer, and recorder. Start permanently binds those services and begins serving
 HTTP. The runner forwards component and port registrations and calls `Stop()`

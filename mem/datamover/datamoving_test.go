@@ -3,13 +3,13 @@ package datamover
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -28,11 +28,11 @@ var _ = Describe("DataMover", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 
 		srcPort = newDriverPort("Src.Top", 4)
 
-		memSpec := idealmemcontroller.Definition.DefaultSpec
+		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
 		memSpec.Width = 1
 		memSpec.CacheLineSize = 64
@@ -42,22 +42,16 @@ var _ = Describe("DataMover", func() {
 		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = buildIdealMem(sim, memSpec, outsideStorage, "OutsideMem")
 
-		dmSpec := Definition.DefaultSpec
+		dmSpec := DefaultSpec()
 		dmSpec.BufferSize = 2048
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
-		dataMover = Definition.Builder().
+		dmSpec.Inside.Destinations = []messaging.RemotePort{insideMem.Ports.Top.AsRemote()}
+
+		dmSpec.Outside.Destinations = []messaging.RemotePort{outsideMem.Ports.Top.AsRemote()}
+		dataMover = modeling.MakeBuilder[*Comp](dmSpec).
 			WithSimulation(sim).
-			WithSpec(dmSpec).
-			WithResources(Resources{
-				InsideMapper: &mem.SinglePortMapper{
-					Port: insideMem.Ports.Top.AsRemote(),
-				},
-				OutsideMapper: &mem.SinglePortMapper{
-					Port: outsideMem.Ports.Top.AsRemote(),
-				},
-			}).
 			Build("DataMover")
 		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 40960000)
 		dataMover.BindPort("Top", dataMoverPorts.Top)

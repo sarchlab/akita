@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
-	nc "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
+	nc "github.com/sarchlab/akita/v5/noc/networkconnector"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -57,12 +57,10 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		test.RegisterAgent(agent)
 	}
 
-	connector := nc.MakeConnector().
+	connector := nc.MakeBuilder().
 		WithSimulation(s).
-		WithDefaultFreq(freq).
-		WithFlitSize(16)
-
-	connector.NewNetwork("Network")
+		WithFreq(freq).
+		WithFlitSize(16).Build("Network")
 
 	switchID := connector.AddSwitch()
 

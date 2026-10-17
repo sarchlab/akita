@@ -3,7 +3,7 @@ package gmmu
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
@@ -47,15 +47,14 @@ var _ = Describe("GMMU", func() {
 	// build constructs a GMMU, injects the shared page table, and plugs a
 	// noopConn into each port so they can be driven.
 	build := func() {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.DeviceID = 0
 		spec.Latency = 1
-		spec.LowModule = lowModulePort
+		spec.Bottom = lowModulePort
 
-		gmmuComp = Definition.Builder().
+		gmmuComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(spec).
 			Build("MMU")
 		gmmuCompPorts := defaultPorts("MMU")
 		gmmuComp.BindPort("Top", gmmuCompPorts.Top)
@@ -93,7 +92,7 @@ var _ = Describe("GMMU", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build()
 	})

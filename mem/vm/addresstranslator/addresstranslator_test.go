@@ -5,17 +5,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -72,23 +71,15 @@ var _ = Describe("Address Translator", func() {
 	// build constructs a translator with the given Top-port buffer size, injects
 	// the mappers, and plugs a noopConn into each port so they can be driven.
 	build := func(topBufSize int) {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
-		resources := Resources{
-			MemProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("MemPort"),
-			},
-			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("TranslationProvider"),
-			},
-		}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		t = Definition.Builder().
+		t = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(resources).
 			Build("AddressTranslator")
 		tPorts := makePorts("AddressTranslator", topBufSize)
 		t.BindPort("Top", tPorts.Top)
@@ -117,7 +108,7 @@ var _ = Describe("Address Translator", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		sim = modeling.NewStandaloneSimulation(engine)
+		sim = testsim.New(engine, false)
 		build(topBufSize)
 	})
 

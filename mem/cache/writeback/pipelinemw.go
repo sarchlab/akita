@@ -7,13 +7,11 @@ import (
 )
 
 // pipelineMW runs the writeback cache's data pipeline. It holds only
-// references: the component, the storage and address mapper resolved at build
-// time, and the pipeline stages. All mutable state is in comp.State.
+// references: the component, the storage, and the pipeline stages. All mutable state is in comp.State.
 type pipelineMW struct {
 	comp *Comp
 
-	storage       *mem.Storage
-	addressMapper mem.AddressToPortMapper
+	storage *mem.Storage
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage
@@ -66,12 +64,7 @@ func (m *pipelineMW) bottomPort() messaging.Port {
 
 // findPort resolves an address to the lower-memory port that serves it.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	if m.addressMapper == nil {
-		panic("writeback: no address mapper; set Resources.AddressToPortMapper, " +
-			"or Spec.AddressMapperType with Resources.RemotePorts")
-	}
-
-	return m.addressMapper.Find(address)
+	return m.comp.Spec.Bottom.Find(address)
 }
 
 // Handle runs one cycle of the cache pipeline, unless the cache is paused.

@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
-// TestDefinitionMatchesSource asserts that the inspector's static view of
-// this package equals the runtime Definition, so the two can never drift.
-func TestDefinitionMatchesSource(t *testing.T) {
-	modelingtest.CheckTicking(t, Definition)
+// TestComponentMatchesSource asserts that the inspector's static view of
+// this package equals the runtime component type and DefaultSpec() result, so the two can never drift.
+func TestComponentMatchesSource(t *testing.T) {
+	modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())
 }

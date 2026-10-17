@@ -2,13 +2,13 @@
 sidebar_position: 2
 ---
 
-# The Definition and the Middlewares
+# Defaults and Middlewares
 
-The `Definition` ties the Spec, the middlewares, and the ports together.
-Every Akita component declares one in the same shape, so once you know one
-you know them all.
+The `Comp` alias ties together the five element types. `DefaultSpec()` supplies
+configuration defaults, and `Middlewares.Initialize` creates the behavior after
+ports are wired. Every Akita component follows this shape.
 
-## Definition
+## Default configuration
 
 tickingping's middlewares are the fields of its `Middlewares` struct, in
 the order they run:
@@ -24,16 +24,15 @@ type Middlewares struct {
 }
 ```
 
-and the package declares its `Definition`, in `definition.go`:
+and the package declares its defaults and middleware initialization in `definition.go`:
 
 ```go
-var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
-    DefaultSpec:    Spec{Freq: 1 * timing.GHz},
-    NewMiddlewares: newMiddlewares,
+func DefaultSpec() Spec {
+    return Spec{Freq: 1 * timing.GHz}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-    return Middlewares{
+func (m *Middlewares) Initialize(c *Comp) {
+    *m = Middlewares{
         Send:           &sendMW{comp: c},
         ReceiveProcess: &receiveProcessMW{comp: c},
     }
@@ -42,7 +41,7 @@ func newMiddlewares(c *Comp) Middlewares {
 
 Things to notice:
 
-- It has the same shape as the walker's. `Definition.Builder()…Build(name)`
+- It has the same shape as the walker's. `modeling.MakeBuilder[*Comp](DefaultSpec())…Build(name)`
   returns a `*Comp` — the alias from the previous page.
 - The component **declares its port** as a field of `Ports` but does not
   create it. After Build, the system builder creates the port and calls
@@ -52,7 +51,7 @@ Things to notice:
   then `ReceiveProcess`.
 - `Build` registers the component; `BindPort` registers each port,
   which adds them to checkpointing, tracing, and monitoring.
-- The `Definition.Builder()` → `WithX` → `Build(name)` shape is universal
+- The `modeling.MakeBuilder[*Comp](DefaultSpec())` → `WithX` → `Build(name)` shape is universal
   across Akita components.
 
 The system builder creates the port with `twowaybuffered.NewPort` and passes it
@@ -61,7 +60,7 @@ with `component.BindPort` after Build:
 ```go
 outA := twowaybuffered.NewPort(16, 16)
 
-agentA := Definition.Builder().
+agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
     WithSimulation(sim).
     WithSpec(specA).
     Build("AgentA")
@@ -84,18 +83,18 @@ convention for every real component: **one component type per package**.
 A package of its own buys three things:
 
 - **Correct assembly, every time.** The package declares the parts once —
-  the five structs, the middlewares, the `Definition` — and `Build`
+  the five structs, the `Comp` alias, the defaults and initializers — and `Build`
   assembles them the same way for every instance. A caller cannot forget a
   middleware or run them in the wrong order; `Initialize` checks and
   creates them after wiring.
-- **Easy instances.** `Definition.Builder().WithSpec(spec).Build(name)`
+- **Easy instances.** `modeling.MakeBuilder[*Comp](DefaultSpec()).WithSpec(spec).Build(name)`
   stamps out an agent on demand — we build two, AgentA and AgentB — and
-  `Definition.DefaultSpec` gives a base configuration to tweak.
+  `DefaultSpec()` gives a base configuration to tweak.
 - **A clean surface.** Callers see only what they must supply — the Spec,
-  the Resources, the Ports — and the `Definition`; the middlewares are
-  unexported. Tooling reads the same `Definition` without running the code,
+  the Resources, the Ports — and `DefaultSpec()`; the middlewares are
+  unexported. Tooling reads the `Comp` alias and `DefaultSpec()` literal without running the code,
   and each component package keeps the two views in agreement with a
-  one-line test, `modelingtest.CheckTicking(t, Definition)`.
+  one-line test, `modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())`.
 
 Rule of thumb: keep a trivial, single-use component next to `main`; give it
 a package once it owns ports, has more than one middleware, or gets

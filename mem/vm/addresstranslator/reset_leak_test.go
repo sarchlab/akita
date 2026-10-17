@@ -4,14 +4,13 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TestResetEndsInflightTracingTasks drives a read into the address translator so
@@ -19,26 +18,17 @@ import (
 // translation), then issues a Reset and asserts both tasks are ended — i.e. a
 // mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-	spec := Definition.DefaultSpec
+	spec := DefaultSpec()
 	spec.Log2PageSize = 12
 	spec.Freq = 1
 
-	resources := Resources{
-		MemProviderMapper: &mem.SinglePortMapper{
-			Port: messaging.RemotePort("MemPort"),
-		},
-		TranslationProviderMapper: &mem.SinglePortMapper{
-			Port: messaging.RemotePort("TranslationProvider"),
-		},
-	}
+	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+	spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-	at := Definition.Builder().
+	at := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithSpec(spec).
-		WithResources(resources).
 		Build("AddressTranslator")
 	atPorts := makePorts("AddressTranslator", 16)
 	at.BindPort("Top", atPorts.Top)

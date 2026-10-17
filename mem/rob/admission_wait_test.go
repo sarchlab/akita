@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -23,11 +24,11 @@ func (c *admissionClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *milestoneRecorder, uint64) {
 	t.Helper()
 	clock := &admissionClock{Engine: timing.NewSerialEngine()}
-	sim := modeling.NewStandaloneSimulation(clock).WithTaskTracking()
-	spec := Definition.DefaultSpec
+	sim := testsim.New(clock, true)
+	spec := DefaultSpec()
 	spec.BufferSize = 1
-	spec.BottomUnit = "Remote"
-	c := Definition.Builder().WithSimulation(sim).WithSpec(spec).Build("Rob")
+	spec.Bottom = "Remote"
+	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("Rob")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		p := twowaybuffered.NewPort(2, 1)
 		c.BindPort(name, p)

@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -94,16 +95,15 @@ var _ = Describe("DRAM Statistics", func() {
 
 	// Integration test: verify stats accumulate during real simulation
 	It("should accumulate statistics during simulation", func() {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
+		engine := sim.Engine().(*timing.SerialEngine)
 
 		conn := direct.NewConnection("StatsConn", sim, timing.GHz)
 
-		spec := dram.Definition.DefaultSpec
+		spec := dram.DefaultSpec()
 		spec.Freq = 1 * timing.GHz
-		dramComp := dram.Definition.Builder().
+		dramComp := modeling.MakeBuilder[*dram.Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("StatsDRAM")
 

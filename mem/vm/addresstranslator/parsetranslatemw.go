@@ -57,7 +57,7 @@ func (m *parseTranslateMW) translate() bool {
 		DeviceID: spec.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.translationPort().AsRemote(),
-		Dst: m.comp.Resources.TranslationProviderMapper.Find(vAddr),
+		Dst: m.comp.Spec.Translation.Find(vAddr),
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

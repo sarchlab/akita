@@ -4,9 +4,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -21,8 +21,8 @@ type p0Harness struct {
 }
 
 func newP0Harness(spec Spec, tracers ...tasks.Observer) *p0Harness {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	engine := sim.Engine().(*timing.SerialEngine)
 
 	dramComp := buildDRAM(sim, spec, "P0DRAM", 1024)
 	for _, t := range tracers {
@@ -99,7 +99,7 @@ func (h *p0Harness) collect() (
 
 var _ = Describe("P0: open-page panic regression", func() {
 	openPageSpec := func() Spec {
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.PagePolicy = PagePolicyOpen
 		return spec
 	}
@@ -184,7 +184,7 @@ var _ = Describe("P0: close-page completion latency", func() {
 
 	It("maps the read variants to ReadDelay, not TRP", func() {
 		// Precondition: the bug is only observable when the two differ.
-		Expect(DDR4Spec.TRP).NotTo(Equal(cmdCycles[cmdKindRead]))
+		Expect(DDR4Spec().TRP).NotTo(Equal(cmdCycles[cmdKindRead]))
 
 		Expect(cmdCycles[cmdKindReadPrecharge]).
 			To(Equal(cmdCycles[cmdKindRead]))
@@ -216,10 +216,9 @@ var _ = Describe("P0: close-page completion latency", func() {
 var _ = Describe("P0: channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
-			engine := timing.NewSerialEngine()
-			sim := modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+			sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
-			spec := Definition.DefaultSpec
+			spec := DefaultSpec()
 			spec.NumChannel = numChannel
 			buildDRAM(sim, spec, "ChannelGuard", 16)
 			Expect(sim.Initialize()).To(Succeed())

@@ -4,28 +4,26 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
-		spec.BottomUnit = messaging.RemotePort("BottomUnit")
+		spec := DefaultSpec()
+		spec.Bottom = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
 			p := twowaybuffered.NewPort(16, 16)
 			return p
 		}
 
-		comp := Definition.Builder().
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
 			Build("ROB")
 
 		comp.BindPort("Top", port("Top"))

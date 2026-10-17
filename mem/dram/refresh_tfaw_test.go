@@ -15,7 +15,7 @@ var _ = Describe("tFAW and Refresh", func() {
 
 	Describe("tFAW Constraint", func() {
 		BeforeEach(func() {
-			spec = DDR4Spec
+			spec = DDR4Spec()
 			spec.TFAW = 28
 
 			timing = generateTiming(&spec)
@@ -161,7 +161,7 @@ var _ = Describe("tFAW and Refresh", func() {
 
 	Describe("Periodic Refresh", func() {
 		BeforeEach(func() {
-			spec = DDR4Spec
+			spec = DDR4Spec()
 			spec.TREFI = 20 // small value for testing
 			spec.TRFC = 5
 

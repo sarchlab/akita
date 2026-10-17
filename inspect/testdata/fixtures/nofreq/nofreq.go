@@ -24,12 +24,10 @@ type (
 )
 
 // Def aliases the definition type.
-type Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]
+type Def = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // Comp is the component.
-type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = Def
 
-// Definition declares the component through the alias.
-var Definition = Def{DefaultSpec: Spec{Depth: 8}, NewMiddlewares: newMiddlewares}
-
-func newMiddlewares(*Comp) Middlewares { return Middlewares{} }
+// DefaultSpec returns the default configuration.
+func DefaultSpec() Spec { return Spec{Depth: 8} }

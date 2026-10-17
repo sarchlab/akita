@@ -362,7 +362,6 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 	request := msg.Payload.(vmprotocol.TranslationReq)
 
 	spec := m.comp.Spec
-	mapper := m.comp.Resources.TranslationProviderMapper
 
 	fetchBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
 		PID:      request.PID,
@@ -370,7 +369,7 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 		DeviceID: request.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
-		Dst: findTranslationPort(mapper, request.VAddr),
+		Dst: spec.Bottom.Find(request.VAddr),
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

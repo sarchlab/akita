@@ -54,8 +54,8 @@ conn.BindPort(portC)
 
 ```go
 // Create engine and connection
-engine := timing.NewSerialEngine()
-sim := modeling.NewStandaloneSimulation(engine)
+sim := sim.MakeBuilder().Build()
+engine := sim.Engine()
 conn := direct.NewConnection("Bus", sim, timing.GHz)
 
 // Create components with ports, then plug them in
@@ -79,5 +79,5 @@ index advances by one each tick, ensuring no port is permanently starved.
 
 - No bandwidth modeling — all pending messages are forwarded each tick.
 - No latency modeling beyond the tick granularity.
-- `noc/networking` adds switch pipelines, routing, and contention while using
+- The `noc` packages add switch pipelines, routing, and contention while using
   ideal direct links. Finite link bandwidth and latency are separate future work.

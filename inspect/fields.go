@@ -68,6 +68,12 @@ func structFields(
 			field.Default = fieldDefault(f.Type(), defaults[f.Name()])
 		}
 
+		if defaults != nil {
+			field.Fields, err = recordFields(pkg, f.Type(), field.Default, index)
+			if err != nil {
+				return nil, err
+			}
+		}
 		fields = append(fields, field)
 	}
 
@@ -224,4 +230,21 @@ func qualifiedTypeName(typ types.Type) string {
 	}
 
 	return named.Obj().Pkg().Path() + "." + named.Obj().Name()
+}
+
+// recordFields describes a standalone record or the elements of a record slice.
+func recordFields(pkg *packages.Package, typ types.Type, value any, index pkgIndex) ([]schema.Field, error) {
+	defaults, _ := value.(map[string]any)
+	if slice, ok := typ.Underlying().(*types.Slice); ok {
+		typ = slice.Elem()
+		defaults = map[string]any{}
+	}
+	if _, ok := typ.Underlying().(*types.Struct); !ok {
+		return nil, nil
+	}
+	fields, err := structFields(pkg, typ, defaults, index)
+	if err != nil {
+		return nil, err
+	}
+	return fields, validateFieldMetadata(pkg, typ, fields)
 }

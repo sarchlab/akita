@@ -1,6 +1,7 @@
 package tickingping
 
 import (
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -8,31 +9,28 @@ import (
 )
 
 func Example() {
-	engine := timing.NewSerialEngine()
-	sim := modeling.NewStandaloneSimulation(engine)
+	sim := akitasim.MakeBuilder().Build()
 
 	// Choose buffer sizes; binding below assigns each port its name.
 	outA := twowaybuffered.NewPort(16, 16)
 	outB := twowaybuffered.NewPort(16, 16)
 
-	specA := Definition.DefaultSpec
+	specA := DefaultSpec()
 	specA.Freq = 1 * timing.Hz
 	specA.PingDst = "AgentB.Out"
 	specA.NumPings = 2
 
-	specB := Definition.DefaultSpec
+	specB := DefaultSpec()
 	specB.Freq = 1 * timing.Hz
 
-	agentA := Definition.Builder().
+	agentA := modeling.MakeBuilder[*Comp](specA).
 		WithSimulation(sim).
-		WithSpec(specA).
 		Build("AgentA")
 
 	agentA.BindPort("Out", outA)
 
-	agentB := Definition.Builder().
+	agentB := modeling.MakeBuilder[*Comp](specB).
 		WithSimulation(sim).
-		WithSpec(specB).
 		Build("AgentB")
 
 	agentB.BindPort("Out", outB)
@@ -49,7 +47,7 @@ func Example() {
 	// arrives.
 	agentA.TickLater()
 
-	err := engine.Run()
+	err := sim.Run()
 	if err != nil {
 		panic(err)
 	}

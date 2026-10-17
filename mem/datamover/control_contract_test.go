@@ -3,12 +3,11 @@ package datamover
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type ccNoopConn struct {
@@ -23,21 +22,18 @@ func (c *ccNoopConn) NotifySend()                      {}
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
-		engine := timing.NewSerialEngine()
-		sim := modeling.NewStandaloneSimulation(engine)
+		sim := akitasim.MakeBuilder().Build()
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.BufferSize = 64
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8
 
-		comp := Definition.Builder().
+		spec.Inside.Destinations = []messaging.RemotePort{messaging.RemotePort("InsideMem")}
+
+		spec.Outside.Destinations = []messaging.RemotePort{messaging.RemotePort("OutsideMem")}
+		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(Resources{
-				InsideMapper:  &mem.SinglePortMapper{Port: messaging.RemotePort("InsideMem")},
-				OutsideMapper: &mem.SinglePortMapper{Port: messaging.RemotePort("OutsideMem")},
-			}).
 			Build("DataMover")
 		compPorts := makePorts("DataMover", 16, 16, 16, 16)
 		comp.BindPort("Top", compPorts.Top)

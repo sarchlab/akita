@@ -18,7 +18,7 @@ do the translation work.
 For each incoming `memprotocol.ReadReq` / `memprotocol.WriteReq` on the `Top` port, the
 translator computes the virtual page ID (`addr >> Log2PageSize << Log2PageSize`)
 and sends a `vmprotocol.TranslationReq` on the `Translation` port to the provider
-resolved by the `TranslationProviderMapper`. The original request's fields are
+resolved by the Spec routing value. The original request's fields are
 saved in a transaction record while the translation is outstanding.
 
 ### RespondPipeline — forward and respond
@@ -26,7 +26,7 @@ saved in a transaction record while the translation is outstanding.
 1. **parseTranslation** — When a `vmprotocol.TranslationRsp` returns, the saved request is
    cloned with its address rewritten to `page.PAddr + offset` (where `offset` is
    the original address modulo the page size) and sent downstream on the `Bottom`
-   port to the memory provider resolved by the `MemProviderMapper`.
+   port to the memory provider resolved by the Spec.Bottom routing value.
 2. **respond** — When a `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp` returns on
    `Bottom`, it is matched to the in-flight request and a corresponding response
    is sent back up on `Top` to the original requester.
@@ -41,8 +41,8 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 - `State` — mutable runtime data: the control state, the in-flight translation
   transactions, and the requests forwarded to the bottom port awaiting
   responses.
-- `Resources` — external wiring; holds the `MemProviderMapper` and the
-  `TranslationProviderMapper` (both `mem.AddressToPortMapper`).
+- `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom and Translation).
+  Middleware calls their `Find` methods directly; Resources has no routing override.
 - `Ports` — the `Top`, `Bottom`, `Translation`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands), `ParseTranslate` (accept and
   translate), and `RespondPipeline` (forward and respond), run in that order
@@ -53,16 +53,13 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 ## Builder Pattern
 
 ```go
-spec := addresstranslator.Definition.DefaultSpec
+spec := addresstranslator.DefaultSpec()
 spec.DeviceID = 1
+spec.Translation.Destinations = []messaging.RemotePort{"MMU.Top"}
+spec.Bottom.Destinations = []messaging.RemotePort{"Cache.Top"}
 
-at := addresstranslator.Definition.Builder().
+at := modeling.MakeBuilder[*addresstranslator.Comp](spec).
     WithSimulation(sim).
-    WithSpec(spec).
-    WithResources(addresstranslator.Resources{
-        MemProviderMapper:         memMapper,
-        TranslationProviderMapper: tlbMapper,
-    }).
     Build("AddressTranslator")
 at.BindPort("Top", twowaybuffered.NewPort(4, 4))
 at.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
@@ -73,8 +70,8 @@ at.BindPort("Control", twowaybuffered.NewPort(1, 1))
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{...})` | External wiring (memory and translation provider mappers) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithResources(Resources{})` | Optional empty Resources |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports

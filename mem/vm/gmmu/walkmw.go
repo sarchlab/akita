@@ -18,7 +18,7 @@ import (
 type walkMW struct {
 	comp *Comp
 
-	// pageTable is Resources.PageTable, taken by newMiddlewares.
+	// pageTable is Resources.PageTable, taken by Middlewares.Initialize.
 	pageTable vm.PageTable
 }
 
@@ -188,7 +188,7 @@ func (m *walkMW) processRemoteMemReq(
 		DeviceID: walking.DeviceID},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
-		Dst: spec.LowModule,
+		Dst: spec.Bottom,
 
 		TrafficClass: "vmprotocol.TranslationReq"}
 

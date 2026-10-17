@@ -5,19 +5,13 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Definition declares the writeback cache, a ticking component: its default
-// configuration and its behavior. Its ports and middlewares are the fields of
-// Ports and Middlewares. The system builder builds an instance with
-// Definition.Builder()...Build(name); tooling reads the same declaration
-// statically.
-var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
-	DefaultSpec: Spec{
+// DefaultSpec returns the component's default configuration.
+func DefaultSpec() Spec {
+	return Spec{
 		Freq:                1 * timing.GHz,
 		NumReqPerCycle:      1,
 		Log2BlockSize:       6,
@@ -29,15 +23,17 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 		WriteBufferCapacity: 1024,
 		MaxInflightFetch:    128,
 		MaxInflightEviction: 128,
-		InterleavingSize:    4096,
-	},
-	NewState:       newState,
-	NewMiddlewares: newMiddlewares,
+		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
+	}
 }
 
-// newState returns a running cache with an empty directory, MSHR, and
+// Initialize creates a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) state {
+func (s *state) Initialize(c *Comp) {
+	if err := validateSpec(c.Spec); err != nil {
+		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	}
+
 	spec := c.Spec
 
 	numBanks := spec.numBanks()
@@ -56,7 +52,7 @@ func newState(c *Comp) state {
 		bankPostBufs[i] = queueing.MakeBuffer[int](laneWidth)
 	}
 
-	s := state{
+	initial := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
 		DirStageBuf:  queueing.MakeBuffer[int](spec.NumReqPerCycle),
@@ -76,29 +72,28 @@ func newState(c *Comp) state {
 		BankDownwardInflightTransCounts: make([]int, numBanks),
 	}
 
-	cache.DirectoryReset(&s.DirectoryState,
+	cache.DirectoryReset(&initial.DirectoryState,
 		spec.numSets(), spec.WayAssociativity, 1<<spec.Log2BlockSize)
 
-	return s
+	*s = initial
 }
 
-// newMiddlewares creates the cache's middlewares. The control middlewares and
+// Initialize creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
-// the address mapper, and the ports' accessors.
-func newMiddlewares(c *Comp) middlewares {
+// and the ports' accessors.
+func (m *middlewares) Initialize(c *Comp) {
 	res := c.Resources
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
 	}
 
 	pipeline := &pipelineMW{
-		comp:          c,
-		storage:       res.Storage,
-		addressMapper: resolveAddressMapper(c.Spec, res),
+		comp:    c,
+		storage: res.Storage,
 	}
 	pipeline.createInternalStages()
 
-	return middlewares{
+	*m = middlewares{
 		Ctrl: &ctrlMiddleware{pipeline: pipeline},
 		Flusher: &controlMW{
 			comp:    c,
@@ -108,44 +103,6 @@ func newMiddlewares(c *Comp) middlewares {
 	}
 }
 
-// resolveAddressMapper returns the mapper that routes fetches and evictions
-// to lower memory: the injected Resources.AddressToPortMapper, or one built
-// from Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
-// neither is configured or there are no remote ports, so the first routed
-// request reports the missing wiring.
-func resolveAddressMapper(spec Spec, res Resources) mem.AddressToPortMapper {
-	if res.AddressToPortMapper != nil {
-		return res.AddressToPortMapper
-	}
-
-	ports := res.RemotePorts
-
-	switch spec.AddressMapperType {
-	case "":
-		return nil
-	case "single":
-		if len(ports) == 0 {
-			return nil
-		}
-
-		return &mem.SinglePortMapper{Port: ports[0]}
-	case "interleaved":
-		if len(ports) == 0 {
-			return nil
-		}
-
-		if spec.InterleavingSize == 0 {
-			panic("writeback: an interleaved address mapper needs a " +
-				"non-zero Spec.InterleavingSize")
-		}
-
-		return &mem.InterleavedAddressPortMapper{
-			InterleavingSize: spec.InterleavingSize,
-			LowModules:       append([]messaging.RemotePort(nil), ports...),
-		}
-	default:
-		panic(fmt.Sprintf(
-			"writeback: unknown address mapper type %q",
-			spec.AddressMapperType))
-	}
+func validateSpec(spec Spec) error {
+	return spec.Bottom.Validate()
 }

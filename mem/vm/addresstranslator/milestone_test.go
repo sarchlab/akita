@@ -3,8 +3,7 @@ package addresstranslator
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -107,25 +106,17 @@ var _ = Describe("Address Translator milestones", func() {
 
 	BeforeEach(func() {
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
-		sim = modeling.NewStandaloneSimulation(engine).WithTaskTracking()
+		sim = testsim.New(engine, true)
 
-		spec := Definition.DefaultSpec
+		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 
-		resources := Resources{
-			MemProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("MemPort"),
-			},
-			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("TranslationProvider"),
-			},
-		}
+		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
+		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		at = Definition.Builder().
+		at = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithSpec(spec).
-			WithResources(resources).
 			Build("AddressTranslator")
 		atPorts := makePorts("AddressTranslator", topBufSize)
 		at.BindPort("Top", atPorts.Top)
