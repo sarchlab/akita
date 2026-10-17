@@ -1,21 +1,19 @@
 package switches_test
 
 import (
+	"testing"
+
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type fixtureWiring struct {
-	ports []messaging.Port
 	links []switches.Link
 }
 
-func (w *fixtureWiring) Ports() []messaging.Port       { return w.ports }
 func (w *fixtureWiring) Links() []switches.Link        { return w.links }
 func (w *fixtureWiring) Routes() switches.RoutingTable { return nil }
 
@@ -35,7 +33,6 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 
 	s = sim.MakeBuilder().Build()
 	port := twowaybuffered.NewPort(1, 1)
-	wiring.ports = []messaging.Port{port}
 	sw = modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).WithSimulation(s).
 		WithResources(switches.Resources{Wiring: wiring}).Build("Switch")
 	sw.BindPort("Links[0]", port)
@@ -46,11 +43,10 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 func TestInvalidLinkRejectedAtInitialization(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	port := twowaybuffered.NewPort(1, 1)
-	wiring := &fixtureWiring{ports: []messaging.Port{port},
-		links: []switches.Link{{Remote: "Peer.Top",
-			Latency:          -1,
-			NumInputChannel:  1,
-			NumOutputChannel: 1}}}
+	wiring := &fixtureWiring{links: []switches.Link{{Remote: "Peer.Top",
+		Latency:          -1,
+		NumInputChannel:  1,
+		NumOutputChannel: 1}}}
 	sw := modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).WithSimulation(s).
 		WithResources(switches.Resources{Wiring: wiring}).Build("Switch")
 	sw.BindPort("Links[0]", port)

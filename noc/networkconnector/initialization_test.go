@@ -73,7 +73,7 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			c.ConnectDevice(b, []messaging.Port{dst}, dp)
 			c.ConnectSwitches(a, b, sp)
 			require.Nil(t, c.switches[a].Routes())
-			require.Len(t, c.switches[a].Ports(), 2)
+			require.Len(t, c.switches[a].sw.Ports.Links, 2)
 			_ = (&networkCheckpoint{c}).record()
 			require.Zero(t, router.calls)
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)

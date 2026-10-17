@@ -10,7 +10,6 @@ import (
 )
 
 type routeForwardSendMW struct {
-	orderedPorts []messaging.Port
 	comp         *Comp
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable RoutingTable
@@ -19,7 +18,7 @@ type routeForwardSendMW struct {
 // ports returns the switch's local ports, in index order aligned with
 // State.PortComplexes.
 func (m *routeForwardSendMW) ports() []messaging.Port {
-	return m.orderedPorts
+	return m.comp.Ports.Links
 }
 
 // Handle runs sendOut → forward → route on every tick.

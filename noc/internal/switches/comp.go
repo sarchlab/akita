@@ -20,7 +20,6 @@ type RoutingTable interface {
 // Wiring supplies completed port settings and routes without depending on any
 // component's initialized State. Its implementation belongs to the network.
 type Wiring interface {
-	Ports() []messaging.Port
 	Links() []Link
 	Routes() RoutingTable
 }

@@ -106,6 +106,3 @@ func (dn *deviceNode) Table() *routing.Table {
 type Router interface{ EstablishRoute(nodes []Node) }
 
 func (r Remote) localAddress() messaging.RemotePort { return r.LocalPort.AsRemote() }
-
-// Ports returns ports in binding order, which determines arbitration order.
-func (sn *switchNode) Ports() []messaging.Port { return sn.ports }

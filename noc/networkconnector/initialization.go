@@ -122,7 +122,7 @@ func (n *networkCheckpoint) record() networkRecord {
 			Links:  sw.Links(),
 			Ends:   sw.ends,
 			Routes: c.routes[sw.name]}
-		for _, p := range sw.Ports() {
+		for _, p := range sw.sw.Ports.Links {
 			item.Ports = append(item.Ports, p.AsRemote())
 		}
 		record.Switches = append(record.Switches, item)

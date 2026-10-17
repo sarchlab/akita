@@ -20,7 +20,7 @@ func (s *state) Initialize(c *Comp) {
 	if c.Resources.Wiring == nil {
 		panic(c.Name() + ": switches: network wiring is required")
 	}
-	ports := c.Resources.Wiring.Ports()
+	ports := c.Ports.Links
 	links := c.Resources.Wiring.Links()
 	if len(links) != len(ports) {
 		panic(fmt.Sprintf("%s: switches: %d ports but %d link settings", c.Name(), len(ports), len(links)))
@@ -66,7 +66,7 @@ func (m *middlewares) Initialize(c *Comp) {
 	links := c.Resources.Wiring.Links()
 
 	portIndex := make(map[messaging.RemotePort]int)
-	ports := c.Resources.Wiring.Ports()
+	ports := c.Ports.Links
 	for i, port := range ports {
 		portIndex[port.AsRemote()] = i
 
@@ -78,14 +78,12 @@ func (m *middlewares) Initialize(c *Comp) {
 	*m = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
-			orderedPorts: ports,
 			portIndex:    portIndex,
 			routingTable: table,
 		},
 		ReceivePipeline: &receivePipelineMW{
-			comp:         c,
-			orderedPorts: ports,
-			portIndex:    portIndex,
+			comp:      c,
+			portIndex: portIndex,
 		},
 	}
 }

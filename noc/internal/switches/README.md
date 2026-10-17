@@ -14,8 +14,9 @@ table. Switches are wired together (and to endpoints) by the higher-level
 middlewares]`. Configuration is split the usual way:
 
 Spec holds the switch frequency. Resources references network wiring, which
-provides bound ports, per-port processing parameters, and routes derived
-at Initialize. Port binding order determines arbitration order. Changing routing
+provides per-port processing parameters and routes derived at Initialize.
+The component's `Ports.Links` is the sole runtime port list; its binding order
+determines arbitration order. Changing routing
 tables after initialization is not supported.
 
 `State` holds one `portComplexState` per port — each with an input

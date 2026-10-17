@@ -28,7 +28,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 		t.Run(fmt.Sprintf("latency_%d", latency), func(t *testing.T) {
 			s := akitasim.MakeBuilder().WithTaskTracking().Build()
 			port := twowaybuffered.NewPort(1, 1)
-			wiring := &testWiring{ports: []messaging.Port{port},
+			wiring := &testWiring{
 				links: []Link{{Remote: "Destination", Latency: latency, NumInputChannel: 1, NumOutputChannel: 1}},
 				table: fixedRoute("Switch.Links[0]")}
 			sw := modeling.MakeBuilder[*Comp](Spec{Freq: timing.GHz}).WithSimulation(s).
