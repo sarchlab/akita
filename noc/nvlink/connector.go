@@ -321,8 +321,3 @@ func (c *Connector) ConnectDevicesWithNVLink(
 			},
 		})
 }
-
-// EstablishRoute populates the routing tables in the network.
-func (c *Connector) EstablishRoute() {
-	c.connector.EstablishRoute()
-}

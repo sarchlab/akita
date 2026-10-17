@@ -11,21 +11,19 @@ import (
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
-	// Devices lists the bound device addresses in arbitration order.
-	Devices           []messaging.RemotePort `json:"devices"`
-	Freq              timing.Freq            `json:"freq"`
-	NumInputChannels  int                    `json:"num_input_channels"`
-	NumOutputChannels int                    `json:"num_output_channels"`
-	FlitByteSize      int                    `json:"flit_byte_size"`
-	EncodingOverhead  float64                `json:"encoding_overhead"`
-
-	// DefaultSwitchDst is the port at the other end of the network link,
-	// usually a switch port, that every flit is sent to.
-	DefaultSwitchDst messaging.RemotePort `json:"default_switch_dst"`
+	Freq              timing.Freq `json:"freq"`
+	NumInputChannels  int         `json:"num_input_channels"`
+	NumOutputChannels int         `json:"num_output_channels"`
+	FlitByteSize      int         `json:"flit_byte_size"`
+	EncodingOverhead  float64     `json:"encoding_overhead"`
 }
 
 // Resources holds the endpoint's live device-side connection, created by Builder.
-type Resources struct{ devices *deviceSide }
+type Resources struct {
+	// Peer is the port at the other end of the network link, supplied during setup.
+	Peer    messaging.Port
+	devices *deviceSide
+}
 
 // assemblingMsgState is a serializable representation of a message being
 // assembled from flits.
@@ -78,7 +76,7 @@ type deviceSide struct {
 // DeviceConnection is the pass-through connection that device ports bind to.
 func DeviceConnection(c *Comp) messaging.Connection { return c.Resources.devices }
 
-// BindPort attaches a device during setup. Spec.Devices is checked at Initialize.
+// BindPort appends a device in arbitration order during setup.
 func (d *deviceSide) BindPort(port messaging.Port) {
 	d.RequireSetup()
 	mustBeBufferedDevicePort(port)

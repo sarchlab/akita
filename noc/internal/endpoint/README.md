@@ -1,25 +1,22 @@
 # Internal NoC endpoint
 
 Applications assemble networks with `networkconnector`, `mesh`, `pcie`, or
-`nvlink`. This internal package implements the pass-through endpoint shared by
-those connectors; acceptance tests can also wire endpoints directly.
+`nvlink`. This internal package implements their pass-through endpoint.
 
-Start with `DefaultSpec()`, set `Spec.Devices` to the ordered remote
-addresses of the device ports, and build with
-`MakeBuilder().WithSimulation(s).WithSpec(spec).Build(name)`. Bind the network
-port with `ep.BindPort("NetworkPort", networkPort)`, then bind each device with
-`DeviceConnection(ep).BindPort(port)` in the declared order. Initialize freezes
-further binding, then validates the list before creating middleware. A device
-count, order, or connection mismatch panics and requires rebuilding the simulation.
+Build with `MakeBuilder().WithSimulation(s).WithSpec(DefaultSpec()).WithPeer(peer).Build(name)`.
+Bind `NetworkPort` and both ends of its point-to-point connection, then append
+owned `*twowaybuffered.Port` device ports through `DeviceConnection(ep).BindPort`.
+Device binding order is arbitration order. Initialize reads the bound address of
+the peer supplied in Resources. No predicted addresses or connection port-discovery
+API is needed.
 
-The device connection owns the bound-port list; Resources contains only the
-connection reference. Devices must be owned `*twowaybuffered.Port` values and
-must not already have a connection. Each rejected BindPort leaves that port and
-the connection unchanged. Device membership and order participate in the Spec
-hash, so a checkpoint cannot resume with different routing or arbitration order.
+The network assembler owns one topology checkpoint record covering device order
+and peer wiring. The endpoint builder does not register a separate record. Direct
+endpoint networks register their record explicitly; see `acceptance/one_to_one`.
+The device connection lives in Resources; outgoing/incoming mutable queues remain
+in State. Rebuild old checkpoints after this migration.
 
-Outgoing middleware drains device buffers in order and splits messages into
-flits. Incoming middleware reassembles the original message and delivers it to
-the matching device port. Forwarding preserves the original Src and Dst and
-adds no device-facing link or buffer hop. Default settings are a 32-byte flit,
-0.25 encoding overhead, and one input and output channel.
+Outgoing middleware splits device messages into flits. Incoming middleware
+reassembles and delivers the original message. Sources and destinations are
+preserved, without an additional device-facing buffer or link hop. Defaults are
+a 32-byte flit, 0.25 encoding overhead, and one input/output channel.

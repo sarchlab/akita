@@ -63,7 +63,6 @@ type SwitchToSwitchLinkParameter struct {
 // Device ports must also be *twowaybuffered.Port; wire ports are not supported.
 type Connector struct {
 	name        string
-	engine      timing.EventScheduler
 	simulation  timing.Simulation
 	defaultFreq timing.Freq
 	flitSize    int
@@ -72,12 +71,8 @@ type Connector struct {
 	switches        []*switchNode
 	devices         []*deviceNode
 	connectionCount int
-	pending         []pendingConnection
-}
-
-type pendingConnection struct {
-	conn        *direct.Connection
-	left, right messaging.Port
+	connections     []connectionRecord
+	routes          map[string]frozenRoutes
 }
 
 // Builder configures independent network assembly instances.
@@ -106,10 +101,12 @@ func (b Builder) Build(name string) *Connector {
 	if b.freq <= 0 || b.flitSize <= 0 {
 		panic("networkconnector: frequency and flit size must be positive")
 	}
-	return &Connector{
-		name: name, simulation: b.simulation, engine: b.simulation.Engine(),
+	c := &Connector{
+		name: name, simulation: b.simulation,
 		defaultFreq: b.freq, flitSize: b.flitSize, router: b.router,
 	}
+	b.simulation.RegisterResource(&networkCheckpoint{c: c})
+	return c
 }
 
 // AddSwitch adds a new switch to the network.
@@ -126,18 +123,22 @@ func (c *Connector) AddSwitch() (switchID int) {
 // externally provided name and routing table.
 func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	swName string,
-	rt routing.Table,
+	rt *routing.Table,
 ) (switchID int) {
+	c.simulation.RequireSetup()
 	switchID = len(c.switches)
 
 	spec := switches.DefaultSpec()
 	spec.Freq = c.defaultFreq
 
-	c.switches = append(c.switches, &switchNode{
+	node := &switchNode{
 		name:  fmt.Sprintf("%s.%s", c.name, swName),
-		spec:  spec,
-		table: rt,
-	})
+		table: rt, network: c,
+	}
+	node.sw = modeling.MakeBuilder[*switches.Comp](spec).
+		WithSimulation(c.simulation).
+		WithResources(switches.Resources{Wiring: node}).Build(node.name)
+	c.switches = append(c.switches, node)
 
 	return switchID
 }
@@ -162,27 +163,38 @@ func (c *Connector) ConnectDevice(
 
 // ConnectDeviceWithEPName connects a few ports that belongs to the device to a
 // switch that is identified by switchID, through an endpoint with the given
-// name. It returns the endpoint's network port and the switch port at the
-// other end of the link.
+// name. Repeated calls with the same name, switch and parameters append device
+// ports to that endpoint in call order; this supports incremental mesh tiles.
 func (c *Connector) ConnectDeviceWithEPName(
 	epName string,
 	switchID int,
 	ports []messaging.Port,
 	param DeviceToSwitchLinkParameter,
-) (epPort, swPort messaging.Port) {
+) {
+	c.simulation.RequireSetup()
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
-	epPort = twowaybuffered.NewPort(param.DeviceEndParam.IncomingBufSize,
+	for _, device := range c.devices {
+		if device.endPoint.Name() != epFullName {
+			continue
+		}
+		if device.sw != swNode || device.parameter != param {
+			panic("networkconnector: repeated endpoint name needs the same switch and parameters")
+		}
+		for _, port := range ports {
+			endpoint.DeviceConnection(device.endPoint).BindPort(port)
+		}
+		device.ports = append(device.ports, ports...)
+		return
+	}
+	epPort := twowaybuffered.NewPort(param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize)
-	swPort, _ = swNode.addPort(messaging.RemotePort(epFullName+".NetworkPort"),
-		param.SwitchEndParam)
+	swPort := swNode.addPort(param.SwitchEndParam)
 
 	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
 	conn := c.connectPorts(epPort, swPort, param.LinkParam)
 	c.createRemoteInfoFoEP(epNode, swNode, epPort, swPort, conn)
-
-	return epPort, swPort
 }
 
 // createEndPoint builds the endpoint that carries the device ports' messages
@@ -199,14 +211,10 @@ func (c *Connector) createEndPoint(
 	epSpec.FlitByteSize = c.flitSize
 	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel
 	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
-	epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", swNode.name, len(swNode.ports)-1))
-
-	for _, port := range ports {
-		epSpec.Devices = append(epSpec.Devices, port.AsRemote())
-	}
 	endPoint := endpoint.MakeBuilder().
 		WithSimulation(c.simulation).
 		WithSpec(epSpec).
+		WithPeer(swPort).
 		Build(name)
 
 	endPoint.BindPort("NetworkPort", epPort)
@@ -215,9 +223,10 @@ func (c *Connector) createEndPoint(
 	}
 
 	epNode := &deviceNode{
-		ports:    ports,
-		endPoint: endPoint,
-		sw:       swNode,
+		ports:     append([]messaging.Port(nil), ports...),
+		parameter: param,
+		endPoint:  endPoint,
+		sw:        swNode,
 	}
 	c.devices = append(c.devices, epNode)
 
@@ -258,7 +267,9 @@ func (c *Connector) connectPorts(
 		panic("non-ideal (with latency) connection is not implemented.")
 	}
 
-	c.pending = append(c.pending, pendingConnection{conn, left, right})
+	conn.BindPort(left)
+	conn.BindPort(right)
+	c.connections = append(c.connections, connectionRecord{conn.Name(), left.AsRemote(), right.AsRemote(), linkParam})
 
 	return conn
 }
@@ -268,22 +279,17 @@ func (c *Connector) connectPorts(
 func (c *Connector) ConnectSwitches(
 	leftSwitchID, rightSwitchID int,
 	param SwitchToSwitchLinkParameter,
-) (leftPort, rightPort messaging.Port) {
+) {
+	c.simulation.RequireSetup()
 	leftNode := c.switches[leftSwitchID]
 	rightNode := c.switches[rightSwitchID]
 
-	// Each side's link names the other side's port, so add both ports first
-	// and then record each remote.
-	leftPort, leftLink := leftNode.addPort("", param.LeftEndParam)
-	rightPort, rightLink := rightNode.addPort("", param.RightEndParam)
-	leftNode.links[leftLink].Remote = messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", rightNode.name, rightLink))
-	rightNode.links[rightLink].Remote = messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", leftNode.name, leftLink))
+	leftPort := leftNode.addPort(param.LeftEndParam)
+	rightPort := rightNode.addPort(param.RightEndParam)
 
 	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 
 	c.createRemoteInfo(leftNode, rightNode, leftPort, rightPort, conn)
-
-	return leftPort, rightPort
 }
 
 func (c *Connector) createRemoteInfo(
@@ -308,44 +314,6 @@ func (c *Connector) createRemoteInfo(
 	})
 }
 
-// EstablishRoute sets the routing table for all the nodes.
-//
-// It computes routes, snapshots them into Spec, then builds and binds switches. Call it
-// after the last ConnectDevice and ConnectSwitches of the network.
-func (c *Connector) EstablishRoute() {
-	if c.router != nil {
-		c.router.EstablishRoute(c.createRoutingNodeList())
-	}
-	c.BuildSwitches()
-}
-
-// BuildSwitches builds every switch that is not built yet, with the ports and
-// links added to it. EstablishRoute calls it; a connector that fills the
-// routing tables itself calls it once every device and link is connected.
-func (c *Connector) BuildSwitches() {
-	for _, node := range c.switches {
-		if node.sw != nil {
-			continue
-		}
-
-		node.spec.Links = node.links
-		node.spec.Routes, node.spec.DefaultRoute = node.table.Snapshot()
-		node.sw = modeling.MakeBuilder[*switches.Comp](node.spec).
-			WithSimulation(c.simulation).
-			Build(node.name)
-		bindingPorts := switches.Ports{Links: node.ports}
-		for i, p := range bindingPorts.Links {
-			node.sw.BindPort(fmt.Sprintf("Links[%d]", i), p)
-		}
-	}
-	for _, link := range c.pending {
-		link.conn.BindPort(link.left)
-		link.conn.BindPort(link.right)
-	}
-
-	c.pending = nil
-}
-
 func (c *Connector) createRoutingNodeList() []Node {
 	nodes := make([]Node, 0, len(c.devices)+len(c.switches))
 
@@ -358,41 +326,4 @@ func (c *Connector) createRoutingNodeList() []Node {
 	}
 
 	return nodes
-}
-
-// func (c *Connector) dumpRoute() {
-// 	fmt.Println("")
-// 	for _, swNode := range c.switches {
-// 		for _, epNode := range c.devices {
-// 			for _, port := range epNode.ports {
-// 				nextHopPort := swNode.sw.GetRoutingTable().FindPort(port)
-
-// 				var nextHop Node
-// 				for _, remote := range swNode.remotes {
-// 					if remote.LocalPort == nextHopPort {
-// 						nextHop = remote.RemoteNode
-// 					}
-// 				}
-
-// 				fmt.Printf("%s -> %s -> %s --- %s\n",
-// 					swNode.Name(),
-// 					nextHopPort.Name(),
-// 					nextHop.Name(),
-// 					port.Name())
-// 			}
-// 		}
-// 	}
-// }
-
-// PortAddress returns the deterministic address of a port during assembly,
-// including switch ports that have not been bound to their component yet.
-func (c *Connector) PortAddress(port messaging.Port) messaging.RemotePort {
-	for _, sw := range c.switches {
-		for _, p := range sw.ports {
-			if p == port {
-				return sw.portAddress(port)
-			}
-		}
-	}
-	return port.AsRemote()
 }

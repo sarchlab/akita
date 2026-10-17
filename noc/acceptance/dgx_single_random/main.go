@@ -79,8 +79,6 @@ func createNetwork(
 	deviceIDs := createPCIeNetwork(connector, agents)
 	createNVLinkNetwork(connector, deviceIDs)
 
-	connector.EstablishRoute()
-
 	return agents
 }
 

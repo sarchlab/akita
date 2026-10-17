@@ -44,7 +44,6 @@ func (r BandwidthFirstRouter) floydWarshallInit(
 
 			if i == j {
 				table[i][j].bandwidth = math.Inf(1)
-				table[i][j].nextHop = &remotes[0]
 
 				continue
 			}
@@ -91,6 +90,9 @@ func (r BandwidthFirstRouter) tableToRoute(
 			}
 
 			remote := table[i][j].nextHop
+			if remote == nil {
+				panic("networkconnector: unreachable destination " + epNode.Name() + " from " + swNode.Name())
+			}
 			for _, p := range epNode.ports {
 				swNode.Table().
 					DefineRoute(p.AsRemote(), remote.localAddress())

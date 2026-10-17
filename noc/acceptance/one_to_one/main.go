@@ -64,18 +64,18 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		twowaybuffered.NewPort(4, 4),
 	}
 
+	s.RegisterResource(&networkTopology{
+		devices: [][]messaging.Port{agents[0].AgentPorts, agents[1].AgentPorts}, peers: netPorts,
+	})
+
 	for i, name := range []string{"EP1", "EP2"} {
 		epSpec := endpoint.DefaultSpec()
 		epSpec.Freq = freq
 		epSpec.FlitByteSize = 8
-		epSpec.DefaultSwitchDst = messaging.RemotePort(fmt.Sprintf("EP%d.NetworkPort", 2-i))
-
-		for _, port := range agents[i].AgentPorts {
-			epSpec.Devices = append(epSpec.Devices, port.AsRemote())
-		}
 		ep := endpoint.MakeBuilder().
 			WithSimulation(s).
 			WithSpec(epSpec).
+			WithPeer(netPorts[1-i]).
 			Build(name)
 		ep.BindPort("NetworkPort", netPorts[i])
 		for _, port := range agents[i].AgentPorts {

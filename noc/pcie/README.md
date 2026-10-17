@@ -29,7 +29,6 @@ func (b Builder) Build(name string) *Connector
 func (c *Connector) AddRootComplex(cpuPorts []messaging.Port) (switchID int)
 func (c *Connector) AddSwitch(baseSwitchID int) (switchID int)
 func (c *Connector) PlugInDevice(baseSwitchID int, devicePorts []messaging.Port)
-func (c *Connector) EstablishRoute()
 ```
 
 `AddRootComplex` creates the root switch and connects the CPU ports to it,
@@ -79,10 +78,10 @@ root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
 sw := connector.AddSwitch(root)
 connector.PlugInDevice(sw, []messaging.Port{gpu.Ports.PCIe})
 
-connector.EstablishRoute()
+if err := sim.Initialize(); err != nil { panic(err) }
 ```
 
-After `EstablishRoute`, a message sent from the CPU port to a device port is
+After `simulation.Initialize()`, a message sent from the CPU port to a device port is
 routed down the switch tree to its destination, accumulating switch and link
 latency along the way.
 

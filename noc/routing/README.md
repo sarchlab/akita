@@ -11,15 +11,16 @@ table lookup at run time.
 
 ### Table
 
-`Table` is the interface a switch queries when forwarding a flit. Destinations
+`Table` is a concrete setup-time table populated by routers. Routes are computed
+at Initialize; changing a table afterwards is not supported. Destinations
 and ports are identified by `messaging.RemotePort` (a string port name).
 
 ```go
-type Table interface {
-    FindPort(dst messaging.RemotePort) messaging.RemotePort
-    DefineRoute(finalDst, outputPort messaging.RemotePort)
-    DefineDefaultRoute(outputPort messaging.RemotePort)
-}
+type Table struct { /* private route storage */ }
+func NewTable() *Table
+func (t *Table) FindPort(dst messaging.RemotePort) messaging.RemotePort
+func (t *Table) DefineRoute(finalDst, outputPort messaging.RemotePort)
+func (t *Table) DefineDefaultRoute(outputPort messaging.RemotePort)
 ```
 
 - `DefineRoute` records that traffic whose final destination is `finalDst`
@@ -30,7 +31,7 @@ type Table interface {
 
 ## How It Works
 
-`NewTable` returns the default implementation, a `map` from final destination
+`NewTable` returns a table backed by a `map` from final destination
 to next-hop output port plus an optional default port.
 
 ```go

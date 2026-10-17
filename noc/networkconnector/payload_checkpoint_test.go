@@ -53,7 +53,7 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	c.ConnectDevice(left, []messaging.Port{src}, dp)
 	c.ConnectDevice(right, []messaging.Port{dst}, dp)
 	c.ConnectSwitches(left, right, nc.SwitchToSwitchLinkParameter{LeftEndParam: sw, RightEndParam: sw, LinkParam: link})
-	c.EstablishRoute()
+
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +145,9 @@ func TestNetworkPayloadDeliveryAndCheckpoint(t *testing.T) {
 			resumed := finishPayloadNetwork(t, restored, restoredDst)
 			if !reflect.DeepEqual(uninterrupted, want) || !reflect.DeepEqual(resumed, want) {
 				t.Fatalf("full-message delivery mismatch: uninterrupted=%#v resumed=%#v want=%#v", uninterrupted, resumed, want)
+			}
+			if s.Engine().CurrentTime() != 37000 {
+				t.Fatalf("ideal network completion changed: got %d ps, baseline 37000 ps", s.Engine().CurrentTime())
 			}
 			if s.Engine().CurrentTime() != restored.Engine().CurrentTime() {
 				t.Fatal("checkpoint changed completion time")

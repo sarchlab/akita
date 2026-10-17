@@ -3,7 +3,6 @@ package switches
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/noc/routing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -13,7 +12,7 @@ import (
 type routeForwardSendMW struct {
 	comp         *Comp
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
-	routingTable routing.Table
+	routingTable RoutingTable
 }
 
 // ports returns the switch's local ports, in index order aligned with

@@ -1,7 +1,6 @@
 package switches
 
 import (
-	"github.com/sarchlab/akita/v5/noc/routing"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
@@ -11,14 +10,24 @@ import (
 // Spec contains immutable configuration for the switch.
 type Spec struct {
 	Freq timing.Freq `json:"freq"`
-	// Links and Ports.Links share the same index.
-	Links        []Link               `json:"links"`
-	Routes       []routing.Route      `json:"routes"`
-	DefaultRoute messaging.RemotePort `json:"default_route"`
 }
 
-// Resources is empty: all switch routing and link configuration belongs to Spec.
-type Resources struct{}
+// RoutingTable is an immutable view of the routes derived at Initialize.
+type RoutingTable interface {
+	FindPort(messaging.RemotePort) messaging.RemotePort
+}
+
+// Wiring supplies completed port settings and routes without depending on any
+// component's initialized State. Its implementation belongs to the network.
+type Wiring interface {
+	Links() []Link
+	Routes() RoutingTable
+}
+
+// Resources holds the network's wiring, fixed at Build. The network computes
+// immutable routes at Initialize and checks its identity during checkpoint load.
+// Runtime route mutation is not supported.
+type Resources struct{ Wiring Wiring }
 
 // Link describes the link behind one switch port.
 type Link struct {
@@ -41,7 +50,7 @@ type Link struct {
 
 // Ports holds the switch's ports.
 type Ports struct {
-	// Links holds one port per link, index-aligned with Spec.Links.
+	// Links holds one port per link, in binding order.
 	Links []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/noc/packetization.link"`
 }
 
