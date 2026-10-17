@@ -57,6 +57,7 @@ var _ = Describe("End Point", func() {
 		endPoint = MakeBuilder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithPeer(defaultSwitchPort).
 			Build("EndPoint")
 
 		endPoint.BindPort("NetworkPort", networkPort)

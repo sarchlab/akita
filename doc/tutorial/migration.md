@@ -101,18 +101,19 @@ Remove connector `EstablishRoute()` / `EstablishNetwork()` calls: assembly calls
 now finish wiring, and `simulation.Initialize()` computes and validates routing.
 `BuildSwitches`, `PortAddress`, `routing.Route`, and `Table.Snapshot` are removed.
 `ConnectSwitches` and `ConnectDeviceWithEPName` no longer return internal ports.
+`routing.Table` is now concrete; custom routers populate `*routing.Table` values.
 Repeated `ConnectDeviceWithEPName` calls with the same switch and parameters append
 device ports; repeated mesh `AddTile` calls retain their merge behavior.
 
 Internal endpoint device ports bind to `DeviceConnection(ep)` in arbitration
-order. The network peer and switch routes are derived from bound ports at
-Initialize. Internal switch routing/link fields and endpoint `Devices` and
-`DefaultSwitchDst` are removed from Spec. Network and endpoint topology resources
-now validate checkpoint compatibility, including device order, so old checkpoints
+order. Supply the endpoint peer in Resources; its address and switch routes are
+read from bound ports at Initialize. Internal switch routing/link fields and endpoint `Devices` and
+`DefaultSwitchDst` are removed from Spec. One topology resource per network now
+validates checkpoint compatibility, including device order, so old checkpoints
 must be rebuilt. The endpoint remains pass-through, preserving message sources
 and hop count. Mesh internal port indices follow assembly order; runtime
-arbitration retains the previous full-grid order. Runtime route mutation and
-non-ideal transport are not introduced by this change.
+arbitration follows binding order and can change contention timing compared with
+v4. Runtime route mutation and non-ideal transport are not introduced by this change.
 
 Monitor and NoC connector configuration now uses value builders:
 `MakeBuilder().With...().Build()` (or `Build(name)` for a connector). Only builders

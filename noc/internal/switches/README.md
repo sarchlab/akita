@@ -14,9 +14,9 @@ table. Switches are wired together (and to endpoints) by the higher-level
 middlewares]`. Configuration is split the usual way:
 
 Spec holds the switch frequency. Resources references network wiring, which
-provides bound ports, per-port processing parameters, and immutable routes derived
-at Initialize. Ports retains the actual bindings; the network may choose a stable
-arbitration order independently of binding order.
+provides bound ports, per-port processing parameters, and routes derived
+at Initialize. Port binding order determines arbitration order. Changing routing
+tables after initialization is not supported.
 
 `State` holds one `portComplexState` per port — each with an input
 pipeline (modeling per-port latency), a route buffer, a forward buffer, and a
@@ -46,7 +46,7 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 Applications use the public NoC connectors. Internally, AddSwitch builds the
 component with its network resource, and connect calls bind ports immediately.
 State initialization allocates port complexes after checking completed wiring.
-Middleware captures the immutable routing table and ordered ports.
+Middleware captures the derived routing table and ports in binding order.
 
 Per-port latency still models the pipeline inside the switch, and channel counts
 still limit admission/ejection. They have not been reinterpreted as physical link

@@ -62,22 +62,24 @@ table for every reachable device port.
 
 `AddSwitch` builds a switch immediately. Connect calls bind both port owners and
 attach both ends of the connection. Indexed port groups grow until Initialize.
-The network's shared topology resource computes routes once from actual bound
-addresses. It validates connectivity, every destination's next hop, and complete
-forwarding paths (including custom-router loops). Initializers consume the same
-cached result without reading another component's State.
+The network's shared topology resource computes routes during setup validation
+from actual bound addresses. It returns errors for disconnected networks, invalid
+next hops, and forwarding loops before any component initializes runtime state.
+Accessing wiring during assembly does not compute or cache routes.
 
-The network copies setup tables into immutable runtime lookups. Custom `Router`
-and `routing.Table` implementations remain supported, but later edits to their
-tables do not change runtime routing. A router may implement
-`OrderPorts(Node) []messaging.Port`, returning every local port exactly once, to
-choose deterministic arbitration order; mesh uses this to retain its prior order
-while growing incrementally. That order is frozen at Initialize as well.
+Custom `Router` implementations use the concrete `routing.Table` type. Changing
+tables after Initialize is not supported. Switch arbitration uses port binding
+order; the routing interface does not configure arbitration priority.
 
-Topology checkpoint records validate wiring, port/device order, link settings,
-routing policy type and computed routes. Endpoint records additionally cover
-device order and the bound network peer, including direct endpoint-to-endpoint
-connections. Runtime route mutation and non-ideal link transport are deferred.
+`ConnectDeviceWithEPName` may be called repeatedly with the same endpoint name,
+switch, and parameters. Each call appends device ports in call order to the existing
+endpoint. Reusing the name with a different switch or parameters is rejected.
+
+One network topology record validates wiring, port/device order, link settings,
+and computed routes on checkpoint restore, without depending on Go policy type
+names. Endpoint peers are explicitly supplied through Resources. Direct networks
+built without a connector register their own topology record (see `one_to_one`).
+Runtime route mutation and non-ideal link transport are deferred.
 
 ## Supported ports and links
 

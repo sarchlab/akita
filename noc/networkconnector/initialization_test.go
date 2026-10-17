@@ -20,8 +20,8 @@ func (r *countingRouter) EstablishRoute(nodes []Node) {
 	FloydWarshallRouter{}.EstablishRoute(nodes)
 }
 
-// Register topology resources after components to exercise the same lazy route
-// computation with the opposite initialization order.
+// Register topology resources after components to verify validation computes routes
+// before component initialization in either registration order.
 type lateResources struct {
 	*sim.Simulation
 	pending []naming.Named
@@ -72,6 +72,9 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			c.ConnectDevice(a, []messaging.Port{src}, dp)
 			c.ConnectDevice(b, []messaging.Port{dst}, dp)
 			c.ConnectSwitches(a, b, sp)
+			require.Nil(t, c.switches[a].Routes())
+			require.Len(t, c.switches[a].Ports(), 2)
+			_ = (&networkCheckpoint{c}).record()
 			require.Zero(t, router.calls)
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)
 			for _, sw := range c.switches {
@@ -150,6 +153,8 @@ func TestCheckpointRejectsChangedNetworkIdentity(t *testing.T) {
 	require.NoError(t, baseline.SaveCheckpoint(path))
 	same := checkpointNetwork(t, alternateRouter{}, false, 2, false)
 	require.NoError(t, same.LoadCheckpoint(path))
+	renamedPolicy := checkpointNetwork(t, FloydWarshallRouter{}, false, 2, false)
+	require.NoError(t, renamedPolicy.LoadCheckpoint(path))
 	for _, tc := range []struct {
 		name           string
 		router         Router
@@ -158,7 +163,6 @@ func TestCheckpointRejectsChangedNetworkIdentity(t *testing.T) {
 		reverseDevices bool
 	}{
 		{"rewired-ports", alternateRouter{}, true, 2, false},
-		{"routing-policy", FloydWarshallRouter{}, false, 2, false},
 		{"computed-routes", alternateRouter{alternate: true}, false, 2, false},
 		{"switch-port-latency", alternateRouter{}, false, 3, false},
 		{"device-order", alternateRouter{}, false, 2, true},
@@ -196,6 +200,7 @@ func TestInvalidTopologyFailsBeforeRun(t *testing.T) {
 	}{
 		{"disconnected", FloydWarshallRouter{}, false, "disconnected"},
 		{"loop", loopRouter{}, true, "routing loop"},
+		{"invalid-next-hop", invalidHopRouter{}, true, "unreachable destination"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := sim.MakeBuilder().Build()
@@ -207,9 +212,67 @@ func TestInvalidTopologyFailsBeforeRun(t *testing.T) {
 			if tc.connect {
 				c.ConnectSwitches(a, b, sp)
 			}
-			require.Panics(t, func() { _ = s.Initialize() })
+			require.ErrorContains(t, s.Initialize(), tc.want)
 			require.Error(t, s.Run())
 			require.Error(t, s.Initialize())
 		})
 	}
+}
+
+type invalidHopRouter struct{}
+
+func (invalidHopRouter) EstablishRoute(nodes []Node) {
+	for _, n := range nodes {
+		if n.Table() != nil {
+			n.Table().DefineDefaultRoute("NotALocalPort")
+		}
+	}
+}
+
+func TestValidationCanBeRetriedAfterCompletingWiring(t *testing.T) {
+	s := sim.MakeBuilder().Build()
+	c := MakeBuilder().WithSimulation(s).Build("Network")
+	a, b := c.AddSwitch(), c.AddSwitch()
+	dp, sp := topologyParameters()
+	c.ConnectDevice(a, []messaging.Port{topologyPort(s, "Source.Port")}, dp)
+	c.ConnectDevice(b, []messaging.Port{topologyPort(s, "Target.Port")}, dp)
+	require.ErrorContains(t, s.Initialize(), "disconnected")
+	require.Nil(t, c.routes)
+	c.ConnectSwitches(a, b, sp)
+	require.NoError(t, s.Initialize())
+	require.NotEmpty(t, c.switches[a].Routes().FindPort("Target.Port"))
+	t.Log("Disconnected wiring returns an error; completing wiring and retrying Initialize computes valid routes")
+}
+
+func TestSwitchUsesIndependentBufferSizes(t *testing.T) {
+	s := sim.MakeBuilder().Build()
+	c := MakeBuilder().WithSimulation(s).Build("Network")
+	a, b := c.AddSwitch(), c.AddSwitch()
+	_, sp := topologyParameters()
+	sp.LeftEndParam.IncomingBufSize = 3
+	sp.LeftEndParam.OutgoingBufSize = 1
+	c.ConnectSwitches(a, b, sp)
+	require.NoError(t, s.Initialize())
+	p := c.switches[a].ports[0]
+	for range 3 {
+		require.True(t, p.CanDeliver())
+		p.Deliver(messaging.Msg{ID: s.NewID()})
+	}
+	require.False(t, p.CanDeliver())
+	require.True(t, p.CanSend())
+	p.Send(messaging.Msg{ID: s.NewID(), Src: p.AsRemote(), Dst: c.switches[b].ports[0].AsRemote()})
+	require.False(t, p.CanSend())
+	t.Log("Asymmetric switch port holds three incoming messages and one outgoing message")
+}
+
+func TestRepeatedEndpointRequiresMatchingConfiguration(t *testing.T) {
+	s := sim.MakeBuilder().Build()
+	c := MakeBuilder().WithSimulation(s).Build("Network")
+	a, b := c.AddSwitch(), c.AddSwitch()
+	dp, _ := topologyParameters()
+	c.ConnectDeviceWithEPName("EP", a, nil, dp)
+	require.Panics(t, func() { c.ConnectDeviceWithEPName("EP", b, nil, dp) })
+	dp.SwitchEndParam.Latency++
+	require.Panics(t, func() { c.ConnectDeviceWithEPName("EP", a, nil, dp) })
+	require.Len(t, c.devices, 1)
 }

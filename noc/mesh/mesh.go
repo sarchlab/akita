@@ -32,6 +32,7 @@ type Connector struct {
 	links                   map[[2]int]bool
 }
 
+// Builder configures a rectangular mesh connector.
 type Builder struct {
 	simulation              timing.Simulation
 	freq                    timing.Freq
@@ -39,17 +40,30 @@ type Builder struct {
 	linkTransferPerCycle    float64
 }
 
+// MakeBuilder returns a builder with default frequency, flit size, and bandwidth.
 func MakeBuilder() Builder {
 	return Builder{freq: timing.GHz, flitSize: 16, linkTransferPerCycle: 1}
 }
+
+// WithSimulation sets the owning simulation.
 func (b Builder) WithSimulation(s timing.Simulation) Builder { b.simulation = s; return b }
-func (b Builder) WithFreq(f timing.Freq) Builder             { b.freq = f; return b }
-func (b Builder) WithSwitchLatency(cycles int) Builder       { b.switchLatency = cycles; return b }
+
+// WithFreq sets the switch frequency.
+func (b Builder) WithFreq(f timing.Freq) Builder { b.freq = f; return b }
+
+// WithSwitchLatency sets the switch pipeline latency in cycles.
+func (b Builder) WithSwitchLatency(cycles int) Builder { b.switchLatency = cycles; return b }
+
+// WithBandwidth sets the link transfers per cycle.
 func (b Builder) WithBandwidth(transfersPerCycle float64) Builder {
 	b.linkTransferPerCycle = transfersPerCycle
 	return b
 }
+
+// WithFlitSize sets the number of bytes per flit.
 func (b Builder) WithFlitSize(size int) Builder { b.flitSize = size; return b }
+
+// Build creates an empty connector ready for AddTile calls.
 func (b Builder) Build(name string) *Connector {
 	if b.linkTransferPerCycle <= 0 {
 		panic("mesh: bandwidth must be positive")

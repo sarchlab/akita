@@ -19,7 +19,11 @@ type Spec struct {
 }
 
 // Resources holds the endpoint's live device-side connection, created by Builder.
-type Resources struct{ devices *deviceSide }
+type Resources struct {
+	// Peer is the port at the other end of the network link, supplied during setup.
+	Peer    messaging.Port
+	devices *deviceSide
+}
 
 // assemblingMsgState is a serializable representation of a message being
 // assembled from flits.

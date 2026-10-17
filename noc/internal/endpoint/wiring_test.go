@@ -1,7 +1,6 @@
 package endpoint
 
 import (
-	"path/filepath"
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
@@ -17,7 +16,7 @@ func buildWiring(t *testing.T, bound []messaging.RemotePort) (*akitasim.Simulati
 
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).Build("EP")
 	ep.BindPort("NetworkPort", twowaybuffered.NewPort(1, 1))
-	connectPeer(s, ep.Ports.NetworkPort)
+	ep.Resources.Peer = connectPeer(s, ep.Ports.NetworkPort)
 	for _, name := range bound {
 		p := twowaybuffered.NewPort(1, 1)
 		p.BindOwner(payloadOwner{string(name)}, string(name))
@@ -34,16 +33,6 @@ func TestDeviceBindingOrderAndFreeze(t *testing.T) {
 	p.BindOwner(payloadOwner{"C"}, "C")
 	require.Panics(t, func() { DeviceConnection(ep).BindPort(p) })
 	require.Nil(t, p.Connection())
-}
-func TestCheckpointRejectsChangedDeviceOrder(t *testing.T) {
-	s, _ := buildWiring(t, []messaging.RemotePort{"A", "B"})
-	require.NoError(t, s.Initialize())
-	checkpoint := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
-	require.NoError(t, s.SaveCheckpoint(checkpoint))
-	s2, _ := buildWiring(t, []messaging.RemotePort{"B", "A"})
-	require.NoError(t, s2.Initialize())
-	require.Error(t, s2.LoadCheckpoint(checkpoint))
-	t.Log("Changing bound device arbitration order invalidates the simulation checkpoint")
 }
 func TestBindingRejectsUnownedDuplicateAndConnectedPorts(t *testing.T) {
 	s, ep := buildWiring(t, []messaging.RemotePort{"A"})

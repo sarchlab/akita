@@ -87,7 +87,7 @@ func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 
 	ep.BindPort("NetworkPort", network)
 	DeviceConnection(ep).BindPort(device)
-	connectPeer(s, network)
+	ep.Resources.Peer = connectPeer(s, network)
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}

@@ -20,12 +20,17 @@ type connectionRecord struct {
 	Parameter   LinkParameter
 }
 
-func (c *Connector) initializeRoutes() {
-	if c.routes != nil {
-		return
-	}
+func (c *Connector) initializeRoutes() error {
+	c.routes = nil
 	nodes := c.createRoutingNodeList()
-	c.validateConnectivity(nodes)
+	if err := c.validateConnectivity(nodes); err != nil {
+		return err
+	}
+	for _, sw := range c.switches {
+		if sw.table == nil {
+			return fmt.Errorf("%s: missing routing table", sw.name)
+		}
+	}
 	if c.router != nil {
 		c.router.EstablishRoute(nodes)
 	}
@@ -35,16 +40,6 @@ func (c *Connector) initializeRoutes() {
 		for _, device := range c.devices {
 			for _, dst := range device.ports {
 				output := sw.table.FindPort(dst.AsRemote())
-				valid := false
-				for _, remote := range sw.remotes {
-					if output == remote.LocalPort.AsRemote() {
-						valid = true
-						break
-					}
-				}
-				if !valid {
-					panic(fmt.Sprintf("%s: no valid route from %s to %s", c.name, sw.name, dst.AsRemote()))
-				}
 				table[dst.AsRemote()] = output
 			}
 		}
@@ -55,29 +50,29 @@ func (c *Connector) initializeRoutes() {
 	for _, sw := range c.switches {
 		for _, device := range c.devices {
 			for _, dst := range device.ports {
-				c.validatePath(sw, device, dst.AsRemote(), routes)
+				if err := c.validatePath(sw, device, dst.AsRemote(), routes); err != nil {
+					return err
+				}
 			}
 		}
 	}
-	for _, sw := range c.switches {
-		sw.orderedPorts = append([]messaging.Port(nil), sw.orderPorts()...)
-	}
 	c.routes = routes
+	return nil
 }
 
 func (c *Connector) validatePath(
 	start *switchNode, dst *deviceNode, address messaging.RemotePort, routes map[string]frozenRoutes,
-) {
+) error {
 	current := Node(start)
 	seen := make(map[Node]bool)
 	for current != dst {
 		if seen[current] {
-			panic(fmt.Sprintf("%s: routing loop from %s to %s", c.name, start.name, address))
+			return fmt.Errorf("%s: routing loop from %s to %s", c.name, start.name, address)
 		}
 		seen[current] = true
 		sw, ok := current.(*switchNode)
 		if !ok {
-			panic(fmt.Sprintf("%s: route to %s reaches the wrong endpoint", c.name, address))
+			return fmt.Errorf("%s: route to %s reaches the wrong endpoint", c.name, address)
 		}
 		next := routes[sw.name][address]
 		var remoteNode Node
@@ -88,27 +83,25 @@ func (c *Connector) validatePath(
 			}
 		}
 		if remoteNode == nil {
-			panic(fmt.Sprintf("%s: unreachable destination %s", c.name, address))
+			return fmt.Errorf("%s: unreachable destination %s", c.name, address)
 		}
 		current = remoteNode
 	}
+	return nil
 }
 
-// The resource is registered before its switches. Switch requests also use the
-// same cache, so computing routes does not depend on component initialization order.
+// Validation computes routes before any component initializes its runtime state.
 type networkCheckpoint struct{ c *Connector }
 
 func (n *networkCheckpoint) Name() string         { return n.c.name + ".Topology" }
-func (n *networkCheckpoint) ValidateSetup() error { return nil }
-func (n *networkCheckpoint) InitializeComponent() { n.c.initializeRoutes() }
+func (n *networkCheckpoint) ValidateSetup() error { return n.c.initializeRoutes() }
 
 type switchRecord struct {
-	Name      string
-	TableType string
-	Ports     []messaging.RemotePort
-	Links     []switches.Link
-	Ends      []LinkEndSwitchParameter
-	Routes    frozenRoutes
+	Name   string
+	Ports  []messaging.RemotePort
+	Links  []switches.Link
+	Ends   []LinkEndSwitchParameter
+	Routes frozenRoutes
 }
 type deviceRecord struct {
 	Name      string
@@ -116,7 +109,6 @@ type deviceRecord struct {
 	Parameter DeviceToSwitchLinkParameter
 }
 type networkRecord struct {
-	Router      string
 	Switches    []switchRecord
 	Devices     []deviceRecord
 	Connections []connectionRecord
@@ -124,14 +116,12 @@ type networkRecord struct {
 
 func (n *networkCheckpoint) record() networkRecord {
 	c := n.c
-	c.initializeRoutes()
-	record := networkRecord{Router: fmt.Sprintf("%T", c.router), Connections: c.connections}
+	record := networkRecord{Connections: c.connections}
 	for _, sw := range c.switches {
 		item := switchRecord{Name: sw.name,
-			TableType: fmt.Sprintf("%T", sw.table),
-			Links:     sw.Links(),
-			Ends:      sw.ends,
-			Routes:    c.routes[sw.name]}
+			Links:  sw.Links(),
+			Ends:   sw.ends,
+			Routes: c.routes[sw.name]}
 		for _, p := range sw.Ports() {
 			item.Ports = append(item.Ports, p.AsRemote())
 		}
@@ -153,9 +143,9 @@ func (n *networkCheckpoint) LoadCheckpoint(r io.Reader) error {
 	return modeling.ReadCheckpoint(r, n.record(), &struct{}{}, nil)
 }
 
-func (c *Connector) validateConnectivity(nodes []Node) {
+func (c *Connector) validateConnectivity(nodes []Node) error {
 	if len(nodes) == 0 {
-		return
+		return nil
 	}
 	seen := map[Node]bool{nodes[0]: true}
 	pending := []Node{nodes[0]}
@@ -164,7 +154,7 @@ func (c *Connector) validateConnectivity(nodes []Node) {
 		pending = pending[1:]
 		for _, remote := range node.ListRemotes() {
 			if remote.LocalPort.Connection() != remote.Link || remote.RemotePort.Connection() != remote.Link {
-				panic(fmt.Sprintf("%s: inconsistent link at %s", c.name, node.Name()))
+				return fmt.Errorf("%s: inconsistent link at %s", c.name, node.Name())
 			}
 			if !seen[remote.RemoteNode] {
 				seen[remote.RemoteNode] = true
@@ -174,7 +164,8 @@ func (c *Connector) validateConnectivity(nodes []Node) {
 	}
 	for _, node := range nodes {
 		if !seen[node] {
-			panic(fmt.Sprintf("%s: disconnected node %s", c.name, node.Name()))
+			return fmt.Errorf("%s: disconnected node %s", c.name, node.Name())
 		}
 	}
+	return nil
 }

@@ -162,11 +162,3 @@ func (c *Connection) LoadCheckpoint(r io.Reader) error {
 
 // RequireSetup rejects connection changes after simulation initialization.
 func (c *Connection) RequireSetup() { c.simulation.RequireSetup() }
-
-// Ports returns a copy of the binding order. Setup-derived routing may inspect
-// it after wiring is complete; changing the returned slice cannot rewire a link.
-func (c *Connection) Ports() []messaging.Port {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	return append([]messaging.Port(nil), c.ports.ports...)
-}

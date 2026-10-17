@@ -123,7 +123,7 @@ func (c *Connector) AddSwitch() (switchID int) {
 // externally provided name and routing table.
 func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	swName string,
-	rt routing.Table,
+	rt *routing.Table,
 ) (switchID int) {
 	c.simulation.RequireSetup()
 	switchID = len(c.switches)
@@ -192,7 +192,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 		param.DeviceEndParam.OutgoingBufSize)
 	swPort := swNode.addPort(param.SwitchEndParam)
 
-	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort)
+	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
 	conn := c.connectPorts(epPort, swPort, param.LinkParam)
 	c.createRemoteInfoFoEP(epNode, swNode, epPort, swPort, conn)
 }
@@ -204,7 +204,7 @@ func (c *Connector) createEndPoint(
 	ports []messaging.Port,
 	param DeviceToSwitchLinkParameter,
 	swNode *switchNode,
-	epPort messaging.Port,
+	epPort, swPort messaging.Port,
 ) *deviceNode {
 	epSpec := endpoint.DefaultSpec()
 	epSpec.Freq = c.defaultFreq
@@ -214,6 +214,7 @@ func (c *Connector) createEndPoint(
 	endPoint := endpoint.MakeBuilder().
 		WithSimulation(c.simulation).
 		WithSpec(epSpec).
+		WithPeer(swPort).
 		Build(name)
 
 	endPoint.BindPort("NetworkPort", epPort)

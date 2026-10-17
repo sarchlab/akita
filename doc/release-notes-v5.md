@@ -216,11 +216,22 @@ is provided.
 ## NoC assembly at Initialize
 
 NoC connect calls now build and bind immediately. Remove `EstablishRoute` and
-`EstablishNetwork`: `simulation.Initialize()` computes immutable routes from
-completed wiring and rejects disconnected or invalid routing. `BuildSwitches`,
+`EstablishNetwork`: `simulation.Initialize()` computes routes from
+completed wiring and returns errors for disconnected or invalid routing. Changing
+tables after Initialize is not supported. `BuildSwitches`,
 `PortAddress`, `routing.Route`, `Table.Snapshot`, and internal-port return values
 are removed. Custom setup routers remain supported. Internal endpoint/switch
 routing fields leave Spec; registered topology resources preserve checkpoint
 configuration validation. Old checkpoints must be rebuilt. Mesh still supports
 rectangular growth, empty transit tiles and repeated AddTile merges. Non-ideal
 transport and mutable/adaptive runtime routing are deferred.
+
+### Result-changing NoC changes
+
+Mesh switch arbitration now uses deterministic port binding order. Under
+contention, arbitration order and simulated timing can differ from v4 and depend
+on assembly order. No public routing hook configures arbitration priority.
+Switch incoming buffers now use `IncomingBufSize` rather than `OutgoingBufSize`,
+so asymmetric buffer configurations can also change results. `routing.Table` is
+a concrete type; custom setup routers remain supported. Checkpoint fingerprints
+record computed routes rather than Go router/table type names.

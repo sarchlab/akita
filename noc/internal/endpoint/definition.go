@@ -20,7 +20,7 @@ func (m *middlewares) Initialize(c *Comp) {
 	if c.Resources.devices == nil {
 		panic("endpoint: construct endpoints with MakeBuilder")
 	}
-	peer := (&topology{comp: c}).record().Peer
+	peer := networkPeer(c)
 	devicePorts := c.Resources.devices.ports
 
 	*m = middlewares{

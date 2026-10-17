@@ -2,28 +2,23 @@ package routing
 
 import "github.com/sarchlab/akita/v5/sim/messaging"
 
-// Table is the setup-time routing table supplied to a Router. The network
-// copies its routes at Initialize; subsequent table edits do not change routing.
-type Table interface {
-	FindPort(dst messaging.RemotePort) messaging.RemotePort
-	DefineRoute(finalDst, outputPort messaging.RemotePort)
-	DefineDefaultRoute(outputPort messaging.RemotePort)
+// Table holds setup-time routes. Routes are computed at Initialize; changing
+// a table afterwards is not supported.
+type Table struct {
+	t           map[messaging.RemotePort]messaging.RemotePort
+	defaultPort messaging.RemotePort
 }
 
 // NewTable creates a new Table.
-func NewTable() Table {
-	t := &table{}
+func NewTable() *Table {
+	t := &Table{}
 	t.t = make(map[messaging.RemotePort]messaging.RemotePort)
 
 	return t
 }
 
-type table struct {
-	t           map[messaging.RemotePort]messaging.RemotePort
-	defaultPort messaging.RemotePort
-}
-
-func (t table) FindPort(dst messaging.RemotePort) messaging.RemotePort {
+// FindPort returns the next hop, or the default port if no route matches.
+func (t *Table) FindPort(dst messaging.RemotePort) messaging.RemotePort {
 	out, found := t.t[dst]
 	if found {
 		return out
@@ -32,10 +27,15 @@ func (t table) FindPort(dst messaging.RemotePort) messaging.RemotePort {
 	return t.defaultPort
 }
 
-func (t *table) DefineRoute(finalDst, outputPort messaging.RemotePort) {
+// DefineRoute sets the next hop for a destination during setup.
+func (t *Table) DefineRoute(finalDst, outputPort messaging.RemotePort) {
+	if t.t == nil {
+		t.t = make(map[messaging.RemotePort]messaging.RemotePort)
+	}
 	t.t[finalDst] = outputPort
 }
 
-func (t *table) DefineDefaultRoute(outputPort messaging.RemotePort) {
+// DefineDefaultRoute sets the fallback next hop during setup.
+func (t *Table) DefineDefaultRoute(outputPort messaging.RemotePort) {
 	t.defaultPort = outputPort
 }

@@ -21,7 +21,7 @@ var _ = Describe("Switch", func() {
 		sim          timing.Simulation
 		port1, port2 *MockPort
 		dstPort      *MockPort
-		routingTable *MockTable
+		routingTable *MockRoutingTable
 		sw           *Comp
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
@@ -64,7 +64,7 @@ var _ = Describe("Switch", func() {
 			Return(messaging.RemotePort("DstPort")).
 			AnyTimes()
 
-		routingTable = NewMockTable(mockCtrl)
+		routingTable = NewMockRoutingTable(mockCtrl)
 
 		spec := DefaultSpec()
 		spec.Freq = 1

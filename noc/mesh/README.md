@@ -12,9 +12,9 @@ coordinates, including empty transit tiles. Each AddTile immediately creates new
 switches/endpoints and wires neighboring switches along X, Y and Z. Repeated
 calls append devices to the same tile. `simulation.Initialize()` derives Z-then-Y-
 then-X dimension-order routing from the finished bindings. There is no separate
-finalization call. Runtime arbitration retains the previous complete-grid order
-(local, front, top, left, back, bottom, right), independently of tile insertion
-order; internal port indices reflect actual assembly order.
+finalization call. Runtime arbitration follows deterministic port binding order;
+contention timing can differ from v4 and between assembly orders.
+Internal port indices also reflect assembly order.
 
 The configured frequency, flit size, and switch latency affect the network
 components. Links currently use ideal direct connections at the network's
