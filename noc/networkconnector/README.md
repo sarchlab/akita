@@ -30,11 +30,11 @@ Topology methods:
 - `ConnectDevice(switchID, ports, param)` — create an endpoint for the device's
   ports and link it to a switch.
 - `ConnectSwitches(leftID, rightID, param)` — add a bidirectional switch link.
-- `EstablishRoute()` — compute routes using planned port names, capture them in
-  each switch's Spec, build and bind the switches, and complete pending links. Call it once,
-  after the last `ConnectDevice` and `ConnectSwitches`: `Spec.Links` is
-  fixed at Build, so each switch is built only when its links are final.
-  Call `simulation.Initialize()` after the remaining platform wiring.
+- `ConnectDeviceWithEPName(name, switchID, ports, param)` — create a named
+  endpoint, or append ports to it when the switch and parameters match.
+
+Call `simulation.Initialize()` after all platform wiring. There is no separate
+connector finalization call, address prediction, or returned internal switch port.
 
 Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
 and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel
@@ -60,18 +60,24 @@ table for every reachable device port.
 
 ## How It Works
 
-`ConnectDevice` builds an `endpoint`, binds its network port, attaches the
-device ports through `endpoint.DeviceConnection(ep).BindPort(port)`, and creates the switch-side
-port. It creates a `direct.Connection` and records the pending attachment
-and `Remote`s on both nodes. `ConnectSwitches` similarly records a pending
-link between two switches. Because `Spec.Links` is fixed at Build, the
-connector waits until the topology is described before building switches in
-`EstablishRoute`. Its `BuildSwitches` step binds every switch port and then
-attaches both ends of each pending connection. The chosen `Router` first fills each assembly-time routing table; a sorted
-snapshot becomes `Spec.Routes` and `Spec.DefaultRoute`. Switch middleware derives
-its private lookup table from that Spec during initialization. Adding a port to
-a switch that is already built panics. Initialize the simulation after all
-platform wiring is complete.
+`AddSwitch` builds a switch immediately. Connect calls bind both port owners and
+attach both ends of the connection. Indexed port groups grow until Initialize.
+The network's shared topology resource computes routes once from actual bound
+addresses. It validates connectivity, every destination's next hop, and complete
+forwarding paths (including custom-router loops). Initializers consume the same
+cached result without reading another component's State.
+
+The network copies setup tables into immutable runtime lookups. Custom `Router`
+and `routing.Table` implementations remain supported, but later edits to their
+tables do not change runtime routing. A router may implement
+`OrderPorts(Node) []messaging.Port`, returning every local port exactly once, to
+choose deterministic arbitration order; mesh uses this to retain its prior order
+while growing incrementally. That order is frozen at Initialize as well.
+
+Topology checkpoint records validate wiring, port/device order, link settings,
+routing policy type and computed routes. Endpoint records additionally cover
+device order and the bound network peer, including direct endpoint-to-endpoint
+connections. Runtime route mutation and non-ideal link transport are deferred.
 
 ## Supported ports and links
 

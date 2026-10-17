@@ -87,6 +87,4 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 				},
 			})
 	}
-
-	connector.EstablishRoute()
 }

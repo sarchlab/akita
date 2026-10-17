@@ -13,27 +13,10 @@ table. Switches are wired together (and to endpoints) by the higher-level
 `Comp` is a ticking component, `ticking.Component[Spec, state, Resources, Ports,
 middlewares]`. Configuration is split the usual way:
 
-```go
-type Spec struct {
-    Freq         timing.Freq         `json:"freq"`
-    Links        []Link              `json:"links"`
-    Routes       []routing.Route     `json:"routes"`
-    DefaultRoute messaging.RemotePort `json:"default_route"`
-}
-
-type Resources struct{}
-
-type Link struct {
-    Remote           messaging.RemotePort `json:"remote"`
-    Latency          int                  `json:"latency"`
-    NumInputChannel  int                  `json:"num_input_channel"`
-    NumOutputChannel int                  `json:"num_output_channel"`
-}
-
-type Ports struct {
-    Links []messaging.Port // same index as Spec.Links
-}
-```
+Spec holds the switch frequency. Resources references network wiring, which
+provides bound ports, per-port processing parameters, and immutable routes derived
+at Initialize. Ports retains the actual bindings; the network may choose a stable
+arbitration order independently of binding order.
 
 `State` holds one `portComplexState` per port — each with an input
 pipeline (modeling per-port latency), a route buffer, a forward buffer, and a
@@ -58,29 +41,18 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 5. **sendOut** — send buffered flits out, stamping each flit's hop `Src`/`Dst`
    with the local port and its connected remote port.
 
-## Builder Pattern
+## Assembly and checkpoints
 
-A switch receives its final links and routing configuration in Spec at Build.
-The system builder then creates one unnamed port per link and binds each indexed
-slot. Finish all bindings before `simulation.Initialize()`.
+Applications use the public NoC connectors. Internally, AddSwitch builds the
+component with its network resource, and connect calls bind ports immediately.
+State initialization allocates port complexes after checking completed wiring.
+Middleware captures the immutable routing table and ordered ports.
 
-```go
-spec := switches.DefaultSpec()
-spec.Links = []switches.Link{
-    {Remote: "Endpoint.Network", Latency: 1, NumInputChannel: 1, NumOutputChannel: 1},
-}
-spec.Routes = []routing.Route{{Destination: "Device.Top", Output: "Switch0.Links[0]"}}
-sw := modeling.MakeBuilder[*switches.Comp](spec).WithSimulation(sim).Build("Switch0")
-sw.Ports.Links = make([]messaging.Port, len(spec.Links))
-sw.BindPort("Links[0]", twowaybuffered.NewPort(1, 1))
-```
+Per-port latency still models the pipeline inside the switch, and channel counts
+still limit admission/ejection. They have not been reinterpreted as physical link
+latency or bandwidth. Non-ideal transport is a separate follow-up.
 
-Build validates flat record shape. The State initializer checks link parameters
-and `len(Spec.Links) == len(Ports.Links)` before allocating port complexes.
-A mismatch panics and leaves the simulation unusable; correct the configuration
-and rebuild. Generic missing-port errors detected before element initialization
-still leave setup editable.
-Routing middleware derives its private table from `Spec.Routes` and
-`Spec.DefaultRoute`. There is no Resources routing override. The connector
-computes routes from planned port names before building switches, then binds
-ports and completes pending links.
+The network's registered topology resource validates routes, wiring, configuration
+and arbitration order on checkpoint restore. Mutable queues and the round-robin
+cursor remain in State. Runtime route changes are not supported by this refactor;
+a future adaptive-routing model must checkpoint those changes.

@@ -1,0 +1,215 @@
+package networkconnector
+
+import (
+	"fmt"
+	"path/filepath"
+	"testing"
+
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
+)
+
+type countingRouter struct{ calls int }
+
+func (r *countingRouter) EstablishRoute(nodes []Node) {
+	r.calls++
+	FloydWarshallRouter{}.EstablishRoute(nodes)
+}
+
+// Register topology resources after components to exercise the same lazy route
+// computation with the opposite initialization order.
+type lateResources struct {
+	*sim.Simulation
+	pending []naming.Named
+}
+
+func (s *lateResources) RegisterResource(r naming.Named) { s.pending = append(s.pending, r) }
+func (s *lateResources) initialize() error {
+	for _, r := range s.pending {
+		s.Simulation.RegisterResource(r)
+	}
+	return s.Initialize()
+}
+func topologyParameters() (DeviceToSwitchLinkParameter, SwitchToSwitchLinkParameter) {
+	end := LinkEndSwitchParameter{IncomingBufSize: 2,
+		OutgoingBufSize:  2,
+		NumInputChannel:  1,
+		NumOutputChannel: 1,
+		Latency:          2}
+	link := LinkParameter{IsIdeal: true, Frequency: timing.GHz}
+	return DeviceToSwitchLinkParameter{DeviceEndParam: LinkEndDeviceParameter{IncomingBufSize: 2,
+			OutgoingBufSize:  2,
+			NumInputChannel:  1,
+			NumOutputChannel: 1},
+			SwitchEndParam: end,
+			LinkParam:      link},
+		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end, LinkParam: link}
+}
+func topologyPort(s timing.Simulation, name string) messaging.Port {
+	p := twowaybuffered.NewPort(2, 2)
+	p.BindOwner(routeTestOwner{}, name)
+	s.RegisterPort(p)
+	return p
+}
+func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		t.Run(fmt.Sprint(late), func(t *testing.T) {
+			s := sim.MakeBuilder().Build()
+			var service timing.Simulation = s
+			delayed := &lateResources{Simulation: s}
+			if late {
+				service = delayed
+			}
+			router := &countingRouter{}
+			c := MakeBuilder().WithSimulation(service).WithRouter(router).Build("Network")
+			a, b := c.AddSwitch(), c.AddSwitch()
+			dp, sp := topologyParameters()
+			src, dst := topologyPort(service, "Source.Port"), topologyPort(service, "Target.Port")
+			c.ConnectDevice(a, []messaging.Port{src}, dp)
+			c.ConnectDevice(b, []messaging.Port{dst}, dp)
+			c.ConnectSwitches(a, b, sp)
+			require.Zero(t, router.calls)
+			require.Len(t, c.switches[a].sw.Ports.Links, 2)
+			for _, sw := range c.switches {
+				for _, p := range sw.ports {
+					require.NotEmpty(t, p.AsRemote())
+					require.NotNil(t, p.Connection())
+				}
+			}
+			if late {
+				require.NoError(t, delayed.initialize())
+			} else {
+				require.NoError(t, s.Initialize())
+			}
+			require.Equal(t, 1, router.calls)
+			output := c.switches[a].Routes().FindPort(dst.AsRemote())
+			c.switches[a].table.DefineRoute(dst.AsRemote(), "NotABoundPort")
+			require.Equal(t, output, c.switches[a].Routes().FindPort(dst.AsRemote()))
+			require.Equal(t, 1, router.calls)
+			require.Panics(t, func() { c.AddSwitch() })
+			require.Panics(t, func() { c.ConnectSwitches(a, b, sp) })
+			require.Panics(t, func() { c.ConnectDevice(a, nil, dp) })
+			require.Len(t, c.switches, 2)
+			t.Log("Connect calls bound all ports; Initialize computed routes once; " +
+				"setup-table edits and late assembly cannot change runtime routing")
+		})
+	}
+}
+
+type alternateRouter struct{ alternate bool }
+
+func (r alternateRouter) EstablishRoute(nodes []Node) {
+	FloydWarshallRouter{}.EstablishRoute(nodes)
+	if !r.alternate {
+		return
+	}
+	for _, node := range nodes {
+		if node.Name() != "Network.Switch[0]" {
+			continue
+		}
+		for _, remote := range node.ListRemotes() {
+			if remote.RemoteNode.Name() == "Network.Switch[3]" {
+				node.Table().DefineRoute("Target.Port", remote.LocalPort.AsRemote())
+			}
+		}
+	}
+}
+func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, reverseDevices bool) *sim.Simulation {
+	t.Helper()
+	s := sim.MakeBuilder().Build()
+	c := MakeBuilder().WithSimulation(s).WithRouter(router).Build("Network")
+	for range 4 {
+		c.AddSwitch()
+	}
+	dp, sp := topologyParameters()
+	sp.LeftEndParam.Latency = latency
+	source, extra, target := topologyPort(s, "Source.Port"), topologyPort(s, "Extra.Port"), topologyPort(s, "Target.Port")
+	ports := []messaging.Port{source, extra}
+	if reverseDevices {
+		ports[0], ports[1] = ports[1], ports[0]
+	}
+	c.ConnectDevice(0, ports, dp)
+	c.ConnectDevice(2, []messaging.Port{target}, dp)
+	cycle := []int{0, 1, 2, 3}
+	if reverse {
+		cycle = []int{0, 3, 2, 1}
+	}
+	for i, a := range cycle {
+		c.ConnectSwitches(a, cycle[(i+1)%4], sp)
+	}
+	require.NoError(t, s.Initialize())
+	return s
+}
+func TestCheckpointRejectsChangedNetworkIdentity(t *testing.T) {
+	baseline := checkpointNetwork(t, alternateRouter{}, false, 2, false)
+	path := filepath.Join(t.TempDir(), "network.tar.gz")
+	require.NoError(t, baseline.SaveCheckpoint(path))
+	same := checkpointNetwork(t, alternateRouter{}, false, 2, false)
+	require.NoError(t, same.LoadCheckpoint(path))
+	for _, tc := range []struct {
+		name           string
+		router         Router
+		reverse        bool
+		latency        int
+		reverseDevices bool
+	}{
+		{"rewired-ports", alternateRouter{}, true, 2, false},
+		{"routing-policy", FloydWarshallRouter{}, false, 2, false},
+		{"computed-routes", alternateRouter{alternate: true}, false, 2, false},
+		{"switch-port-latency", alternateRouter{}, false, 3, false},
+		{"device-order", alternateRouter{}, false, 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rebuilt := checkpointNetwork(t, tc.router, tc.reverse, tc.latency, tc.reverseDevices)
+			err := rebuilt.LoadCheckpoint(path)
+			require.ErrorContains(t, err, "spec hash mismatch")
+			t.Logf("Checkpoint rejected %s: %v", tc.name, err)
+		})
+	}
+}
+
+type loopRouter struct{}
+
+func (loopRouter) EstablishRoute(nodes []Node) {
+	for _, n := range nodes {
+		if n.Table() == nil {
+			continue
+		}
+		for _, remote := range n.ListRemotes() {
+			if remote.RemoteNode.Table() != nil {
+				n.Table().DefineDefaultRoute(remote.LocalPort.AsRemote())
+				break
+			}
+		}
+	}
+}
+func TestInvalidTopologyFailsBeforeRun(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		router  Router
+		connect bool
+		want    string
+	}{
+		{"disconnected", FloydWarshallRouter{}, false, "disconnected"},
+		{"loop", loopRouter{}, true, "routing loop"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := sim.MakeBuilder().Build()
+			c := MakeBuilder().WithSimulation(s).WithRouter(tc.router).Build("Network")
+			a, b := c.AddSwitch(), c.AddSwitch()
+			dp, sp := topologyParameters()
+			c.ConnectDevice(a, []messaging.Port{topologyPort(s, "Source.Port")}, dp)
+			c.ConnectDevice(b, []messaging.Port{topologyPort(s, "Target.Port")}, dp)
+			if tc.connect {
+				c.ConnectSwitches(a, b, sp)
+			}
+			require.Panics(t, func() { _ = s.Initialize() })
+			require.Error(t, s.Run())
+			require.Error(t, s.Initialize())
+		})
+	}
+}

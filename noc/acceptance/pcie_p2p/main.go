@@ -72,8 +72,6 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		pcieConnector.PlugInDevice(switch2ID, agents[i].AgentPorts)
 	}
 
-	pcieConnector.EstablishRoute()
-
 	test.RegisterAgent(agents[1])
 	test.RegisterAgent(agents[8])
 }

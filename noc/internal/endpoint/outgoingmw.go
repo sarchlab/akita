@@ -54,6 +54,7 @@ func msgToFlits(
 type outgoingMW struct {
 	comp        *Comp
 	devicePorts []messaging.Port
+	peer        messaging.RemotePort
 }
 
 // networkPort resolves the endpoint's network port by name. The instance is
@@ -179,7 +180,7 @@ func (m *outgoingMW) prepareFlits() bool {
 		msgTaskID := m.logMsgE2EStart(meta)
 		flits := msgToFlits(
 			m.comp.NewID,
-			meta, spec, networkPortRemote, m.comp.Spec.DefaultSwitchDst, msgTaskID)
+			meta, spec, networkPortRemote, m.peer, msgTaskID)
 
 		for i := range flits {
 			m.logFlitE2EStart(&flits[i])

@@ -3,8 +3,6 @@ package switches
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/noc/routing"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -19,15 +17,19 @@ func DefaultSpec() Spec {
 
 // Initialize creates one port complex per port, sized by the port's link.
 func (s *state) Initialize(c *Comp) {
-	if err := validateSpec(c.Spec); err != nil {
-		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	if c.Resources.Wiring == nil {
+		panic(c.Name() + ": switches: network wiring is required")
 	}
-	if err := validateSetup(c); err != nil {
-		panic(fmt.Errorf("%s: %w", c.Name(), err))
+	ports := c.Resources.Wiring.Ports()
+	links := c.Resources.Wiring.Links()
+	if len(links) != len(ports) {
+		panic(fmt.Sprintf("%s: switches: %d ports but %d link settings", c.Name(), len(ports), len(links)))
 	}
-
-	ports := c.Ports.Links
-	links := c.Spec.Links
+	for i, link := range links {
+		if link.Remote == "" || link.Latency < 0 || link.NumInputChannel <= 0 || link.NumOutputChannel <= 0 {
+			panic(fmt.Sprintf("%s: switches: invalid link %d", c.Name(), i))
+		}
+	}
 
 	state := state{PortComplexes: make([]portComplexState, len(ports))}
 	for i, port := range ports {
@@ -60,17 +62,15 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 // Initialize creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
 func (m *middlewares) Initialize(c *Comp) {
-	table := routing.NewTable()
-	for _, route := range c.Spec.Routes {
-		table.DefineRoute(route.Destination, route.Output)
-	}
-	table.DefineDefaultRoute(c.Spec.DefaultRoute)
+	table := c.Resources.Wiring.Routes()
+	links := c.Resources.Wiring.Links()
 
 	portIndex := make(map[messaging.RemotePort]int)
-	for i, port := range c.Ports.Links {
+	ports := c.Resources.Wiring.Ports()
+	for i, port := range ports {
 		portIndex[port.AsRemote()] = i
 
-		if remote := c.Spec.Links[i].Remote; remote != "" {
+		if remote := links[i].Remote; remote != "" {
 			portIndex[remote] = i
 		}
 	}
@@ -78,35 +78,14 @@ func (m *middlewares) Initialize(c *Comp) {
 	*m = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
+			orderedPorts: ports,
 			portIndex:    portIndex,
 			routingTable: table,
 		},
 		ReceivePipeline: &receivePipelineMW{
-			comp:      c,
-			portIndex: portIndex,
+			comp:         c,
+			orderedPorts: ports,
+			portIndex:    portIndex,
 		},
 	}
-}
-
-func validateSpec(spec Spec) error {
-	for i, link := range spec.Links {
-		if link.Remote == "" || link.Latency < 0 || link.NumInputChannel <= 0 || link.NumOutputChannel <= 0 {
-			return fmt.Errorf("switches: link %d needs a remote, non-negative latency and positive channel counts", i)
-		}
-	}
-	seen := map[messaging.RemotePort]bool{}
-	for _, route := range spec.Routes {
-		if route.Destination == "" || route.Output == "" || seen[route.Destination] {
-			return fmt.Errorf("switches: invalid or duplicate route for %q", route.Destination)
-		}
-		seen[route.Destination] = true
-	}
-	return nil
-}
-
-func validateSetup(c *Comp) error {
-	if len(c.Spec.Links) != len(c.Ports.Links) {
-		return fmt.Errorf("switches: %d ports but %d links in Spec.Links", len(c.Ports.Links), len(c.Spec.Links))
-	}
-	return nil
 }

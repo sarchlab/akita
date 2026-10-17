@@ -36,17 +36,16 @@ type Node interface {
 	Name() string
 }
 
-// switchNode is a switch of the network. Its ports and links are collected as
-// devices and switches are connected; the switch itself is built from them by
-// EstablishRoute.
+// switchNode owns setup-time wiring for a switch built by AddSwitch.
 type switchNode struct {
-	name    string
-	spec    switches.Spec
-	table   routing.Table
-	ports   []messaging.Port
-	links   []switches.Link
-	sw      *switches.Comp
-	remotes []Remote
+	name         string
+	network      *Connector
+	table        routing.Table
+	ports        []messaging.Port
+	ends         []LinkEndSwitchParameter
+	sw           *switches.Comp
+	remotes      []Remote
+	orderedPorts []messaging.Port
 }
 
 func (sn *switchNode) ListRemotes() []Remote {
@@ -61,35 +60,49 @@ func (sn *switchNode) Table() routing.Table {
 	return sn.table
 }
 
-// addPort creates the switch's next port and the link behind it, and returns
-// the port and the link's index. remote may be empty and set later, once the
-// port at the other end exists.
-func (sn *switchNode) addPort(
-	remote messaging.RemotePort,
-	param LinkEndSwitchParameter,
-) (messaging.Port, int) {
-	if sn.sw != nil {
-		panic(fmt.Sprintf("networkconnector: switch %s is already built", sn.name))
-	}
-
+// addPort binds immediately, so every address comes from a bound port.
+func (sn *switchNode) addPort(param LinkEndSwitchParameter) messaging.Port {
+	sn.network.simulation.RequireSetup()
 	port := twowaybuffered.NewPort(param.OutgoingBufSize, param.OutgoingBufSize)
-
+	sn.sw.BindPort(fmt.Sprintf("Links[%d]", len(sn.ports)), port)
 	sn.ports = append(sn.ports, port)
-	sn.links = append(sn.links, switches.Link{
-		Remote:           remote,
-		Latency:          param.Latency,
-		NumInputChannel:  param.NumInputChannel,
-		NumOutputChannel: param.NumOutputChannel,
-	})
+	sn.ends = append(sn.ends, param)
+	return port
+}
 
-	return port, len(sn.links) - 1
+func (sn *switchNode) Links() []switches.Link {
+	ports := sn.Ports()
+	links := make([]switches.Link, len(ports))
+	for i, port := range ports {
+		for _, remote := range sn.remotes {
+			if remote.LocalPort == port {
+				var p LinkEndSwitchParameter
+				for j, bound := range sn.ports {
+					if bound == port {
+						p = sn.ends[j]
+						break
+					}
+				}
+				links[i] = switches.Link{Remote: remote.RemotePort.AsRemote(), Latency: p.Latency,
+					NumInputChannel: p.NumInputChannel, NumOutputChannel: p.NumOutputChannel}
+				break
+			}
+		}
+	}
+	return links
+}
+
+func (sn *switchNode) Routes() switches.RoutingTable {
+	sn.network.initializeRoutes()
+	return sn.network.routes[sn.name]
 }
 
 type deviceNode struct {
-	ports    []messaging.Port
-	endPoint *endpoint.Comp
-	sw       *switchNode
-	remote   Remote
+	ports     []messaging.Port
+	parameter DeviceToSwitchLinkParameter
+	endPoint  *endpoint.Comp
+	sw        *switchNode
+	remote    Remote
 }
 
 func (dn *deviceNode) ListRemotes() []Remote {
@@ -104,23 +117,40 @@ func (dn *deviceNode) Table() routing.Table {
 	return nil
 }
 
-// Router can help establish the routes of a network.
+// Router computes setup-time routes once during Initialize. The network freezes
+// the results; changing the supplied tables later has no runtime effect.
+// A router may also implement OrderPorts(Node) []messaging.Port to define a
+// deterministic switch arbitration order. It must return every local port once.
 type Router interface {
 	EstablishRoute(nodes []Node)
 }
 
-func (sn *switchNode) portAddress(port messaging.Port) messaging.RemotePort {
-	for i, p := range sn.ports {
-		if p == port {
-			return messaging.RemotePort(fmt.Sprintf("%s.Links[%d]", sn.name, i))
-		}
-	}
-	panic("networkconnector: port does not belong to switch")
+func (r Remote) localAddress() messaging.RemotePort { return r.LocalPort.AsRemote() }
+
+// Ports returns the runtime arbitration order. A topology-specific router may
+// preserve its own order independently of the order links were assembled.
+func (sn *switchNode) Ports() []messaging.Port {
+	sn.network.initializeRoutes()
+	return sn.orderedPorts
 }
 
-func (r Remote) localAddress() messaging.RemotePort {
-	if sw, ok := r.LocalNode.(*switchNode); ok {
-		return sw.portAddress(r.LocalPort)
+func (sn *switchNode) orderPorts() []messaging.Port {
+	if orderer, ok := sn.network.router.(interface{ OrderPorts(Node) []messaging.Port }); ok {
+		ports := orderer.OrderPorts(sn)
+		if len(ports) != len(sn.ports) {
+			panic("networkconnector: invalid port order")
+		}
+		remaining := make(map[messaging.Port]bool)
+		for _, p := range sn.ports {
+			remaining[p] = true
+		}
+		for _, p := range ports {
+			if !remaining[p] {
+				panic("networkconnector: invalid port order")
+			}
+			delete(remaining, p)
+		}
+		return ports
 	}
-	return r.LocalPort.AsRemote()
+	return sn.ports
 }

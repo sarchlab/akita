@@ -50,10 +50,9 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().BindOwner(gomock.Any(), "EndPoint.NetworkPort")
 
 		spec := DefaultSpec()
-		spec.Devices = []messaging.RemotePort{devicePort.AsRemote()}
+
 		spec.Freq = 1
 		spec.FlitByteSize = 32
-		spec.DefaultSwitchDst = defaultSwitchPort.AsRemote()
 
 		endPoint = MakeBuilder().
 			WithSimulation(sim).
@@ -62,6 +61,10 @@ var _ = Describe("End Point", func() {
 
 		endPoint.BindPort("NetworkPort", networkPort)
 		networkPort.EXPECT().Owner().Return(endPoint).AnyTimes()
+		link := &testLink{ports: []messaging.Port{networkPort, defaultSwitchPort}}
+		networkPort.EXPECT().Connection().Return(link).AnyTimes()
+		defaultSwitchPort.EXPECT().Connection().Return(link).AnyTimes()
+		defaultSwitchPort.EXPECT().Owner().Return(payloadOwner{"Peer"}).AnyTimes()
 		DeviceConnection(endPoint).BindPort(devicePort)
 		if err := sim.Initialize(); err != nil {
 			panic(err)

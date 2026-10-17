@@ -9,14 +9,15 @@ import (
 )
 
 type receivePipelineMW struct {
-	comp      *Comp
-	portIndex map[messaging.RemotePort]int
+	orderedPorts []messaging.Port
+	comp         *Comp
+	portIndex    map[messaging.RemotePort]int
 }
 
 // ports returns the switch's local ports, in index order aligned with
 // State.PortComplexes.
 func (m *receivePipelineMW) ports() []messaging.Port {
-	return m.comp.Ports.Links
+	return m.orderedPorts
 }
 
 // Handle runs movePipeline → startProcessing on every tick.

@@ -1,63 +1,79 @@
 package mesh
 
 import (
-	"sort"
-
-	"github.com/sarchlab/akita/v5/noc/routing"
+	"github.com/sarchlab/akita/v5/noc/networkconnector"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"sort"
 )
 
-// meshRoutingTable is a routing table that can find the next-hop port according
-// to the coordinate of the final destination.
-type meshRoutingTable struct {
-	x, y, z                               int
-	top, left, bottom, right, front, back messaging.RemotePort
-	local                                 messaging.RemotePort
-	dstTable                              map[messaging.RemotePort]*tile
-}
+// meshRouter derives Z, then Y, then X dimension-order routes from bound ports.
+type meshRouter struct{ c *Connector }
 
-// FindPort finds the next-hop port according to the coordinate of the final
-// destination.
-func (t *meshRoutingTable) FindPort(dst messaging.RemotePort) messaging.RemotePort {
-	dstTile := t.dstTable[dst]
-	dstX, dstY, dstZ := dstTile.rt.x, dstTile.rt.y, dstTile.rt.z
-
-	switch {
-	case dstZ < t.z:
-		return t.front
-	case dstZ > t.z:
-		return t.back
-	case dstY < t.y:
-		return t.top
-	case dstY > t.y:
-		return t.bottom
-	case dstX < t.x:
-		return t.left
-	case dstX > t.x:
-		return t.right
-	case dstX == t.x && dstY == t.y && dstZ == t.z:
-		return t.local
-	default:
-		panic("unreachable")
+func (r meshRouter) EstablishRoute(nodes []networkconnector.Node) {
+	byName := make(map[string]networkconnector.Node)
+	for _, n := range nodes {
+		byName[n.Name()] = n
 	}
+	r.c.eachLocation(func(src [3]int) {
+		t := r.c.tiles[src]
+		node := byName[t.switchName]
+		outputs := make(map[string]messaging.RemotePort)
+		for _, remote := range node.ListRemotes() {
+			outputs[remote.RemoteNode.Name()] = remote.LocalPort.AsRemote()
+		}
+		r.c.eachLocation(func(dst [3]int) {
+			target := r.c.tiles[dst]
+			next := src
+			for axis := 2; axis >= 0; axis-- {
+				if dst[axis] < src[axis] {
+					next[axis]--
+					break
+				}
+				if dst[axis] > src[axis] {
+					next[axis]++
+					break
+				}
+			}
+			name := r.c.name + "." + target.endpointName
+			if next != src {
+				name = r.c.tiles[next].switchName
+			}
+			for _, port := range target.ports {
+				node.Table().DefineRoute(port.AsRemote(), outputs[name])
+			}
+		})
+	})
 }
 
-// DefineRoute does noting
-func (t *meshRoutingTable) DefineRoute(finalDst, outputPort messaging.RemotePort) {
-	// Do nothing.
-}
-
-// DefineDefaultRoute sets the local port.
-func (t *meshRoutingTable) DefineDefaultRoute(outputPort messaging.RemotePort) {
-	t.local = outputPort
-}
-
-// Snapshot materializes the current coordinate routing into immutable Spec data.
-func (t *meshRoutingTable) Snapshot() ([]routing.Route, messaging.RemotePort) {
-	routes := make([]routing.Route, 0, len(t.dstTable))
-	for dst := range t.dstTable {
-		routes = append(routes, routing.Route{Destination: dst, Output: t.FindPort(dst)})
+// OrderPorts preserves the old full-grid construction's arbitration order even
+// when AddTile grows dimensions in a different order: local, front, top, left,
+// back, bottom, right. Binding names remain the actual names assigned at setup.
+func (r meshRouter) OrderPorts(node networkconnector.Node) []messaging.Port {
+	locations := make(map[string][3]int)
+	for _, t := range r.c.tiles {
+		locations[t.switchName] = t.location
 	}
-	sort.Slice(routes, func(i, j int) bool { return routes[i].Destination < routes[j].Destination })
-	return routes, ""
+	here := locations[node.Name()]
+	remotes := append([]networkconnector.Remote(nil), node.ListRemotes()...)
+	rank := func(remote networkconnector.Remote) int {
+		at, isSwitch := locations[remote.RemoteNode.Name()]
+		if !isSwitch {
+			return 0
+		}
+		for axis := 2; axis >= 0; axis-- {
+			if at[axis] < here[axis] {
+				return 3 - axis
+			}
+			if at[axis] > here[axis] {
+				return 6 - axis
+			}
+		}
+		panic("mesh: invalid neighbor")
+	}
+	sort.Slice(remotes, func(i, j int) bool { return rank(remotes[i]) < rank(remotes[j]) })
+	ports := make([]messaging.Port, len(remotes))
+	for i, remote := range remotes {
+		ports[i] = remote.LocalPort
+	}
+	return ports
 }

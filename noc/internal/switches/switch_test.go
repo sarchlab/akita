@@ -83,9 +83,11 @@ var _ = Describe("Switch", func() {
 			}
 		}
 
-		spec.Links = []Link{link(remote1), link(remote2)}
+		wiring := &testWiring{ports: []messaging.Port{port1, port2},
+			links: []Link{link(remote1), link(remote2)},
+			table: routingTable}
 		sw = modeling.MakeBuilder[*Comp](spec).
-			WithSimulation(sim).
+			WithSimulation(sim).WithResources(Resources{Wiring: wiring}).
 			Build("Switch")
 		swPorts := Ports{Links: []messaging.Port{port1, port2}}
 		for i, p := range swPorts.Links {

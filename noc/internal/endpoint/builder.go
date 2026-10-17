@@ -8,7 +8,8 @@ import (
 
 // Builder creates an endpoint and its device-side connection together.
 type Builder struct {
-	builder ticking.Builder[Spec, state, Resources, Ports, middlewares]
+	simulation timing.Simulation
+	builder    ticking.Builder[Spec, state, Resources, Ports, middlewares]
 }
 
 // MakeBuilder starts with the endpoint's default configuration.
@@ -16,6 +17,7 @@ func MakeBuilder() Builder { return Builder{builder: modeling.MakeBuilder[*Comp]
 
 // WithSimulation sets the owning simulation.
 func (b Builder) WithSimulation(s timing.Simulation) Builder {
+	b.simulation = s
 	b.builder = b.builder.WithSimulation(s)
 	return b
 }
@@ -28,5 +30,6 @@ func (b Builder) Build(name string) *Comp {
 	devices := &deviceSide{}
 	c := b.builder.WithResources(Resources{devices: devices}).Build(name)
 	devices.Comp = c
+	b.simulation.RegisterResource(&topology{comp: c})
 	return c
 }

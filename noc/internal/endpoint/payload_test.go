@@ -81,12 +81,13 @@ func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 	device.BindOwner(payloadOwner{"Receiver"}, "Receiver.Port")
 	network := twowaybuffered.NewPort(8, 8)
 	spec := DefaultSpec()
-	spec.Devices = []messaging.RemotePort{device.AsRemote()}
+
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).
 		Build("Endpoint")
 
 	ep.BindPort("NetworkPort", network)
 	DeviceConnection(ep).BindPort(device)
+	connectPeer(s, network)
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}

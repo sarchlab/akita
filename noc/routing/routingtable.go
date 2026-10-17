@@ -1,21 +1,10 @@
 package routing
 
-import (
-	"sort"
+import "github.com/sarchlab/akita/v5/sim/messaging"
 
-	"github.com/sarchlab/akita/v5/sim/messaging"
-)
-
-// Route is one immutable destination-to-output-port entry in a switch Spec.
-type Route struct {
-	Destination messaging.RemotePort `json:"destination"`
-	Output      messaging.RemotePort `json:"output"`
-}
-
-// Table finds next-hop ports and exports configuration for switch Specs.
+// Table is the setup-time routing table supplied to a Router. The network
+// copies its routes at Initialize; subsequent table edits do not change routing.
 type Table interface {
-	// Snapshot returns independent, deterministically ordered configuration.
-	Snapshot() ([]Route, messaging.RemotePort)
 	FindPort(dst messaging.RemotePort) messaging.RemotePort
 	DefineRoute(finalDst, outputPort messaging.RemotePort)
 	DefineDefaultRoute(outputPort messaging.RemotePort)
@@ -49,13 +38,4 @@ func (t *table) DefineRoute(finalDst, outputPort messaging.RemotePort) {
 
 func (t *table) DefineDefaultRoute(outputPort messaging.RemotePort) {
 	t.defaultPort = outputPort
-}
-
-func (t *table) Snapshot() ([]Route, messaging.RemotePort) {
-	routes := make([]Route, 0, len(t.t))
-	for dst, output := range t.t {
-		routes = append(routes, Route{Destination: dst, Output: output})
-	}
-	sort.Slice(routes, func(i, j int) bool { return routes[i].Destination < routes[j].Destination })
-	return routes, t.defaultPort
 }

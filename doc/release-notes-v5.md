@@ -212,3 +212,15 @@ Go type. The component checkpoint guard is named `pending_event_guard` instead
 of `scheduler`, with `scheduled` and `at` fields. Saved checkpoints from before
 this cleanup are not supported; no legacy type-tag alias or schema migration
 is provided.
+
+## NoC assembly at Initialize
+
+NoC connect calls now build and bind immediately. Remove `EstablishRoute` and
+`EstablishNetwork`: `simulation.Initialize()` computes immutable routes from
+completed wiring and rejects disconnected or invalid routing. `BuildSwitches`,
+`PortAddress`, `routing.Route`, `Table.Snapshot`, and internal-port return values
+are removed. Custom setup routers remain supported. Internal endpoint/switch
+routing fields leave Spec; registered topology resources preserve checkpoint
+configuration validation. Old checkpoints must be rebuilt. Mesh still supports
+rectangular growth, empty transit tiles and repeated AddTile merges. Non-ideal
+transport and mutable/adaptive runtime routing are deferred.
