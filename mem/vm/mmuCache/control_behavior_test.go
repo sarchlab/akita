@@ -1,8 +1,8 @@
 package mmuCache
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-2 control-behavior tests for the mmuCache: it asserts
@@ -27,7 +28,9 @@ import (
 //     Top response on its own. So "completion" for the Drain test is the
 //     request appearing on the Bottom port's outgoing queue, and Drain
 //     quiesces when both Top and Bottom incoming queues are empty.
-var _ = Describe("MMUCache control behavior", func() {
+//
+//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUCacheControlBehavior(t *testing.T) {
 	var (
 		engine      timing.Engine
 		sim         timing.Simulation
@@ -67,7 +70,6 @@ var _ = Describe("MMUCache control behavior", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
-
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {
@@ -113,13 +115,17 @@ var _ = Describe("MMUCache control behavior", func() {
 		return rsp
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		build()
-	})
+	}
 
-	It("waits for outstanding bottom walks before acking Drain", func() {
+	t.Run("waits for outstanding bottom walks before acking Drain", func(t *testing.T) {
+		setup1(t)
+
 		const n = 3
 		for i := range n {
 			topPort.Deliver(makeTranslationReq(uint64(0x1000 + i*0x1000)))
@@ -136,13 +142,12 @@ var _ = Describe("MMUCache control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
-
 					forwarded = append(forwarded, out)
 				}
 			}
 		}
-		Expect(forwarded).To(HaveLen(n))
-		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
+		require.Len(t, forwarded, n)
+		require.Len(t, comp.State.OutstandingBottomReqs, n)
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
@@ -151,7 +156,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		for i := 0; i < 8 && comp.State.CurrentState != mmuCacheStateDrain; i++ {
 			modelingtest.Tick(comp)
 		}
-		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateDrain))
+		require.Equal(t, mmuCacheStateDrain, comp.State.CurrentState)
 
 		// A request delivered while draining must not be admitted (no new
 		// forward), and with the walks still outstanding Drain must NOT ack.
@@ -159,13 +164,13 @@ var _ = Describe("MMUCache control behavior", func() {
 		for range 8 {
 			modelingtest.Tick(comp)
 			_, present0 := controlPort.RetrieveOutgoing()
-			Expect(present0).To(BeFalse())
+			require.False(t, present0)
 			_, present1 := bottomPort.RetrieveOutgoing()
-			Expect(present1).To(BeFalse())
+			require.False(t, present1)
 		}
-		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
+		require.Len(t, comp.State.OutstandingBottomReqs, n)
 		_, present2 := topPort.PeekIncoming()
-		Expect(present2).To(BeTrue()) // late req still queued
+		require.True(t, present2) // late req still queued
 
 		// Let every outstanding walk complete.
 		for _, fr := range forwarded {
@@ -195,23 +200,24 @@ var _ = Describe("MMUCache control behavior", func() {
 
 					drainFound = true
 				}
-
 			}
 		}
 
-		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
-		Expect(upResponses).To(Equal(n))
-		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
+		require.True(t, drainFound)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
+		require.Equal(t, n, upResponses)
+		require.Empty(t, comp.State.OutstandingBottomReqs)
 		// The request delivered mid-drain was never admitted; it remains
 		// queued for after Enable.
 		_, present3 := topPort.PeekIncoming()
-		Expect(present3).To(BeTrue())
-		Expect(comp.State.CurrentState).To(Equal(mmuCacheStatePause))
+		require.True(t, present3)
+		require.Equal(t, mmuCacheStatePause, comp.State.CurrentState)
 	})
 
-	It("drops a late bottom response that arrives after Reset", func() {
+	t.Run("drops a late bottom response that arrives after Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Forward a lookup so a bottom request is outstanding.
 		topPort.Deliver(makeTranslationReq(0x1000))
 		var fwd messaging.Msg
@@ -223,8 +229,8 @@ var _ = Describe("MMUCache control behavior", func() {
 				fwd = out
 			}
 		}
-		Expect(gotFwd).To(BeTrue())
-		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(1))
+		require.True(t, gotFwd)
+		require.Len(t, comp.State.OutstandingBottomReqs, 1)
 
 		// Reset discards the outstanding walk.
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
@@ -237,11 +243,10 @@ var _ = Describe("MMUCache control behavior", func() {
 					Command == memcontrolprotocol.CmdReset {
 					resetAcked = true
 				}
-
 			}
 		}
-		Expect(resetAcked).To(BeTrue())
-		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
+		require.True(t, resetAcked)
+		require.Empty(t, comp.State.OutstandingBottomReqs)
 
 		// The low module's now-orphaned response arrives. It must be dropped:
 		// no panic, and no stale translation emitted up the Top port. Before
@@ -250,12 +255,14 @@ var _ = Describe("MMUCache control behavior", func() {
 		for range 16 {
 			modelingtest.Tick(comp)
 			_, present4 := topPort.RetrieveOutgoing()
-			Expect(present4).To(BeFalse())
+			require.False(t, present4)
 		}
-		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
+		require.Empty(t, comp.State.OutstandingBottomReqs)
 	})
 
-	It("freezes incoming traffic while paused", func() {
+	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
+		setup1(t)
+
 		comp.State.CurrentState = mmuCacheStatePause
 		topPort.Deliver(makeTranslationReq(0x1000))
 
@@ -265,13 +272,17 @@ var _ = Describe("MMUCache control behavior", func() {
 
 		// The lookup is neither consumed nor forwarded while paused.
 		_, present5 := topPort.PeekIncoming()
-		Expect(present5).To(BeTrue())
+		require.True(t, present5)
 		_, present6 := bottomPort.RetrieveOutgoing()
-		Expect(present6).To(BeFalse())
+		require.False(t, present6)
 	})
 
-	DescribeTable("Reset wipes queued work from any control state",
-		func(startState string) {
+	t.Run("Reset wipes queued work from any control state", func(t *testing.T) {
+		runCase := func(t *testing.T, startState string) {
+			t.Helper()
+
+			setup1(t)
+
 			topPort.Deliver(makeTranslationReq(0x1000))
 			comp.State.CurrentState = startState
 
@@ -288,22 +299,24 @@ var _ = Describe("MMUCache control behavior", func() {
 				}
 			}
 
-			Expect(found).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			Expect(rsp.RspTo).To(Equal(reset.ID))
-			Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
+			require.True(t, found)
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, reset.ID, rsp.RspTo)
+			require.Equal(t, mmuCacheStateEnable, comp.State.CurrentState)
 			_, present7 := topPort.PeekIncoming()
-			Expect(present7).To(BeFalse())
+			require.False(t, present7)
 			_, present8 := bottomPort.PeekIncoming()
-			Expect(present8).To(BeFalse())
-		},
-		Entry("from Enable", mmuCacheStateEnable),
-		Entry("from Pause", mmuCacheStatePause),
-		Entry("from Drain", mmuCacheStateDrain),
-	)
+			require.False(t, present8)
+		}
+		t.Run("from Enable", func(t *testing.T) { runCase(t, mmuCacheStateEnable) })
+		t.Run("from Pause", func(t *testing.T) { runCase(t, mmuCacheStatePause) })
+		t.Run("from Drain", func(t *testing.T) { runCase(t, mmuCacheStateDrain) })
+	})
 
-	It("completes a pending Drain before servicing a queued Reset", func() {
+	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Draining with the drain ack pending and no in-flight work: the data
 		// path flips the state to pause and completePendingDrain acks the
 		// Drain. Control commands are serialized with no preemption, so a Reset
@@ -325,17 +338,16 @@ var _ = Describe("MMUCache control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 					rsps = append(rsps, out)
 				}
 			}
 		}
 
-		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
-		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
+		require.Len(t, rsps, 2)
+		require.Equal(t, memcontrolprotocol.CmdDrain, rsps[0].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, uint64(999), rsps[0].RspTo)
+		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, reset.ID, rsps[1].RspTo)
+		require.Equal(t, mmuCacheStateEnable, comp.State.CurrentState)
 	})
-})
+}

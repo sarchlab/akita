@@ -1,8 +1,8 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-2 control-behavior tests for the writeback cache: it
@@ -20,7 +21,9 @@ import (
 // control_contract_test.go. The writeback cache is downstream-dependent: a read
 // MISS issues a request out the Bottom port and only completes once the
 // matching DataReadyRsp is fed back.
-var _ = Describe("Write-Back Cache control behavior", func() {
+//
+//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestWriteBackCacheControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
 		sim      timing.Simulation
@@ -138,14 +141,18 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		return setID
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
-	})
+	}
 
-	It("drains all in-flight read misses before acking Drain", func() {
+	t.Run("drains all in-flight read misses before acking Drain", func(t *testing.T) {
+		setup1(t)
+
 		const n = 3
 
 		// Deliver N distinct-block read misses.
@@ -166,17 +173,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memprotocol.ReadReq); ok {
-
 					botReads = append(botReads, out)
 				}
 			}
 		}
-		Expect(botReads).To(HaveLen(n))
+		require.Len(t, botReads, n)
 
 		// Teeth: with misses in flight and nothing answered, the cache holds
 		// live transactions and is NOT quiescent.
-		Expect(comp.State.Transactions).ToNot(BeEmpty())
-		Expect(cacheIsQuiescent(&comp.State)).To(BeFalse())
+		require.NotEmpty(t, comp.State.Transactions)
+		require.False(t, cacheIsQuiescent(&comp.State))
 
 		// Issue Drain.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -188,14 +194,12 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
-					Expect(rsp.Command).ToNot(Equal(memcontrolprotocol.CmdDrain),
-						"Drain must not ack before in-flight misses finish")
+					require.NotEqual(t, memcontrolprotocol.CmdDrain, rsp.Command, "Drain must not ack before in-flight misses finish")
 				}
 			}
 		}
-		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStateDraining))
-		Expect(cacheIsQuiescent(&comp.State)).To(BeFalse())
+		require.Equal(t, cacheStateDraining, cacheState(comp.State.CacheState))
+		require.False(t, cacheIsQuiescent(&comp.State))
 
 		// Now feed the matching fill response for each captured Bottom read.
 		for _, br := range botReads {
@@ -225,19 +229,20 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 					gotDrainRsp = true
 				}
-
 			}
 		}
 
-		Expect(gotDrainRsp).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
-		Expect(completed).To(Equal(n))
-		Expect(cacheIsQuiescent(&comp.State)).To(BeTrue())
-		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStatePaused))
+		require.True(t, gotDrainRsp)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
+		require.Equal(t, n, completed)
+		require.True(t, cacheIsQuiescent(&comp.State))
+		require.Equal(t, cacheStatePaused, cacheState(comp.State.CacheState))
 	})
 
-	It("leaves a Pause queued while a flush is in progress", func() {
+	t.Run("leaves a Pause queued while a flush is in progress", func(t *testing.T) {
+		setup1(t)
+
 		// An active flush that is still pre-flushing (waiting on an in-flight
 		// transaction) so it cannot finalize.
 		comp.State.CacheState = int(cacheStatePreFlushing)
@@ -253,18 +258,19 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for range 16 {
 			modelingtest.Tick(comp)
 			_, present0 := ctrlPort.RetrieveOutgoing()
-			Expect(present0).To(BeFalse())
+			require.False(t, present0)
 		}
-		Expect(comp.State.HasProcessingFlush).To(BeTrue())
-		Expect(cacheState(comp.State.CacheState)).
-			To(Equal(cacheStatePreFlushing))
+		require.True(t, comp.State.HasProcessingFlush)
+		require.Equal(t, cacheStatePreFlushing, cacheState(comp.State.CacheState))
 		// The Pause is still waiting on the Control port, to be handled once the
 		// flush settles.
 		_, present1 := ctrlPort.PeekIncoming()
-		Expect(present1).To(BeTrue())
+		require.True(t, present1)
 	})
 
-	It("freezes incoming traffic while paused", func() {
+	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
+		setup1(t)
+
 		comp.State.CacheState = int(cacheStatePaused)
 		topPort.Deliver(makeRead(0))
 
@@ -275,20 +281,24 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// The request is neither consumed nor turned into work, and nothing is
 		// forwarded out Bottom, while paused.
 		_, present2 := topPort.PeekIncoming()
-		Expect(present2).To(BeTrue())
-		Expect(comp.State.Transactions).To(BeEmpty())
+		require.True(t, present2)
+		require.Empty(t, comp.State.Transactions)
 		_, present3 := botPort.RetrieveOutgoing()
-		Expect(present3).To(BeFalse())
+		require.False(t, present3)
 	})
 
-	DescribeTable("Reset wipes in-flight state from any control state",
-		func(startState cacheState) {
+	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
+		runCase := func(t *testing.T, startState cacheState) {
+			t.Helper()
+
+			setup1(t)
+
 			// Get a transaction in flight via one read miss.
 			topPort.Deliver(makeRead(0x10000))
 			for i := 0; i < 64 && len(comp.State.Transactions) == 0; i++ {
 				modelingtest.Tick(comp)
 			}
-			Expect(comp.State.Transactions).ToNot(BeEmpty())
+			require.NotEmpty(t, comp.State.Transactions)
 
 			comp.State.CacheState = int(startState)
 
@@ -305,22 +315,20 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				}
 			}
 
-			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			Expect(rsp.RspTo).To(Equal(reset.ID))
-			Expect(comp.State.Transactions).To(BeEmpty())
-			Expect(cacheState(comp.State.CacheState)).
-				To(Equal(cacheStateRunning))
-		},
-		Entry("from Running", cacheStateRunning),
-		Entry("from Paused", cacheStatePaused),
-		// The Draining case is covered separately by the
-		// "completes a pending Drain before servicing a queued Reset" test,
-		// since a queued Reset waits for the in-progress Drain to ack first.
-	)
+			require.True(t, gotRsp)
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, reset.ID, rsp.RspTo)
+			require.Empty(t, comp.State.Transactions)
+			require.Equal(t, cacheStateRunning, cacheState(comp.State.CacheState))
+		}
+		t.Run("from Running", func(t *testing.T) { runCase(t, cacheStateRunning) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, cacheStatePaused) })
+	})
 
-	It("completes a pending Drain before servicing a queued Reset", func() {
+	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Draining and already quiescent: completePendingDrain acks the Drain.
 		// Control commands are serialized with no preemption, so a Reset queued
 		// behind the drain is serviced only after the Drain acks.
@@ -340,22 +348,23 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 					rsps = append(rsps, out)
 				}
 			}
 		}
 
-		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
-		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStateRunning))
+		require.Len(t, rsps, 2)
+		require.Equal(t, memcontrolprotocol.CmdDrain, rsps[0].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, uint64(999), rsps[0].RspTo)
+		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, reset.ID, rsps[1].RspTo)
+		require.Equal(t, cacheStateRunning, cacheState(comp.State.CacheState))
 	})
 
-	It("drops only the address-filtered block on Invalidate, keeping the "+
-		"other resident block", func() {
+	t.Run("drops only the address-filtered block on Invalidate, keeping the "+
+		"other resident block", func(t *testing.T) {
+		setup1(t)
+
 		// Two resident blocks in different sets so they never collide.
 		const addrKeep = uint64(0x0)
 		const addrDrop = uint64(blockSize) // next block, set 1
@@ -363,10 +372,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		setDrop := residentDirtyBlock(addrDrop, 0xBB)
 
 		// Both are valid before the verb.
-		Expect(comp.State.DirectoryState.Sets[setKeep].Blocks[0].IsValid).
-			To(BeTrue())
-		Expect(comp.State.DirectoryState.Sets[setDrop].Blocks[0].IsValid).
-			To(BeTrue())
+		require.True(t, comp.State.DirectoryState.Sets[setKeep].Blocks[0].IsValid)
+		require.True(t, comp.State.DirectoryState.Sets[setDrop].Blocks[0].IsValid)
 
 		// Pause: Invalidate is only legal once paused.
 		comp.State.CacheState = int(cacheStatePaused)
@@ -384,57 +391,56 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			}
 		}
 
-		Expect(gotRsp).To(BeTrue())
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(rsp.RspTo).To(Equal(inv.ID))
+		require.True(t, gotRsp)
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, inv.ID, rsp.RspTo)
 
 		// Only the filtered block was dropped; the other stays resident.
 		dropBlock := &comp.State.DirectoryState.Sets[setDrop].Blocks[0]
 		keepBlock := &comp.State.DirectoryState.Sets[setKeep].Blocks[0]
-		Expect(dropBlock.IsValid).To(BeFalse(),
-			"filtered block must be invalidated")
-		Expect(keepBlock.IsValid).To(BeTrue(),
-			"unfiltered block must remain resident")
-		Expect(keepBlock.Tag).To(Equal(addrKeep))
+		require.False(t, dropBlock.IsValid, "filtered block must be invalidated")
+		require.True(t, keepBlock.IsValid, "unfiltered block must remain resident")
+		require.Equal(t, addrKeep, keepBlock.Tag)
 
 		// Invalidate discards dirty data silently: no write-back is emitted.
 		_, present4 := botPort.RetrieveOutgoing()
-		Expect(present4).To(BeFalse())
+		require.False(t, present4)
 	})
 
-	It("rejects Invalidate while Enabled with ErrMustBePausedOrDrained",
-		func() {
-			residentDirtyBlock(0x0, 0xAA)
-			// Cache is Running (Enabled) as freshly built.
-			Expect(cacheState(comp.State.CacheState)).
-				To(Equal(cacheStateRunning))
+	t.Run("rejects Invalidate while Enabled with ErrMustBePausedOrDrained", func(t *testing.T) {
+		setup1(t)
 
-			inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
-			ctrlPort.Deliver(inv)
+		residentDirtyBlock(0x0, 0xAA)
+		// Cache is Running (Enabled) as freshly built.
+		require.Equal(t, cacheStateRunning, cacheState(comp.State.CacheState))
 
-			var rsp messaging.Msg
-			gotRsp := false
-			for i := 0; i < 64 && !gotRsp; i++ {
-				modelingtest.Tick(comp)
-				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
-					rsp = out
-				}
+		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
+		ctrlPort.Deliver(inv)
+
+		var rsp messaging.Msg
+		gotRsp := false
+		for i := 0; i < 64 && !gotRsp; i++ {
+			modelingtest.Tick(comp)
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
+				_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
+				rsp = out
 			}
+		}
 
-			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
+		require.True(t, gotRsp)
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.False(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, memcontrolprotocol.ErrMustBePausedOrDrained, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 
-			// The block is untouched because the verb was rejected.
-			Expect(comp.State.DirectoryState.Sets[0].Blocks[0].IsValid).
-				To(BeTrue())
-		})
+		// The block is untouched because the verb was rejected.
+		require.True(t, comp.State.DirectoryState.Sets[0].Blocks[0].IsValid)
+	})
 
-	It("writes back only the address-filtered dirty block on Flush, "+
-		"leaving the other dirty block in place", func() {
+	t.Run("writes back only the address-filtered dirty block on Flush, "+
+		"leaving the other dirty block in place", func(t *testing.T) {
+		setup1(t)
+
 		const addrFlush = uint64(0x0)
 		const addrKeep = uint64(blockSize) // set 1
 		const flushFill = byte(0x11)
@@ -462,7 +468,6 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memprotocol.WriteReq); ok {
-
 					botWrites = append(botWrites, out)
 					done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 						ID:  sim.NewID(),
@@ -482,33 +487,34 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 					gotFlushRsp = true
 				}
-
 			}
 		}
 
-		Expect(gotFlushRsp).To(BeTrue())
-		Expect(flushRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(flushRsp.RspTo).To(Equal(flush.ID))
+		require.True(t, gotFlushRsp)
+		require.True(t, flushRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, flush.ID, flushRsp.RspTo)
 
 		// Exactly one write-back, for the filtered block only.
-		Expect(botWrites).To(HaveLen(1))
-		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Address).To(Equal(addrFlush))
-		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Data).To(HaveLen(blockSize))
-		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Data[0]).To(Equal(flushFill),
-			"the written-back payload must be the filtered block's data")
+		require.Len(t, botWrites, 1)
+		require.Equal(t, addrFlush, botWrites[0].Payload.(memprotocol.WriteReq).Address)
+		require.Len(t, botWrites[0].Payload.(memprotocol.WriteReq).Data, blockSize)
+		require.Equal(
+			t,
+			flushFill,
+			botWrites[0].Payload.(memprotocol.WriteReq).Data[0],
+			"the written-back payload must be the filtered block's data",
+		)
 		for _, b := range botWrites[0].Payload.(memprotocol.WriteReq).Data {
-			Expect(b).To(Equal(flushFill))
+			require.Equal(t, flushFill, b)
 		}
 
 		// The flushed block is now clean but still valid; the unfiltered
 		// dirty block was neither written back nor cleaned.
 		flushBlock := &comp.State.DirectoryState.Sets[setFlush].Blocks[0]
 		keepBlock := &comp.State.DirectoryState.Sets[setKeep].Blocks[0]
-		Expect(flushBlock.IsValid).To(BeTrue())
-		Expect(flushBlock.IsDirty).To(BeFalse(),
-			"flushed block must be clean after write-back")
-		Expect(keepBlock.IsValid).To(BeTrue())
-		Expect(keepBlock.IsDirty).To(BeTrue(),
-			"unfiltered dirty block must stay dirty")
+		require.True(t, flushBlock.IsValid)
+		require.False(t, flushBlock.IsDirty, "flushed block must be clean after write-back")
+		require.True(t, keepBlock.IsValid)
+		require.True(t, keepBlock.IsDirty, "unfiltered dirty block must stay dirty")
 	})
-})
+}

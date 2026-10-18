@@ -1,20 +1,22 @@
 package endpoint
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	gomock "go.uber.org/mock/gomock"
 )
 
-var _ = Describe("End Point", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestEndPoint(t *testing.T) {
 	var (
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
@@ -25,8 +27,10 @@ var _ = Describe("End Point", func() {
 		endPoint          *Comp
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
+		mockCtrl = gomock.NewController(t)
 		engine = NewMockEngine(mockCtrl)
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
@@ -70,14 +74,11 @@ var _ = Describe("End Point", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	t.Run("should send flits", func(t *testing.T) {
+		setup1(t)
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
-	It("should send flits", func() {
 		msg := messaging.Msg{
 			ID:           sim.NewID(),
 			Src:          devicePort.AsRemote(),
@@ -91,43 +92,45 @@ var _ = Describe("End Point", func() {
 		devicePort.Send(msg)
 
 		madeProgress := modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
 			flit := sent
-			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(0))
-			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
-			Expect(flit.Payload.(packetization.Flit).Msg).To(Equal(msg))
-			Expect(flit.Payload.(packetization.Flit).MsgID).To(Equal(msg.ID))
+			require.Equal(t, networkPort.AsRemote(), flit.Src)
+			require.Equal(t, defaultSwitchPort.AsRemote(), flit.Dst)
+			require.Equal(t, 0, flit.Payload.(packetization.Flit).SeqID)
+			require.Equal(t, 2, flit.Payload.(packetization.Flit).NumFlitInMsg)
+			require.Equal(t, msg, flit.Payload.(packetization.Flit).Msg)
+			require.Equal(t, msg.ID, flit.Payload.(packetization.Flit).MsgID)
 		})
 
 		madeProgress = modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
 			flit := sent
-			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(1))
-			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
-			Expect(flit.Payload.(packetization.Flit).Msg.Payload).To(BeNil())
-			Expect(flit.Payload.(packetization.Flit).MsgID).To(Equal(msg.ID))
+			require.Equal(t, networkPort.AsRemote(), flit.Src)
+			require.Equal(t, defaultSwitchPort.AsRemote(), flit.Dst)
+			require.Equal(t, 1, flit.Payload.(packetization.Flit).SeqID)
+			require.Equal(t, 2, flit.Payload.(packetization.Flit).NumFlitInMsg)
+			require.Nil(t, flit.Payload.(packetization.Flit).Msg.Payload)
+			require.Equal(t, msg.ID, flit.Payload.(packetization.Flit).MsgID)
 		})
 
 		madeProgress = modelingtest.Tick(endPoint)
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		madeProgress = modelingtest.Tick(endPoint)
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should receive message", func() {
+	t.Run("should receive message", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Dst: devicePort.AsRemote(),
@@ -153,21 +156,21 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 
 		madeProgress := modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		madeProgress = modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		madeProgress = modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		madeProgress = modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		madeProgress = modelingtest.Tick(endPoint)
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 		received, ok := devicePort.PeekIncoming()
-		Expect(ok).To(BeTrue())
-		Expect(received).To(Equal(msg))
+		require.True(t, ok)
+		require.Equal(t, msg, received)
 	})
-})
+}

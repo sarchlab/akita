@@ -1,8 +1,8 @@
 package datamover
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
@@ -11,9 +11,11 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("DataMover", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDataMover(t *testing.T) {
 	var (
 		engine         timing.Engine
 		sim            timing.Simulation
@@ -26,7 +28,9 @@ var _ = Describe("DataMover", func() {
 		srcPort        messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -69,10 +73,11 @@ var _ = Describe("DataMover", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	t.Run("should move data outside to inside", func(t *testing.T) {
+		setup1(t)
 
-	It("should move data outside to inside", func() {
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -93,16 +98,17 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
-		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value0, present0 := srcPort.RetrieveIncoming()
-		Expect(present0).To(BeTrue())
-		Expect(value0).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present0)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value0)
 	})
 
-	It("should move data when SrcAddress is beyond BufferSize", func() {
+	t.Run("should move data when SrcAddress is beyond BufferSize", func(t *testing.T) {
+		setup1(t)
+
 		// Regression: the read-window check must use the transaction-relative
 		// address. With a source address at or beyond BufferSize (2048 here),
 		// an absolute-address check would reject every read and the move would
@@ -127,16 +133,17 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
-		Expect(insideStorage.Read(8192, 2048)).To(Equal(data))
+		require.Equal(t, data, insideStorage.Read(8192, 2048))
 		value1, present1 := srcPort.RetrieveIncoming()
-		Expect(present1).To(BeTrue())
-		Expect(value1).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present1)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value1)
 	})
 
-	It("should move data inside to outside", func() {
+	t.Run("should move data inside to outside", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -157,16 +164,17 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
-		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value2, present2 := srcPort.RetrieveIncoming()
-		Expect(present2).To(BeTrue())
-		Expect(value2).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present2)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value2)
 	})
 
-	It("should move on difference addresses", func() {
+	t.Run("should move on difference addresses", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -187,16 +195,17 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
-		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
+		require.Equal(t, data, outsideStorage.Read(4096, 4096))
 		value3, present3 := srcPort.RetrieveIncoming()
-		Expect(present3).To(BeTrue())
-		Expect(value3).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present3)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value3)
 	})
 
-	It("should move partial data", func() {
+	t.Run("should move partial data", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 1024)
 		for i := range 1024 {
 			data[i] = byte(i)
@@ -217,17 +226,18 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		expected := data[:512]
-		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
+		require.Equal(t, expected, insideStorage.Read(512, 512))
 		value4, present4 := srcPort.RetrieveIncoming()
-		Expect(present4).To(BeTrue())
-		Expect(value4).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present4)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value4)
 	})
 
-	It("should handle zero-size transfers", func() {
+	t.Run("should handle zero-size transfers", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
 			SrcAddress: 0,
 			SrcSide:    "inside",
@@ -240,12 +250,14 @@ var _ = Describe("DataMover", func() {
 
 			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
-		Expect(func() {
+		require.NotPanics(t, func() {
 			dataMover.Ports.Top.Deliver(req)
-		}).NotTo(Panic())
+		})
 	})
 
-	It("should handle overlapping ranges", func() {
+	t.Run("should handle overlapping ranges", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 1024)
 		for i := range 1024 {
 			data[i] = byte(i)
@@ -266,13 +278,12 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.Ports.Top.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		expected := append(data[:512], data[:512]...)
-		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
+		require.Equal(t, expected, insideStorage.Read(0, 1024))
 		value5, present5 := srcPort.RetrieveIncoming()
-		Expect(present5).To(BeTrue())
-		Expect(value5).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present5)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value5)
 	})
-})
+}

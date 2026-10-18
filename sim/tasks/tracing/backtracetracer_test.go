@@ -1,89 +1,103 @@
 package tracing
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/tasks"
+	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 )
 
-var _ = Describe("BackTraceTracer", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBackTraceTracer(t *testing.T) {
 	var (
 		mockCtrl        *gomock.Controller
 		mockTaskPrinter *MockTaskPrinter
-		t               *BackTraceTracer
+		tracer          *BackTraceTracer
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
+		mockCtrl = gomock.NewController(t)
 		mockTaskPrinter = NewMockTaskPrinter(mockCtrl)
 
-		t = NewBackTraceTracer(mockTaskPrinter)
+		tracer = NewBackTraceTracer(mockTaskPrinter)
+	}
+
+	t.Run("should trace a single task", func(t *testing.T) {
+		setup1(t)
+
+		tracer.TaskStarted(tasks.Task{ID: 1})
+
+		require.Equal(t, 1, len(tracer.tracingTasks))
+		require.Equal(t, uint64(0), tracer.tracingTasks[1].ParentID)
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
+	t.Run("should trace two tasks", func(t *testing.T) {
+		setup1(t)
+
+		tracer.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+
+		require.Equal(t, 2, len(tracer.tracingTasks))
+		require.Equal(t, uint64(0), tracer.tracingTasks[1].ParentID)
+		require.Equal(t, uint64(1), tracer.tracingTasks[2].ParentID)
 	})
 
-	It("should trace a single task", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
+	t.Run("should trace three tasks", func(t *testing.T) {
+		setup1(t)
 
-		Expect(len(t.tracingTasks)).To(Equal(1))
-		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
+		tracer.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+
+		require.Equal(t, 3, len(tracer.tracingTasks))
+		require.Equal(t, uint64(0), tracer.tracingTasks[1].ParentID)
+		require.Equal(t, uint64(1), tracer.tracingTasks[2].ParentID)
+		require.Equal(t, uint64(2), tracer.tracingTasks[3].ParentID)
 	})
 
-	It("should trace two tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
-		t.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+	t.Run("should end a single task", func(t *testing.T) {
+		setup1(t)
 
-		Expect(len(t.tracingTasks)).To(Equal(2))
-		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
-		Expect(t.tracingTasks[2].ParentID).To(Equal(uint64(1)))
+		tracer.TaskStarted(tasks.Task{ID: 1})
+
+		tracer.TaskEnded(tasks.Task{ID: 1})
+
+		require.Equal(t, 0, len(tracer.tracingTasks))
 	})
 
-	It("should trace three tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
-		t.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
-		t.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+	t.Run("should end two tasks", func(t *testing.T) {
+		setup1(t)
 
-		Expect(len(t.tracingTasks)).To(Equal(3))
-		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
-		Expect(t.tracingTasks[2].ParentID).To(Equal(uint64(1)))
-		Expect(t.tracingTasks[3].ParentID).To(Equal(uint64(2)))
+		tracer.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+
+		tracer.TaskEnded(tasks.Task{ID: 3})
+		tracer.TaskEnded(tasks.Task{ID: 2})
+
+		require.Equal(t, 1, len(tracer.tracingTasks))
+		require.Equal(t, uint64(0), tracer.tracingTasks[1].ParentID)
 	})
 
-	It("should end a single task", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
+	t.Run("should print single tasks", func(t *testing.T) {
+		setup1(t)
 
-		t.TaskEnded(tasks.Task{ID: 1})
-
-		Expect(len(t.tracingTasks)).To(Equal(0))
-	})
-
-	It("should end two tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
-		t.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
-		t.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
-
-		t.TaskEnded(tasks.Task{ID: 3})
-		t.TaskEnded(tasks.Task{ID: 2})
-
-		Expect(len(t.tracingTasks)).To(Equal(1))
-		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
-	})
-
-	It("should print single tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 1})
 
 		mockTaskPrinter.EXPECT().Print(tasks.Task{ID: 1})
 
-		t.DumpBackTrace(tasks.Task{ID: 1})
+		tracer.DumpBackTrace(tasks.Task{ID: 1})
 	})
 
-	It("should print three tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
-		t.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
-		t.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+	t.Run("should print three tasks", func(t *testing.T) {
+		setup1(t)
+
+		tracer.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
 
 		e3 := mockTaskPrinter.EXPECT().
 			Print(tasks.Task{ID: 3, ParentID: 2})
@@ -93,19 +107,21 @@ var _ = Describe("BackTraceTracer", func() {
 		mockTaskPrinter.EXPECT().Print(tasks.Task{ID: 1}).
 			After(e2)
 
-		t.DumpBackTrace(tasks.Task{ID: 3, ParentID: 2})
+		tracer.DumpBackTrace(tasks.Task{ID: 3, ParentID: 2})
 	})
 
-	It("should print three tasks", func() {
-		t.TaskStarted(tasks.Task{ID: 1})
-		t.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
-		t.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+	t.Run("should print three tasks", func(t *testing.T) {
+		setup1(t)
 
-		t.TaskEnded(tasks.Task{ID: 2})
+		tracer.TaskStarted(tasks.Task{ID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 2, ParentID: 1})
+		tracer.TaskStarted(tasks.Task{ID: 3, ParentID: 2})
+
+		tracer.TaskEnded(tasks.Task{ID: 2})
 
 		mockTaskPrinter.EXPECT().
 			Print(tasks.Task{ID: 3, ParentID: 2})
 
-		t.DumpBackTrace(tasks.Task{ID: 3, ParentID: 2})
+		tracer.DumpBackTrace(tasks.Task{ID: 3, ParentID: 2})
 	})
-})
+}

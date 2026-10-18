@@ -1,8 +1,8 @@
 package mmu
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-2 control-behavior tests for the MMU: it asserts the
@@ -23,7 +24,9 @@ import (
 // produces a vmprotocol.TranslationRsp on the Top port and removes itself from
 // WalkingTranslations. The tests below rely on that by inserting mapped pages,
 // keeping the walk entirely local.
-var _ = Describe("MMU control behavior", func() {
+//
+//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUControlBehavior(t *testing.T) {
 	var (
 		engine    timing.Engine
 		sim       timing.Simulation
@@ -34,7 +37,6 @@ var _ = Describe("MMU control behavior", func() {
 	)
 
 	build := func() {
-
 		comp = modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
@@ -51,7 +53,6 @@ var _ = Describe("MMU control behavior", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
-
 	}
 
 	// insertMappedPage adds a page that resolves locally: it is not migrating
@@ -94,14 +95,18 @@ var _ = Describe("MMU control behavior", func() {
 		return req
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build()
-	})
+	}
 
-	It("drains all in-flight translations before acking Drain", func() {
+	t.Run("drains all in-flight translations before acking Drain", func(t *testing.T) {
+		setup1(t)
+
 		const n = 3
 		for i := range n {
 			vAddr := uint64(0x1000 * (i + 1))
@@ -114,7 +119,7 @@ var _ = Describe("MMU control behavior", func() {
 			len(comp.State.WalkingTranslations) != n; i++ {
 			modelingtest.Tick(comp)
 		}
-		Expect(comp.State.WalkingTranslations).To(HaveLen(n))
+		require.Len(t, comp.State.WalkingTranslations, n)
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
@@ -140,21 +145,22 @@ var _ = Describe("MMU control behavior", func() {
 
 					gotDrainRsp = true
 				}
-
 			}
 		}
 
-		Expect(gotDrainRsp).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		require.True(t, gotDrainRsp)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
 		// Every in-flight walk finished, and none remain, by the time the
 		// async Drain ack is sent.
-		Expect(completed).To(Equal(n))
-		Expect(comp.State.WalkingTranslations).To(BeEmpty())
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
+		require.Equal(t, n, completed)
+		require.Empty(t, comp.State.WalkingTranslations)
+		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
 	})
 
-	It("freezes incoming translations while paused", func() {
+	t.Run("freezes incoming translations while paused", func(t *testing.T) {
+		setup1(t)
+
 		comp.State.ControlState = memcontrolprotocol.StatePaused
 
 		insertMappedPage(0x1000)
@@ -167,14 +173,18 @@ var _ = Describe("MMU control behavior", func() {
 		// The request is neither consumed nor turned into a walk, and no
 		// response is produced, while paused.
 		_, present0 := topPort.PeekIncoming()
-		Expect(present0).To(BeTrue())
-		Expect(comp.State.WalkingTranslations).To(BeEmpty())
+		require.True(t, present0)
+		require.Empty(t, comp.State.WalkingTranslations)
 		_, present1 := topPort.RetrieveOutgoing()
-		Expect(present1).To(BeFalse())
+		require.False(t, present1)
 	})
 
-	DescribeTable("Reset wipes in-flight walk state from any control state",
-		func(startState memcontrolprotocol.State) {
+	t.Run("Reset wipes in-flight walk state from any control state", func(t *testing.T) {
+		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+			t.Helper()
+
+			setup1(t)
+
 			insertMappedPage(0x1000)
 			topPort.Deliver(makeTranslationReq(0x1000))
 
@@ -183,7 +193,7 @@ var _ = Describe("MMU control behavior", func() {
 				len(comp.State.WalkingTranslations) == 0; i++ {
 				modelingtest.Tick(comp)
 			}
-			Expect(comp.State.WalkingTranslations).ToNot(BeEmpty())
+			require.NotEmpty(t, comp.State.WalkingTranslations)
 
 			comp.State.ControlState = startState
 
@@ -200,24 +210,20 @@ var _ = Describe("MMU control behavior", func() {
 				}
 			}
 
-			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			Expect(rsp.RspTo).To(Equal(reset.ID))
-			Expect(comp.State.WalkingTranslations).To(BeEmpty())
-			Expect(comp.State.ControlState).
-				To(Equal(memcontrolprotocol.StateEnabled))
-		},
-		Entry("from Enabled", memcontrolprotocol.StateEnabled),
-		Entry("from Paused", memcontrolprotocol.StatePaused),
-		// The Draining case is covered by the dedicated "completes a pending
-		// Drain before servicing a queued Reset" test below: under strict
-		// serialization a Reset queued during a drain waits for the drain to
-		// ack, so this shared closure (which forces an in-flight walk then sets
-		// the state) no longer models the draining path.
-	)
+			require.True(t, gotRsp)
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, reset.ID, rsp.RspTo)
+			require.Empty(t, comp.State.WalkingTranslations)
+			require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+		}
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+	})
 
-	It("completes a pending Drain before servicing a queued Reset", func() {
+	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
+		setup1(t)
+
 		// The component is draining and already quiescent (no in-flight
 		// walks): completePendingDrain acks the Drain. Control commands are
 		// serialized with no preemption, so a Reset queued behind the drain is
@@ -239,18 +245,17 @@ var _ = Describe("MMU control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		// Two acks, in order: the Drain completion (RspTo 999) then the Reset.
-		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
-		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
+		require.Len(t, rsps, 2)
+		require.Equal(t, memcontrolprotocol.CmdDrain, rsps[0].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, uint64(999), rsps[0].RspTo)
+		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, reset.ID, rsps[1].RspTo)
+		require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
 	})
-})
+}

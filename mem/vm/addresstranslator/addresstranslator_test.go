@@ -3,8 +3,8 @@ package addresstranslator
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -16,6 +16,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -55,11 +56,12 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-var _ = Describe("Address Translator", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestAddressTranslator(t *testing.T) {
 	var (
 		engine          timing.Engine
 		sim             timing.Simulation
-		t               *Comp
+		translator      *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
 		translationPort messaging.Port
@@ -78,19 +80,19 @@ var _ = Describe("Address Translator", func() {
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("MemPort")}
 		spec.Translation.Destinations = []messaging.RemotePort{messaging.RemotePort("TranslationProvider")}
 
-		t = modeling.MakeBuilder[*Comp](spec).
+		translator = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("AddressTranslator")
 		tPorts := makePorts("AddressTranslator", topBufSize)
-		t.BindPort("Top", tPorts.Top)
-		t.BindPort("Bottom", tPorts.Bottom)
-		t.BindPort("Translation", tPorts.Translation)
-		t.BindPort("Control", tPorts.Control)
+		translator.BindPort("Top", tPorts.Top)
+		translator.BindPort("Bottom", tPorts.Bottom)
+		translator.BindPort("Translation", tPorts.Translation)
+		translator.BindPort("Control", tPorts.Control)
 
-		topPort = t.Ports.Top
-		bottomPort = t.Ports.Bottom
-		translationPort = t.Ports.Translation
-		ctrlPort = t.Ports.Control
+		topPort = translator.Ports.Top
+		bottomPort = translator.Ports.Bottom
+		translationPort = translator.Ports.Translation
+		ctrlPort = translator.Ports.Control
 
 		for _, p := range []messaging.Port{
 			topPort, bottomPort, translationPort, ctrlPort,
@@ -102,22 +104,26 @@ var _ = Describe("Address Translator", func() {
 			panic(err)
 		}
 
-		tParseTransMW = t.Middlewares.ParseTranslate
-		tRespondPipeMW = t.Middlewares.RespondPipeline
+		tParseTransMW = translator.Middlewares.ParseTranslate
+		tRespondPipeMW = translator.Middlewares.RespondPipeline
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		build(topBufSize)
-	})
+	}
 
-	Context("translate stage", func() {
+	t.Run("translate stage", func(t *testing.T) {
 		var (
 			req messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			req = messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x100,
 				AccessByteSize: 4,
@@ -128,15 +134,20 @@ var _ = Describe("Address Translator", func() {
 
 				TrafficBytes: 12,
 				TrafficClass: "memprotocol.ReadReq"}
+		}
 
-		})
+		t.Run("should do nothing if there is no request", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
 
-		It("should do nothing if there is no request", func() {
 			madeProgress := tParseTransMW.translate()
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should send translation", func() {
+		t.Run("should send translation", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			payload1 := req.Payload.(memprotocol.ReadReq)
 			payload1.Address = 0x1040
 			req.Payload = payload1
@@ -144,36 +155,40 @@ var _ = Describe("Address Translator", func() {
 
 			needTick := tParseTransMW.translate()
 
-			Expect(needTick).To(BeTrue())
-			updatedState := &t.State
-			Expect(updatedState.Transactions).To(HaveLen(1))
+			require.True(t, needTick)
+			updatedState := &translator.State
+			require.Len(t, updatedState.Transactions, 1)
 
 			sent, _ := translationPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationReq{}}))
+			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationReq{}}, sent)
 			transReq := sent
-			Expect(updatedState.Transactions[0].TranslationReqID).
-				To(Equal(transReq.ID))
+			require.Equal(t, transReq.ID, updatedState.Transactions[0].TranslationReqID)
 		})
 
-		It("should stall if cannot send for translation", func() {
+		t.Run("should stall if cannot send for translation", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			// Fill the translation port's outgoing buffer so Send fails.
-			fillOutgoing(translationPort, translationBufSize)
+			fillOutgoing(t, translationPort, translationBufSize)
 			topPort.Deliver(req)
 
 			needTick := tParseTransMW.translate()
 
-			Expect(needTick).To(BeFalse())
-			updatedState := &t.State
-			Expect(updatedState.Transactions).To(HaveLen(0))
+			require.False(t, needTick)
+			updatedState := &translator.State
+			require.Len(t, updatedState.Transactions, 0)
 		})
 	})
 
-	Context("parse translation", func() {
+	t.Run("parse translation", func(t *testing.T) {
 		var (
 			transReq1, transReq2 messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			transReq1 = messaging.Msg{Payload: vmprotocol.TranslationReq{
 				PID:      1,
 				VAddr:    0x100,
@@ -190,20 +205,26 @@ var _ = Describe("Address Translator", func() {
 
 				TrafficClass: "vmprotocol.TranslationReq"}
 
-			t.State = state{
+			translator.State = state{
 				Transactions: []transactionState{
 					{TranslationReqID: transReq1.ID},
 					{TranslationReqID: transReq2.ID},
 				},
 			}
-		})
+		}
 
-		It("should do nothing if there is no translation return", func() {
+		t.Run("should do nothing if there is no translation return", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			needTick := tRespondPipeMW.parseTranslation()
-			Expect(needTick).To(BeFalse())
+			require.False(t, needTick)
 		})
 
-		It("should stall if send failed", func() {
+		t.Run("should stall if send failed", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			req := messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x10040,
 				AccessByteSize: 4},
@@ -223,7 +244,7 @@ var _ = Describe("Address Translator", func() {
 				RspTo:        transReq1.ID,
 				TrafficClass: "vmprotocol.TranslationRsp"}
 
-			t.State = state{
+			translator.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -237,15 +258,18 @@ var _ = Describe("Address Translator", func() {
 			}
 
 			// Fill the bottom port's outgoing buffer so Send fails.
-			fillOutgoing(bottomPort, bottomBufSize)
+			fillOutgoing(t, bottomPort, bottomBufSize)
 			translationPort.Deliver(translationRsp)
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should forward read request", func() {
+		t.Run("should forward read request", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			req := messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x10040,
 				AccessByteSize: 4},
@@ -265,7 +289,7 @@ var _ = Describe("Address Translator", func() {
 				RspTo:        transReq1.ID,
 				TrafficClass: "vmprotocol.TranslationRsp"}
 
-			t.State = state{
+			translator.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -282,28 +306,26 @@ var _ = Describe("Address Translator", func() {
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			sent, _ := bottomPort.RetrieveOutgoing()
 			read := sent
-			Expect(read.Payload.(memprotocol.ReadReq).PID).To(Equal(vm.PID(0)))
-			Expect(read.Payload.(memprotocol.ReadReq).Address).To(Equal(uint64(0x20040)))
-			Expect(read.Payload.(memprotocol.ReadReq).AccessByteSize).To(Equal(uint64(4)))
-			Expect(read.Src).To(Equal(bottomPort.AsRemote()))
+			require.Equal(t, vm.PID(0), read.Payload.(memprotocol.ReadReq).PID)
+			require.Equal(t, uint64(0x20040), read.Payload.(memprotocol.ReadReq).Address)
+			require.Equal(t, uint64(4), read.Payload.(memprotocol.ReadReq).AccessByteSize)
+			require.Equal(t, bottomPort.AsRemote(), read.Src)
 
-			updatedState := &t.State
-			Expect(updatedState.Transactions).NotTo(
-				ContainElement(
-					WithTransform(
-						func(ts transactionState) uint64 { return ts.TranslationReqID },
-						Equal(transReq1.ID),
-					),
-				),
-			)
-			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
+			updatedState := &translator.State
+			for _, transaction := range updatedState.Transactions {
+				require.NotEqual(t, transReq1.ID, transaction.TranslationReqID)
+			}
+			require.Len(t, updatedState.InflightReqToBottom, 1)
 		})
 
-		It("should forward write request", func() {
+		t.Run("should forward write request", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
 			write := messaging.Msg{Payload: memprotocol.WriteReq{
@@ -326,7 +348,7 @@ var _ = Describe("Address Translator", func() {
 				RspTo:        transReq1.ID,
 				TrafficClass: "vmprotocol.TranslationRsp"}
 
-			t.State = state{
+			translator.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -343,22 +365,22 @@ var _ = Describe("Address Translator", func() {
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			sent, _ := bottomPort.RetrieveOutgoing()
 			writeMsg := sent
-			Expect(writeMsg.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(0)))
-			Expect(writeMsg.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x20040)))
-			Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
-			Expect(writeMsg.Payload.(memprotocol.WriteReq).Data).To(Equal(data))
-			Expect(writeMsg.Payload.(memprotocol.WriteReq).DirtyMask).To(Equal(dirty))
+			require.Equal(t, vm.PID(0), writeMsg.Payload.(memprotocol.WriteReq).PID)
+			require.Equal(t, uint64(0x20040), writeMsg.Payload.(memprotocol.WriteReq).Address)
+			require.Equal(t, bottomPort.AsRemote(), writeMsg.Src)
+			require.Equal(t, data, writeMsg.Payload.(memprotocol.WriteReq).Data)
+			require.Equal(t, dirty, writeMsg.Payload.(memprotocol.WriteReq).DirtyMask)
 
-			updatedState := &t.State
-			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
+			updatedState := &translator.State
+			require.Len(t, updatedState.InflightReqToBottom, 1)
 		})
 	})
 
-	Context("respond", func() {
+	t.Run("respond", func(t *testing.T) {
 		var (
 			readFromTop   messaging.Msg
 			writeFromTop  messaging.Msg
@@ -366,7 +388,9 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup4 := func(t *testing.T) {
+			t.Helper()
+
 			readFromTop = messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x10040,
 				AccessByteSize: 4},
@@ -405,7 +429,7 @@ var _ = Describe("Address Translator", func() {
 				TrafficBytes: 12,
 				TrafficClass: "memprotocol.WriteReq"}
 
-			t.State = state{
+			translator.State = state{
 				InflightReqToBottom: []reqToBottomState{
 					{
 						ReqFromTopID:    readFromTop.ID,
@@ -429,14 +453,20 @@ var _ = Describe("Address Translator", func() {
 					},
 				},
 			}
-		})
+		}
 
-		It("should do nothing if there is no response to process", func() {
+		t.Run("should do nothing if there is no response to process", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			madeProgress := tRespondPipeMW.respond()
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should respond data ready", func() {
+		t.Run("should respond data ready", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
 				ID:           sim.NewID(),
 				RspTo:        readToBottom.ID,
@@ -447,18 +477,21 @@ var _ = Describe("Address Translator", func() {
 
 			madeProgress := tRespondPipeMW.respond()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			sent, _ := topPort.RetrieveOutgoing()
 			dr := sent
-			Expect(dr.RspTo).To(Equal(readFromTop.ID))
-			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(dataReady.Payload.(memprotocol.DataReadyRsp).Data))
+			require.Equal(t, readFromTop.ID, dr.RspTo)
+			require.Equal(t, dataReady.Payload.(memprotocol.DataReadyRsp).Data, dr.Payload.(memprotocol.DataReadyRsp).Data)
 
-			updatedState := &t.State
-			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
+			updatedState := &translator.State
+			require.Len(t, updatedState.InflightReqToBottom, 1)
 		})
 
-		It("should respond write done", func() {
+		t.Run("should respond write done", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 				ID:           sim.NewID(),
 				RspTo:        writeToBottom.ID,
@@ -469,17 +502,20 @@ var _ = Describe("Address Translator", func() {
 
 			madeProgress := tRespondPipeMW.respond()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			sent, _ := topPort.RetrieveOutgoing()
 			doneMsg := sent
-			Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
+			require.Equal(t, writeFromTop.ID, doneMsg.RspTo)
 
-			updatedState := &t.State
-			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
+			updatedState := &translator.State
+			require.Len(t, updatedState.InflightReqToBottom, 1)
 		})
 
-		It("should stall if TopPort is busy", func() {
+		t.Run("should stall if TopPort is busy", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
 				ID:           sim.NewID(),
 				RspTo:        readToBottom.ID,
@@ -487,25 +523,27 @@ var _ = Describe("Address Translator", func() {
 				TrafficClass: "memprotocol.DataReadyRsp"}
 
 			// Fill the top port's outgoing buffer so Send fails.
-			fillOutgoing(topPort, topBufSize)
+			fillOutgoing(t, topPort, topBufSize)
 			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()
 
-			Expect(madeProgress).To(BeFalse())
-			updatedState := &t.State
-			Expect(updatedState.InflightReqToBottom).To(HaveLen(2))
+			require.False(t, madeProgress)
+			updatedState := &translator.State
+			require.Len(t, updatedState.InflightReqToBottom, 2)
 		})
 	})
 
-	Context("state serialization", func() {
-		It("should pass ValidateState", func() {
+	t.Run("state serialization", func(t *testing.T) {
+		t.Run("should pass ValidateState", func(t *testing.T) {
+			setup1(t)
+
 			err := modeling.ValidateState(state{})
-			Expect(err).To(Succeed())
+			require.NoError(t, err)
 		})
 	})
 
-	Context("when handling control messages", func() {
+	t.Run("when handling control messages", func(t *testing.T) {
 		var (
 			readFromTop   messaging.Msg
 			writeFromTop  messaging.Msg
@@ -515,7 +553,9 @@ var _ = Describe("Address Translator", func() {
 			restartReq    messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup5 := func(t *testing.T) {
+			t.Helper()
+
 			readFromTop = messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x10040,
 				AccessByteSize: 4},
@@ -564,7 +604,7 @@ var _ = Describe("Address Translator", func() {
 				TrafficBytes: 4,
 				TrafficClass: "memcontrolprotocol.Req"}
 
-			nextState := &t.State
+			nextState := &translator.State
 			nextState.InflightReqToBottom = []reqToBottomState{
 				{
 					ReqFromTopID:    readFromTop.ID,
@@ -587,43 +627,50 @@ var _ = Describe("Address Translator", func() {
 					ReqToBottomType: fmt.Sprintf("%T", writeToBottom.Payload),
 				},
 			}
-		})
+		}
 
-		It("rejects Flush as unsupported", func() {
+		t.Run("rejects Flush as unsupported", func(t *testing.T) {
+			setup1(t)
+			setup5(t)
+
 			ctrlPort.Deliver(flushReq)
 
-			madeProgress := modelingtest.Tick(t)
+			madeProgress := modelingtest.Tick(translator)
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, rspMsg)
 			rsp := rspMsg
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrUnsupported))
+			require.False(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, memcontrolprotocol.ErrUnsupported, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 		})
 
-		It("clears in-flight state on Reset", func() {
+		t.Run("clears in-flight state on Reset", func(t *testing.T) {
+			setup1(t)
+			setup5(t)
+
 			ctrlPort.Deliver(restartReq)
 
-			madeProgress := modelingtest.Tick(t)
+			madeProgress := modelingtest.Tick(translator)
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, rspMsg)
 			rsp := rspMsg
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			updatedState := &t.State
-			Expect(updatedState.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
-			Expect(updatedState.InflightReqToBottom).To(BeEmpty())
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			updatedState := &translator.State
+			require.Equal(t, memcontrolprotocol.StateEnabled, updatedState.ControlState)
+			require.Empty(t, updatedState.InflightReqToBottom)
 		})
-
 	})
-})
+}
 
 // fillOutgoing fills a port's outgoing buffer with dummy messages so the next
 // CanSend returns false. Each dummy's Src equals the port (required by Send's
 // validation) and is sent to a distinct destination.
-func fillOutgoing(p messaging.Port, n int) {
+func fillOutgoing(t *testing.T, p messaging.Port, n int) {
+	t.Helper()
+
 	for i := 0; i < n; i++ {
 		dummy := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 			ID:           p.Owner().(interface{ NewID() uint64 }).NewID(),
@@ -631,7 +678,7 @@ func fillOutgoing(p messaging.Port, n int) {
 			Dst:          messaging.RemotePort("Dummy"),
 			TrafficClass: "memprotocol.WriteDoneRsp"}
 
-		Expect(p.CanSend()).To(BeTrue())
+		require.True(t, p.CanSend())
 		p.Send(dummy)
 	}
 }

@@ -33,7 +33,7 @@ oracles/build_oracles.sh                    # -> oracles/.oracles/...
 python3 run_oracles.py                      # -> data/reference.csv, traces/scenarios.json
 
 # 3. Check Akita against the committed reference (fast, no C++):
-go test ./mem/dram/ --ginkgo.focus="Tier 5"
+go test ./mem/dram/ -run '^TestTier5' -count=1
 ```
 
 `run_oracles.py` is the single source of truth: it defines the canonical DDR4

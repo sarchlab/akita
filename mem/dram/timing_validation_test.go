@@ -1,8 +1,9 @@
 package dram
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // buildDDR4TimingAndCycles generates the Timing and cmdCycles for the DDR4
@@ -34,22 +35,27 @@ func newDDR4State() *state {
 	return st
 }
 
-var _ = Describe("Timing Validation", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTimingValidation(t *testing.T) {
 	var (
 		timing    dramTiming
 		cmdCycles map[commandKind]int
 		st        *state
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		timing, cmdCycles = buildDDR4TimingAndCycles()
 		st = newDDR4State()
-	})
+	}
 
-	Describe("TestActivateOpensBank", func() {
-		It("should open the bank and require tRCD before a Read", func() {
+	t.Run("TestActivateOpensBank", func(t *testing.T) {
+		t.Run("should open the bank and require tRCD before a Read", func(t *testing.T) {
+			setup1(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+			require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 
 			cmd := &commandState{
 				Kind: int(cmdKindActivate),
@@ -65,15 +71,17 @@ var _ = Describe("Timing Validation", func() {
 			updateTiming(timing, st, cmd)
 
 			// Bank should now be open with the correct row.
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
-			Expect(bs.OpenRow).To(Equal(uint64(42)))
+			require.Equal(t, bankStateOpen, bankStateKind(bs.State))
+			require.Equal(t, uint64(42), bs.OpenRow)
 			// Activate→Read gap = tRCD - tAL = 16 - 0 = 16
-			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(16))
+			require.Equal(t, 16, bs.CyclesToCmdAvailable[cmdKindRead])
 		})
 	})
 
-	Describe("TestActivateThenRead", func() {
-		It("should allow Read after tRCD cycles", func() {
+	t.Run("TestActivateThenRead", func(t *testing.T) {
+		t.Run("should allow Read after tRCD cycles", func(t *testing.T) {
+			setup1(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			activateCmd := &commandState{
@@ -92,7 +100,7 @@ var _ = Describe("Timing Validation", func() {
 			// After Activate, the SameBank timing for Activate→Read
 			// should be tRCD - tAL = 16.
 			readKey := cmdKindRead
-			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(16))
+			require.Equal(t, 16, bs.CyclesToCmdAvailable[readKey])
 
 			// Tick 16 cycles to drain the timing constraint.
 			for range 16 {
@@ -100,7 +108,7 @@ var _ = Describe("Timing Validation", func() {
 			}
 
 			// After 16 ticks the Read constraint should be 0.
-			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(0))
+			require.Equal(t, 0, bs.CyclesToCmdAvailable[readKey])
 
 			// Now a Read command should be ready.
 			readCmd := &commandState{
@@ -114,13 +122,15 @@ var _ = Describe("Timing Validation", func() {
 			}
 			spec := DDR4Spec()
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindRead, commandKind(ready.Kind))
 		})
 	})
 
-	Describe("TestReadTiming", func() {
-		It("should set correct inter-read timing constraints", func() {
+	t.Run("TestReadTiming", func(t *testing.T) {
+		t.Run("should set correct inter-read timing constraints", func(t *testing.T) {
+			setup1(t)
+
 			// First open the bank.
 			bs00 := findBankState(&st.BankStates, 0, 0, 0)
 			activateCmd := &commandState{
@@ -155,22 +165,24 @@ var _ = Describe("Timing Validation", func() {
 
 			// Same bank: Read→Read constraint should be tCCDL = 6
 			readKey := cmdKindRead
-			Expect(bs00.CyclesToCmdAvailable[readKey]).To(Equal(6))
+			require.Equal(t, 6, bs00.CyclesToCmdAvailable[readKey])
 
 			// Other bank in same bank group (e.g., bank index 1 in group 0):
 			// should also be tCCDL = 6.
 			bs01 := findBankState(&st.BankStates, 0, 0, 1)
-			Expect(bs01.CyclesToCmdAvailable[readKey]).To(Equal(6))
+			require.Equal(t, 6, bs01.CyclesToCmdAvailable[readKey])
 
 			// Bank in a different bank group but same rank (e.g., group 1, bank 0):
 			// should be tCCDS = 4.
 			bs10 := findBankState(&st.BankStates, 0, 1, 0)
-			Expect(bs10.CyclesToCmdAvailable[readKey]).To(Equal(4))
+			require.Equal(t, 4, bs10.CyclesToCmdAvailable[readKey])
 		})
 	})
 
-	Describe("TestPrechargeToActivate", func() {
-		It("should require tRP cycles before Activate after Precharge", func() {
+	t.Run("TestPrechargeToActivate", func(t *testing.T) {
+		t.Run("should require tRP cycles before Activate after Precharge", func(t *testing.T) {
+			setup1(t)
+
 			// Use a fresh bank with no prior Activate timing residue.
 			// We manually set the bank to Open state and clear timing
 			// to isolate the Precharge→Activate constraint.
@@ -193,10 +205,10 @@ var _ = Describe("Timing Validation", func() {
 
 			// Precharge→Activate constraint should be tRP = 16.
 			activateKey := cmdKindActivate
-			Expect(bs.CyclesToCmdAvailable[activateKey]).To(Equal(16))
+			require.Equal(t, 16, bs.CyclesToCmdAvailable[activateKey])
 
 			// Bank should now be closed.
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+			require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 
 			// Tick 16 cycles to drain the constraint.
 			for range 16 {
@@ -204,7 +216,7 @@ var _ = Describe("Timing Validation", func() {
 			}
 
 			// Now Activate should be ready (constraint == 0).
-			Expect(bs.CyclesToCmdAvailable[activateKey]).To(Equal(0))
+			require.Equal(t, 0, bs.CyclesToCmdAvailable[activateKey])
 
 			// Verify by issuing a Read to the closed bank — getReadyCommand
 			// should return Activate (the required predecessor) since the
@@ -220,13 +232,15 @@ var _ = Describe("Timing Validation", func() {
 			}
 			spec := DDR4Spec()
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindActivate, commandKind(ready.Kind))
 		})
 	})
 
-	Describe("TestRowBufferHitVsMiss", func() {
-		It("should return Read directly for row hit, Precharge for row miss", func() {
+	t.Run("TestRowBufferHitVsMiss", func(t *testing.T) {
+		t.Run("should return Read directly for row hit, Precharge for row miss", func(t *testing.T) {
+			setup1(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open the bank to row 200.
@@ -247,8 +261,8 @@ var _ = Describe("Timing Validation", func() {
 				tickBanks(st)
 			}
 
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
-			Expect(bs.OpenRow).To(Equal(uint64(200)))
+			require.Equal(t, bankStateOpen, bankStateKind(bs.State))
+			require.Equal(t, uint64(200), bs.OpenRow)
 
 			// Row buffer HIT: command for same row (200) → should return Read.
 			hitCmd := &commandState{
@@ -261,7 +275,7 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 			hitKind := getRequiredCommandKind(bs, hitCmd)
-			Expect(hitKind).To(Equal(cmdKindRead))
+			require.Equal(t, cmdKindRead, hitKind)
 
 			// Row buffer MISS: command for different row (999) → should return Precharge.
 			missCmd := &commandState{
@@ -274,7 +288,7 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 			missKind := getRequiredCommandKind(bs, missCmd)
-			Expect(missKind).To(Equal(cmdKindPrecharge))
+			require.Equal(t, cmdKindPrecharge, missKind)
 
 			// Also verify Write hit/miss behaves the same way.
 			writeHitCmd := &commandState{
@@ -287,7 +301,7 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 			writeHitKind := getRequiredCommandKind(bs, writeHitCmd)
-			Expect(writeHitKind).To(Equal(cmdKindWrite))
+			require.Equal(t, cmdKindWrite, writeHitKind)
 
 			writeMissCmd := &commandState{
 				Kind: int(cmdKindWrite),
@@ -299,7 +313,7 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 			writeMissKind := getRequiredCommandKind(bs, writeMissCmd)
-			Expect(writeMissKind).To(Equal(cmdKindPrecharge))
+			require.Equal(t, cmdKindPrecharge, writeMissKind)
 		})
 	})
-})
+}

@@ -1,8 +1,8 @@
 package writethrough_test
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	. "github.com/sarchlab/akita/v5/mem/cache/writethrough"
@@ -13,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // testDriver owns the ports a test drives by hand. The test polls those ports,
@@ -31,7 +32,8 @@ func newDriverPort(name string, bufSize int) messaging.Port {
 	return p
 }
 
-var _ = Describe("Cache", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestCache(t *testing.T) {
 	var (
 		engine              timing.Engine
 		sim                 timing.Simulation
@@ -56,7 +58,9 @@ var _ = Describe("Cache", func() {
 		return msgs
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		connection = direct.NewConnection("Conn", sim, timing.GHz)
@@ -98,10 +102,11 @@ var _ = Describe("Cache", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	t.Run("should do read miss", func(t *testing.T) {
+		setup1(t)
 
-	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x100,
@@ -115,15 +120,17 @@ var _ = Describe("Cache", func() {
 
 		c.Ports.Top.Deliver(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsps := drainResponses()
-		Expect(rsps).To(HaveLen(1))
+		require.Len(t, rsps, 1)
 		dr := rsps[0]
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		require.Equal(t, []byte{1, 2, 3, 4}, dr.Payload.(memprotocol.DataReadyRsp).Data)
 	})
 
-	It("should do read miss coalesce", func() {
+	t.Run("should do read miss coalesce", func(t *testing.T) {
+		setup1(t)
+
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x100,
@@ -149,7 +156,7 @@ var _ = Describe("Cache", func() {
 
 		c.Ports.Top.Deliver(read2)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// Without coalescing, the MSHR-hit transaction (read2) may be
 		// finalized before the fetcher (read1). Accept responses in
@@ -164,11 +171,13 @@ var _ = Describe("Cache", func() {
 			}
 		}
 
-		Expect(received["1234"]).To(BeTrue())
-		Expect(received["5678"]).To(BeTrue())
+		require.True(t, received["1234"])
+		require.True(t, received["5678"])
 	})
 
-	It("should do read hit", func() {
+	t.Run("should do read hit", func(t *testing.T) {
+		setup1(t)
+
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x100,
@@ -181,12 +190,12 @@ var _ = Describe("Cache", func() {
 			TrafficClass: "req"}
 
 		c.Ports.Top.Deliver(read1)
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 		t1 := engine.CurrentTime()
 
 		rsps := drainResponses()
-		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		require.Len(t, rsps, 1)
+		require.Equal(t, []byte{1, 2, 3, 4}, rsps[0].Payload.(memprotocol.DataReadyRsp).Data)
 
 		read2 := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x104,
@@ -199,17 +208,19 @@ var _ = Describe("Cache", func() {
 			TrafficClass: "req"}
 
 		c.Ports.Top.Deliver(read2)
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 		t2 := engine.CurrentTime()
 
 		rsps = drainResponses()
-		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+		require.Len(t, rsps, 1)
+		require.Equal(t, []byte{5, 6, 7, 8}, rsps[0].Payload.(memprotocol.DataReadyRsp).Data)
 
-		Expect(t2 - t1).To(BeNumerically("<", t1))
+		require.True(t, (t2-t1) < (t1), "expected t2 - t1 < t1")
 	})
 
-	It("should write partial line", func() {
+	t.Run("should write partial line", func(t *testing.T) {
+		setup1(t)
+
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x100,
 			Data:    []byte{1, 2, 3, 4}},
@@ -222,17 +233,19 @@ var _ = Describe("Cache", func() {
 
 		c.Ports.Top.Deliver(write)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsps := drainResponses()
-		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].RspTo).To(Equal(write.ID))
+		require.Len(t, rsps, 1)
+		require.Equal(t, write.ID, rsps[0].RspTo)
 
 		data := dramStorage.Read(0x100, 4)
-		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
+		require.Equal(t, []byte{1, 2, 3, 4}, data)
 	})
 
-	It("should write full line", func() {
+	t.Run("should write full line", func(t *testing.T) {
+		setup1(t)
+
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x100,
 			Data: []byte{
@@ -253,17 +266,16 @@ var _ = Describe("Cache", func() {
 			TrafficClass: "req"}
 
 		c.Ports.Top.Deliver(write)
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsps := drainResponses()
-		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].RspTo).To(Equal(write.ID))
+		require.Len(t, rsps, 1)
+		require.Equal(t, write.ID, rsps[0].RspTo)
 
 		data := dramStorage.Read(0x100, 4)
-		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
+		require.Equal(t, []byte{1, 2, 3, 4}, data)
 	})
-
-})
+}
 
 func (o testDriver) Name() string                           { return "TestDriver" }
 func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

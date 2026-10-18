@@ -1,11 +1,13 @@
 package dram
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("tFAW and Refresh", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTFAWAndRefresh(t *testing.T) {
 	var (
 		spec      Spec
 		st        *state
@@ -13,8 +15,10 @@ var _ = Describe("tFAW and Refresh", func() {
 		timing    dramTiming
 	)
 
-	Describe("tFAW Constraint", func() {
-		BeforeEach(func() {
+	t.Run("tFAW Constraint", func(t *testing.T) {
+		setup1 := func(t *testing.T) {
+			t.Helper()
+
 			spec = DDR4Spec()
 			spec.TFAW = 28
 
@@ -25,16 +29,18 @@ var _ = Describe("tFAW and Refresh", func() {
 				BankStates: initBankStatesFlat(
 					spec.NumRank, spec.NumBankGroup, spec.NumBank),
 			}
-		})
+		}
 
-		It("should block 5th activate within tFAW window", func() {
+		t.Run("should block 5th activate within tFAW window", func(t *testing.T) {
+			setup1(t)
+
 			// Issue 4 activates on different banks in rank 0.
 			// Each at successive ticks so they're all within tFAW.
 			for i := range 4 {
 				st.TickCount = uint64(i * 2) // spread by 2 ticks
 				bs := findBankState(&st.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
-				Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+				require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 
 				cmd := &commandState{
 					Kind: int(cmdKindActivate),
@@ -71,10 +77,12 @@ var _ = Describe("tFAW and Refresh", func() {
 			// getReadyCommand should determine CmdKindActivate is needed
 			// (bank is closed) but tFAW should block it.
 			ready := getReadyCommand(&spec, st, bs, cmd)
-			Expect(ready).To(BeNil())
+			require.Nil(t, ready)
 		})
 
-		It("should allow activate after tFAW window passes", func() {
+		t.Run("should allow activate after tFAW window passes", func(t *testing.T) {
+			setup1(t)
+
 			// Issue 4 activates at tick 0, 1, 2, 3
 			for i := range 4 {
 				st.TickCount = uint64(i)
@@ -113,11 +121,13 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			// Now the window has passed, activate should be allowed.
 			ready := getReadyCommand(&spec, st, bs, cmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindActivate, commandKind(ready.Kind))
 		})
 
-		It("should not apply tFAW when TFAW is 0", func() {
+		t.Run("should not apply tFAW when TFAW is 0", func(t *testing.T) {
+			setup1(t)
+
 			spec.TFAW = 0
 
 			// Issue 4 activates
@@ -155,12 +165,14 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			// tFAW=0 means no constraint
 			ready := getReadyCommand(&spec, st, bs, cmd)
-			Expect(ready).NotTo(BeNil())
+			require.NotNil(t, ready)
 		})
 	})
 
-	Describe("Periodic Refresh", func() {
-		BeforeEach(func() {
+	t.Run("Periodic Refresh", func(t *testing.T) {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			spec = DDR4Spec()
 			spec.TREFI = 20 // small value for testing
 			spec.TRFC = 5
@@ -169,28 +181,32 @@ var _ = Describe("tFAW and Refresh", func() {
 				BankStates: initBankStatesFlat(
 					spec.NumRank, spec.NumBankGroup, spec.NumBank),
 			}
-		})
+		}
 
-		It("should trigger refresh after TREFI ticks and stall for TRFC", func() {
+		t.Run("should trigger refresh after TREFI ticks and stall for TRFC", func(t *testing.T) {
+			setup2(t)
+
 			// Simulate the countdown
-			Expect(st.RefreshInProgress).To(BeFalse())
+			require.False(t, st.RefreshInProgress)
 
 			// After TREFI ticks, refresh should trigger
 			for i := range spec.TREFI {
 				_ = i
 				progress := runFakeStallRefresh(&spec, st)
 				if i < spec.TREFI-1 {
-					Expect(st.RefreshInProgress).To(BeFalse())
+					require.False(t, st.RefreshInProgress)
 				}
 				_ = progress
 			}
 
-			Expect(st.RefreshInProgress).To(BeTrue())
-			Expect(st.RefreshCyclesRemaining).To(Equal(spec.TRFC))
-			Expect(st.RefreshCycleCounter).To(Equal(0))
+			require.True(t, st.RefreshInProgress)
+			require.Equal(t, spec.TRFC, st.RefreshCyclesRemaining)
+			require.Equal(t, 0, st.RefreshCycleCounter)
 		})
 
-		It("should complete refresh after TRFC cycles", func() {
+		t.Run("should complete refresh after TRFC cycles", func(t *testing.T) {
+			setup2(t)
+
 			// Set up state as if refresh just triggered
 			st.RefreshInProgress = true
 			st.RefreshCyclesRemaining = spec.TRFC
@@ -198,22 +214,24 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			// Tick TRFC times
 			for range spec.TRFC {
-				Expect(st.RefreshInProgress).To(BeTrue())
+				require.True(t, st.RefreshInProgress)
 				runFakeStallRefresh(&spec, st)
 			}
 
 			// After TRFC ticks, refresh should be complete
-			Expect(st.RefreshInProgress).To(BeFalse())
+			require.False(t, st.RefreshInProgress)
 		})
 
-		It("should not trigger refresh when TREFI is 0", func() {
+		t.Run("should not trigger refresh when TREFI is 0", func(t *testing.T) {
+			setup2(t)
+
 			spec.TREFI = 0
 
 			for range 100 {
 				runFakeStallRefresh(&spec, st)
 			}
 
-			Expect(st.RefreshInProgress).To(BeFalse())
+			require.False(t, st.RefreshInProgress)
 		})
 	})
-})
+}

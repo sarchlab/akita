@@ -3,11 +3,12 @@ package tracing
 import (
 	"os"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // Simple test time teller implementation
@@ -15,15 +16,16 @@ type testTimeTeller struct {
 	currentTime timing.VTimeInPicoSec
 }
 
-func (t *testTimeTeller) CurrentTime() timing.VTimeInPicoSec {
-	return t.currentTime
+func (subject *testTimeTeller) CurrentTime() timing.VTimeInPicoSec {
+	return subject.currentTime
 }
 
-func (t *testTimeTeller) SetCurrentTime(time timing.VTimeInPicoSec) {
-	t.currentTime = time
+func (subject *testTimeTeller) SetCurrentTime(time timing.VTimeInPicoSec) {
+	subject.currentTime = time
 }
 
-var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 	var (
 		timeTeller   *testTimeTeller
 		dataRecorder datarecording.DataRecorder
@@ -31,23 +33,30 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 		dbPath       string
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		timeTeller = &testTimeTeller{}
 		dbPath = "test_trace_milestone"
 		os.Remove(dbPath + ".sqlite3")
 		dataRecorder = datarecording.NewDataRecorder(dbPath + ".sqlite3")
 		tracer = NewDBTracer(timeTeller, dataRecorder)
-	})
+	}
 
-	AfterEach(func() {
+	cleanup2 := func(t *testing.T) {
+		t.Helper()
+
 		if dataRecorder != nil {
 			dataRecorder.Close()
 			os.Remove(dbPath + ".sqlite3")
 		}
-	})
+	}
 
-	Context("MilestoneAdded with same timestamp", func() {
-		It("should only record the first milestone when multiple milestones occur at the same time", func() {
+	t.Run("MilestoneAdded with same timestamp", func(t *testing.T) {
+		t.Run("should only record the first milestone when multiple milestones occur at the same time", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			tracer.StartTracing()
 
 			milestone1 := tasks.Milestone{
@@ -79,12 +88,15 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 			tracer.MilestoneAdded(milestone3) // Same time, different milestone - should be ignored
 
 			task := tracer.tracingTasks[uint64(1)]
-			Expect(task.Milestones).To(HaveLen(1), "Only first milestone should be recorded at same time")
-			Expect(task.Milestones[0].ID).To(Equal(uint64(10)))
-			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInPicoSec(100)))
+			require.Len(t, task.Milestones, 1, "Only first milestone should be recorded at same time")
+			require.Equal(t, uint64(10), task.Milestones[0].ID)
+			require.Equal(t, timing.VTimeInPicoSec(100), task.Milestones[0].Time)
 		})
 
-		It("should allow milestones for different tasks at the same time", func() {
+		t.Run("should allow milestones for different tasks at the same time", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			tracer.StartTracing()
 
 			milestone1 := tasks.Milestone{
@@ -108,13 +120,16 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 
 			task1 := tracer.tracingTasks[uint64(1)]
 			task2 := tracer.tracingTasks[uint64(2)]
-			Expect(task1.Milestones).To(HaveLen(1))
-			Expect(task2.Milestones).To(HaveLen(1))
-			Expect(task1.Milestones[0].ID).To(Equal(uint64(10)))
-			Expect(task2.Milestones[0].ID).To(Equal(uint64(11)))
+			require.Len(t, task1.Milestones, 1)
+			require.Len(t, task2.Milestones, 1)
+			require.Equal(t, uint64(10), task1.Milestones[0].ID)
+			require.Equal(t, uint64(11), task2.Milestones[0].ID)
 		})
 
-		It("should allow milestones for same task at different times", func() {
+		t.Run("should allow milestones for same task at different times", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			tracer.StartTracing()
 
 			milestone1 := tasks.Milestone{
@@ -138,12 +153,15 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 			tracer.MilestoneAdded(milestone2)
 
 			task := tracer.tracingTasks[uint64(1)]
-			Expect(task.Milestones).To(HaveLen(2))
-			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInPicoSec(100)))
-			Expect(task.Milestones[1].Time).To(Equal(timing.VTimeInPicoSec(200)))
+			require.Len(t, task.Milestones, 2)
+			require.Equal(t, timing.VTimeInPicoSec(100), task.Milestones[0].Time)
+			require.Equal(t, timing.VTimeInPicoSec(200), task.Milestones[1].Time)
 		})
 
-		It("should still prevent identical milestones from being recorded twice", func() {
+		t.Run("should still prevent identical milestones from being recorded twice", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			tracer.StartTracing()
 
 			milestone := tasks.Milestone{
@@ -158,10 +176,13 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 			tracer.MilestoneAdded(milestone) // Same milestone again
 
 			task := tracer.tracingTasks[uint64(1)]
-			Expect(task.Milestones).To(HaveLen(1))
+			require.Len(t, task.Milestones, 1)
 		})
 
-		It("should keep a repeated (kind, what) at different times", func() {
+		t.Run("should keep a repeated (kind, what) at different times", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			tracer.StartTracing()
 
 			m1 := tasks.Milestone{
@@ -185,9 +206,9 @@ var _ = Describe("DBTracer tasks.Milestone Deduplication", func() {
 			tracer.MilestoneAdded(m2)
 
 			task := tracer.tracingTasks[uint64(1)]
-			Expect(task.Milestones).To(HaveLen(2))
-			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInPicoSec(100)))
-			Expect(task.Milestones[1].Time).To(Equal(timing.VTimeInPicoSec(200)))
+			require.Len(t, task.Milestones, 2)
+			require.Equal(t, timing.VTimeInPicoSec(100), task.Milestones[0].Time)
+			require.Equal(t, timing.VTimeInPicoSec(200), task.Milestones[1].Time)
 		})
 	})
-})
+}

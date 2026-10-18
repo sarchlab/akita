@@ -6,20 +6,24 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/queueing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Bankstage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBankstage(t *testing.T) {
 	var (
 		storage *mem.Storage
 		s       *bankStage
 		c       *pipelineMW
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := state{
@@ -61,15 +65,19 @@ var _ = Describe("Bankstage", func() {
 			bankID:         0,
 			numReqPerCycle: 1,
 		}
-	})
+	}
 
-	It("should do nothing if no request", func() {
+	t.Run("should do nothing if no request", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := s.Tick()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should insert transactions into pipeline", func() {
+	t.Run("should insert transactions into pipeline", func(t *testing.T) {
+		setup1(t)
+
 		next := &c.comp.State
 
 		// Add a transaction
@@ -78,16 +86,18 @@ var _ = Describe("Bankstage", func() {
 
 		madeProgress := s.Tick()
 
-		Expect(madeProgress).To(BeTrue())
-		Expect(next.BankPipelines[0].Stages()).To(HaveLen(1))
+		require.True(t, madeProgress)
+		require.Len(t, next.BankPipelines[0].Stages(), 1)
 	})
 
-	Context("read hit", func() {
+	t.Run("read hit", func(t *testing.T) {
 		var (
 			blockSetID, blockWayID int
 		)
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			blockSetID = 0
 			blockWayID = 0
 
@@ -132,27 +142,32 @@ var _ = Describe("Bankstage", func() {
 
 			// Put in post-pipeline buffer
 			next.BankPostBufs[0].Push(0)
-		})
+		}
 
-		It("should read", func() {
+		t.Run("should read", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &c.comp.State
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			trans := &next.Transactions[0]
-			Expect(trans.Data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(trans.Done).To(BeTrue())
-			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
+			require.Equal(t, []byte{5, 6, 7, 8}, trans.Data)
+			require.True(t, trans.Done)
+			require.Equal(t, 0, next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount)
 		})
 	})
 
-	Context("write", func() {
+	t.Run("write", func(t *testing.T) {
 		var (
 			blockSetID, blockWayID int
 		)
 
-		BeforeEach(func() {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			blockSetID = 0
 			blockWayID = 0
 
@@ -206,17 +221,20 @@ var _ = Describe("Bankstage", func() {
 			)
 
 			next.BankPostBufs[0].Push(0)
-		})
+		}
 
-		It("should write", func() {
+		t.Run("should write", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			next := &c.comp.State
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
+			require.True(t, madeProgress)
+			require.False(t, next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked)
 			data := storage.Read(0x400, 64)
-			Expect(data).To(Equal([]byte{
+			require.Equal(t, []byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				0, 0, 0, 0, 0, 0, 0, 0,
@@ -225,16 +243,18 @@ var _ = Describe("Bankstage", func() {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0,
-			}))
+			}, data)
 		})
 	})
 
-	Context("write fetched", func() {
+	t.Run("write fetched", func(t *testing.T) {
 		var (
 			blockSetID, blockWayID int
 		)
 
-		BeforeEach(func() {
+		setup4 := func(t *testing.T) {
+			t.Helper()
+
 			blockSetID = 0
 			blockWayID = 0
 
@@ -269,24 +289,29 @@ var _ = Describe("Bankstage", func() {
 			)
 
 			next.BankPostBufs[0].Push(0)
-		})
+		}
 
-		It("should write fetched", func() {
+		t.Run("should write fetched", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			next := &c.comp.State
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
+			require.True(t, madeProgress)
+			require.False(t, next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked)
 			trans := &next.Transactions[0]
 			data := storage.Read(0x400, 64)
-			Expect(data).To(Equal(trans.Data))
+			require.Equal(t, trans.Data, data)
 		})
 
-		Context("with an MSHR-coalesced write waiter", func() {
+		t.Run("with an MSHR-coalesced write waiter", func(t *testing.T) {
 			var coalescedWriteMeta messaging.Msg
 
-			BeforeEach(func() {
+			setup5 := func(t *testing.T) {
+				t.Helper()
+
 				next := &c.comp.State
 
 				// Fetcher is the read at index 0 (set up above). Append
@@ -309,30 +334,38 @@ var _ = Describe("Bankstage", func() {
 						MSHRFillFetcherIdx: 0,
 					},
 				)
-			})
+			}
 
-			It("does not complete the coalesced write when its bottom ack hasn't arrived", func() {
+			t.Run("does not complete the coalesced write when its bottom ack hasn't arrived", func(t *testing.T) {
+				setup1(t)
+				setup4(t)
+				setup5(t)
+
 				next := &c.comp.State
 
 				madeProgress := s.Tick()
 
-				Expect(madeProgress).To(BeTrue())
+				require.True(t, madeProgress)
 				coalesced := &next.Transactions[1]
-				Expect(coalesced.MSHRFillDone).To(BeTrue())
-				Expect(coalesced.Done).To(BeFalse())
+				require.True(t, coalesced.MSHRFillDone)
+				require.False(t, coalesced.Done)
 			})
 
-			It("completes the coalesced write when its bottom ack already arrived", func() {
+			t.Run("completes the coalesced write when its bottom ack already arrived", func(t *testing.T) {
+				setup1(t)
+				setup4(t)
+				setup5(t)
+
 				next := &c.comp.State
 				next.Transactions[1].BottomWriteDone = true
 
 				madeProgress := s.Tick()
 
-				Expect(madeProgress).To(BeTrue())
+				require.True(t, madeProgress)
 				coalesced := &next.Transactions[1]
-				Expect(coalesced.MSHRFillDone).To(BeTrue())
-				Expect(coalesced.Done).To(BeTrue())
+				require.True(t, coalesced.MSHRFillDone)
+				require.True(t, coalesced.Done)
 			})
 		})
 	})
-})
+}

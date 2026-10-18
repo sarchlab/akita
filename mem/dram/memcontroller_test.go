@@ -1,8 +1,8 @@
 package dram
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
@@ -10,22 +10,28 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Address Operations", func() {
-	It("should map address", func() {
+func TestAddressOperations(t *testing.T) {
+	t.Run("should map address", func(t *testing.T) {
 		spec := DefaultSpec()
 
 		loc := newAddrMapping(&spec).mapAddress(0)
-		Expect(loc.Channel).To(Equal(uint64(0)))
-		Expect(loc.Rank).To(Equal(uint64(0)))
+		require.Equal(t, uint64(0), loc.Channel)
+		require.Equal(t, uint64(0), loc.Rank)
 	})
-})
+}
 
-var _ = Describe("Transaction Splitting", func() {
+func TestTransactionSplitting(t *testing.T) {
 	var ids timing.Simulation
-	BeforeEach(func() { ids = akitasim.MakeBuilder().Build() })
-	It("should split a transaction into sub-transactions", func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+		ids = akitasim.MakeBuilder().Build()
+	}
+	t.Run("should split a transaction into sub-transactions", func(t *testing.T) {
+		setup1(t)
+
 		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
@@ -40,12 +46,14 @@ var _ = Describe("Transaction Splitting", func() {
 
 		splitTransaction(ids.NewID, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
-		Expect(trans.SubTransactions).To(HaveLen(2))
-		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
-		Expect(trans.SubTransactions[1].Address).To(Equal(uint64(0x140)))
+		require.Len(t, trans.SubTransactions, 2)
+		require.Equal(t, uint64(0x100), trans.SubTransactions[0].Address)
+		require.Equal(t, uint64(0x140), trans.SubTransactions[1].Address)
 	})
 
-	It("should align to unit boundaries", func() {
+	t.Run("should align to unit boundaries", func(t *testing.T) {
+		setup1(t)
+
 		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
@@ -60,13 +68,14 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Payload = payload4
 
 		splitTransaction(ids.NewID, spec, trans)
-		Expect(trans.SubTransactions).To(HaveLen(1))
-		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
+		require.Len(t, trans.SubTransactions, 1)
+		require.Equal(t, uint64(0x100), trans.SubTransactions[0].Address)
 	})
-})
+}
 
-var _ = Describe("Bank Operations", func() {
-	It("should get required command kind for closed bank", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBankOperations(t *testing.T) {
+	t.Run("should get required command kind for closed bank", func(t *testing.T) {
 		bs := &bankState{
 			State:                int(bankStateClosed),
 			CyclesToCmdAvailable: [numCmdKind]int{},
@@ -77,10 +86,10 @@ var _ = Describe("Bank Operations", func() {
 		}
 
 		requiredKind := getRequiredCommandKind(bs, cmd)
-		Expect(requiredKind).To(Equal(cmdKindActivate))
+		require.Equal(t, cmdKindActivate, requiredKind)
 	})
 
-	It("should get required command kind for open bank - same row", func() {
+	t.Run("should get required command kind for open bank - same row", func(t *testing.T) {
 		bs := &bankState{
 			State:                int(bankStateOpen),
 			OpenRow:              10,
@@ -92,10 +101,10 @@ var _ = Describe("Bank Operations", func() {
 		}
 
 		requiredKind := getRequiredCommandKind(bs, cmd)
-		Expect(requiredKind).To(Equal(cmdKindReadPrecharge))
+		require.Equal(t, cmdKindReadPrecharge, requiredKind)
 	})
 
-	It("should get precharge for open bank - different row", func() {
+	t.Run("should get precharge for open bank - different row", func(t *testing.T) {
 		bs := &bankState{
 			State:                int(bankStateOpen),
 			OpenRow:              5,
@@ -107,10 +116,10 @@ var _ = Describe("Bank Operations", func() {
 		}
 
 		requiredKind := getRequiredCommandKind(bs, cmd)
-		Expect(requiredKind).To(Equal(cmdKindPrecharge))
+		require.Equal(t, cmdKindPrecharge, requiredKind)
 	})
 
-	It("should tick banks and count down timing gaps", func() {
+	t.Run("should tick banks and count down timing gaps", func(t *testing.T) {
 		st := &state{
 			BankStates: bankStatesFlat{
 				NumRanks:      1,
@@ -131,12 +140,12 @@ var _ = Describe("Bank Operations", func() {
 		}
 
 		progress := tickBanks(st)
-		Expect(progress).To(BeTrue())
+		require.True(t, progress)
 		bs := &st.BankStates.Entries[0].Data
-		Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(2))
+		require.Equal(t, 2, bs.CyclesToCmdAvailable[cmdKindRead])
 	})
 
-	It("should complete pending reads/writes and mark subtrans done", func() {
+	t.Run("should complete pending reads/writes and mark subtrans done", func(t *testing.T) {
 		st := &state{
 			TickCount: 100,
 			Transactions: []transactionState{
@@ -158,24 +167,24 @@ var _ = Describe("Bank Operations", func() {
 
 		completed := processPendingCompletions(st)
 
-		Expect(completed).NotTo(BeEmpty())
-		Expect(st.PendingCompletions).To(BeEmpty())
-		Expect(st.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
+		require.NotEmpty(t, completed)
+		require.Empty(t, st.PendingCompletions)
+		require.True(t, st.Transactions[0].SubTransactions[0].Completed)
 	})
-})
+}
 
-var _ = Describe("Queue Operations", func() {
-	It("should check if sub-trans queue can push", func() {
+func TestQueueOperations(t *testing.T) {
+	t.Run("should check if sub-trans queue can push", func(t *testing.T) {
 		st := &state{
 			SubTransQueue: subTransQueueState{
 				Entries: make([]subTransRef, 5),
 			},
 		}
-		Expect(canPushSubTrans(st, 3, 10)).To(BeTrue())
-		Expect(canPushSubTrans(st, 6, 10)).To(BeFalse())
+		require.True(t, canPushSubTrans(st, 3, 10))
+		require.False(t, canPushSubTrans(st, 6, 10))
 	})
 
-	It("should push sub-transactions", func() {
+	t.Run("should push sub-transactions", func(t *testing.T) {
 		st := &state{
 			Transactions: []transactionState{
 				{
@@ -191,33 +200,37 @@ var _ = Describe("Queue Operations", func() {
 		}
 
 		pushSubTrans(st, 0)
-		Expect(st.SubTransQueue.Entries).To(HaveLen(2))
-		Expect(st.SubTransQueue.Entries[0]).To(Equal(
-			subTransRef{TxID: 0, SubIndex: 0}))
+		require.Len(t, st.SubTransQueue.Entries, 2)
+		require.Equal(t, subTransRef{TxID: 0, SubIndex: 0}, st.SubTransQueue.Entries[0])
 	})
-})
+}
 
-var _ = Describe("DRAM Integration", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDRAMIntegration(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
 		memCtrl *Comp
 	)
 
-	BeforeEach(func() {
+	setup2 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
 		memCtrl = buildDRAM(sim, DefaultSpec(), "MemCtrl", 1024)
-	})
+	}
 
-	It("should read and write via direct connection", func() {
+	t.Run("should read and write via direct connection", func(t *testing.T) {
+		setup2(t)
+
 		srcPort := newDriverPort("Src.Top", 1024)
 		conn := direct.NewConnection("Conn", sim, timing.GHz)
 		topPort := memCtrl.Ports.Top
 		conn.BindPort(topPort)
 		conn.BindPort(srcPort)
-		Expect(sim.Initialize()).To(Succeed())
+		require.NoError(t, sim.Initialize())
 
 		writeData := []byte{1, 2, 3, 4}
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
@@ -243,7 +256,7 @@ var _ = Describe("DRAM Integration", func() {
 		srcPort.Send(write)
 		srcPort.Send(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// Collect responses
 		var writeDone messaging.Msg
@@ -269,186 +282,191 @@ var _ = Describe("DRAM Integration", func() {
 			}
 		}
 
-		Expect(gotWriteDone).To(BeTrue())
-		Expect(writeDone.RspTo).To(Equal(write.ID))
-		Expect(gotDataReady).To(BeTrue())
-		Expect(dataReady.RspTo).To(Equal(read.ID))
-		Expect(dataReady.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		require.True(t, gotWriteDone)
+		require.Equal(t, write.ID, writeDone.RspTo)
+		require.True(t, gotDataReady)
+		require.Equal(t, read.ID, dataReady.RspTo)
+		require.Equal(t, []byte{1, 2, 3, 4}, dataReady.Payload.(memprotocol.DataReadyRsp).Data)
 	})
-})
+}
 
 // ========================================================================
 // New feature tests below
 // ========================================================================
 
-var _ = Describe("Predefined Specs", func() {
-	It("should build with DDR4 spec", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestPredefinedSpecs(t *testing.T) {
+	t.Run("should build with DDR4 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		ctrl := buildDRAM(sim, DDR4Spec(), "DDR4Ctrl", 16)
-		Expect(ctrl).NotTo(BeNil())
+		require.NotNil(t, ctrl)
 		spec := ctrl.Spec
-		Expect(spec.BurstLength).To(Equal(8))
-		Expect(spec.NumBankGroup).To(Equal(4))
-		Expect(spec.NumBank).To(Equal(4))
-		Expect(spec.NumRank).To(Equal(1))
-		Expect(spec.BusWidth).To(Equal(64))
-		Expect(spec.Protocol).To(Equal(int(protoDDR4)))
+		require.Equal(t, 8, spec.BurstLength)
+		require.Equal(t, 4, spec.NumBankGroup)
+		require.Equal(t, 4, spec.NumBank)
+		require.Equal(t, 1, spec.NumRank)
+		require.Equal(t, 64, spec.BusWidth)
+		require.Equal(t, int(protoDDR4), spec.Protocol)
 	})
 
-	It("should build with DDR5 spec", func() {
+	t.Run("should build with DDR5 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		ctrl := buildDRAM(sim, DDR5Spec(), "DDR5Ctrl", 16)
-		Expect(ctrl).NotTo(BeNil())
+		require.NotNil(t, ctrl)
 		spec := ctrl.Spec
-		Expect(spec.BurstLength).To(Equal(16))
-		Expect(spec.NumBankGroup).To(Equal(8))
-		Expect(spec.NumBank).To(Equal(4))
-		Expect(spec.BusWidth).To(Equal(32))
-		Expect(spec.Protocol).To(Equal(int(protoDDR5)))
+		require.Equal(t, 16, spec.BurstLength)
+		require.Equal(t, 8, spec.NumBankGroup)
+		require.Equal(t, 4, spec.NumBank)
+		require.Equal(t, 32, spec.BusWidth)
+		require.Equal(t, int(protoDDR5), spec.Protocol)
 	})
 
-	It("should build with HBM2 spec", func() {
+	t.Run("should build with HBM2 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		ctrl := buildDRAM(sim, HBM2Spec(), "HBM2Ctrl", 16)
-		Expect(ctrl).NotTo(BeNil())
+		require.NotNil(t, ctrl)
 		spec := ctrl.Spec
-		Expect(spec.BurstLength).To(Equal(4))
-		Expect(spec.NumBankGroup).To(Equal(4))
-		Expect(spec.NumBank).To(Equal(4))
-		Expect(spec.BusWidth).To(Equal(128))
-		Expect(spec.DeviceWidth).To(Equal(128))
-		Expect(spec.Protocol).To(Equal(int(protoHBM2)))
+		require.Equal(t, 4, spec.BurstLength)
+		require.Equal(t, 4, spec.NumBankGroup)
+		require.Equal(t, 4, spec.NumBank)
+		require.Equal(t, 128, spec.BusWidth)
+		require.Equal(t, 128, spec.DeviceWidth)
+		require.Equal(t, int(protoHBM2), spec.Protocol)
 	})
 
-	It("should build with HBM3 spec", func() {
+	t.Run("should build with HBM3 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		ctrl := buildDRAM(sim, HBM3Spec(), "HBM3Ctrl", 16)
-		Expect(ctrl).NotTo(BeNil())
+		require.NotNil(t, ctrl)
 		spec := ctrl.Spec
-		Expect(spec.BurstLength).To(Equal(8))
-		Expect(spec.NumBankGroup).To(Equal(4))
-		Expect(spec.BusWidth).To(Equal(64))
-		Expect(spec.DeviceWidth).To(Equal(64))
-		Expect(spec.Protocol).To(Equal(int(protoHBM3)))
+		require.Equal(t, 8, spec.BurstLength)
+		require.Equal(t, 4, spec.NumBankGroup)
+		require.Equal(t, 64, spec.BusWidth)
+		require.Equal(t, 64, spec.DeviceWidth)
+		require.Equal(t, int(protoHBM3), spec.Protocol)
 	})
 
-	It("should build with GDDR6 spec", func() {
+	t.Run("should build with GDDR6 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		ctrl := buildDRAM(sim, GDDR6Spec(), "GDDR6Ctrl", 16)
-		Expect(ctrl).NotTo(BeNil())
+		require.NotNil(t, ctrl)
 		spec := ctrl.Spec
-		Expect(spec.BurstLength).To(Equal(16))
-		Expect(spec.NumBankGroup).To(Equal(4))
-		Expect(spec.NumBank).To(Equal(4))
-		Expect(spec.BusWidth).To(Equal(32))
-		Expect(spec.DeviceWidth).To(Equal(32))
-		Expect(spec.Protocol).To(Equal(int(protoGDDR6)))
+		require.Equal(t, 16, spec.BurstLength)
+		require.Equal(t, 4, spec.NumBankGroup)
+		require.Equal(t, 4, spec.NumBank)
+		require.Equal(t, 32, spec.BusWidth)
+		require.Equal(t, 32, spec.DeviceWidth)
+		require.Equal(t, int(protoGDDR6), spec.Protocol)
 	})
 
-	It("should preserve DDR4 timing parameters", func() {
-		Expect(DDR4Spec().TCL).To(Equal(16))
-		Expect(DDR4Spec().TRCD).To(Equal(16))
-		Expect(DDR4Spec().TRP).To(Equal(16))
-		Expect(DDR4Spec().TRAS).To(Equal(39))
+	t.Run("should preserve DDR4 timing parameters", func(t *testing.T) {
+		require.Equal(t, 16, DDR4Spec().TCL)
+		require.Equal(t, 16, DDR4Spec().TRCD)
+		require.Equal(t, 16, DDR4Spec().TRP)
+		require.Equal(t, 39, DDR4Spec().TRAS)
 	})
 
-	It("should preserve DDR5 timing parameters", func() {
-		Expect(DDR5Spec().TCL).To(Equal(40))
-		Expect(DDR5Spec().TRCD).To(Equal(40))
-		Expect(DDR5Spec().TRP).To(Equal(40))
-		Expect(DDR5Spec().TRAS).To(Equal(76))
+	t.Run("should preserve DDR5 timing parameters", func(t *testing.T) {
+		require.Equal(t, 40, DDR5Spec().TCL)
+		require.Equal(t, 40, DDR5Spec().TRCD)
+		require.Equal(t, 40, DDR5Spec().TRP)
+		require.Equal(t, 76, DDR5Spec().TRAS)
 	})
 
-	It("should preserve HBM3 timing parameters", func() {
-		Expect(HBM3Spec().TCL).To(Equal(36))
-		Expect(HBM3Spec().TRCD).To(Equal(36))
-		Expect(HBM3Spec().TRP).To(Equal(36))
-		Expect(HBM3Spec().TRAS).To(Equal(72))
-		Expect(HBM3Spec().TRCDRD).To(Equal(36))
-		Expect(HBM3Spec().TRCDWR).To(Equal(24))
+	t.Run("should preserve HBM3 timing parameters", func(t *testing.T) {
+		require.Equal(t, 36, HBM3Spec().TCL)
+		require.Equal(t, 36, HBM3Spec().TRCD)
+		require.Equal(t, 36, HBM3Spec().TRP)
+		require.Equal(t, 72, HBM3Spec().TRAS)
+		require.Equal(t, 36, HBM3Spec().TRCDRD)
+		require.Equal(t, 24, HBM3Spec().TRCDWR)
 	})
-})
+}
 
-var _ = Describe("Protocol Enums", func() {
-	It("should have new protocol values after HMC", func() {
-		Expect(int(protoDDR5)).To(BeNumerically(">", int(protoHMC)))
-		Expect(int(protoHBM3)).To(BeNumerically(">", int(protoDDR5)))
-		Expect(int(protoLPDDR5)).To(BeNumerically(">", int(protoHBM3)))
-		Expect(int(protoHBM3E)).To(BeNumerically(">", int(protoLPDDR5)))
-	})
-
-	It("should recognize HBM3 as HBM", func() {
-		Expect(protoHBM3.isHBM()).To(BeTrue())
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestProtocolEnums(t *testing.T) {
+	t.Run("should have new protocol values after HMC", func(t *testing.T) {
+		require.True(t, (int(protoDDR5)) > (int(protoHMC)), "expected int(protoDDR5) > int(protoHMC)")
+		require.True(t, (int(protoHBM3)) > (int(protoDDR5)), "expected int(protoHBM3) > int(protoDDR5)")
+		require.True(t, (int(protoLPDDR5)) > (int(protoHBM3)), "expected int(protoLPDDR5) > int(protoHBM3)")
+		require.True(t, (int(protoHBM3E)) > (int(protoLPDDR5)), "expected int(protoHBM3E) > int(protoLPDDR5)")
 	})
 
-	It("should recognize HBM3E as HBM", func() {
-		Expect(protoHBM3E.isHBM()).To(BeTrue())
+	t.Run("should recognize HBM3 as HBM", func(t *testing.T) {
+		require.True(t, protoHBM3.isHBM())
 	})
 
-	It("should recognize HBM2 as HBM", func() {
-		Expect(protoHBM2.isHBM()).To(BeTrue())
+	t.Run("should recognize HBM3E as HBM", func(t *testing.T) {
+		require.True(t, protoHBM3E.isHBM())
 	})
 
-	It("should recognize HBM as HBM", func() {
-		Expect(protoHBM.isHBM()).To(BeTrue())
+	t.Run("should recognize HBM2 as HBM", func(t *testing.T) {
+		require.True(t, protoHBM2.isHBM())
 	})
 
-	It("should not recognize DDR4 as HBM", func() {
-		Expect(protoDDR4.isHBM()).To(BeFalse())
+	t.Run("should recognize HBM as HBM", func(t *testing.T) {
+		require.True(t, protoHBM.isHBM())
 	})
 
-	It("should not recognize DDR5 as HBM", func() {
-		Expect(protoDDR5.isHBM()).To(BeFalse())
+	t.Run("should not recognize DDR4 as HBM", func(t *testing.T) {
+		require.False(t, protoDDR4.isHBM())
 	})
 
-	It("should recognize GDDR6 as GDDR", func() {
-		Expect(protoGDDR6.isGDDR()).To(BeTrue())
+	t.Run("should not recognize DDR5 as HBM", func(t *testing.T) {
+		require.False(t, protoDDR5.isHBM())
 	})
 
-	It("should recognize GDDR5 as GDDR", func() {
-		Expect(protoGDDR5.isGDDR()).To(BeTrue())
+	t.Run("should recognize GDDR6 as GDDR", func(t *testing.T) {
+		require.True(t, protoGDDR6.isGDDR())
 	})
 
-	It("should recognize GDDR5X as GDDR", func() {
-		Expect(protoGDDR5X.isGDDR()).To(BeTrue())
+	t.Run("should recognize GDDR5 as GDDR", func(t *testing.T) {
+		require.True(t, protoGDDR5.isGDDR())
 	})
 
-	It("should not recognize DDR4 as GDDR", func() {
-		Expect(protoDDR4.isGDDR()).To(BeFalse())
+	t.Run("should recognize GDDR5X as GDDR", func(t *testing.T) {
+		require.True(t, protoGDDR5X.isGDDR())
 	})
 
-	It("should not recognize HBM3 as GDDR", func() {
-		Expect(protoHBM3.isGDDR()).To(BeFalse())
+	t.Run("should not recognize DDR4 as GDDR", func(t *testing.T) {
+		require.False(t, protoDDR4.isGDDR())
 	})
 
-	It("should have all original protocols in correct order", func() {
-		Expect(int(protoDDR3)).To(Equal(0))
-		Expect(int(protoDDR4)).To(Equal(1))
-		Expect(int(protoGDDR5)).To(Equal(2))
-		Expect(int(protoGDDR5X)).To(Equal(3))
-		Expect(int(protoGDDR6)).To(Equal(4))
-		Expect(int(protoLPDDR)).To(Equal(5))
-		Expect(int(protoLPDDR3)).To(Equal(6))
-		Expect(int(protoLPDDR4)).To(Equal(7))
-		Expect(int(protoHBM)).To(Equal(8))
-		Expect(int(protoHBM2)).To(Equal(9))
-		Expect(int(protoHMC)).To(Equal(10))
+	t.Run("should not recognize HBM3 as GDDR", func(t *testing.T) {
+		require.False(t, protoHBM3.isGDDR())
 	})
-})
 
-var _ = Describe("Open Page Policy", func() {
+	t.Run("should have all original protocols in correct order", func(t *testing.T) {
+		require.Equal(t, 0, int(protoDDR3))
+		require.Equal(t, 1, int(protoDDR4))
+		require.Equal(t, 2, int(protoGDDR5))
+		require.Equal(t, 3, int(protoGDDR5X))
+		require.Equal(t, 4, int(protoGDDR6))
+		require.Equal(t, 5, int(protoLPDDR))
+		require.Equal(t, 6, int(protoLPDDR3))
+		require.Equal(t, 7, int(protoLPDDR4))
+		require.Equal(t, 8, int(protoHBM))
+		require.Equal(t, 9, int(protoHBM2))
+		require.Equal(t, 10, int(protoHMC))
+	})
+}
+
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestOpenPagePolicy(t *testing.T) {
 	var (
 		ids  timing.Simulation
 		spec *Spec
 		st   *state
 	)
 
-	BeforeEach(func() {
+	setup3 := func(t *testing.T) {
+		t.Helper()
+
 		ids = akitasim.MakeBuilder().Build()
 		defaultSpec := DefaultSpec()
 		spec = &defaultSpec
@@ -487,49 +505,59 @@ var _ = Describe("Open Page Policy", func() {
 			BankStates: initBankStatesFlat(
 				spec.NumRank, spec.NumBankGroup, spec.NumBank),
 		}
-	})
+	}
 
-	It("should create open page command with Read kind", func() {
+	t.Run("should create open page command with Read kind", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
 		cmd := createOpenPageCommand(ids.NewID, spec, st, ref)
 
-		Expect(cmd).NotTo(BeNil())
-		Expect(cmd.Kind).To(Equal(int(cmdKindRead)))
+		require.NotNil(t, cmd)
+		require.Equal(t, int(cmdKindRead), cmd.Kind)
 	})
 
-	It("should create open page command with Write kind", func() {
+	t.Run("should create open page command with Write kind", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
 		cmd := createOpenPageCommand(ids.NewID, spec, st, ref)
 
-		Expect(cmd).NotTo(BeNil())
-		Expect(cmd.Kind).To(Equal(int(cmdKindWrite)))
+		require.NotNil(t, cmd)
+		require.Equal(t, int(cmdKindWrite), cmd.Kind)
 	})
 
-	It("should create close page command with ReadPrecharge kind", func() {
+	t.Run("should create close page command with ReadPrecharge kind", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
 		cmd := createClosePageCommand(ids.NewID, spec, st, ref)
 
-		Expect(cmd).NotTo(BeNil())
-		Expect(cmd.Kind).To(Equal(int(cmdKindReadPrecharge)))
+		require.NotNil(t, cmd)
+		require.Equal(t, int(cmdKindReadPrecharge), cmd.Kind)
 	})
 
-	It("should create close page command with WritePrecharge kind", func() {
+	t.Run("should create close page command with WritePrecharge kind", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
 		cmd := createClosePageCommand(ids.NewID, spec, st, ref)
 
-		Expect(cmd).NotTo(BeNil())
-		Expect(cmd.Kind).To(Equal(int(cmdKindWritePrecharge)))
+		require.NotNil(t, cmd)
+		require.Equal(t, int(cmdKindWritePrecharge), cmd.Kind)
 	})
 
-	It("should keep bank open after Read command in open-page mode", func() {
+	t.Run("should keep bank open after Read command in open-page mode", func(t *testing.T) {
+		setup3(t)
+
 		// Set up a bank that is Open at row 5
 		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
@@ -547,11 +575,13 @@ var _ = Describe("Open Page Policy", func() {
 		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should remain open
-		Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
-		Expect(bs.OpenRow).To(Equal(uint64(5)))
+		require.Equal(t, bankStateOpen, bankStateKind(bs.State))
+		require.Equal(t, uint64(5), bs.OpenRow)
 	})
 
-	It("should keep bank open after Write command in open-page mode", func() {
+	t.Run("should keep bank open after Write command in open-page mode", func(t *testing.T) {
+		setup3(t)
+
 		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 7
@@ -568,11 +598,13 @@ var _ = Describe("Open Page Policy", func() {
 		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should remain open
-		Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
-		Expect(bs.OpenRow).To(Equal(uint64(7)))
+		require.Equal(t, bankStateOpen, bankStateKind(bs.State))
+		require.Equal(t, uint64(7), bs.OpenRow)
 	})
 
-	It("should close bank after ReadPrecharge command", func() {
+	t.Run("should close bank after ReadPrecharge command", func(t *testing.T) {
+		setup3(t)
+
 		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 5
@@ -589,10 +621,12 @@ var _ = Describe("Open Page Policy", func() {
 		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should be closed
-		Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+		require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 	})
 
-	It("should close bank after WritePrecharge command", func() {
+	t.Run("should close bank after WritePrecharge command", func(t *testing.T) {
+		setup3(t)
+
 		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 5
@@ -609,10 +643,12 @@ var _ = Describe("Open Page Policy", func() {
 		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should be closed
-		Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+		require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 	})
 
-	It("should select command creation based on page policy in tickSubTransQueue", func() {
+	t.Run("should select command creation based on page policy in tickSubTransQueue", func(t *testing.T) {
+		setup3(t)
+
 		// Test with open-page policy
 		spec.PagePolicy = PagePolicyOpen
 		st.SubTransQueue.Entries = []subTransRef{
@@ -620,65 +656,70 @@ var _ = Describe("Open Page Policy", func() {
 		}
 
 		progress := tickSubTransQueue(ids.NewID, spec, st)
-		Expect(progress).To(BeTrue())
+		require.True(t, progress)
 
 		// The command in the queue should be CmdKindRead (not ReadPrecharge)
-		Expect(st.CommandQueues.Entries).To(HaveLen(1))
-		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
-			Equal(int(cmdKindRead)))
+		require.Len(t, st.CommandQueues.Entries, 1)
+		require.Equal(t, int(cmdKindRead), st.CommandQueues.Entries[0].Command.Kind)
 	})
 
-	It("should use close-page commands when PagePolicyClose in tickSubTransQueue", func() {
+	t.Run("should use close-page commands when PagePolicyClose in tickSubTransQueue", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyClose
 		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 0, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(ids.NewID, spec, st)
-		Expect(progress).To(BeTrue())
+		require.True(t, progress)
 
 		// The command in the queue should be CmdKindReadPrecharge
-		Expect(st.CommandQueues.Entries).To(HaveLen(1))
-		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
-			Equal(int(cmdKindReadPrecharge)))
+		require.Len(t, st.CommandQueues.Entries, 1)
+		require.Equal(t, int(cmdKindReadPrecharge), st.CommandQueues.Entries[0].Command.Kind)
 	})
 
-	It("should use Write for write transaction with open-page in tickSubTransQueue", func() {
+	t.Run("should use Write for write transaction with open-page in tickSubTransQueue", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyOpen
 		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 1, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(ids.NewID, spec, st)
-		Expect(progress).To(BeTrue())
+		require.True(t, progress)
 
-		Expect(st.CommandQueues.Entries).To(HaveLen(1))
-		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
-			Equal(int(cmdKindWrite)))
+		require.Len(t, st.CommandQueues.Entries, 1)
+		require.Equal(t, int(cmdKindWrite), st.CommandQueues.Entries[0].Command.Kind)
 	})
 
-	It("should use WritePrecharge for write transaction with close-page in tickSubTransQueue", func() {
+	t.Run("should use WritePrecharge for write transaction with close-page in tickSubTransQueue", func(t *testing.T) {
+		setup3(t)
+
 		spec.PagePolicy = PagePolicyClose
 		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 1, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(ids.NewID, spec, st)
-		Expect(progress).To(BeTrue())
+		require.True(t, progress)
 
-		Expect(st.CommandQueues.Entries).To(HaveLen(1))
-		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
-			Equal(int(cmdKindWritePrecharge)))
+		require.Len(t, st.CommandQueues.Entries, 1)
+		require.Equal(t, int(cmdKindWritePrecharge), st.CommandQueues.Entries[0].Command.Kind)
 	})
-})
+}
 
-var _ = Describe("FR-FCFS Scheduling", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestFRFCFSScheduling(t *testing.T) {
 	var (
 		spec *Spec
 		st   *state
 	)
 
-	BeforeEach(func() {
+	setup4 := func(t *testing.T) {
+		t.Helper()
+
 		spec = &Spec{
 			NumRank:              1,
 			NumBankGroup:         1,
@@ -692,9 +733,11 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 			},
 			BankStates: initBankStatesFlat(1, 1, 2),
 		}
-	})
+	}
 
-	It("should prioritize row-buffer hits over misses", func() {
+	t.Run("should prioritize row-buffer hits over misses", func(t *testing.T) {
+		setup4(t)
+
 		// Open bank 0 at row 5
 		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.State = int(bankStateOpen)
@@ -725,12 +768,14 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 
 		result := getCommandToIssue(spec, st)
-		Expect(result).NotTo(BeNil())
+		require.NotNil(t, result)
 		// Should pick the hit (row 5) even though it was added second
-		Expect(result.Location.Row).To(Equal(uint64(5)))
+		require.Equal(t, uint64(5), result.Location.Row)
 	})
 
-	It("should use FCFS when no row-buffer hits", func() {
+	t.Run("should use FCFS when no row-buffer hits", func(t *testing.T) {
+		setup4(t)
+
 		// Both banks closed — no row-buffer hits possible
 		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
@@ -758,21 +803,25 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 
 		result := getCommandToIssue(spec, st)
-		Expect(result).NotTo(BeNil())
+		require.NotNil(t, result)
 		// For closed banks, getRequiredCommandKind returns Activate.
 		// The ready command should be an Activate for the older command.
-		Expect(result.Kind).To(Equal(int(cmdKindActivate)))
-		Expect(result.Location.Row).To(Equal(uint64(10)))
+		require.Equal(t, int(cmdKindActivate), result.Kind)
+		require.Equal(t, uint64(10), result.Location.Row)
 	})
 
-	It("should handle empty queue", func() {
+	t.Run("should handle empty queue", func(t *testing.T) {
+		setup4(t)
+
 		st.CommandQueues.Entries = []queueEntry{}
 
 		result := getCommandToIssue(spec, st)
-		Expect(result).To(BeNil())
+		require.Nil(t, result)
 	})
 
-	It("should return nil when all commands have timing constraints", func() {
+	t.Run("should return nil when all commands have timing constraints", func(t *testing.T) {
+		setup4(t)
+
 		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{
 			cmdKindActivate:      5,
@@ -793,18 +842,21 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 
 		result := getCommandToIssue(spec, st)
-		Expect(result).To(BeNil())
+		require.Nil(t, result)
 	})
-})
+}
 
-var _ = Describe("Read/Write Queue Separation", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestReadWriteQueueSeparation(t *testing.T) {
 	var (
 		ids  timing.Simulation
 		spec *Spec
 		st   *state
 	)
 
-	BeforeEach(func() {
+	setup5 := func(t *testing.T) {
+		t.Helper()
+
 		ids = akitasim.MakeBuilder().Build()
 		spec = &Spec{
 			NumRank:              1,
@@ -823,9 +875,11 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			},
 			BankStates: initBankStatesFlat(1, 1, 4),
 		}
-	})
+	}
 
-	It("should count write commands", func() {
+	t.Run("should count write commands", func(t *testing.T) {
+		setup5(t)
+
 		st.CommandQueues.Entries = []queueEntry{
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindRead)}, IsWrite: false},
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindWrite)}, IsWrite: true},
@@ -835,15 +889,19 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		}
 
 		count := countWriteCommands(st)
-		Expect(count).To(Equal(3))
+		require.Equal(t, 3, count)
 	})
 
-	It("should count zero writes in empty queue", func() {
+	t.Run("should count zero writes in empty queue", func(t *testing.T) {
+		setup5(t)
+
 		count := countWriteCommands(st)
-		Expect(count).To(Equal(0))
+		require.Equal(t, 0, count)
 	})
 
-	It("should enter drain mode at high watermark", func() {
+	t.Run("should enter drain mode at high watermark", func(t *testing.T) {
+		setup5(t)
+
 		// Set up 4 open banks, each with a write command that's a row hit
 		for i := range 4 {
 			bs := findBankState(&st.BankStates, 0, 0, i)
@@ -868,15 +926,17 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			)
 		}
 
-		Expect(st.CommandQueues.WriteDrainMode).To(BeFalse())
+		require.False(t, st.CommandQueues.WriteDrainMode)
 
 		// getCommandToIssue should trigger drain mode
 		result := getCommandToIssue(spec, st)
-		Expect(result).NotTo(BeNil())
-		Expect(st.CommandQueues.WriteDrainMode).To(BeTrue())
+		require.NotNil(t, result)
+		require.True(t, st.CommandQueues.WriteDrainMode)
 	})
 
-	It("should exit drain mode at low watermark", func() {
+	t.Run("should exit drain mode at low watermark", func(t *testing.T) {
+		setup5(t)
+
 		// Start in drain mode with exactly 2 writes (the low watermark)
 		st.CommandQueues.WriteDrainMode = true
 
@@ -913,11 +973,13 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// 2 writes == low watermark, so drain mode should be exited
 		result := getCommandToIssue(spec, st)
-		Expect(result).NotTo(BeNil())
-		Expect(st.CommandQueues.WriteDrainMode).To(BeFalse())
+		require.NotNil(t, result)
+		require.False(t, st.CommandQueues.WriteDrainMode)
 	})
 
-	It("should respect separate read/write queue capacities", func() {
+	t.Run("should respect separate read/write queue capacities", func(t *testing.T) {
+		setup5(t)
+
 		// Fill write queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
@@ -925,7 +987,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindWritePrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
-			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			require.True(t, canAcceptCommand(st, cmd, spec))
 			acceptCommand(st, cmd)
 		}
 
@@ -935,7 +997,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, extraWrite, spec)).To(BeFalse())
+		require.False(t, canAcceptCommand(st, extraWrite, spec))
 
 		// But a read should still be accepted
 		readCmd := &commandState{
@@ -943,10 +1005,12 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, readCmd, spec)).To(BeTrue())
+		require.True(t, canAcceptCommand(st, readCmd, spec))
 	})
 
-	It("should respect separate read queue capacity", func() {
+	t.Run("should respect separate read queue capacity", func(t *testing.T) {
+		setup5(t)
+
 		// Fill read queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
@@ -954,7 +1018,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
-			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			require.True(t, canAcceptCommand(st, cmd, spec))
 			acceptCommand(st, cmd)
 		}
 
@@ -964,7 +1028,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, extraRead, spec)).To(BeFalse())
+		require.False(t, canAcceptCommand(st, extraRead, spec))
 
 		// But a write should still be accepted
 		writeCmd := &commandState{
@@ -972,10 +1036,12 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, writeCmd, spec)).To(BeTrue())
+		require.True(t, canAcceptCommand(st, writeCmd, spec))
 	})
 
-	It("should fall back to unified capacity when sizes are 0", func() {
+	t.Run("should fall back to unified capacity when sizes are 0", func(t *testing.T) {
+		setup5(t)
+
 		spec.ReadQueueSize = 0
 		spec.WriteQueueSize = 0
 		spec.CommandQueueCapacity = 4
@@ -987,7 +1053,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 			}
-			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			require.True(t, canAcceptCommand(st, cmd, spec))
 			acceptCommand(st, cmd)
 		}
 
@@ -997,41 +1063,45 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, readCmd, spec)).To(BeFalse())
+		require.False(t, canAcceptCommand(st, readCmd, spec))
 
 		writeCmd := &commandState{
 			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(st, writeCmd, spec)).To(BeFalse())
+		require.False(t, canAcceptCommand(st, writeCmd, spec))
 	})
 
-	It("should identify write commands correctly", func() {
+	t.Run("should identify write commands correctly", func(t *testing.T) {
+		setup5(t)
+
 		writeCmd := &commandState{Kind: int(cmdKindWrite)}
-		Expect(isWriteCommand(writeCmd)).To(BeTrue())
+		require.True(t, isWriteCommand(writeCmd))
 
 		writePCmd := &commandState{Kind: int(cmdKindWritePrecharge)}
-		Expect(isWriteCommand(writePCmd)).To(BeTrue())
+		require.True(t, isWriteCommand(writePCmd))
 
 		readCmd := &commandState{Kind: int(cmdKindRead)}
-		Expect(isWriteCommand(readCmd)).To(BeFalse())
+		require.False(t, isWriteCommand(readCmd))
 
 		readPCmd := &commandState{Kind: int(cmdKindReadPrecharge)}
-		Expect(isWriteCommand(readPCmd)).To(BeFalse())
+		require.False(t, isWriteCommand(readPCmd))
 
 		actCmd := &commandState{Kind: int(cmdKindActivate)}
-		Expect(isWriteCommand(actCmd)).To(BeFalse())
+		require.False(t, isWriteCommand(actCmd))
 	})
 
-	It("should tag queue entries with IsWrite flag", func() {
+	t.Run("should tag queue entries with IsWrite flag", func(t *testing.T) {
+		setup5(t)
+
 		writeCmd := &commandState{
 			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0},
 		}
 		acceptCommand(st, writeCmd)
-		Expect(st.CommandQueues.Entries[0].IsWrite).To(BeTrue())
+		require.True(t, st.CommandQueues.Entries[0].IsWrite)
 
 		readCmd := &commandState{
 			ID:       ids.NewID(),
@@ -1039,12 +1109,13 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Location: location{Rank: 0},
 		}
 		acceptCommand(st, readCmd)
-		Expect(st.CommandQueues.Entries[1].IsWrite).To(BeFalse())
+		require.False(t, st.CommandQueues.Entries[1].IsWrite)
 	})
-})
+}
 
-var _ = Describe("Builder Configuration", func() {
-	It("should set page policy via builder", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBuilderConfiguration(t *testing.T) {
+	t.Run("should set page policy via builder", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -1052,10 +1123,10 @@ var _ = Describe("Builder Configuration", func() {
 		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
 
 		builtSpec := ctrl.Spec
-		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
+		require.Equal(t, PagePolicyOpen, builtSpec.PagePolicy)
 	})
 
-	It("should set R/W queue sizes via builder", func() {
+	t.Run("should set R/W queue sizes via builder", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -1066,13 +1137,13 @@ var _ = Describe("Builder Configuration", func() {
 		ctrl := buildDRAM(sim, spec, "RWQueueCtrl", 16)
 
 		builtSpec := ctrl.Spec
-		Expect(builtSpec.ReadQueueSize).To(Equal(8))
-		Expect(builtSpec.WriteQueueSize).To(Equal(8))
-		Expect(builtSpec.WriteHighWatermark).To(Equal(6))
-		Expect(builtSpec.WriteLowWatermark).To(Equal(2))
+		require.Equal(t, 8, builtSpec.ReadQueueSize)
+		require.Equal(t, 8, builtSpec.WriteQueueSize)
+		require.Equal(t, 6, builtSpec.WriteHighWatermark)
+		require.Equal(t, 2, builtSpec.WriteLowWatermark)
 	})
 
-	It("should build with spec and preserve page policy", func() {
+	t.Run("should build with spec and preserve page policy", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		specWithOpenPage := DDR4Spec()
@@ -1080,11 +1151,11 @@ var _ = Describe("Builder Configuration", func() {
 		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
 
 		builtSpec := ctrl.Spec
-		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
-		Expect(builtSpec.BurstLength).To(Equal(8))
+		require.Equal(t, PagePolicyOpen, builtSpec.PagePolicy)
+		require.Equal(t, 8, builtSpec.BurstLength)
 	})
 
-	It("should build with spec and preserve R/W queue config", func() {
+	t.Run("should build with spec and preserve R/W queue config", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
 		specWithRW := DDR4Spec()
@@ -1095,16 +1166,16 @@ var _ = Describe("Builder Configuration", func() {
 		ctrl := buildDRAM(sim, specWithRW, "DDR4RWQueue", 16)
 
 		builtSpec := ctrl.Spec
-		Expect(builtSpec.ReadQueueSize).To(Equal(16))
-		Expect(builtSpec.WriteQueueSize).To(Equal(16))
-		Expect(builtSpec.WriteHighWatermark).To(Equal(12))
-		Expect(builtSpec.WriteLowWatermark).To(Equal(4))
+		require.Equal(t, 16, builtSpec.ReadQueueSize)
+		require.Equal(t, 16, builtSpec.WriteQueueSize)
+		require.Equal(t, 12, builtSpec.WriteHighWatermark)
+		require.Equal(t, 4, builtSpec.WriteLowWatermark)
 	})
 
-	It("should require a storage", func() {
+	t.Run("should require a storage", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 
-		Expect(func() {
+		require.PanicsWithValue(t, "dram: Resources.Storage is required", func() {
 			builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 				WithSimulation(sim).
 				Build("NoStorage")
@@ -1114,7 +1185,6 @@ var _ = Describe("Builder Configuration", func() {
 			if err := sim.Initialize(); err != nil {
 				panic(err)
 			}
-
-		}).To(PanicWith("dram: Resources.Storage is required"))
+		})
 	})
-})
+}

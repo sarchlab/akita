@@ -1,17 +1,17 @@
 package tlb
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("TLB CtrlMiddleware", func() {
-
+func TestTLBCtrlMiddleware(t *testing.T) {
 	var (
 		engine timing.Engine
 		sim    timing.Simulation
@@ -19,7 +19,9 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		ctrlMW *ctrlMiddleware
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -39,11 +41,13 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		}
 
 		ctrlMW = comp.Middlewares.Ctrl
-	})
+	}
 
-	It("should do nothing if there is no req in ctrlPort", func() {
+	t.Run("should do nothing if there is no req in ctrlPort", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := ctrlMW.Handle(modelingtest.TickEvent(comp))
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
-})
+}

@@ -1,8 +1,8 @@
 package mmu
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -38,8 +39,8 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-var _ = Describe("MMU", func() {
-
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMU(t *testing.T) {
 	var (
 		engine           timing.Engine
 		sim              timing.Simulation
@@ -73,15 +74,19 @@ var _ = Describe("MMU", func() {
 		translationMWRef = mmuComp.Middlewares.Translation
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build(4096)
-	})
+	}
 
-	Context("parse top", func() {
-		It("should process translation request", func() {
+	t.Run("parse top", func(t *testing.T) {
+		t.Run("should process translation request", func(t *testing.T) {
+			setup1(t)
+
 			translationReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
 				PID:      1,
 				VAddr:    0x100000100,
@@ -97,24 +102,27 @@ var _ = Describe("MMU", func() {
 			translationMWRef.parseFromTop()
 
 			next := &mmuComp.State
-			Expect(next.WalkingTranslations).To(HaveLen(1))
+			require.Len(t, next.WalkingTranslations, 1)
 		})
 
-		It("should stall parse from top "+
-			"if MMU is servicing max requests",
-			func() {
-				mmuComp.State = state{
-					WalkingTranslations: make([]transactionState, 16),
-				}
+		t.Run("should stall parse from top "+
+			"if MMU is servicing max requests", func(t *testing.T) {
+			setup1(t)
 
-				madeProgress := translationMWRef.parseFromTop()
+			mmuComp.State = state{
+				WalkingTranslations: make([]transactionState, 16),
+			}
 
-				Expect(madeProgress).To(BeFalse())
-			})
+			madeProgress := translationMWRef.parseFromTop()
+
+			require.False(t, madeProgress)
+		})
 	})
 
-	Context("walk page table", func() {
-		It("should reduce translation cycles", func() {
+	t.Run("walk page table", func(t *testing.T) {
+		t.Run("should reduce translation cycles", func(t *testing.T) {
+			setup1(t)
+
 			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
@@ -131,11 +139,13 @@ var _ = Describe("MMU", func() {
 			madeProgress := translationMWRef.walkPageTable()
 
 			next := &mmuComp.State
-			Expect(next.WalkingTranslations[0].CycleLeft).To(Equal(9))
-			Expect(madeProgress).To(BeTrue())
+			require.Equal(t, 9, next.WalkingTranslations[0].CycleLeft)
+			require.True(t, madeProgress)
 		})
 
-		It("should send rsp to top if hit", func() {
+		t.Run("should send rsp to top if hit", func(t *testing.T) {
+			setup1(t)
+
 			page := vm.Page{
 				PID:      1,
 				VAddr:    0x1000,
@@ -161,16 +171,18 @@ var _ = Describe("MMU", func() {
 
 			madeProgress := translationMWRef.walkPageTable()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			next := &mmuComp.State
-			Expect(next.WalkingTranslations).To(HaveLen(0))
+			require.Len(t, next.WalkingTranslations, 0)
 
 			rsp, _ := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationRsp{}}))
-			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
+			require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
 		})
 
-		It("should stall if cannot send to top", func() {
+		t.Run("should stall if cannot send to top", func(t *testing.T) {
+			setup1(t)
+
 			// Rebuild with a single-slot Top port and pre-fill its outgoing
 			// buffer so the controller's response Send fails.
 			build(1)
@@ -207,13 +219,13 @@ var _ = Describe("MMU", func() {
 
 			madeProgress := translationMWRef.walkPageTable()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 	})
+}
 
-})
-
-var _ = Describe("MMU Integration", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUIntegration(t *testing.T) {
 	var (
 		engine    timing.Engine
 		sim       timing.Simulation
@@ -223,7 +235,9 @@ var _ = Describe("MMU Integration", func() {
 		agentPort messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup2 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -246,10 +260,11 @@ var _ = Describe("MMU Integration", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	t.Run("should lookup", func(t *testing.T) {
+		setup2(t)
 
-	It("should lookup", func() {
 		page := vm.Page{
 			PID:      1,
 			VAddr:    0x1000,
@@ -279,12 +294,12 @@ var _ = Describe("MMU Integration", func() {
 		}
 
 		rspI, _ := topPort.RetrieveOutgoing()
-		Expect(rspI).ToNot(BeNil())
+		require.NotNil(t, rspI)
 		rsp := rspI
-		Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
-		Expect(rsp.RspTo).To(Equal(req.ID))
+		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, req.ID, rsp.RspTo)
 	})
-})
+}
 
 type testDriver struct{}
 

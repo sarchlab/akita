@@ -1,8 +1,8 @@
 package dram
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -11,13 +11,16 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-2 control-behavior tests: it asserts the actual
 // behavior the universal verbs promise (Drain quiescence, Pause freeze,
 // Reset from every state), beyond the protocol-surface checks in
 // control_contract_test.go.
-var _ = Describe("DRAM control behavior", func() {
+//
+//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDRAMControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
 		sim      timing.Simulation
@@ -44,7 +47,6 @@ var _ = Describe("DRAM control behavior", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
-
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {
@@ -74,26 +76,32 @@ var _ = Describe("DRAM control behavior", func() {
 	// acceptReads delivers n reads and ticks until all n have been pulled
 	// into the transaction queue. DRAM accepts one transaction per tick,
 	// so a single Tick is not enough.
-	acceptReads := func(n int) {
+	acceptReads := func(t *testing.T, n int) {
+		t.Helper()
+
 		for i := range n {
 			topPort.Deliver(makeRead(uint64(i * 64)))
 		}
 		for i := 0; i < 64 && len(comp.State.Transactions) < n; i++ {
 			modelingtest.Tick(comp)
 		}
-		Expect(comp.State.Transactions).To(HaveLen(n))
+		require.Len(t, comp.State.Transactions, n)
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
-	})
+	}
 
-	It("drains all in-flight reads before acking Drain", func() {
+	t.Run("drains all in-flight reads before acking Drain", func(t *testing.T) {
+		setup1(t)
+
 		const n = 3
-		acceptReads(n)
+		acceptReads(t, n)
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
@@ -119,21 +127,22 @@ var _ = Describe("DRAM control behavior", func() {
 
 					drainFound = true
 				}
-
 			}
 		}
 
-		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		require.True(t, drainFound)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
 		// Every in-flight read finished, and none remain, by the time the
 		// async Drain ack is sent.
-		Expect(completed).To(Equal(n))
-		Expect(comp.State.Transactions).To(BeEmpty())
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
+		require.Equal(t, n, completed)
+		require.Empty(t, comp.State.Transactions)
+		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
 	})
 
-	It("freezes incoming traffic while paused", func() {
+	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
+		setup1(t)
+
 		comp.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeRead(0))
 
@@ -144,25 +153,27 @@ var _ = Describe("DRAM control behavior", func() {
 		// The request is neither consumed nor turned into work, and no
 		// response is produced, while paused.
 		_, present0 := topPort.PeekIncoming()
-		Expect(present0).To(BeTrue())
-		Expect(comp.State.Transactions).To(BeEmpty())
+		require.True(t, present0)
+		require.Empty(t, comp.State.Transactions)
 		_, present1 := topPort.RetrieveOutgoing()
-		Expect(present1).To(BeFalse())
+		require.False(t, present1)
 	})
 
-	It("does not abort an in-flight Drain when a Pause arrives", func() {
+	t.Run("does not abort an in-flight Drain when a Pause arrives", func(t *testing.T) {
+		setup1(t)
+
 		const n = 2
 		for i := range n {
 			topPort.Deliver(makeRead(uint64(i * 64)))
 		}
 		modelingtest.Tick(comp)
-		Expect(comp.State.Transactions).ToNot(BeEmpty())
+		require.NotEmpty(t, comp.State.Transactions)
 
 		// Begin draining while work is still in flight.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 		modelingtest.Tick(comp)
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
+		require.Equal(t, memcontrolprotocol.StateDraining, comp.State.ControlState)
 
 		// A Pause arrives mid-drain. Control commands are serialized, so the
 		// Pause stays queued until the drain finishes; it must not freeze the
@@ -186,19 +197,21 @@ var _ = Describe("DRAM control behavior", func() {
 				switch r.Payload.(memcontrolprotocol.Rsp).Command {
 				case memcontrolprotocol.CmdDrain:
 					drainAcked = true
-					Expect(r.RspTo).To(Equal(drain.ID))
+					require.Equal(t, drain.ID, r.RspTo)
 				case memcontrolprotocol.CmdPause:
 					pauseAcked = true
 				}
 			}
 		}
-		Expect(pauseAcked).To(BeTrue())
-		Expect(drainAcked).To(BeTrue())
-		Expect(comp.State.Transactions).To(BeEmpty())
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
+		require.True(t, pauseAcked)
+		require.True(t, drainAcked)
+		require.Empty(t, comp.State.Transactions)
+		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
 	})
 
-	It("completes a pending Drain even when a non-Reset verb is queued", func() {
+	t.Run("completes a pending Drain even when a non-Reset verb is queued", func(t *testing.T) {
+		setup1(t)
+
 		// Draining and just quiescent, with a Pause queued in the same window.
 		// Commands are serialized: the in-flight Drain finishes and acks first,
 		// then the queued Pause is serviced.
@@ -226,17 +239,19 @@ var _ = Describe("DRAM control behavior", func() {
 				switch r.Payload.(memcontrolprotocol.Rsp).Command {
 				case memcontrolprotocol.CmdDrain:
 					drainAcked = true
-					Expect(r.RspTo).To(Equal(uint64(777)))
+					require.Equal(t, uint64(777), r.RspTo)
 				case memcontrolprotocol.CmdPause:
 					pauseAcked = true
 				}
 			}
 		}
-		Expect(drainAcked).To(BeTrue())
-		Expect(pauseAcked).To(BeTrue())
+		require.True(t, drainAcked)
+		require.True(t, pauseAcked)
 	})
 
-	It("completes a pending Drain before servicing a queued Reset", func() {
+	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
+		setup1(t)
+
 		// The controller is draining and has just become quiescent (no
 		// transactions): completePendingDrain acks the Drain.
 		comp.State.ControlState = memcontrolprotocol.StateDraining
@@ -259,22 +274,23 @@ var _ = Describe("DRAM control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		// Two acks, in order: the Drain completion (RspTo 999) then the Reset.
-		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
-		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
+		require.Len(t, rsps, 2)
+		require.Equal(t, memcontrolprotocol.CmdDrain, rsps[0].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, uint64(999), rsps[0].RspTo)
+		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, reset.ID, rsps[1].RspTo)
+		require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
 	})
 
-	It("zeroes accumulated statistics on Reset", func() {
+	t.Run("zeroes accumulated statistics on Reset", func(t *testing.T) {
+		setup1(t)
+
 		comp.State.TotalReadCommands = 7
 		comp.State.RowBufferHits = 3
 		comp.State.TotalCycles = 100
@@ -292,24 +308,25 @@ var _ = Describe("DRAM control behavior", func() {
 					Command == memcontrolprotocol.CmdReset {
 					found = true
 				}
-
 			}
 		}
 
-		Expect(found).To(BeTrue())
+		require.True(t, found)
 		// Activity counters have no post-reset traffic, so they are exactly 0.
-		Expect(comp.State.TotalReadCommands).To(BeZero())
-		Expect(comp.State.RowBufferHits).To(BeZero())
-		Expect(comp.State.CompletedReads).To(BeZero())
-		Expect(comp.State.BytesRead).To(BeZero())
-		Expect(comp.State.TotalWriteLatencyCycles).To(BeZero())
+		require.Zero(t, comp.State.TotalReadCommands)
+		require.Zero(t, comp.State.RowBufferHits)
+		require.Zero(t, comp.State.CompletedReads)
+		require.Zero(t, comp.State.BytesRead)
+		require.Zero(t, comp.State.TotalWriteLatencyCycles)
 		// TotalCycles is cleared by the reset, then counts only post-reset
 		// cycles, so it is far below the pre-reset value rather than carrying
 		// it forward.
-		Expect(comp.State.TotalCycles).To(BeNumerically("<", 100))
+		require.True(t, (comp.State.TotalCycles) < (100), "expected comp.State.TotalCycles < 100")
 	})
 
-	It("clears in-flight pending completions on Reset", func() {
+	t.Run("clears in-flight pending completions on Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Seed a pending read/write completion with an absolute completion tick
 		// in the future and a high tick count, as if reset arrived mid-flight.
 		comp.State.TickCount = 500
@@ -327,20 +344,23 @@ var _ = Describe("DRAM control behavior", func() {
 					Command == memcontrolprotocol.CmdReset {
 					found = true
 				}
-
 			}
 		}
 
-		Expect(found).To(BeTrue())
+		require.True(t, found)
 		// Without clearing, the stale entry would keep bankTickMW reporting
 		// progress (len(PendingCompletions) > 0) until TickCount climbed back to
 		// 1000, spinning a freshly-reset controller on pre-reset work.
-		Expect(comp.State.PendingCompletions).To(BeEmpty())
+		require.Empty(t, comp.State.PendingCompletions)
 	})
 
-	DescribeTable("Reset wipes in-flight state from any control state",
-		func(startState memcontrolprotocol.State) {
-			acceptReads(1)
+	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
+		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+			t.Helper()
+
+			setup1(t)
+
+			acceptReads(t, 1)
 
 			comp.State.ControlState = startState
 
@@ -353,7 +373,6 @@ var _ = Describe("DRAM control behavior", func() {
 				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 						rsp = out
 
 						found = true
@@ -361,18 +380,14 @@ var _ = Describe("DRAM control behavior", func() {
 				}
 			}
 
-			Expect(found).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			Expect(rsp.RspTo).To(Equal(reset.ID))
-			Expect(comp.State.Transactions).To(BeEmpty())
-			Expect(comp.State.ControlState).
-				To(Equal(memcontrolprotocol.StateEnabled))
-		},
-		// Reset from a draining state is covered separately ("completes a
-		// pending Drain before servicing a queued Reset"): under serialization
-		// it does not run immediately but waits for the drain to ack.
-		Entry("from Enabled", memcontrolprotocol.StateEnabled),
-		Entry("from Paused", memcontrolprotocol.StatePaused),
-	)
-})
+			require.True(t, found)
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, reset.ID, rsp.RspTo)
+			require.Empty(t, comp.State.Transactions)
+			require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+		}
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+	})
+}

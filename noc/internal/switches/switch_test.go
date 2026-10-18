@@ -3,18 +3,20 @@ package switches
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 )
 
-var _ = Describe("Switch", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestSwitch(t *testing.T) {
 	var (
 		mockCtrl     *gomock.Controller
 		engine       *MockEngine
@@ -27,8 +29,10 @@ var _ = Describe("Switch", func() {
 		rpMW         *receivePipelineMW
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
+		mockCtrl = gomock.NewController(t)
 		engine = NewMockEngine(mockCtrl)
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = testsim.New(engine, false)
@@ -100,13 +104,11 @@ var _ = Describe("Switch", func() {
 		rfsMW = sw.Middlewares.RouteForwardSend
 		rfsMW.routingTable = routingTable
 		rpMW = sw.Middlewares.ReceivePipeline
-	})
+	}
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	t.Run("should start processing", func(t *testing.T) {
+		setup1(t)
 
-	It("should start processing", func() {
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -124,14 +126,16 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rpMW.startProcessing()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		// Verify flit was accepted into pipeline
 		next := &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages()).To(HaveLen(1))
-		Expect(next.PortComplexes[0].Pipeline.Stages()[0].Item.Flit.ID).To(Equal(flit.ID))
+		require.Len(t, next.PortComplexes[0].Pipeline.Stages(), 1)
+		require.Equal(t, flit.ID, next.PortComplexes[0].Pipeline.Stages()[0].Item.Flit.ID)
 	})
 
-	It("should not start processing if pipeline is busy", func() {
+	t.Run("should not start processing if pipeline is busy", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -152,10 +156,12 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rpMW.startProcessing()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should tick the pipelines", func() {
+	t.Run("should tick the pipelines", func(t *testing.T) {
+		setup1(t)
+
 		// Place an item in pipeline stage 0 for port1
 		next := &sw.State
 		next.PortComplexes[0].Pipeline.Accept(routedFlit{
@@ -165,14 +171,16 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rpMW.movePipeline()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		// For latency=1, the item should have moved to RouteBuffer
 		next = &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages()).To(HaveLen(0))
-		Expect(next.PortComplexes[0].RouteBuffer.Size()).To(Equal(1))
+		require.Len(t, next.PortComplexes[0].Pipeline.Stages(), 0)
+		require.Equal(t, 1, next.PortComplexes[0].RouteBuffer.Size())
 	})
 
-	It("should route", func() {
+	t.Run("should route", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -195,13 +203,15 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.route()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		next = &sw.State
-		Expect(next.PortComplexes[0].RouteBuffer.Size()).To(Equal(0))
-		Expect(next.PortComplexes[0].ForwardBuffer.Size()).To(Equal(1))
+		require.Equal(t, 0, next.PortComplexes[0].RouteBuffer.Size())
+		require.Equal(t, 1, next.PortComplexes[0].ForwardBuffer.Size())
 	})
 
-	It("should not route if forward buffer is full", func() {
+	t.Run("should not route if forward buffer is full", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -223,10 +233,12 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.route()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should forward", func() {
+	t.Run("should forward", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -245,13 +257,15 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.forward()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		next = &sw.State
-		Expect(next.PortComplexes[0].ForwardBuffer.Size()).To(Equal(0))
-		Expect(next.PortComplexes[1].SendOutBuffer.Size()).To(Equal(1))
+		require.Equal(t, 0, next.PortComplexes[0].ForwardBuffer.Size())
+		require.Equal(t, 1, next.PortComplexes[1].SendOutBuffer.Size())
 	})
 
-	It("should not forward if the output buffer is busy", func() {
+	t.Run("should not forward if the output buffer is busy", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -273,10 +287,12 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.forward()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should send flits out", func() {
+	t.Run("should send flits out", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -298,12 +314,14 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.sendOut()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		next = &sw.State
-		Expect(next.PortComplexes[1].SendOutBuffer.Size()).To(Equal(0))
+		require.Equal(t, 0, next.PortComplexes[1].SendOutBuffer.Size())
 	})
 
-	It("should wait if port is busy sending flits out", func() {
+	t.Run("should wait if port is busy sending flits out", func(t *testing.T) {
+		setup1(t)
+
 		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
@@ -324,9 +342,9 @@ var _ = Describe("Switch", func() {
 
 		madeProgress := rfsMW.sendOut()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 		// Flit should still be in send buffer
 		next = &sw.State
-		Expect(next.PortComplexes[1].SendOutBuffer.Size()).To(Equal(1))
+		require.Equal(t, 1, next.PortComplexes[1].SendOutBuffer.Size())
 	})
-})
+}

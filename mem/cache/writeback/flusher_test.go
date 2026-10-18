@@ -1,23 +1,27 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Flusher", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestFlusher(t *testing.T) {
 	var (
 		controlPort messaging.Port
 		m           *pipelineMW
 		f           *flusher
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -55,15 +59,19 @@ var _ = Describe("Flusher", func() {
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
 		f = comp.Middlewares.Flusher.flusher
-	})
+	}
 
-	It("should do nothing if no request", func() {
+	t.Run("should do nothing if no request", func(t *testing.T) {
+		setup1(t)
+
 		ret := f.Tick()
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 	})
 
-	Context("flush without reset", func() {
-		It("should start flushing", func() {
+	t.Run("flush without reset", func(t *testing.T) {
+		t.Run("should start flushing", func(t *testing.T) {
+			setup1(t)
+
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
@@ -75,13 +83,15 @@ var _ = Describe("Flusher", func() {
 
 			ret := f.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next := &m.comp.State
-			Expect(next.HasProcessingFlush).To(BeTrue())
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
+			require.True(t, next.HasProcessingFlush)
+			require.Equal(t, cacheStatePreFlushing, cacheState(next.CacheState))
 		})
 
-		It("should do nothing if there is inflight transaction", func() {
+		t.Run("should do nothing if there is inflight transaction", func(t *testing.T) {
+			setup1(t)
+
 			next := &m.comp.State
 			next.CacheState = int(cacheStatePreFlushing)
 			next.Transactions = append(
@@ -95,10 +105,12 @@ var _ = Describe("Flusher", func() {
 
 			ret := f.Tick()
 
-			Expect(ret).To(BeFalse())
+			require.False(t, ret)
 		})
 
-		It("should move to flush stage if no inflight transaction", func() {
+		t.Run("should move to flush stage if no inflight transaction", func(t *testing.T) {
+			setup1(t)
+
 			next := &m.comp.State
 			next.CacheState = int(cacheStatePreFlushing)
 			next.HasProcessingFlush = true
@@ -115,13 +127,15 @@ var _ = Describe("Flusher", func() {
 
 			ret := f.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next = &m.comp.State
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStateFlushing))
-			Expect(next.FlusherBlockToEvictRefs).To(HaveLen(1))
+			require.Equal(t, cacheStateFlushing, cacheState(next.CacheState))
+			require.Len(t, next.FlusherBlockToEvictRefs, 1)
 		})
 
-		It("should send response if all the blocks are evicted", func() {
+		t.Run("should send response if all the blocks are evicted", func(t *testing.T) {
+			setup1(t)
+
 			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
@@ -136,20 +150,22 @@ var _ = Describe("Flusher", func() {
 
 			ret := f.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next = &m.comp.State
-			Expect(next.HasProcessingFlush).To(BeFalse())
+			require.False(t, next.HasProcessingFlush)
 			// Flush returns the cache to paused (its prior, legal state).
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePaused))
+			require.Equal(t, cacheStatePaused, cacheState(next.CacheState))
 
 			out, _ := controlPort.RetrieveOutgoing()
-			Expect(out).NotTo(BeNil())
-			Expect(out.RspTo).To(Equal(flushID))
+			require.NotNil(t, out)
+			require.Equal(t, flushID, out.RspTo)
 		})
 	})
 
-	Context("flush with reset", func() {
-		It("should remove inflight state", func() {
+	t.Run("flush with reset", func(t *testing.T) {
+		t.Run("should remove inflight state", func(t *testing.T) {
+			setup1(t)
+
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
@@ -161,13 +177,13 @@ var _ = Describe("Flusher", func() {
 
 			ret := f.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next := &m.comp.State
-			Expect(next.HasProcessingFlush).To(BeTrue())
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
+			require.True(t, next.HasProcessingFlush)
+			require.Equal(t, cacheStatePreFlushing, cacheState(next.CacheState))
 		})
 	})
 
 	// CmdEnable / Reset handling moved out of flusher to ctrlmiddleware;
 	// those code paths are covered by TestControlContract.
-})
+}

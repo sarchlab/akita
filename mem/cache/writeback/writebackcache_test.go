@@ -4,14 +4,11 @@ package writeback
 //go:generate mockgen -destination "mock_timing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/timing Engine
 
 import (
-	"log"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
@@ -22,13 +19,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
-
-func TestCache(t *testing.T) {
-	log.SetOutput(GinkgoWriter)
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Write-Back Suite")
-}
 
 // makePorts creates the ports of the writeback cache named name, each with
 // bufSize slots in each direction.
@@ -118,7 +110,8 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 	return dram.Ports.Top
 }
 
-var _ = Describe("Write-Back Cache Integration", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestWriteBackCacheIntegration(t *testing.T) {
 	var (
 		engine              timing.Engine
 		sim                 timing.Simulation
@@ -132,7 +125,9 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		controlAgentPort    messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -169,10 +164,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			panic(err)
 		}
 		m = cacheComp.Middlewares.Pipeline
+	}
 
-	})
+	t.Run("should do read hit", func(t *testing.T) {
+		setup1(t)
 
-	It("should do read hit", func() {
 		state := m.comp.State
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
@@ -205,15 +201,17 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
-		Expect(dr.RspTo).To(Equal(read.ID))
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
+		require.Equal(t, read.ID, dr.RspTo)
 	})
 
-	It("should write hit", func() {
+	t.Run("should write hit", func(t *testing.T) {
+		setup1(t)
+
 		state := m.comp.State
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
@@ -246,21 +244,23 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(write)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp, _ := agentPort.RetrieveIncoming()
-		Expect(rsp.RspTo).To(Equal(write.ID))
+		require.Equal(t, write.ID, rsp.RspTo)
 
 		// Re-read state after engine run
 		postState := m.comp.State
 		postBlock := &postState.DirectoryState.Sets[setID].Blocks[0]
 		retData := m.storage.Read(postBlock.CacheAddress+0x4, 4)
-		Expect(retData).To(Equal(write.Payload.(memprotocol.WriteReq).Data))
-		Expect(postBlock.IsValid).To(BeTrue())
-		Expect(postBlock.IsDirty).To(BeTrue())
+		require.Equal(t, write.Payload.(memprotocol.WriteReq).Data, retData)
+		require.True(t, postBlock.IsValid)
+		require.True(t, postBlock.IsDirty)
 	})
 
-	It("should do read miss, mshr miss, w/ fetch, w/o eviction", func() {
+	t.Run("should do read miss, mshr miss, w/ fetch, w/o eviction", func(t *testing.T) {
+		setup1(t)
+
 		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -284,15 +284,17 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
-		Expect(dr.RspTo).To(Equal(read.ID))
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
+		require.Equal(t, read.ID, dr.RspTo)
 	})
 
-	It("should handle read miss, mshr hit", func() {
+	t.Run("should handle read miss, mshr hit", func(t *testing.T) {
+		setup1(t)
+
 		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -328,20 +330,22 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(read2)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsps := map[uint64][]byte{}
 		for i := 0; i < 2; i++ {
 			rsp, _ := agentPort.RetrieveIncoming()
-			Expect(rsp).NotTo(BeNil())
+			require.NotNil(t, rsp)
 			dr := rsp
 			rsps[dr.RspTo] = dr.Payload.(memprotocol.DataReadyRsp).Data
 		}
-		Expect(rsps[read1.ID]).To(Equal([]byte{5, 6, 7, 8}))
-		Expect(rsps[read2.ID]).To(Equal([]byte{1, 2, 3, 4}))
+		require.Equal(t, []byte{5, 6, 7, 8}, rsps[read1.ID])
+		require.Equal(t, []byte{1, 2, 3, 4}, rsps[read2.ID])
 	})
 
-	It("should handle write miss, mshr miss, w/o fetch, w/o eviction", func() {
+	t.Run("should handle write miss, mshr miss, w/o fetch, w/o eviction", func(t *testing.T) {
+		setup1(t)
+
 		writeData := []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -376,20 +380,22 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsps := map[uint64]messaging.Msg{}
 		for i := 0; i < 2; i++ {
 			rsp, _ := agentPort.RetrieveIncoming()
-			Expect(rsp).NotTo(BeNil())
+			require.NotNil(t, rsp)
 			rsps[rsp.RspTo] = rsp
 		}
-		Expect(rsps).To(HaveKey(write.ID))
+		require.Contains(t, rsps, write.ID)
 		dr := rsps[read.ID]
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
 	})
 
-	It("should handle read miss, mshr miss, w/ fetch, w/ eviction", func() {
+	t.Run("should handle read miss, mshr miss, w/ fetch, w/ eviction", func(t *testing.T) {
+		setup1(t)
+
 		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -425,15 +431,17 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Top.Deliver(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
-		Expect(dr.RspTo).To(Equal(read.ID))
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
+		require.Equal(t, read.ID, dr.RspTo)
 	})
 
-	It("should flush", func() {
+	t.Run("should flush", func(t *testing.T) {
+		setup1(t)
+
 		write1 := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x100000,
 			Data:    []byte{1, 2, 3, 4}},
@@ -459,9 +467,9 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheComp.Ports.Top.Deliver(write2)
 
 		// Let the writes settle so the block is resident and dirty.
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 		_, present0 := controlAgentPort.RetrieveIncoming()
-		Expect(present0).To(BeFalse())
+		require.False(t, present0)
 		// Flush is a conditional verb: pause first so it is legal.
 		pause := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause},
 			ID:           m.comp.NewID(),
@@ -471,12 +479,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Control.Deliver(pause)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		pauseRsp, _ := controlAgentPort.RetrieveIncoming()
-		Expect(pauseRsp).NotTo(BeNil())
-		Expect(pauseRsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdPause))
-		Expect(pauseRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		require.NotNil(t, pauseRsp)
+		require.Equal(t, memcontrolprotocol.CmdPause, pauseRsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, pauseRsp.Payload.(memcontrolprotocol.Rsp).Success)
 
 		flush := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
 			ID:           m.comp.NewID(),
@@ -486,18 +494,18 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		cacheComp.Ports.Control.Deliver(flush)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp, _ := controlAgentPort.RetrieveIncoming()
-		Expect(rsp).NotTo(BeNil())
-		Expect(rsp.RspTo).To(Equal(flush.ID))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		require.NotNil(t, rsp)
+		require.Equal(t, flush.ID, rsp.RspTo)
+		require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 
 		// The dirty block's data reached DRAM.
 		flushed := dramStorage.Read(0x100000, 4)
-		Expect(flushed).To(Equal([]byte{1, 2, 3, 4}))
+		require.Equal(t, []byte{1, 2, 3, 4}, flushed)
 	})
-})
+}
 
 func (o testDriver) Name() string                           { return "TestDriver" }
 func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

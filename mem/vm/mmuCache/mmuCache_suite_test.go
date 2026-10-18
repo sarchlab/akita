@@ -1,19 +1,10 @@
 package mmuCache
 
 import (
-	"testing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
-
-func TestMMUCache(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "MMUCache Suite")
-}
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
 // ports in isolation. Because the mmuCache now owns its ports (they are no

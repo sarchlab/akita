@@ -9,15 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
-
-func TestTlb(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Tlb Suite")
-}
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
 // ports in isolation. Because the TLB now owns its ports (they are no longer

@@ -1,31 +1,38 @@
 package writethrough
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Intake allocTransaction", func() {
+func TestIntakeAllocTransaction(t *testing.T) {
 	var (
 		s    *intake
 		next *state
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		s = &intake{}
 		next = &state{}
-	})
+	}
 
-	It("should append when no Removed slot is available", func() {
+	t.Run("should append when no Removed slot is available", func(t *testing.T) {
+		setup1(t)
+
 		idx0 := s.allocTransaction(next, transactionState{ID: 1})
 		idx1 := s.allocTransaction(next, transactionState{ID: 2})
 
-		Expect(idx0).To(Equal(0))
-		Expect(idx1).To(Equal(1))
-		Expect(next.Transactions).To(HaveLen(2))
+		require.Equal(t, 0, idx0)
+		require.Equal(t, 1, idx1)
+		require.Len(t, next.Transactions, 2)
 	})
 
-	It("should reuse a Removed slot instead of growing the slice", func() {
+	t.Run("should reuse a Removed slot instead of growing the slice", func(t *testing.T) {
+		setup1(t)
+
 		s.allocTransaction(next, transactionState{ID: 1})
 		idx1 := s.allocTransaction(next, transactionState{ID: 2})
 		s.allocTransaction(next, transactionState{ID: 3})
@@ -35,13 +42,15 @@ var _ = Describe("Intake allocTransaction", func() {
 
 		reusedIdx := s.allocTransaction(next, transactionState{ID: 4})
 
-		Expect(reusedIdx).To(Equal(idx1))
-		Expect(next.Transactions).To(HaveLen(3))
-		Expect(next.Transactions[reusedIdx].ID).To(Equal(uint64(4)))
-		Expect(next.Transactions[reusedIdx].Removed).To(BeFalse())
+		require.Equal(t, idx1, reusedIdx)
+		require.Len(t, next.Transactions, 3)
+		require.Equal(t, uint64(4), next.Transactions[reusedIdx].ID)
+		require.False(t, next.Transactions[reusedIdx].Removed)
 	})
 
-	It("should keep the slice bounded by the active transaction count", func() {
+	t.Run("should keep the slice bounded by the active transaction count", func(t *testing.T) {
+		setup1(t)
+
 		// Repeatedly allocate then complete a transaction. With slot reuse the
 		// slice must never grow beyond the peak number of active transactions
 		// (one here), regardless of how many requests are processed.
@@ -50,6 +59,6 @@ var _ = Describe("Intake allocTransaction", func() {
 			next.Transactions[idx].Removed = true
 		}
 
-		Expect(next.Transactions).To(HaveLen(1))
+		require.Len(t, next.Transactions, 1)
 	})
-})
+}

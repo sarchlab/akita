@@ -1,8 +1,8 @@
 package datamover
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // dmTraceRecorder captures the full trace event stream the data mover emits —
@@ -25,12 +26,12 @@ type dmTraceRecorder struct {
 	milestones []tasks.Milestone
 }
 
-func (r *dmTraceRecorder) TaskStarted(t tasks.Task) {
-	r.starts = append(r.starts, t)
+func (r *dmTraceRecorder) TaskStarted(subject tasks.Task) {
+	r.starts = append(r.starts, subject)
 }
 
-func (r *dmTraceRecorder) TaskEnded(t tasks.Task) {
-	r.ends = append(r.ends, t)
+func (r *dmTraceRecorder) TaskEnded(subject tasks.Task) {
+	r.ends = append(r.ends, subject)
 }
 
 func (r *dmTraceRecorder) MilestoneAdded(m tasks.Milestone) {
@@ -68,7 +69,8 @@ func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
-var _ = Describe("DataMover milestones", func() {
+//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDataMoverMilestones(t *testing.T) {
 	var (
 		engine         timing.Engine
 		sim            timing.Simulation
@@ -83,7 +85,9 @@ var _ = Describe("DataMover milestones", func() {
 		rec            *dmTraceRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, true)
 
@@ -136,11 +140,12 @@ var _ = Describe("DataMover milestones", func() {
 		// task, so the test also needs that buffer task to exist.
 		rec = &dmTraceRecorder{}
 		dataMover.TaskTracker().Subscribe(rec, dataMover)
+	}
 
-	})
+	t.Run("attributes the admission wait to the buffer task and closes the "+
+		"req_in that was opened on the request", func(t *testing.T) {
+		setup1(t)
 
-	It("attributes the admission wait to the buffer task and closes the "+
-		"req_in that was opened on the request", func() {
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -161,21 +166,20 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// The move completed end-to-end.
-		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value0, present0 := srcPort.RetrieveIncoming()
-		Expect(present0).To(BeTrue())
-		Expect(value0).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present0)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value0)
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
-		Expect(bufID).ToNot(BeZero())
-		Expect(reqInID).ToNot(BeZero())
-		Expect(bufID).ToNot(Equal(reqInID))
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.NotEqual(t, reqInID, bufID)
 
 		bufMs := rec.milestonesOn(bufID)
 		var admission *tasks.Milestone
@@ -184,17 +188,19 @@ var _ = Describe("DataMover milestones", func() {
 				admission = &bufMs[i]
 			}
 		}
-		Expect(admission).ToNot(BeNil())
-		Expect(admission.What).To(Equal(dataMover.Name() + ".transaction"))
+		require.NotNil(t, admission)
+		require.Equal(t, dataMover.Name()+".transaction", admission.What)
 
 		// (b) The req_in opened on the request is also ENDED. Before the
 		// close-key fix it leaked because it was "closed" on the fresh response
 		// (a different key), so no EndTask carried the req_in task id.
-		Expect(rec.endedIDs()).To(ContainElement(reqInID))
+		require.Contains(t, rec.endedIDs(), reqInID)
 	})
 
-	It("charges the in-flight src-read and dst-write waits to the req_in "+
-		"as data and subtask milestones", func() {
+	t.Run("charges the in-flight src-read and dst-write waits to the req_in "+
+		"as data and subtask milestones", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -215,18 +221,17 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort.Deliver(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// The move completed end-to-end, so reads and writes were issued and
 		// acknowledged.
-		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value1, present1 := srcPort.RetrieveIncoming()
-		Expect(present1).To(BeTrue())
-		Expect(value1).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present1)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value1)
 
 		reqInID := rec.taskID("req_in")
-		Expect(reqInID).ToNot(BeZero())
+		require.NotZero(t, reqInID)
 
 		reqInMs := rec.milestonesOn(reqInID)
 
@@ -242,14 +247,14 @@ var _ = Describe("DataMover milestones", func() {
 				hasSubTask = true
 			}
 		}
-		Expect(hasData).To(BeTrue(),
-			"req_in should carry a data milestone for the src read wait")
-		Expect(hasSubTask).To(BeTrue(),
-			"req_in should carry a subtask milestone for the dst write wait")
+		require.True(t, hasData, "req_in should carry a data milestone for the src read wait")
+		require.True(t, hasSubTask, "req_in should carry a subtask milestone for the dst write wait")
 	})
 
-	It("waits at the head and admits a request that arrives while a "+
-		"transaction is running, instead of dropping it", func() {
+	t.Run("waits at the head and admits a request that arrives while a "+
+		"transaction is running, instead of dropping it", func(t *testing.T) {
+		setup1(t)
+
 		data := make([]byte, 4096)
 		for i := range 4096 {
 			data[i] = byte(i)
@@ -281,17 +286,15 @@ var _ = Describe("DataMover milestones", func() {
 		topPort.Deliver(req1)
 		topPort.Deliver(req2)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// Both transactions completed: two responses come back to the source.
 		value2, present2 := srcPort.RetrieveIncoming()
-		Expect(present2).To(BeTrue())
-		Expect(value2).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present2)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value2)
 		value3, present3 := srcPort.RetrieveIncoming()
-		Expect(present3).To(BeTrue())
-		Expect(value3).To(
-			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
+		require.True(t, present3)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value3)
 
 		// Two req_in tasks opened and both were closed (one per request), so the
 		// second request was processed, not dropped.
@@ -308,7 +311,7 @@ var _ = Describe("DataMover milestones", func() {
 				reqInEnds++
 			}
 		}
-		Expect(reqInStarts).To(Equal(2))
-		Expect(reqInEnds).To(Equal(2))
+		require.Equal(t, 2, reqInStarts)
+		require.Equal(t, 2, reqInEnds)
 	})
-})
+}

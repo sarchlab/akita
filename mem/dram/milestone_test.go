@@ -1,9 +1,10 @@
 package dram
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -61,7 +62,7 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("DRAM admission milestones", func() {
+func TestDRAMAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
@@ -70,20 +71,21 @@ var _ = Describe("DRAM admission milestones", func() {
 		rec     *milestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 
 		memCtrl = buildDRAM(sim, DefaultSpec(), "MemCtrl", 16)
-		Expect(sim.Initialize()).To(Succeed())
+		require.NoError(t, sim.Initialize())
 
 		topPort = memCtrl.Ports.Top
 
 		// Subscribe before driving to retain the starts of request and buffer tasks.
 		rec = &milestoneRecorder{}
 		memCtrl.TaskTracker().Subscribe(rec, memCtrl)
-
-	})
+	}
 
 	makeRead := func(addr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
@@ -96,7 +98,9 @@ var _ = Describe("DRAM admission milestones", func() {
 		return req
 	}
 
-	It("records a SubTransQueue admission milestone on the buffer task", func() {
+	t.Run("records a SubTransQueue admission milestone on the buffer task", func(t *testing.T) {
+		setup1(t)
+
 		topPort.Deliver(makeRead(0x40))
 		engine.(*milestoneClock).now += 1000
 
@@ -105,20 +109,20 @@ var _ = Describe("DRAM admission milestones", func() {
 		modelingtest.Tick(memCtrl)
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
-		Expect(bufID).ToNot(BeZero())
+		require.NotZero(t, bufID)
 
 		bufMs := rec.milestonesOn(bufID)
 		// No queue delay: the buffer task carries only the SubTransQueue admission milestone.
-		Expect(bufMs).To(HaveLen(1))
+		require.Len(t, bufMs, 1)
 
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindQueue))
-		Expect(bufMs[0].What).To(Equal(memCtrl.Name() + ".SubTransQueue"))
+		require.Equal(t, tasks.MilestoneKindQueue, bufMs[0].Kind)
+		require.Equal(t, memCtrl.Name()+".SubTransQueue", bufMs[0].What)
 	})
-})
+}
 
-var _ = Describe("DRAM refresh-stall attribution", func() {
-	It("charges a refresh milestone to the sub-trans that issues "+
-		"after a refresh window", func() {
+func TestDRAMRefreshStallAttribution(t *testing.T) {
+	t.Run("charges a refresh milestone to the sub-trans that issues "+
+		"after a refresh window", func(t *testing.T) {
 		engine := &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim := testsim.New(engine, true)
 
@@ -129,7 +133,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		spec.TRFC = 3
 
 		memCtrl := buildDRAM(sim, spec, "MemCtrl", 16)
-		Expect(sim.Initialize()).To(Succeed())
+		require.NoError(t, sim.Initialize())
 
 		topPort := memCtrl.Ports.Top
 
@@ -154,7 +158,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		}
 
 		subID := rec.taskID("sub-trans")
-		Expect(subID).ToNot(BeZero())
+		require.NotZero(t, subID)
 
 		var refreshMs []tasks.Milestone
 		for _, m := range rec.milestonesOn(subID) {
@@ -168,6 +172,6 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		// resumes issuing once the window ends: at least one refresh milestone
 		// (one per stall window the command waited through) is charged to it,
 		// rather than the window being invisible in the trace.
-		Expect(len(refreshMs)).To(BeNumerically(">=", 1))
+		require.True(t, (len(refreshMs)) >= (1), "expected len(refreshMs) >= 1")
 	})
-})
+}

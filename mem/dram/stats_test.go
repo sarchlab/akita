@@ -1,8 +1,8 @@
 package dram_test
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // testDriver owns the ports a test drives by hand. The test polls those ports,
@@ -30,71 +31,67 @@ func newDriverPort(name string, bufSize int) messaging.Port {
 	return p
 }
 
-var _ = Describe("DRAM Statistics", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDRAMStatistics(t *testing.T) {
 	// Unit tests for stat computation functions
-	It("should compute row buffer hit rate", func() {
+	t.Run("should compute row buffer hit rate", func(t *testing.T) {
 		c := &dram.Comp{}
 		c.State.RowBufferHits = 3
 		c.State.RowBufferMisses = 7
-		Expect(dram.RowBufferHitRate(c)).To(
-			BeNumerically("~", 0.3, 0.001))
+		require.InDelta(t, 0.3, dram.RowBufferHitRate(c), 0.001)
 	})
 
-	It("should return 0 hit rate when no accesses", func() {
+	t.Run("should return 0 hit rate when no accesses", func(t *testing.T) {
 		c := &dram.Comp{}
-		Expect(dram.RowBufferHitRate(c)).To(Equal(0.0))
+		require.Equal(t, 0.0, dram.RowBufferHitRate(c))
 	})
 
-	It("should compute average read latency", func() {
+	t.Run("should compute average read latency", func(t *testing.T) {
 		c := &dram.Comp{}
 		c.State.CompletedReads = 10
 		c.State.TotalReadLatencyCycles = 200
-		Expect(dram.AverageReadLatency(c)).To(
-			BeNumerically("~", 20.0, 0.001))
+		require.InDelta(t, 20.0, dram.AverageReadLatency(c), 0.001)
 	})
 
-	It("should return 0 average read latency when no reads completed", func() {
+	t.Run("should return 0 average read latency when no reads completed", func(t *testing.T) {
 		c := &dram.Comp{}
-		Expect(dram.AverageReadLatency(c)).To(Equal(0.0))
+		require.Equal(t, 0.0, dram.AverageReadLatency(c))
 	})
 
-	It("should compute average write latency", func() {
+	t.Run("should compute average write latency", func(t *testing.T) {
 		c := &dram.Comp{}
 		c.State.CompletedWrites = 5
 		c.State.TotalWriteLatencyCycles = 100
-		Expect(dram.AverageWriteLatency(c)).To(
-			BeNumerically("~", 20.0, 0.001))
+		require.InDelta(t, 20.0, dram.AverageWriteLatency(c), 0.001)
 	})
 
-	It("should return 0 average write latency when no writes completed", func() {
+	t.Run("should return 0 average write latency when no writes completed", func(t *testing.T) {
 		c := &dram.Comp{}
-		Expect(dram.AverageWriteLatency(c)).To(Equal(0.0))
+		require.Equal(t, 0.0, dram.AverageWriteLatency(c))
 	})
 
-	It("should compute read bandwidth", func() {
+	t.Run("should compute read bandwidth", func(t *testing.T) {
 		c := &dram.Comp{}
 		c.State.BytesRead = 1024
 		c.State.TotalCycles = 100
-		Expect(dram.ReadBandwidth(c)).To(
-			BeNumerically("~", 10.24, 0.001))
+		require.InDelta(t, 10.24, dram.ReadBandwidth(c), 0.001)
 	})
 
-	It("should compute write bandwidth", func() {
+	t.Run("should compute write bandwidth", func(t *testing.T) {
 		c := &dram.Comp{}
 		c.State.BytesWritten = 2048
 		c.State.TotalCycles = 200
-		Expect(dram.WriteBandwidth(c)).To(
-			BeNumerically("~", 10.24, 0.001))
+		require.InDelta(t, 10.24, dram.WriteBandwidth(c), 0.001)
 	})
 
-	It("should return 0 bandwidth when no cycles", func() {
+	t.Run("should return 0 bandwidth when no cycles", func(t *testing.T) {
 		c := &dram.Comp{}
-		Expect(dram.ReadBandwidth(c)).To(Equal(0.0))
-		Expect(dram.WriteBandwidth(c)).To(Equal(0.0))
+		require.Equal(t, 0.0, dram.ReadBandwidth(c))
+		require.Equal(t, 0.0, dram.WriteBandwidth(c))
 	})
 
 	// Integration test: verify stats accumulate during real simulation
-	It("should accumulate statistics during simulation", func() {
+	t.Run("should accumulate statistics during simulation", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 		engine := sim.Engine().(*timing.SerialEngine)
 
@@ -144,24 +141,27 @@ var _ = Describe("DRAM Statistics", func() {
 
 		srcPort.Send(read)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		state := &dramComp.State
-		Expect(state.CompletedReads).To(BeNumerically(">=", 1))
-		Expect(state.CompletedWrites).To(BeNumerically(">=", 1))
-		Expect(state.TotalReadLatencyCycles).To(BeNumerically(">", 0))
-		Expect(state.TotalWriteLatencyCycles).To(BeNumerically(">", 0))
-		Expect(state.BytesRead).To(BeNumerically(">", 0))
-		Expect(state.BytesWritten).To(BeNumerically(">", 0))
-		Expect(state.TotalCycles).To(BeNumerically(">", 0))
-		Expect(state.RowBufferHits + state.RowBufferMisses).To(
-			BeNumerically(">", 0))
-		Expect(dram.AverageReadLatency(dramComp)).To(BeNumerically(">", 0))
-		Expect(dram.AverageWriteLatency(dramComp)).To(BeNumerically(">", 0))
-		Expect(dram.ReadBandwidth(dramComp)).To(BeNumerically(">", 0))
-		Expect(dram.WriteBandwidth(dramComp)).To(BeNumerically(">", 0))
+		require.True(t, (state.CompletedReads) >= (1), "expected state.CompletedReads >= 1")
+		require.True(t, (state.CompletedWrites) >= (1), "expected state.CompletedWrites >= 1")
+		require.True(t, (state.TotalReadLatencyCycles) > (0), "expected state.TotalReadLatencyCycles > 0")
+		require.True(t, (state.TotalWriteLatencyCycles) > (0), "expected state.TotalWriteLatencyCycles > 0")
+		require.True(t, (state.BytesRead) > (0), "expected state.BytesRead > 0")
+		require.True(t, (state.BytesWritten) > (0), "expected state.BytesWritten > 0")
+		require.True(t, (state.TotalCycles) > (0), "expected state.TotalCycles > 0")
+		require.True(
+			t,
+			(state.RowBufferHits+state.RowBufferMisses) > (0),
+			"expected state.RowBufferHits + state.RowBufferMisses > 0",
+		)
+		require.True(t, (dram.AverageReadLatency(dramComp)) > (0), "expected dram.AverageReadLatency(dramComp) > 0")
+		require.True(t, (dram.AverageWriteLatency(dramComp)) > (0), "expected dram.AverageWriteLatency(dramComp) > 0")
+		require.True(t, (dram.ReadBandwidth(dramComp)) > (0), "expected dram.ReadBandwidth(dramComp) > 0")
+		require.True(t, (dram.WriteBandwidth(dramComp)) > (0), "expected dram.WriteBandwidth(dramComp) > 0")
 	})
-})
+}
 
 func (o testDriver) Name() string                           { return "TestDriver" }
 func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

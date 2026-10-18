@@ -2,9 +2,10 @@ package simplebankedmemory
 
 import (
 	"fmt"
+	"slices"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -13,6 +14,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // milestoneRecorder captures the task starts and milestones the memory emits, in
@@ -92,7 +94,8 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("SimpleBankedMemory admission milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
@@ -101,7 +104,9 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		rec     *milestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 		storage := mem.NewStorage(4 * mem.GB)
@@ -129,8 +134,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		// exist.
 		rec = &milestoneRecorder{}
 		memComp.TaskTracker().Subscribe(rec, memComp)
-
-	})
+	}
 
 	makeRead := func(addr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
@@ -143,8 +147,10 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		return req
 	}
 
-	It("records a per-bank hardware_resource admission milestone on "+
-		"the buffer task", func() {
+	t.Run("records a per-bank hardware_resource admission milestone on "+
+		"the buffer task", func(t *testing.T) {
+		setup1(t)
+
 		req := makeRead(0x0)
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
@@ -158,19 +164,19 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		modelingtest.Tick(memComp)
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
-		Expect(bufID).ToNot(BeZero())
+		require.NotZero(t, bufID)
 
 		bufMs := rec.milestonesOn(bufID)
 		// No queue delay: the buffer task carries only the bank admission milestone.
-		Expect(bufMs).To(HaveLen(1))
+		require.Len(t, bufMs, 1)
 
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
-		Expect(bufMs[0].What).To(Equal(
-			fmt.Sprintf("%s.bank%d", memComp.Name(), bankID)))
+		require.Equal(t, tasks.MilestoneKindHardwareResource, bufMs[0].Kind)
+		require.Equal(t, fmt.Sprintf("%s.bank%d", memComp.Name(), bankID), bufMs[0].What)
 	})
-})
+}
 
-var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
@@ -182,7 +188,9 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		rec     *milestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup2 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 		storage = mem.NewStorage(4 * mem.GB)
@@ -212,7 +220,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		// real (request starts return 0 with no hooks).
 		rec = &milestoneRecorder{}
 		memComp.TaskTracker().Subscribe(rec, memComp)
-	})
+	}
 
 	// drive ticks the memory and shuttles messages over the loopback until the
 	// agent has received the response, or a tick budget is exhausted.
@@ -223,8 +231,10 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		}
 	}
 
-	It("attributes the bank-pipeline traversal as work on the read "+
-		"req_in", func() {
+	t.Run("attributes the bank-pipeline traversal as work on the read "+
+		"req_in", func(t *testing.T) {
+		setup2(t)
+
 		data := []byte{1, 2, 3, 4}
 		storage.Write(0x40, data)
 
@@ -235,37 +245,38 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
 
-		agent.send(read)
+		agent.send(t, read)
 		conn.transfer()
 		drive()
 
-		Expect(agent.received).To(HaveLen(1))
+		require.Len(t, agent.received, 1)
 		_, ok := agent.received[0].Payload.(memprotocol.DataReadyRsp)
 		rsp := agent.received[0]
-		Expect(ok).To(BeTrue())
-		Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(data))
+		require.True(t, ok)
+		require.Equal(t, data, rsp.Payload.(memprotocol.DataReadyRsp).Data)
 
 		reqInID := rec.taskID("req_in")
-		Expect(reqInID).ToNot(BeZero())
+		require.NotZero(t, reqInID)
 
 		// The req_in carries a work milestone marking the end of the
 		// bank-pipeline traversal, named "<comp>.pipeline".
 		reqInMs := rec.milestonesOn(reqInID)
-		Expect(reqInMs).To(ContainElement(SatisfyAll(
-			HaveField("Kind", tasks.MilestoneKindWork),
-			HaveField("What", memComp.Name()+".pipeline"),
-		)))
+		require.True(t, slices.ContainsFunc(reqInMs, func(m tasks.Milestone) bool {
+			return m.Kind == tasks.MilestoneKindWork && m.What == memComp.Name()+".pipeline"
+		}), "req_in must contain the bank-pipeline work milestone")
 
 		// The pipeline subtask is a child of req_in and is closed at exit.
 		pipeStart, found := rec.taskStart(tasks.KindPipeline)
-		Expect(found).To(BeTrue())
-		Expect(pipeStart.ParentID).To(Equal(reqInID))
-		Expect(pipeStart.What).To(Equal(memComp.Name() + ".pipeline"))
-		Expect(rec.ended(pipeStart.ID)).To(BeTrue())
+		require.True(t, found)
+		require.Equal(t, reqInID, pipeStart.ParentID)
+		require.Equal(t, memComp.Name()+".pipeline", pipeStart.What)
+		require.True(t, rec.ended(pipeStart.ID))
 	})
 
-	It("attributes the bank-pipeline traversal as work on the write "+
-		"req_in", func() {
+	t.Run("attributes the bank-pipeline traversal as work on the write "+
+		"req_in", func(t *testing.T) {
+		setup2(t)
+
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x80,
 			Data:    []byte{9, 8, 7, 6},
@@ -277,26 +288,25 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		write.TrafficBytes = len(write.Payload.(memprotocol.WriteReq).Data) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
 
-		agent.send(write)
+		agent.send(t, write)
 		conn.transfer()
 		drive()
 
-		Expect(agent.received).To(HaveLen(1))
+		require.Len(t, agent.received, 1)
 		_, ok := agent.received[0].Payload.(memprotocol.WriteDoneRsp)
-		Expect(ok).To(BeTrue())
+		require.True(t, ok)
 
 		reqInID := rec.taskID("req_in")
-		Expect(reqInID).ToNot(BeZero())
+		require.NotZero(t, reqInID)
 
 		reqInMs := rec.milestonesOn(reqInID)
-		Expect(reqInMs).To(ContainElement(SatisfyAll(
-			HaveField("Kind", tasks.MilestoneKindWork),
-			HaveField("What", memComp.Name()+".pipeline"),
-		)))
+		require.True(t, slices.ContainsFunc(reqInMs, func(m tasks.Milestone) bool {
+			return m.Kind == tasks.MilestoneKindWork && m.What == memComp.Name()+".pipeline"
+		}), "req_in must contain the bank-pipeline work milestone")
 
 		pipeStart, found := rec.taskStart(tasks.KindPipeline)
-		Expect(found).To(BeTrue())
-		Expect(pipeStart.ParentID).To(Equal(reqInID))
-		Expect(rec.ended(pipeStart.ID)).To(BeTrue())
+		require.True(t, found)
+		require.Equal(t, reqInID, pipeStart.ParentID)
+		require.True(t, rec.ended(pipeStart.ID))
 	})
-})
+}

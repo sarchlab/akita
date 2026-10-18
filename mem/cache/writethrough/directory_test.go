@@ -8,13 +8,15 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Directory", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDirectory(t *testing.T) {
 	var (
 		bottomPort messaging.Port
 		d          *directory
@@ -23,18 +25,22 @@ var _ = Describe("Directory", func() {
 
 	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
 	// next CanSend returns false, simulating a busy port.
-	fillBottomOutgoing := func() {
+	fillBottomOutgoing := func(t *testing.T) {
+		t.Helper()
+
 		dummy := messaging.Msg{Payload: memprotocol.ReadReq{},
 			ID:           c.comp.NewID(),
 			Src:          bottomPort.AsRemote(),
 			Dst:          messaging.RemotePort("DRAM"),
 			TrafficClass: "req"}
 
-		Expect(bottomPort.CanSend()).To(BeTrue())
+		require.True(t, bottomPort.CanSend())
 		bottomPort.Send(dummy)
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
@@ -83,16 +89,20 @@ var _ = Describe("Directory", func() {
 		d = &directory{
 			cache: c,
 		}
-	})
+	}
 
-	It("should do nothing if no transaction", func() {
+	t.Run("should do nothing if no transaction", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := d.Tick()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	Context("read mshr hit", func() {
-		It("Should add to mshr entry", func() {
+	t.Run("read mshr hit", func(t *testing.T) {
+		t.Run("Should add to mshr entry", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -120,14 +130,16 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			entry := next.MSHRState.Entries[entryIdx]
-			Expect(entry.TransactionIndices).To(ContainElement(0))
+			require.Contains(t, entry.TransactionIndices, 0)
 		})
 	})
 
-	Context("read hit", func() {
-		It("should send transaction to bank", func() {
+	t.Run("read hit", func(t *testing.T) {
+		t.Run("should send transaction to bank", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -159,17 +171,19 @@ var _ = Describe("Directory", func() {
 			madeProgress := d.Tick()
 
 			trans := &next.Transactions[0]
-			Expect(madeProgress).To(BeTrue())
-			Expect(trans.HasBlock).To(BeTrue())
-			Expect(trans.BlockSetID).To(Equal(setID))
-			Expect(trans.BlockWayID).To(Equal(wayID))
-			Expect(trans.BankAction).To(Equal(bankActionReadHit))
-			Expect(next.DirectoryState.Sets[setID].Blocks[wayID].ReadCount).To(Equal(1))
+			require.True(t, madeProgress)
+			require.True(t, trans.HasBlock)
+			require.Equal(t, setID, trans.BlockSetID)
+			require.Equal(t, wayID, trans.BlockWayID)
+			require.Equal(t, bankActionReadHit, trans.BankAction)
+			require.Equal(t, 1, next.DirectoryState.Sets[setID].Blocks[wayID].ReadCount)
 			// Bank buf should have the trans index
-			Expect(next.BankBufs[0].Size()).To(Equal(1))
+			require.Equal(t, 1, next.BankBufs[0].Size())
 		})
 
-		It("should stall if cannot send to bank", func() {
+		t.Run("should stall if cannot send to bank", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -200,10 +214,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if block is locked", func() {
+		t.Run("should stall if block is locked", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -231,12 +247,14 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 	})
 
-	Context("read miss", func() {
-		It("should send request to bottom", func() {
+	t.Run("read miss", func(t *testing.T) {
+		t.Run("should send request to bottom", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -257,35 +275,37 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			readToBottomValue, _ := bottomPort.RetrieveOutgoing()
 
 			readToBottom := readToBottomValue
-			Expect(readToBottom.Payload.(memprotocol.ReadReq).Address).To(Equal(uint64(0x100)))
-			Expect(readToBottom.Payload.(memprotocol.ReadReq).AccessByteSize).To(Equal(uint64(64)))
-			Expect(readToBottom.Payload.(memprotocol.ReadReq).PID).To(Equal(vm.PID(1)))
+			require.Equal(t, uint64(0x100), readToBottom.Payload.(memprotocol.ReadReq).Address)
+			require.Equal(t, uint64(64), readToBottom.Payload.(memprotocol.ReadReq).AccessByteSize)
+			require.Equal(t, vm.PID(1), readToBottom.Payload.(memprotocol.ReadReq).PID)
 			// Check MSHR entry was created
 			entryIdx, found := cache.MSHRQuery(&next.MSHRState, vm.PID(1), 0x100)
-			Expect(found).To(BeTrue())
+			require.True(t, found)
 			entry := next.MSHRState.Entries[entryIdx]
-			Expect(entry.TransactionIndices).To(ContainElement(0))
-			Expect(entry.HasBlock).To(BeTrue())
-			Expect(entry.HasReadReq).To(BeTrue())
+			require.Contains(t, entry.TransactionIndices, 0)
+			require.True(t, entry.HasBlock)
+			require.True(t, entry.HasReadReq)
 
 			// Check victim block was set up
 			victimSetID := entry.BlockSetID
 			victimWayID := entry.BlockWayID
 			block := next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
-			Expect(block.Tag).To(Equal(uint64(0x100)))
-			Expect(block.IsLocked).To(BeTrue())
-			Expect(block.IsValid).To(BeTrue())
+			require.Equal(t, uint64(0x100), block.Tag)
+			require.True(t, block.IsLocked)
+			require.True(t, block.IsValid)
 			trans := &next.Transactions[0]
-			Expect(trans.HasReadToBottom).To(BeTrue())
-			Expect(trans.HasBlock).To(BeTrue())
+			require.True(t, trans.HasReadToBottom)
+			require.True(t, trans.HasBlock)
 		})
 
-		It("should stall if every way in the set is locked", func() {
+		t.Run("should stall if every way in the set is locked", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -311,10 +331,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if every way in the set is being read", func() {
+		t.Run("should stall if every way in the set is being read", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -340,10 +362,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should skip the LRU victim if it is locked and try another way", func() {
+		t.Run("should skip the LRU victim if it is locked and try another way", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -369,15 +393,17 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			trans := &next.Transactions[0]
-			Expect(trans.HasReadToBottom).To(BeTrue())
-			Expect(trans.HasBlock).To(BeTrue())
+			require.True(t, trans.HasReadToBottom)
+			require.True(t, trans.HasBlock)
 			// Victim must be a different (unlocked) way.
-			Expect(trans.BlockWayID).NotTo(Equal(lockedWay))
+			require.NotEqual(t, lockedWay, trans.BlockWayID)
 		})
 
-		It("should stall if mshr is full", func() {
+		t.Run("should stall if mshr is full", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -403,10 +429,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if send to bottom failed", func() {
+		t.Run("should stall if send to bottom failed", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			readMeta := messaging.Msg{
@@ -425,16 +453,18 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.Push(0)
 
-			fillBottomOutgoing()
+			fillBottomOutgoing(t)
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 	})
 
-	Context("write mshr hit", func() {
-		It("should add to mshr entry and wait for fill", func() {
+	t.Run("write mshr hit", func(t *testing.T) {
+		t.Run("should add to mshr entry and wait for fill", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			// Pre-existing fetcher transaction (index 0) that allocated
@@ -478,28 +508,30 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			writeToBottomValue, _ := bottomPort.RetrieveOutgoing()
 
 			writeToBottom := writeToBottomValue
-			Expect(writeToBottom.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x104)))
-			Expect(writeToBottom.Payload.(memprotocol.WriteReq).Data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(writeToBottom.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
+			require.Equal(t, uint64(0x104), writeToBottom.Payload.(memprotocol.WriteReq).Address)
+			require.Equal(t, []byte{1, 2, 3, 4}, writeToBottom.Payload.(memprotocol.WriteReq).Data)
+			require.Equal(t, vm.PID(1), writeToBottom.Payload.(memprotocol.WriteReq).PID)
 			entry := next.MSHRState.Entries[entryIdx]
-			Expect(entry.TransactionIndices).To(ContainElement(1))
+			require.Contains(t, entry.TransactionIndices, 1)
 			trans := &next.Transactions[1]
-			Expect(trans.HasWriteToBottom).To(BeTrue())
+			require.True(t, trans.HasWriteToBottom)
 			// The coalesced write must wait for the fetcher's merged-line
 			// write to land in storage before completing upstream.
-			Expect(trans.WaitForMSHRFill).To(BeTrue())
-			Expect(trans.MSHRFillFetcherIdx).To(Equal(0))
-			Expect(trans.MSHRFillDone).To(BeFalse())
+			require.True(t, trans.WaitForMSHRFill)
+			require.Equal(t, 0, trans.MSHRFillFetcherIdx)
+			require.False(t, trans.MSHRFillDone)
 		})
 	})
 
-	Context("write hit", func() {
-		It("should send to bank", func() {
+	t.Run("write hit", func(t *testing.T) {
+		t.Run("should send to bank", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -531,19 +563,21 @@ var _ = Describe("Directory", func() {
 			wValue, _ := bottomPort.RetrieveOutgoing()
 
 			w := wValue
-			Expect(w.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x104)))
-			Expect(w.Payload.(memprotocol.WriteReq).Data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(w.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
+			require.Equal(t, uint64(0x104), w.Payload.(memprotocol.WriteReq).Address)
+			require.Equal(t, []byte{1, 2, 3, 4}, w.Payload.(memprotocol.WriteReq).Data)
+			require.Equal(t, vm.PID(1), w.Payload.(memprotocol.WriteReq).PID)
 
 			trans := &next.Transactions[0]
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked).To(BeTrue())
-			Expect(trans.HasWriteToBottom).To(BeTrue())
-			Expect(trans.BankAction).To(Equal(bankActionWrite))
-			Expect(trans.HasBlock).To(BeTrue())
+			require.True(t, madeProgress)
+			require.True(t, next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked)
+			require.True(t, trans.HasWriteToBottom)
+			require.Equal(t, bankActionWrite, trans.BankAction)
+			require.True(t, trans.HasBlock)
 		})
 
-		It("should stall if the block is locked", func() {
+		t.Run("should stall if the block is locked", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -572,10 +606,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if the block is being read", func() {
+		t.Run("should stall if the block is being read", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -604,10 +640,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if bank buf is full", func() {
+		t.Run("should stall if bank buf is full", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -637,10 +675,12 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if send to bottom failed", func() {
+		t.Run("should stall if send to bottom failed", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -666,16 +706,18 @@ var _ = Describe("Directory", func() {
 
 			next.DirPostBuf.Push(0)
 
-			fillBottomOutgoing()
+			fillBottomOutgoing(t)
 
 			madeProgress := d.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 	})
 
-	Context("write miss", func() {
-		It("should send to bottom", func() {
+	t.Run("write miss", func(t *testing.T) {
+		t.Run("should send to bottom", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeMeta := messaging.Msg{
@@ -699,13 +741,13 @@ var _ = Describe("Directory", func() {
 			wValue, _ := bottomPort.RetrieveOutgoing()
 
 			w := wValue
-			Expect(w.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x100)))
-			Expect(w.Payload.(memprotocol.WriteReq).Data).To(HaveLen(64))
-			Expect(w.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
+			require.Equal(t, uint64(0x100), w.Payload.(memprotocol.WriteReq).Address)
+			require.Len(t, w.Payload.(memprotocol.WriteReq).Data, 64)
+			require.Equal(t, vm.PID(1), w.Payload.(memprotocol.WriteReq).PID)
 
 			trans := &next.Transactions[0]
-			Expect(madeProgress).To(BeTrue())
-			Expect(trans.HasWriteToBottom).To(BeTrue())
+			require.True(t, madeProgress)
+			require.True(t, trans.HasWriteToBottom)
 		})
 	})
-})
+}

@@ -1,8 +1,8 @@
 package addresstranslator
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // traceRecorder captures the full trace event stream the address translator
@@ -25,20 +26,20 @@ type traceRecorder struct {
 	tags       []tasks.Tag
 }
 
-func (r *traceRecorder) TaskStarted(t tasks.Task) {
-	r.starts = append(r.starts, t)
+func (r *traceRecorder) TaskStarted(subject tasks.Task) {
+	r.starts = append(r.starts, subject)
 }
 
-func (r *traceRecorder) TaskEnded(t tasks.Task) {
-	r.ends = append(r.ends, t)
+func (r *traceRecorder) TaskEnded(subject tasks.Task) {
+	r.ends = append(r.ends, subject)
 }
 
 func (r *traceRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *traceRecorder) TagAdded(t tasks.Tag) {
-	r.tags = append(r.tags, t)
+func (r *traceRecorder) TagAdded(subject tasks.Tag) {
+	r.tags = append(r.tags, subject)
 }
 
 func (r *traceRecorder) endedIDs() []uint64 {
@@ -91,7 +92,8 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("Address Translator milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestAddressTranslatorMilestones(t *testing.T) {
 	var (
 		engine          timing.Engine
 		sim             timing.Simulation
@@ -104,7 +106,9 @@ var _ = Describe("Address Translator milestones", func() {
 		rec             *traceRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 
@@ -148,8 +152,7 @@ var _ = Describe("Address Translator milestones", func() {
 		at.TaskTracker().Subscribe(rec, at)
 		// The translation-send admission milestone lands on the Top-port buffer
 		// task, so the test needs the buffer task to exist.
-
-	})
+	}
 
 	makeRead := func(addr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
@@ -178,13 +181,15 @@ var _ = Describe("Address Translator milestones", func() {
 	// forward downstream (parseTranslation), then receive the bottom response
 	// and reply upstream (respond). bottomRsp builds the bottom-side response
 	// given the translated request's ID.
-	driveRoundTrip := func(
+	driveRoundTrip := func(t *testing.T,
 		req messaging.Msg,
 		bottomRsp func(rspTo uint64) messaging.Msg,
 	) {
+		t.Helper()
+
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
-		Expect(ptMW.translate()).To(BeTrue())
+		require.True(t, ptMW.translate())
 
 		transReqID := at.State.Transactions[0].TranslationReqID
 		translationPort.RetrieveOutgoing()
@@ -199,7 +204,7 @@ var _ = Describe("Address Translator milestones", func() {
 		translationPort.Deliver(transRsp)
 
 		engine.(*milestoneClock).now += 1000
-		Expect(rpMW.parseTranslation()).To(BeTrue())
+		require.True(t, rpMW.parseTranslation())
 
 		bottomReqID := at.State.InflightReqToBottom[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
@@ -207,13 +212,15 @@ var _ = Describe("Address Translator milestones", func() {
 		bottomPort.Deliver(bottomRsp(bottomReqID))
 
 		engine.(*milestoneClock).now += 1000
-		Expect(rpMW.respond()).To(BeTrue())
+		require.True(t, rpMW.respond())
 
 		topPort.RetrieveOutgoing()
 	}
 
-	It("splits admission (buffer task) from processing (req_in) for a read", func() {
-		driveRoundTrip(makeRead(0x10040), func(rspTo uint64) messaging.Msg {
+	t.Run("splits admission (buffer task) from processing (req_in) for a read", func(t *testing.T) {
+		setup1(t)
+
+		driveRoundTrip(t, makeRead(0x10040), func(rspTo uint64) messaging.Msg {
 			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
 				ID:           sim.NewID(),
 				RspTo:        rspTo,
@@ -224,37 +231,39 @@ var _ = Describe("Address Translator milestones", func() {
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
-		Expect(bufID).ToNot(BeZero())
-		Expect(reqInID).ToNot(BeZero())
-		Expect(bufID).ToNot(Equal(reqInID))
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.NotEqual(t, reqInID, bufID)
 
 		// The buffer task owns the pre-admission story: reached the head of the
 		// Top buffer, then waited to send the translation request.
-		Expect(rec.kindsOn(bufID)).To(Equal([]tasks.MilestoneKind{
+		require.Equal(t, []tasks.MilestoneKind{
 			tasks.MilestoneKindNetworkBusy,
-		}))
+		}, rec.kindsOn(bufID))
 		bufMs := rec.milestonesOn(bufID)
 
-		Expect(bufMs[0].What).To(Equal(translationPort.Name()))
+		require.Equal(t, translationPort.Name(), bufMs[0].What)
 
 		// req_in owns only the post-admission processing — including the bottom
 		// network-busy milestone (on the top req_in, not a phantom keyed by the
 		// downstream request's receiver ID).
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+		require.Equal(t, []tasks.MilestoneKind{
 			tasks.MilestoneKindTranslation,
 			tasks.MilestoneKindNetworkBusy,
 			tasks.MilestoneKindData,
 			tasks.MilestoneKindNetworkBusy,
-		}))
+		}, rec.kindsOn(reqInID))
 		reqMs := rec.milestonesOn(reqInID)
-		Expect(reqMs[0].What).To(Equal("translation"))
-		Expect(reqMs[1].What).To(Equal(bottomPort.Name()))
-		Expect(reqMs[2].What).To(Equal("data"))
-		Expect(reqMs[3].What).To(Equal(topPort.Name()))
+		require.Equal(t, "translation", reqMs[0].What)
+		require.Equal(t, bottomPort.Name(), reqMs[1].What)
+		require.Equal(t, "data", reqMs[2].What)
+		require.Equal(t, topPort.Name(), reqMs[3].What)
 	})
 
-	It("distinguishes a write with a subtask milestone on req_in", func() {
-		driveRoundTrip(
+	t.Run("distinguishes a write with a subtask milestone on req_in", func(t *testing.T) {
+		setup1(t)
+
+		driveRoundTrip(t,
 			makeWrite(0x10040, []byte{1, 2, 3, 4}),
 			func(rspTo uint64) messaging.Msg {
 				rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
@@ -267,16 +276,18 @@ var _ = Describe("Address Translator milestones", func() {
 		)
 
 		reqInID := rec.taskID("req_in")
-		Expect(rec.kindsOn(reqInID)).To(Equal([]tasks.MilestoneKind{
+		require.Equal(t, []tasks.MilestoneKind{
 			tasks.MilestoneKindTranslation,
 			tasks.MilestoneKindNetworkBusy,
 			tasks.MilestoneKindSubTask,
 			tasks.MilestoneKindNetworkBusy,
-		}))
+		}, rec.kindsOn(reqInID))
 	})
 
-	It("finalizes the completing transaction's translation req_out, "+
-		"not a later transaction shifted into its slot", func() {
+	t.Run("finalizes the completing transaction's translation req_out, "+
+		"not a later transaction shifted into its slot", func(t *testing.T) {
+		setup1(t)
+
 		// Two in-flight transactions; complete the first (non-last) one. The
 		// removeTransaction append-shift must not redirect the trace finalize
 		// to the surviving transaction shifted into the freed slot.
@@ -314,9 +325,9 @@ var _ = Describe("Address Translator milestones", func() {
 
 		engine.(*milestoneClock).now += 1000
 
-		Expect(rpMW.parseTranslation()).To(BeTrue())
+		require.True(t, rpMW.parseTranslation())
 
-		Expect(rec.endedIDs()).To(ContainElement(transTask1ID))
-		Expect(rec.endedIDs()).NotTo(ContainElement(transTask2ID))
+		require.Contains(t, rec.endedIDs(), transTask1ID)
+		require.NotContains(t, rec.endedIDs(), transTask2ID)
 	})
-})
+}

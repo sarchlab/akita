@@ -79,8 +79,6 @@ jobs:
           cache: false
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
-      - name: Install ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.32.1
       - name: Generate mocks
         run: go generate ./...
       - name: Build
@@ -92,7 +90,7 @@ jobs:
           args: --timeout=10m
           verify: false
       - name: Run tests
-        run: ginkgo -r
+        run: go test -count=1 ./...
 
   dram_validation:
     # Self-contained DRAM validation gate — runs the whole tier ladder for the

@@ -8,20 +8,24 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/queueing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Bottom Parser", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBottomParser(t *testing.T) {
 	var (
 		bottomPort messaging.Port
 		p          *bottomParser
 		c          *pipelineMW
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
@@ -61,15 +65,19 @@ var _ = Describe("Bottom Parser", func() {
 		bottomPort = ports.Bottom
 
 		p = &bottomParser{cache: c}
-	})
+	}
 
-	It("should do nothing if no respond", func() {
+	t.Run("should do nothing if no respond", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := p.Tick()
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	Context("write done", func() {
-		It("should handle write done", func() {
+	t.Run("write done", func(t *testing.T) {
+		t.Run("should handle write done", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.Msg{
@@ -107,14 +115,16 @@ var _ = Describe("Bottom Parser", func() {
 
 			madeProgress := p.Tick()
 
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.Transactions[0].Done).To(BeTrue())
+			require.True(t, madeProgress)
+			require.True(t, next.Transactions[0].Done)
 			// Transaction stays until bankDone is also true.
-			Expect(next.Transactions[0].BottomWriteDone).To(BeTrue())
-			Expect(next.Transactions[0].Removed).To(BeFalse())
+			require.True(t, next.Transactions[0].BottomWriteDone)
+			require.False(t, next.Transactions[0].Removed)
 		})
 
-		It("does not complete an MSHR-coalesced write before the fill", func() {
+		t.Run("does not complete an MSHR-coalesced write before the fill", func(t *testing.T) {
+			setup1(t)
+
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.Msg{
@@ -157,23 +167,25 @@ var _ = Describe("Bottom Parser", func() {
 
 			madeProgress := p.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			coalesced := &next.Transactions[1]
-			Expect(coalesced.BottomWriteDone).To(BeTrue())
+			require.True(t, coalesced.BottomWriteDone)
 			// Must NOT be done — the fetcher's bankActionWriteFetched
 			// stage hasn't written the merged line yet.
-			Expect(coalesced.Done).To(BeFalse())
+			require.False(t, coalesced.Done)
 		})
 	})
 
-	Context("data ready", func() {
+	t.Run("data ready", func(t *testing.T) {
 		var (
 			readToBottomMeta       messaging.Msg
 			dataReady              messaging.Msg
 			blockSetID, blockWayID int
 		)
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			next := &c.comp.State
 
 			readToBottomMeta = messaging.Msg{
@@ -237,9 +249,12 @@ var _ = Describe("Bottom Parser", func() {
 			entry.BlockSetID = blockSetID
 			entry.BlockWayID = blockWayID
 			entry.TransactionIndices = append(entry.TransactionIndices, 0)
-		})
+		}
 
-		It("should stall if bank is busy", func() {
+		t.Run("should stall if bank is busy", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &c.comp.State
 			next.BankBufs[0] = queueing.MakeBuffer[int](0)
 
@@ -247,21 +262,24 @@ var _ = Describe("Bottom Parser", func() {
 
 			madeProgress := p.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should send transaction to bank", func() {
+		t.Run("should send transaction to bank", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &c.comp.State
 
 			bottomPort.Deliver(dataReady)
 
 			madeProgress := p.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			// Fetcher is NOT marked Done yet — bank stage does that
-			Expect(next.Transactions[0].Done).To(BeFalse())
+			require.False(t, next.Transactions[0].Done)
 			// Fetcher's Data holds the full block for bank write-fetched
-			Expect(next.Transactions[0].Data).To(Equal([]byte{
+			require.Equal(t, []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -270,15 +288,18 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
-			}))
+			}, next.Transactions[0].Data)
 			// Bank buf should have a write-fetched transaction
-			Expect(next.BankBufs[0].Size()).To(Equal(1))
+			require.Equal(t, 1, next.BankBufs[0].Size())
 			// Fetcher trans should have bankAction set
 			trans := &next.Transactions[0]
-			Expect(trans.BankAction).To(Equal(bankActionWriteFetched))
+			require.Equal(t, bankActionWriteFetched, trans.BankAction)
 		})
 
-		It("should combine write", func() {
+		t.Run("should combine write", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &c.comp.State
 
 			// Add another read transaction (index 1) that is in the MSHR
@@ -328,14 +349,14 @@ var _ = Describe("Bottom Parser", func() {
 
 			madeProgress := p.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			// Fetcher's Data holds the full merged block (not the 4-byte
 			// read slice — that's restored by the bank stage).
 			// Fetcher is NOT marked Done yet — bank stage does that.
-			Expect(next.Transactions[0].Done).To(BeFalse())
+			require.False(t, next.Transactions[0].Done)
 			trans := &next.Transactions[0]
-			Expect(trans.BankAction).To(Equal(bankActionWriteFetched))
-			Expect(trans.Data).To(Equal([]byte{
+			require.Equal(t, bankActionWriteFetched, trans.BankAction)
+			require.Equal(t, []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				9, 9, 9, 9, 9, 9, 9, 9,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -344,13 +365,13 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
-			}))
+			}, trans.Data)
 			// Other transactions finalized
-			Expect(next.Transactions[1].Done).To(BeTrue())
-			Expect(next.Transactions[1].Data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(next.Transactions[2].Done).To(BeTrue())
+			require.True(t, next.Transactions[1].Done)
+			require.Equal(t, []byte{5, 6, 7, 8}, next.Transactions[1].Data)
+			require.True(t, next.Transactions[2].Done)
 			// Bank buf should have the fetcher transaction
-			Expect(next.BankBufs[0].Size()).To(Equal(1))
+			require.Equal(t, 1, next.BankBufs[0].Size())
 		})
 	})
-})
+}
