@@ -264,33 +264,28 @@ func (p *Port) PeekOutgoing() (messaging.Msg, bool) {
 }
 
 // IncomingBuf returns a synchronized view of this port's incoming buffer.
-func (p *Port) IncomingBuf() messaging.BufferView { return bufferView{port: p, incoming: true} }
+func (p *Port) IncomingBuf() messaging.BufferView { return bufferView{p, &p.incomingBuf} }
 
 // OutgoingBuf returns a synchronized view of this port's outgoing buffer.
-func (p *Port) OutgoingBuf() messaging.BufferView { return bufferView{port: p} }
+func (p *Port) OutgoingBuf() messaging.BufferView { return bufferView{p, &p.outgoingBuf} }
 
-// Resolve the buffer through its port so a retained view observes restored state.
+// Buffers are value fields restored in place; their addresses remain stable.
+// The view shares the port lock without exposing the buffer's mutating methods.
 type bufferView struct {
-	port     *Port
-	incoming bool
+	port *Port
+	buf  *queueing.Buffer[bufferEntry]
 }
 
 func (v bufferView) Size() int {
 	v.port.lock.Lock()
 	defer v.port.lock.Unlock()
-	if v.incoming {
-		return v.port.incomingBuf.Size()
-	}
-	return v.port.outgoingBuf.Size()
+	return v.buf.Size()
 }
 
 func (v bufferView) Capacity() int {
 	v.port.lock.Lock()
 	defer v.port.lock.Unlock()
-	if v.incoming {
-		return v.port.incomingBuf.Capacity()
-	}
-	return v.port.outgoingBuf.Capacity()
+	return v.buf.Capacity()
 }
 
 // NotifyAvailable is called by the connection to notify the port that the

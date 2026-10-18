@@ -322,11 +322,9 @@ func appendStateBuffers(buffers []bufferState, name string, v reflect.Value) []b
 			buffers = appendStateBuffers(buffers, name+"."+v.Type().Field(i).Name, v.Field(i))
 		}
 	case reflect.Slice, reflect.Array:
-		// Scalar arrays/slices (for example cache-line data) cannot contain
-		// buffers. Do not walk their potentially large payloads.
-		switch v.Type().Elem().Kind() {
-		case reflect.Struct, reflect.Slice, reflect.Array:
-		default:
+		// Inspect the element type before walking values. Large State
+		// collections such as cache directories contain no buffers.
+		if !stateTypeContainsBuffer(v.Type().Elem(), make(map[reflect.Type]bool)) {
 			return buffers
 		}
 		for i := 0; i < v.Len(); i++ {
@@ -334,6 +332,27 @@ func appendStateBuffers(buffers []bufferState, name string, v reflect.Value) []b
 		}
 	}
 	return buffers
+}
+
+func stateTypeContainsBuffer(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	if t.Implements(bufferViewType) || reflect.PointerTo(t).Implements(bufferViewType) {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if stateTypeContainsBuffer(t.Field(i).Type, seen) {
+				return true
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		return stateTypeContainsBuffer(t.Elem(), seen)
+	}
+	return false
 }
 
 // ---- Live HTTP handlers ----

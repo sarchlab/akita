@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -18,6 +19,31 @@ import (
 type inventoryState struct {
 	Queue queueing.Buffer[int]   `json:"queue"`
 	Banks []queueing.Buffer[int] `json:"banks"`
+}
+
+type inventoryBranch struct {
+	Children []inventoryBranch
+	Queue    queueing.Buffer[int]
+}
+
+// Recursive slice types must neither loop during type inspection nor hide a
+// buffer located after the recursive field.
+func TestMonitorDiscoversBuffersInRecursiveState(t *testing.T) {
+	root := inventoryBranch{Queue: queueing.MakeBuffer[int](2), Children: []inventoryBranch{
+		{Queue: queueing.MakeBuffer[int](3)},
+	}}
+	root.Children[0].Queue.Push(42)
+	buffers := appendStateBuffers(nil, "Comp.State", reflect.ValueOf(&root).Elem())
+	require.Len(t, buffers, 2)
+	require.Equal(t, "Comp.State.Children[0].Queue", buffers[0].Name())
+	require.Equal(t, 1, buffers[0].Size())
+	require.Equal(t, 3, buffers[0].Capacity())
+	require.Equal(t, "Comp.State.Queue", buffers[1].Name())
+	require.Equal(t, 2, buffers[1].Capacity())
+
+	type noBuffer []noBuffer
+	data := []noBuffer{{}, {nil}}
+	require.Empty(t, appendStateBuffers(nil, "Data", reflect.ValueOf(&data).Elem()))
 }
 
 type inventoryComponent = wakeup.Component[struct{}, inventoryState, modeling.None, modeling.None, modeling.None]
