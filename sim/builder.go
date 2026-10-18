@@ -51,8 +51,8 @@ func (b Builder) WithOutputPath(path string) Builder {
 	return b
 }
 
-// WithMonitor attaches a monitor. Build calls Start after creating runtime
-// services, before component assembly and Initialize. Terminate stops the
+// WithMonitor attaches a monitor. Successful Initialize calls Start after all
+// component state is initialized and topology is frozen. Terminate stops the
 // monitor before closing recording resources.
 // Each monitor belongs to one simulation and must not be reused.
 // Omitting WithMonitor leaves monitoring disabled.
@@ -108,7 +108,7 @@ func (b Builder) Build() *Simulation {
 	b.createTopologyRecorder(s)
 	b.createTaskTracker(s)
 	b.createVisTracer(s)
-	b.startMonitor(s)
+	s.monitor = b.monitor
 
 	return s
 }
@@ -205,15 +205,6 @@ func (b Builder) createVisTracer(s *Simulation) {
 	if b.visTracingOnStart {
 		s.visTracer.StartTracing()
 	}
-}
-
-func (b Builder) startMonitor(s *Simulation) {
-	if b.monitor == nil {
-		return
-	}
-
-	s.monitor = b.monitor
-	s.monitor.Start(s)
 }
 
 // WithTaskTracking enables task bookkeeping and observer subscriptions. It is

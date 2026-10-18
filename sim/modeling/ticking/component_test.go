@@ -117,7 +117,7 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 	in := newPort("C.In")
 	c := build(Ports{In: in})
 
-	if in.Owner() != modeling.Component(c) || c.Ports.In != in {
+	if in.Owner() != c || c.Ports.In != in {
 		t.Errorf("port In is not bound to the component")
 	}
 

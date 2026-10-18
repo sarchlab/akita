@@ -32,8 +32,8 @@ func (b PageTableBuilder) WithSimulation(sim timing.Simulation) PageTableBuilder
 
 // Build creates the PageTable with the given name. If the builder was wired to
 // a simulation, the page table registers itself as a resource under that name.
-func (b PageTableBuilder) Build(name string) PageTable {
-	pt := &pageTableImpl{
+func (b PageTableBuilder) Build(name string) *PageTable {
+	pt := &PageTable{
 		name:         name,
 		log2PageSize: b.log2PageSize,
 		tables:       make(map[PID]*processTable),

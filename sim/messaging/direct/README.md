@@ -28,7 +28,7 @@ type Connection struct {
 
 func (c *Connection) BindPort(port messaging.Port)          // Connect a port
 func (c *Connection) NotifyAvailable(p messaging.Port)    // Port buffer space freed
-func (c *Connection) NotifySend()                         // Port has outgoing message
+func (c *Connection) NotifySend(port messaging.Port)                         // Port has outgoing message
 ```
 
 `Connection` implements `messaging.Connection`, so ports can use it as their

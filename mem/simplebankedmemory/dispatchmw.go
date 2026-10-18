@@ -36,9 +36,14 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		if !ok {
 			break
 		}
-		_, ok = msgI.Payload.(memprotocol.AccessReq)
 		msg := msgI
-		if !ok {
+		var address uint64
+		switch req := msg.Payload.(type) {
+		case memprotocol.ReadReq:
+			address = req.Address
+		case memprotocol.WriteReq:
+			address = req.Address
+		default:
 			log.Panicf("simplebankedmemory: unsupported message type %T", msgI.Payload)
 		}
 
@@ -46,7 +51,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		bankID := selectBank(spec, bankSelectionAddress(spec, msg.Payload.(memprotocol.AccessReq).AccessAddress()))
+		bankID := selectBank(spec, bankSelectionAddress(spec, address))
 		if bankID < 0 || bankID >= spec.NumBanks {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}

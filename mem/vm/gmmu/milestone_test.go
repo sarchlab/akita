@@ -98,7 +98,7 @@ var _ = Describe("GMMU milestones", func() {
 	var (
 		engine     timing.Engine
 		sim        timing.Simulation
-		pageTable  vm.PageTable
+		pageTable  *vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
 		bottomPort messaging.Port

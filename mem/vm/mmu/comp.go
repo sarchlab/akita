@@ -70,7 +70,7 @@ type state struct {
 type Resources struct {
 	// PageTable holds the translations the MMU walks. It is required, and its
 	// page size must match Spec.Log2PageSize.
-	PageTable vm.PageTable `json:"-"`
+	PageTable *vm.PageTable `json:"-"`
 }
 
 // Comp is the MMU component.

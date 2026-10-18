@@ -24,29 +24,12 @@ var (
 	Responder = Protocol.Role("responder")
 )
 
-// AccessReq abstracts read and write requests sent to cache modules or memory
-// controllers.
-type AccessReq interface {
-	AccessAddress() uint64
-	AccessPID() vm.PID
-}
-
 // ReadReq is a read request sent to a memory controller.
 type ReadReq struct {
 	Address            uint64
 	AccessByteSize     uint64
 	PID                vm.PID
 	CanWaitForCoalesce bool
-}
-
-// AccessAddress returns the address that the request is accessing.
-func (r ReadReq) AccessAddress() uint64 {
-	return r.Address
-}
-
-// AccessPID returns the process ID that the request is working on.
-func (r ReadReq) AccessPID() vm.PID {
-	return r.PID
 }
 
 // WriteReq is a write request sent to a memory controller.
@@ -56,16 +39,6 @@ type WriteReq struct {
 	DirtyMask          []bool
 	PID                vm.PID
 	CanWaitForCoalesce bool
-}
-
-// AccessAddress returns the address that the request is accessing.
-func (r WriteReq) AccessAddress() uint64 {
-	return r.Address
-}
-
-// AccessPID returns the process ID that the request is working on.
-func (r WriteReq) AccessPID() vm.PID {
-	return r.PID
 }
 
 // DataReadyRsp is a response carrying data loaded from memory.

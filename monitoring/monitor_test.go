@@ -240,7 +240,7 @@ func requestFieldValue(
 
 func newSliceFieldMonitor(values []int) *Monitor {
 	monitor := newTestMonitorWithSimulation(testsim.New(&fakeEngine{}, false))
-	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", values))
+	monitor.addTestComponent(newSliceFieldComponent("slice-comp", values))
 
 	return monitor
 }
@@ -502,8 +502,8 @@ func TestRunInvokesEngineRun(t *testing.T) {
 
 func TestListComponentsReturnsRegisteredNames(t *testing.T) {
 	monitor := MakeBuilder().Build()
-	monitor.RegisterComponent(newSliceFieldComponent("alpha", nil))
-	monitor.RegisterComponent(newSliceFieldComponent("beta", nil))
+	monitor.addTestComponent(newSliceFieldComponent("alpha", nil))
+	monitor.addTestComponent(newSliceFieldComponent("beta", nil))
 
 	recorder := httptest.NewRecorder()
 	monitor.listComponents(recorder,
@@ -535,7 +535,7 @@ func TestListComponentDetailsReturns404ForUnknown(t *testing.T) {
 
 func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 	monitor := newTestMonitorWithSimulation(testsim.New(&fakeEngine{}, false))
-	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", []int{1, 2}))
+	monitor.addTestComponent(newSliceFieldComponent("slice-comp", []int{1, 2}))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet,
@@ -579,7 +579,7 @@ func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
 	monitor := MakeBuilder().Build()
 	tickable := newTickableComponent("ticker")
-	monitor.RegisterComponent(tickable)
+	monitor.addTestComponent(tickable)
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/tick/ticker", nil)
@@ -597,7 +597,7 @@ func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
 
 func TestTickReturns405ForNonTickingComponent(t *testing.T) {
 	monitor := MakeBuilder().Build()
-	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", nil))
+	monitor.addTestComponent(newSliceFieldComponent("slice-comp", nil))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost,
@@ -627,6 +627,9 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 	monitor := MakeBuilder().Build()
 	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "progress") + ".sqlite3").WithMonitor(monitor).Build()
 	defer s.Terminate()
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 
 	requireEmpty := func() {
 		recorder := httptest.NewRecorder()
@@ -725,10 +728,10 @@ type bufferRsp struct {
 }
 
 func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
-	monitor := MakeBuilder().Build()
-	monitor.RegisterComponent(newBufferOnlyComponent("low", 10, 1))
-	monitor.RegisterComponent(newBufferOnlyComponent("high", 4, 3))
-	monitor.RegisterComponent(newBufferOnlyComponent("mid", 4, 2))
+	monitor := newTestMonitorWithSimulation(testsim.New(timing.NewSerialEngine(), false))
+	monitor.addTestComponent(newBufferOnlyComponent("low", 10, 1))
+	monitor.addTestComponent(newBufferOnlyComponent("high", 4, 3))
+	monitor.addTestComponent(newBufferOnlyComponent("mid", 4, 2))
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,
@@ -751,10 +754,10 @@ func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
 }
 
 func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
-	monitor := MakeBuilder().Build()
-	monitor.RegisterComponent(newBufferOnlyComponent("a", 10, 5))
-	monitor.RegisterComponent(newBufferOnlyComponent("b", 10, 7))
-	monitor.RegisterComponent(newBufferOnlyComponent("c", 10, 3))
+	monitor := newTestMonitorWithSimulation(testsim.New(timing.NewSerialEngine(), false))
+	monitor.addTestComponent(newBufferOnlyComponent("a", 10, 5))
+	monitor.addTestComponent(newBufferOnlyComponent("b", 10, 7))
+	monitor.addTestComponent(newBufferOnlyComponent("c", 10, 3))
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,
@@ -777,10 +780,10 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 }
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
-	monitor := MakeBuilder().Build()
+	monitor := newTestMonitorWithSimulation(testsim.New(timing.NewSerialEngine(), false))
 	comp := newPortedComponent("Comp")
-	monitor.RegisterComponent(comp)
-	monitor.RegisterPort(comp.port)
+	monitor.addTestComponent(comp)
+	monitor.ports = append(monitor.ports, comp.port)
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,
@@ -984,3 +987,14 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 			http.StatusConflict, recorder.Code)
 	}
 }
+
+func (c *sliceFieldComponent) BindPort(slot string, p messaging.Port) {
+	p.BindOwner(c, c.Name()+"."+slot)
+}
+func (c *tickableComponent) BindPort(slot string, p messaging.Port) {
+	p.BindOwner(c, c.Name()+"."+slot)
+}
+func (c *bufferOnlyComponent) BindPort(slot string, p messaging.Port) {
+	p.BindOwner(c, c.Name()+"."+slot)
+}
+func (c *portedComponent) BindPort(slot string, p messaging.Port) { p.BindOwner(c, c.Name()+"."+slot) }

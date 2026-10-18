@@ -30,7 +30,8 @@ Runtime packages are now under `sim/`; `simulation`, `monitoring2`, and
 
 **Live monitoring is now opt-in.** Downstream simulators such as MGPUSim must
 supply `WithMonitor(monitoring.MakeBuilder().Build())` to retain their monitoring server.
-`Build()` binds and starts the supplied monitor, and `Terminate()` stops it.
+Successful `Initialize()` binds and starts the supplied monitor after State
+exists, and `Terminate()` stops it before recording closes.
 Omitting `WithMonitor` leaves runs headless while tracing remains independent.
 The `WithoutMonitoring` and `WithMonitorPort` options are removed.
 
@@ -198,13 +199,13 @@ implementations; the old names are removed.
   `Restore` methods are unchanged; it records whether the component's own tick
   or wakeup is pending and when, so restore does not schedule a duplicate.
 - Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
-- The page table implementation and MMU's page-size interface use
-  `Log2PageSize()` instead of `GetLog2PageSize()`.
+- Concrete `*vm.PageTable` exposes `Log2PageSize()` instead of
+  `GetLog2PageSize()`; both MMU and GMMU validate it.
 - `monitoring/static.GetAssets()` and `daisen/static.GetAssets()` → `Assets()`.
 - `mshr.Entry.GetPID()` / `GetAddress()` →
   `Matches(pid vm.PID, addr uint64) bool`; cache and TLB entries compare both.
-- `memprotocol.AccessReq.GetAddress()` / `GetPID()` → `AccessAddress()` /
-  `AccessPID()`, including `ReadReq` and `WriteReq`. Their fields are unchanged.
+- `memprotocol.AccessReq` and its accessor methods are removed. Switch on
+  `ReadReq`/`WriteReq` and use their unchanged `Address` and `PID` fields.
 
 Simulation behavior and the event field keys `time` and `handler_id` are
 unchanged. Tick checkpoint type tags now use `ticking.Event`, derived from the
@@ -235,3 +236,18 @@ Switch incoming buffers now use `IncomingBufSize` rather than `OutgoingBufSize`,
 so asymmetric buffer configurations can also change results. `routing.Table` is
 a concrete type; custom setup routers remain supported. Checkpoint fingerprints
 record computed routes rather than Go router/table type names.
+
+## Final extension contracts (#538)
+
+`vm.PageTable` is now concrete; consumers hold `*vm.PageTable`. The exported
+`modeling.Component` interface is removed while concrete model hooks remain.
+PortOwner includes identity and `BindPort`; Connection retains `BindPort`, drops
+Hookable, and uses `NotifySend(port)`. One Port contract supplies read-only
+`IncomingBuf()`/`OutgoingBuf()` views with `Size` and real `Capacity`; nil denotes
+an absent buffer. Milestones remain on Port. NoC's concrete port restriction and
+wire's deferred status are unchanged.
+
+The exported Monitor contract contains only Start/Stop. Simulation provides copied
+Components/Ports inventories, removes its Monitor getter, and starts the monitor
+after initialization. Monitor registration methods are removed; buffer inspection
+includes State and omits absent buffers. See the migration guide for caller changes.

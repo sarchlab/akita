@@ -196,7 +196,7 @@ func buildL2Cache(
 
 func buildMMU(
 	s *sim.Simulation,
-	pageTable vm.PageTable,
+	pageTable *vm.PageTable,
 ) *mmu.Comp {
 	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = 12
@@ -383,7 +383,7 @@ func buildAgent(
 	return agent
 }
 
-func setupPageTable(addressRange uint64, s *sim.Simulation) vm.PageTable {
+func setupPageTable(addressRange uint64, s *sim.Simulation) *vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).

@@ -270,3 +270,5 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 }
 
 var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{testMsg{}}})
+
+func (a *agent) BindPort(slot string, p messaging.Port) { p.BindOwner(a, a.Name()+"."+slot) }

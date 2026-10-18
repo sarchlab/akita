@@ -17,10 +17,16 @@ import (
 func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "live")
 	monitor := MakeBuilder().Build()
-	if monitor.httpServer != nil || monitor.simulation != nil {
-		t.Fatal("constructor bound a simulation or opened a listener")
-	}
 	s := sim.MakeBuilder().WithOutputPath(output + ".sqlite3").WithMonitor(monitor).Build()
+	if monitor.started || monitor.httpServer != nil {
+		t.Fatal("monitor started during Build")
+	}
+	portUnderTest := twowaybuffered.NewPort(2, 2)
+	portUnderTest.BindOwner(monitorPortOwner{}, "Agent.Port")
+	s.RegisterPort(portUnderTest)
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 	if monitor.simulation != s || monitor.engine != s.Engine() || monitor.visTracer != s.VisTracer() {
 		t.Fatal("monitor was not bound to the simulation services")
 	}
@@ -49,17 +55,10 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(body), "live") {
 		t.Fatalf("live endpoint: %d %s, %v", response.StatusCode, body, err)
 	}
-	portUnderTest := twowaybuffered.NewPort(2, 2)
-	portUnderTest.BindOwner(monitorPortOwner{}, "Agent.Port")
-	s.RegisterPort(portUnderTest)
-	if len(monitor.buffers) != 2 {
+	if len(monitor.collectBuffers()) != 2 {
 		t.Fatal("registered port buffers missing")
 	}
-	bar := monitor.CreateProgressBar("work", 10)
-	if bar.ID == 0 || bar.Total != 10 {
-		t.Fatal("progress bar was not initialized")
-	}
-	monitor.CompleteProgressBar(bar)
+	checkProgressBar(t, monitor)
 	s.Terminate()
 	terminated = true
 	connection, err := net.DialTimeout("tcp", address, time.Second)
@@ -74,6 +73,9 @@ func TestMonitorRejectsRepeatedStart(t *testing.T) {
 	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "live") + ".sqlite3").Build()
 	defer s.Terminate()
 	m := MakeBuilder().Build()
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 	m.Start(s)
 	defer m.Stop()
 	other := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "other") + ".sqlite3").Build()
@@ -111,3 +113,15 @@ type monitorPortOwner struct{}
 
 func (monitorPortOwner) NotifyRecv(messaging.Port)     {}
 func (monitorPortOwner) NotifyPortFree(messaging.Port) {}
+
+func (o monitorPortOwner) Name() string                           { return "MonitorPortOwner" }
+func (o monitorPortOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }
+
+func checkProgressBar(t *testing.T, m *Monitor) {
+	t.Helper()
+	bar := m.CreateProgressBar("work", 10)
+	if bar.ID == 0 || bar.Total != 10 {
+		t.Fatal("progress bar was not initialized")
+	}
+	m.CompleteProgressBar(bar)
+}

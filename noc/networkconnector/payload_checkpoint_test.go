@@ -158,3 +158,5 @@ func TestNetworkPayloadDeliveryAndCheckpoint(t *testing.T) {
 		})
 	}
 }
+
+func (o payloadOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

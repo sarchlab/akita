@@ -90,7 +90,7 @@ type sharedHierarchy struct {
 	l2TLB     *tlb.Comp
 	ioMMU     *mmu.Comp
 	memCtrls  []*idealmemcontroller.Comp
-	pageTable vm.PageTable
+	pageTable *vm.PageTable
 
 	// deviceStride is the size of each device's physical address window and the
 	// interleaving size of the L2's address mapper.
@@ -108,14 +108,13 @@ type agentChain struct {
 	l1TLB   *tlb.Comp
 }
 
-func setupTest(seed int64) (
+func setupTest(seed int64, monitor *monitoring.Monitor) (
 	*sim.Simulation,
 	timing.Engine,
 	[]agentChain,
 	sharedHierarchy,
 	*direct.Connection,
 ) {
-	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
@@ -237,7 +236,7 @@ func buildL2Cache(
 
 func buildMMU(
 	s *sim.Simulation,
-	pageTable vm.PageTable,
+	pageTable *vm.PageTable,
 ) *mmu.Comp {
 	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = log2PageSize
@@ -441,7 +440,7 @@ func pagePAddr(device, pageIndex, deviceStride uint64) uint64 {
 func setupPageTable(
 	numPages, deviceStride uint64,
 	s *sim.Simulation,
-) vm.PageTable {
+) *vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(log2PageSize).
@@ -558,7 +557,8 @@ func main() {
 
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 
-	s, engine, chains, shared, memConn := setupTest(seed)
+	monitor := monitoring.MakeBuilder().Build()
+	s, engine, chains, shared, memConn := setupTest(seed, monitor)
 
 	var migCtrl *migrationController
 	if *migrateFlag {
@@ -568,7 +568,6 @@ func main() {
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}
-	monitor := s.Monitor().(*monitoring.Monitor)
 	for i := range chains {
 		memaccessagent.SetProgressTrackers(chains[i].agent,
 			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),

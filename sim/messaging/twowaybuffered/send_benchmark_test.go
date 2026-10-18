@@ -12,7 +12,7 @@ type benchmarkConnection struct{ hooking.HookableBase }
 func (*benchmarkConnection) Name() string                   { return "benchmark" }
 func (*benchmarkConnection) BindPort(messaging.Port)        {}
 func (*benchmarkConnection) NotifyAvailable(messaging.Port) {}
-func (*benchmarkConnection) NotifySend()                    {}
+func (*benchmarkConnection) NotifySend(_ messaging.Port)    {}
 
 type benchmarkPayload struct {
 	Data []byte

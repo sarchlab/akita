@@ -27,8 +27,8 @@ import (
 // Spec and Resources are fixed after Build; Initialize freezes Ports and
 // creates State and Middlewares.
 //
-// A Component is hookable (hooking.Hookable): tracing attaches to it with
-// AcceptHook.
+// A Component retains HookableBase for application-defined hook points.
+// Standard task tracing uses the simulation task tracker.
 type Component[S, T, R, P, M any] struct {
 	base.ComponentBase[S, T, R, P, M]
 

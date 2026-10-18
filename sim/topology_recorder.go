@@ -5,8 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/naming"
 )
 
 // componentSpecTableName holds one row per component: its name, the Go type of
@@ -92,14 +90,11 @@ func (r *topologyRecorder) recordPorts(ports []Port) {
 	for _, p := range ports {
 		entry := portEntry{Port: p.Name()}
 
-		if mp, ok := p.(messaging.Port); ok {
-			if owner, ok := mp.Owner().(naming.Named); ok {
-				entry.Component = owner.Name()
-			}
-
-			if conn := mp.Connection(); conn != nil {
-				entry.Connection = conn.Name()
-			}
+		if owner := p.Owner(); owner != nil {
+			entry.Component = owner.Name()
+		}
+		if conn := p.Connection(); conn != nil {
+			entry.Connection = conn.Name()
 		}
 
 		r.recorder.InsertData(portTableName, entry)

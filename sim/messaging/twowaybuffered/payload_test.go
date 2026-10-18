@@ -24,7 +24,7 @@ func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 		require.PanicsWithValue(t,
 			fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", v),
 			func() { p.Send(messaging.Msg{Src: "Src", Dst: "dst", Payload: v}) })
-		if p.NumOutgoing() != 0 {
+		if p.OutgoingBuf().Size() != 0 {
 			t.Fatal("invalid payload was buffered")
 		}
 	}

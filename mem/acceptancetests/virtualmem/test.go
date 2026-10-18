@@ -232,7 +232,7 @@ func buildTranslationHierarchy(
 	return IoMMU, TLB, L2TLB
 }
 
-func setupPageTable(maxAddress uint64, s *sim.Simulation) vm.PageTable {
+func setupPageTable(maxAddress uint64, s *sim.Simulation) *vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).

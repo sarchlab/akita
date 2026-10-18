@@ -34,18 +34,15 @@ type Page struct {
 
 ### PageTable
 
-```go
-type PageTable interface {
-    Insert(page Page)
-    Remove(pid PID, vAddr uint64)
-    Find(pid PID, addr uint64) (Page, bool)
-    Update(page Page)
-    ReverseLookup(pAddr uint64) (Page, bool)
-}
-```
+`vm.PageTable` is a concrete type with private state. Use `*vm.PageTable` in
+Resources and consuming fields. `NewPageTable(log2PageSize)` creates an unnamed
+table; `MakePageTableBuilder().WithSimulation(s).Build(name)` creates and
+registers a named resource. Do not copy a page table.
 
-Create a page table with `NewPageTable(log2PageSize)`. The implementation
-is thread-safe and maintains per-process tables internally.
+Methods include `Insert`, `Remove`, `Find`, `Update`, `ReverseLookup`, `Name`,
+`Log2PageSize`, `SaveCheckpoint`, and `LoadCheckpoint`. MMU and GMMU validate
+that their configured page size matches the table at initialization. The
+checkpoint payload retains `log2_page_size`, `tables`, `pid`, and `pages`.
 
 ## Translation Protocol
 

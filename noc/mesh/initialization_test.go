@@ -84,3 +84,5 @@ func TestIncrementalMeshOrderDeliveryAndCheckpoint(t *testing.T) {
 			"checkpoint resumes at identical %d ps", farFirst, s.Engine().CurrentTime())
 	}
 }
+
+func (o meshOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

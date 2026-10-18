@@ -1,15 +1,11 @@
 package sim
 
-import "github.com/sarchlab/akita/v5/sim/naming"
-
 // Monitor observes a simulation without tying the runtime to a user interface.
-// Build calls Start once after creating runtime services, before application
-// components are assembled and Initialize is called. It forwards registrations as those
-// objects are built. Terminate calls Stop before closing the tracer and data
-// recorder. Each monitor belongs to one simulation and must not be reused.
+// Successful Initialize calls Start once after component state and topology are
+// complete. The monitor discovers objects through Components and Ports.
+// Terminate calls Stop only if Start completed, before closing the tracer and
+// recording. Each monitor belongs to one simulation and must not be reused.
 type Monitor interface {
-	Start(s *Simulation)
-	RegisterComponent(c naming.Named)
-	RegisterPort(p Port)
+	Start(*Simulation)
 	Stop()
 }

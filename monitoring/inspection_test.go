@@ -51,7 +51,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 			require.NoError(t, s.Initialize())
 			m := newTestMonitorWithSimulation(s)
 			component := newSliceFieldComponent("snapshot", []int{10, 20})
-			m.RegisterComponent(component)
+			m.addTestComponent(component)
 			e.RegisterHandler("model", inspectionHandler(func(timing.Event) {
 				component.State.Values[0] = 30
 				component.State.Values[1] = 40

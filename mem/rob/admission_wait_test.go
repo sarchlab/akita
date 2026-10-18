@@ -70,7 +70,7 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	clock.now = 40
 	require.True(t, c.Middlewares.Pipeline.topDown())
 	require.Len(t, c.State.Transactions, 1)
-	require.Zero(t, c.Ports.Top.NumIncoming())
+	require.Zero(t, c.Ports.Top.IncomingBuf().Size())
 	ms := rec.milestonesOn(bufferID)
 	require.Len(t, ms, 2)
 	for i, want := range []struct {

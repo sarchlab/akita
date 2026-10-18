@@ -71,6 +71,23 @@ than With methods. Use WithFreq consistently. Derived parameters are computed at
 Build so frequency/bandwidth option order does not matter.
 
 Monitor setup is `monitoring.MakeBuilder().WithPortNumber(port).Build()`.
+Attach through `sim.Builder.WithMonitor`; Start runs only after successful
+Initialize, and Stop precedes recording teardown. The exported `sim.Monitor`
+contract contains Start/Stop only. Monitors discover copied component and port
+inventory slices; callers retain the monitor they supplied.
+
+Use one `messaging.Port` contract (also aliased by `sim.Port`) for components,
+connections, and setup. PortOwner includes Name and BindPort; Connection keeps
+BindPort, receives the source in NotifySend, and does not require Hookable.
+Custom ports are allowed with compatible connections; NoC accepts only
+`*twowaybuffered.Port`. Read-only IncomingBuf/OutgoingBuf views expose Size and
+Capacity, returning nil only for an absent buffer. Hooks and milestones stay on
+Port. Wire remains deferred under #496.
+
+Page tables are concrete `*vm.PageTable` resources. MMU/GMMU validate page size
+at Initialize. Memory payload consumers switch on concrete read/write requests;
+there is no AccessReq/AccessRsp abstraction. Component models retain custom hooks
+but do not export a shared modeling.Component interface.
 The networkconnector, mesh, pcie, and nvlink packages use
 `MakeBuilder().With...().Build(name) *Connector`; assembly methods operate on that
 connector. Reusing a builder creates independent networks without reset methods.

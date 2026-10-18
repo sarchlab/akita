@@ -2,23 +2,22 @@ package sim_test
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type lifecycleMonitor struct {
-	events    []string
-	runtime   *sim.Simulation
-	path      string
-	component naming.Named
-	port      sim.Port
+	events     []string
+	runtime    *sim.Simulation
+	path       string
+	components []sim.Component
+	ports      []sim.Port
 }
 
 func (m *lifecycleMonitor) Start(s *sim.Simulation) {
@@ -26,17 +25,8 @@ func (m *lifecycleMonitor) Start(s *sim.Simulation) {
 		panic("monitor started before runtime services were ready")
 	}
 	m.runtime, m.path = s, s.TraceDBPath()
+	m.components, m.ports = s.Components(), s.Ports()
 	m.events = append(m.events, "start")
-}
-
-func (m *lifecycleMonitor) RegisterComponent(c naming.Named) {
-	m.events = append(m.events, "component")
-	m.component = c
-}
-
-func (m *lifecycleMonitor) RegisterPort(p sim.Port) {
-	m.events = append(m.events, "port")
-	m.port = p
 }
 
 func (m *lifecycleMonitor) Stop() {
@@ -48,38 +38,72 @@ func (m *lifecycleMonitor) Stop() {
 	recorder.Flush()
 }
 
-type namedComponent string
+type initializedComponent struct{ ready, invalid bool }
 
-func (c namedComponent) Name() string { return string(c) }
+func (*initializedComponent) Name() string { return "Agent" }
+func (c *initializedComponent) ValidateSetup() error {
+	if c.invalid {
+		return errors.New("invalid setup")
+	}
+	return nil
+}
+func (c *initializedComponent) InitializeComponent() { c.ready = true }
 
 func TestInjectedMonitorLifecycle(t *testing.T) {
-	output := filepath.Join(t.TempDir(), "recording")
+	output := filepath.Join(t.TempDir(), "recording.sqlite3")
 	monitor := &lifecycleMonitor{}
-	s := sim.MakeBuilder().WithOutputPath(output + ".sqlite3").WithMonitor(monitor).Build()
-	if s.Monitor() != monitor || monitor.runtime != s || monitor.path != output+".sqlite3" {
-		t.Fatal("monitor did not receive the simulation and recording destination")
-	}
-	component := namedComponent("Agent")
-	port := twowaybuffered.NewPort(2, 2)
+	s := sim.MakeBuilder().WithOutputPath(output).WithMonitor(monitor).Build()
+	component := &initializedComponent{invalid: true}
+	port := twowaybuffered.NewPort(2, 3)
 	port.BindOwner(monitorPortOwner{}, "Agent.Port")
 	s.RegisterComponent(component)
 	s.RegisterPort(port)
-	s.Terminate()
-	if monitor.component != component || monitor.port != port {
-		t.Fatal("monitor did not receive registered component and port")
+	if monitor.runtime != nil {
+		t.Fatal("monitor started before initialization")
 	}
-	want := []string{"start", "component", "port", "stop"}
-	if !reflect.DeepEqual(monitor.events, want) {
-		t.Fatalf("lifecycle = %v, want %v", monitor.events, want)
+	if err := s.Initialize(); err == nil {
+		t.Fatal("invalid setup was accepted")
+	}
+	if monitor.runtime != nil {
+		t.Fatal("failed initialization started monitor")
+	}
+	component.invalid = false
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if !component.ready || monitor.runtime != s || monitor.path != output ||
+		len(monitor.components) != 1 || monitor.components[0] != component ||
+		len(monitor.ports) != 1 || monitor.ports[0] != port {
+		t.Fatal("monitor did not discover initialized objects")
+	}
+	// The inventories expose live objects but cannot mutate registry slices.
+	monitor.components[0], monitor.ports[0] = nil, nil
+	if s.Components()[0] != component || s.Ports()[0] != port {
+		t.Fatal("inventory aliases registry")
+	}
+	if err := s.Initialize(); err == nil {
+		t.Fatal("repeated initialization accepted")
+	}
+	s.Terminate()
+	if len(monitor.events) != 2 || monitor.events[0] != "start" || monitor.events[1] != "stop" {
+		t.Fatalf("unexpected lifecycle: %v", monitor.events)
+	}
+	t.Log("Monitor started once after state initialization, discovered complete copied inventories, " +
+		"and stopped before recording closed")
+}
+
+func TestUninitializedMonitorIsNotStopped(t *testing.T) {
+	m := &lifecycleMonitor{}
+	s := sim.MakeBuilder().WithMonitor(m).WithOutputPath(filepath.Join(t.TempDir(), "recording.sqlite3")).Build()
+	s.Terminate()
+	if len(m.events) != 0 {
+		t.Fatalf("unstarted monitor received lifecycle calls: %v", m.events)
 	}
 }
 
 func TestMonitoringIsOptIn(t *testing.T) {
 	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "recording") + ".sqlite3").Build()
 	defer s.Terminate()
-	if s.Monitor() != nil {
-		t.Fatal("default simulation unexpectedly has a monitor")
-	}
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +115,7 @@ func TestMonitoringIsOptIn(t *testing.T) {
 func TestHeadlessSimulationPreservesTracing(t *testing.T) {
 	s := sim.MakeBuilder().WithOutputPath(filepath.Join(t.TempDir(), "trace") + ".sqlite3").
 		WithVisTracingOnStart().WithoutSourceRecording().Build()
-	if s.Monitor() != nil || !s.VisTracer().IsTracing() {
+	if !s.VisTracer().IsTracing() {
 		t.Fatal("headless simulation must preserve tracing")
 	}
 	s.VisTracer().TaskStarted(tasks.Task{ID: 1, Kind: "test", What: "headless", Location: "Agent.test", StartTime: 1})
@@ -115,3 +139,6 @@ type monitorPortOwner struct{}
 
 func (monitorPortOwner) NotifyRecv(messaging.Port)     {}
 func (monitorPortOwner) NotifyPortFree(messaging.Port) {}
+
+func (o monitorPortOwner) Name() string                           { return "MonitorPortOwner" }
+func (o monitorPortOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

@@ -205,3 +205,5 @@ func readPorts(
 
 	return rows
 }
+
+func (o *portOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

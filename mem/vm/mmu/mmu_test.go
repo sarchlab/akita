@@ -27,7 +27,7 @@ func (c *noopConn) Name() string                     { return "NoopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the ports of the MMU named name, with the given Top
 // buffer size and a Control buffer size of 4.
@@ -43,7 +43,7 @@ var _ = Describe("MMU", func() {
 	var (
 		engine           timing.Engine
 		sim              timing.Simulation
-		pageTable        vm.PageTable
+		pageTable        *vm.PageTable
 		mmuComp          *Comp
 		topPort          messaging.Port
 		translationMWRef *translationMW
@@ -218,7 +218,7 @@ var _ = Describe("MMU Integration", func() {
 		engine    timing.Engine
 		sim       timing.Simulation
 		mmuComp   *Comp
-		pageTable vm.PageTable
+		pageTable *vm.PageTable
 		topPort   messaging.Port
 		agentPort messaging.Port
 	)
@@ -290,3 +290,6 @@ type testDriver struct{}
 
 func (testDriver) NotifyRecv(messaging.Port)     {}
 func (testDriver) NotifyPortFree(messaging.Port) {}
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

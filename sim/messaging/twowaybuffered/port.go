@@ -131,7 +131,7 @@ func (p *Port) Send(msg messaging.Msg) {
 	p.lock.Unlock()
 
 	if wasEmpty {
-		p.conn.NotifySend()
+		p.conn.NotifySend(p)
 	}
 }
 
@@ -263,20 +263,29 @@ func (p *Port) PeekOutgoing() (messaging.Msg, bool) {
 	return entry.Message, ok
 }
 
-// NumIncoming returns the number of messages in the incoming buffer.
-func (p *Port) NumIncoming() int {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+// IncomingBuf returns a synchronized view of this port's incoming buffer.
+func (p *Port) IncomingBuf() messaging.BufferView { return bufferView{p, &p.incomingBuf} }
 
-	return p.incomingBuf.Size()
+// OutgoingBuf returns a synchronized view of this port's outgoing buffer.
+func (p *Port) OutgoingBuf() messaging.BufferView { return bufferView{p, &p.outgoingBuf} }
+
+// Buffers are value fields restored in place; their addresses remain stable.
+// The view shares the port lock without exposing the buffer's mutating methods.
+type bufferView struct {
+	port *Port
+	buf  *queueing.Buffer[bufferEntry]
 }
 
-// NumOutgoing returns the number of messages in the outgoing buffer.
-func (p *Port) NumOutgoing() int {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+func (v bufferView) Size() int {
+	v.port.lock.Lock()
+	defer v.port.lock.Unlock()
+	return v.buf.Size()
+}
 
-	return p.outgoingBuf.Size()
+func (v bufferView) Capacity() int {
+	v.port.lock.Lock()
+	defer v.port.lock.Unlock()
+	return v.buf.Capacity()
 }
 
 // NotifyAvailable is called by the connection to notify the port that the

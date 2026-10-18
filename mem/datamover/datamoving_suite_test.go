@@ -54,3 +54,6 @@ func allPorts(comp *Comp) []messaging.Port {
 		comp.Ports.Top, comp.Ports.Inside, comp.Ports.Outside, comp.Ports.Control,
 	}
 }
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

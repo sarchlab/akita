@@ -19,7 +19,7 @@ import (
 type tracingTestConnection struct{ hooking.HookableBase }
 
 func (*tracingTestConnection) Name() string                   { return "Link" }
-func (*tracingTestConnection) NotifySend()                    {}
+func (*tracingTestConnection) NotifySend(_ messaging.Port)    {}
 func (*tracingTestConnection) NotifyAvailable(messaging.Port) {}
 func (c *tracingTestConnection) BindPort(p messaging.Port)    { p.BindConnection(c) }
 
@@ -54,7 +54,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 			for range 10 {
 				require.False(t, sw.Middlewares.ReceivePipeline.startProcessing())
 			}
-			require.Equal(t, 1, port.NumIncoming())
+			require.Equal(t, 1, port.IncomingBuf().Size())
 			require.Equal(t, 1, rec.NumStarted(), "blocked attempts must not start phantom tasks")
 			require.Len(t, rec.OpenTasks(), 1)
 
@@ -67,7 +67,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 				}
 			}
 			require.Equal(t, []uint64{first.ID, second.ID}, delivered)
-			require.Zero(t, port.NumIncoming())
+			require.Zero(t, port.IncomingBuf().Size())
 			require.Equal(t, 2, rec.NumStarted())
 			require.Empty(t, rec.OpenTasks(), rec.OpenSummary())
 			t.Logf("latency %d: 10 blocked retries, 2 admitted flits delivered, 2 tasks ended, no open tasks", latency)

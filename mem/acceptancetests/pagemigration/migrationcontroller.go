@@ -110,7 +110,7 @@ func phaseName(phase migPhase) string {
 // existing control protocol, page table, and data mover.
 type migResources struct {
 	// Pages is the shared page table; the controller mutates it directly.
-	Pages vm.PageTable
+	Pages *vm.PageTable
 	// Agents is used only to detect when the workload is finished so the
 	// controller can stop ticking and let the simulation terminate.
 	Agents []*memaccessagent.MemAccessAgent

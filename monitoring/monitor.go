@@ -32,7 +32,7 @@ import (
 	"github.com/sarchlab/akita/v5/monitoring/static"
 
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/shirou/gopsutil/v4/process"
@@ -40,7 +40,7 @@ import (
 )
 
 // Component is the minimal component contract required by the monitor.
-type Component = naming.Named
+type Component = sim.Component
 
 type monitorPort = sim.Port
 
@@ -59,7 +59,7 @@ type Monitor struct {
 	// Internal state.
 	started          bool
 	components       []Component
-	buffers          []bufferState
+	ports            []monitorPort
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
 	httpServer       *http.Server
@@ -91,6 +91,8 @@ func (m *Monitor) Start(s *sim.Simulation) {
 	m.engine = s.Engine()
 	m.visTracer = s.VisTracer()
 	m.tracePath = s.TraceDBPath()
+	m.components = s.Components()
+	m.ports = s.Ports()
 	m.startServer()
 }
 
@@ -108,20 +110,6 @@ func (b Builder) WithPortNumber(port int) Builder {
 	b.port = port
 
 	return b
-}
-
-// RegisterComponent registers a component with the monitor so its internal
-// state can be inspected via the monitoring server.
-func (m *Monitor) RegisterComponent(c Component) {
-	m.components = append(m.components, c)
-	m.registerBuffers(c)
-}
-
-// RegisterPort registers a port's incoming and outgoing buffers with the
-// monitor. The simulation registers every port this way, when the port is
-// built or when its component's BindPort binds it.
-func (m *Monitor) RegisterPort(p monitorPort) {
-	m.registerPortBuffers(p)
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
@@ -265,88 +253,106 @@ type bufferState interface {
 	Capacity() int
 }
 
-// sizedBuffer is what the hang detector reads from a buffer it finds in a
-// field of a component, such as a queueing.Buffer. A buffer has no name of its
-// own: the component and the field name it.
-type sizedBuffer interface {
-	Size() int
-	Capacity() int
-}
-
-// fieldBufferAdapter lists a buffer found in a component's field under the
-// name "<component>.<field>".
-type fieldBufferAdapter struct {
+// namedBuffer gives an observed buffer its location in the simulation.
+type namedBuffer struct {
 	name string
-	buf  sizedBuffer
+	messaging.BufferView
 }
 
-func (a *fieldBufferAdapter) Name() string  { return a.name }
-func (a *fieldBufferAdapter) Size() int     { return a.buf.Size() }
-func (a *fieldBufferAdapter) Capacity() int { return a.buf.Capacity() }
+func (b namedBuffer) Name() string { return b.name }
 
-// portBufferAdapter wraps a port to expose one of its internal buffers
-// (incoming or outgoing) as a bufferState for the hang detector.
-type portBufferAdapter struct {
-	port      monitorPort
-	direction string // "in" or "out"
-}
-
-func (a *portBufferAdapter) Name() string {
-	return a.port.Name() + "." + a.direction
-}
-
-func (a *portBufferAdapter) Size() int {
-	if a.direction == "in" {
-		return a.port.NumIncoming()
-	}
-
-	return a.port.NumOutgoing()
-}
-
-func (a *portBufferAdapter) Capacity() int {
-	return a.Size()
-}
-
-func (m *Monitor) registerBuffers(c Component) {
-	// Port buffers are registered with each port (RegisterPort) through
-	// portBufferAdapter; this walk finds the component's own buffers.
-	m.registerFieldBuffers(c)
-}
-
-func (m *Monitor) registerPortBuffers(p monitorPort) {
-	m.buffers = append(m.buffers,
-		&portBufferAdapter{port: p, direction: "in"},
-		&portBufferAdapter{port: p, direction: "out"},
-	)
-}
-
-// registerFieldBuffers registers the buffers held in the top-level fields of
-// component c, each named after c and its field.
-func (m *Monitor) registerFieldBuffers(c Component) {
-	v := reflect.ValueOf(c).Elem()
-	bufferType := reflect.TypeOf((*sizedBuffer)(nil)).Elem()
-
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Field(i)
-		fieldType := field.Type()
-
-		// Build an addressable reference to the field. This both bypasses the
-		// unexported-field restriction and lets pointer-receiver buffers (e.g. a
-		// value-embedded queueing.Buffer) be captured as a live reference rather
-		// than a stale copy.
-		ref := reflect.NewAt(fieldType, unsafe.Pointer(field.UnsafeAddr()))
-
-		name := c.Name() + "." + v.Type().Field(i).Name
-
-		switch {
-		case fieldType.Implements(bufferType):
-			m.buffers = append(m.buffers, &fieldBufferAdapter{
-				name: name, buf: ref.Elem().Interface().(sizedBuffer)})
-		case reflect.PointerTo(fieldType).Implements(bufferType):
-			m.buffers = append(m.buffers, &fieldBufferAdapter{
-				name: name, buf: ref.Interface().(sizedBuffer)})
+// collectBuffers resolves State afresh at an engine inspection boundary so
+// restored buffers and replaced slice backing arrays cannot leave stale views.
+func (m *Monitor) collectBuffers() []bufferState {
+	var buffers []bufferState
+	for _, p := range m.ports {
+		if b := p.IncomingBuf(); b != nil {
+			buffers = append(buffers, namedBuffer{p.Name() + ".in", b})
+		}
+		if b := p.OutgoingBuf(); b != nil {
+			buffers = append(buffers, namedBuffer{p.Name() + ".out", b})
 		}
 	}
+	for _, c := range m.components {
+		v := reflect.Indirect(reflect.ValueOf(c))
+		if v.Kind() != reflect.Struct {
+			continue
+		}
+		// Retain direct-field discovery for custom components.
+		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).Name == "State" {
+				continue
+			}
+			buffers = appendFieldBuffer(buffers, c.Name()+"."+v.Type().Field(i).Name, v.Field(i))
+		}
+		// FieldByName also finds State promoted by the generic component model.
+		if state := v.FieldByName("State"); state.IsValid() {
+			buffers = appendStateBuffers(buffers, c.Name()+".State", state)
+		}
+	}
+	return buffers
+}
+
+var bufferViewType = reflect.TypeFor[messaging.BufferView]()
+
+func appendFieldBuffer(buffers []bufferState, name string, field reflect.Value) []bufferState {
+	if !field.IsValid() || !field.CanAddr() || monitorIsZero(field) {
+		return buffers
+	}
+	// Read private custom-component fields as well as pointer-receiver buffers.
+	ref := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr()))
+	switch {
+	case field.Type().Implements(bufferViewType):
+		return append(buffers, namedBuffer{name, ref.Elem().Interface().(messaging.BufferView)})
+	case ref.Type().Implements(bufferViewType):
+		return append(buffers, namedBuffer{name, ref.Interface().(messaging.BufferView)})
+	}
+	return buffers
+}
+
+func appendStateBuffers(buffers []bufferState, name string, v reflect.Value) []bufferState {
+	before := len(buffers)
+	buffers = appendFieldBuffer(buffers, name, v)
+	if len(buffers) != before {
+		return buffers
+	}
+	switch v.Kind() {
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			buffers = appendStateBuffers(buffers, name+"."+v.Type().Field(i).Name, v.Field(i))
+		}
+	case reflect.Slice, reflect.Array:
+		// Inspect the element type before walking values. Large State
+		// collections such as cache directories contain no buffers.
+		if !stateTypeContainsBuffer(v.Type().Elem(), make(map[reflect.Type]bool)) {
+			return buffers
+		}
+		for i := 0; i < v.Len(); i++ {
+			buffers = appendStateBuffers(buffers, fmt.Sprintf("%s[%d]", name, i), v.Index(i))
+		}
+	}
+	return buffers
+}
+
+func stateTypeContainsBuffer(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	if t.Implements(bufferViewType) || reflect.PointerTo(t).Implements(bufferViewType) {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if stateTypeContainsBuffer(t.Field(i).Type, seen) {
+				return true
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		return stateTypeContainsBuffer(t.Elem(), seen)
+	}
+	return false
 }
 
 // ---- Live HTTP handlers ----
@@ -833,20 +839,22 @@ func (m *Monitor) hangDetectorBuffers(
 		return
 	}
 
-	sortedBuffers := m.sortAndSelectBuffers(sortMethod, limit, offset)
+	m.inspectResponse(w, r, func(w http.ResponseWriter) {
+		sortedBuffers := m.sortAndSelectBuffers(sortMethod, limit, offset)
 
-	fmt.Fprintf(w, "[")
+		fmt.Fprintf(w, "[")
 
-	for i, b := range sortedBuffers {
-		if i > 0 {
-			fmt.Fprint(w, ",")
+		for i, b := range sortedBuffers {
+			if i > 0 {
+				fmt.Fprint(w, ",")
+			}
+
+			fmt.Fprintf(w, "{\"buffer\":\"%s\",\"level\":%d,\"cap\":%d}",
+				b.Name(), b.Size(), b.Capacity())
 		}
 
-		fmt.Fprintf(w, "{\"buffer\":\"%s\",\"level\":%d,\"cap\":%d}",
-			b.Name(), b.Size(), b.Capacity())
-	}
-
-	fmt.Fprint(w, "]")
+		fmt.Fprint(w, "]")
+	})
 }
 
 func buffersParseParams(
@@ -891,6 +899,9 @@ func buffersParseParams(
 }
 
 func bufferPercent(b bufferState) float64 {
+	if b.Capacity() == 0 {
+		return 0
+	}
 	return float64(b.Size()) / float64(b.Capacity())
 }
 
@@ -898,8 +909,7 @@ func (m *Monitor) sortAndSelectBuffers(
 	sortMethod string,
 	limit, offset int,
 ) []bufferState {
-	sortedBuffers := make([]bufferState, len(m.buffers))
-	copy(sortedBuffers, m.buffers)
+	sortedBuffers := m.collectBuffers()
 
 	if sortMethod == "level" {
 		sort.Slice(sortedBuffers, func(i, j int) bool {

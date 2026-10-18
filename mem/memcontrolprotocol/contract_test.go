@@ -165,7 +165,7 @@ func (c *noopConn) Name() string                     { return "noopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // buildFake produces a BuildFunc that constructs a fresh fakeComp for
 // each verb subtest.
@@ -261,3 +261,5 @@ func TestState_String(t *testing.T) {
 		}
 	}
 }
+
+func (c *fakeComp) BindPort(slot string, p messaging.Port) { p.BindOwner(c, c.Name()+"."+slot) }

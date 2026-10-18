@@ -90,7 +90,7 @@ func (p *Port) waitReason(reason messaging.WaitReason, incoming bool) messaging.
 	}
 	if incoming {
 		name := ""
-		if owner, ok := p.owner.(tasks.Owner); ok {
+		if owner := p.owner; owner != nil {
 			name = owner.Name()
 		}
 		return tasks.Reason(tasks.MilestoneKindConsumer, name)

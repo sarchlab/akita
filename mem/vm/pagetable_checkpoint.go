@@ -25,9 +25,9 @@ type processTableEntry struct {
 
 // SaveCheckpoint writes the page table's shape and every page, grouped by
 // process and sorted by PID so the output is deterministic.
-func (pt *pageTableImpl) SaveCheckpoint(w io.Writer) error {
-	pt.Lock()
-	defer pt.Unlock()
+func (pt *PageTable) SaveCheckpoint(w io.Writer) error {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
 
 	pids := make([]PID, 0, len(pt.tables))
 	for pid := range pt.tables {
@@ -54,7 +54,7 @@ func (pt *pageTableImpl) SaveCheckpoint(w io.Writer) error {
 // LoadCheckpoint rebuilds the per-process tables after checking that the saved
 // shape matches the rebuilt page table. The page table is expected to be freshly
 // built (empty), so restored pages cannot collide.
-func (pt *pageTableImpl) LoadCheckpoint(r io.Reader) error {
+func (pt *PageTable) LoadCheckpoint(r io.Reader) error {
 	var dto pageTableCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
 		return fmt.Errorf("vm: decode page table %q: %w", pt.name, err)
@@ -66,8 +66,8 @@ func (pt *pageTableImpl) LoadCheckpoint(r io.Reader) error {
 			pt.name, dto.Log2PageSize, pt.log2PageSize)
 	}
 
-	pt.Lock()
-	defer pt.Unlock()
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
 
 	pt.tables = make(map[PID]*processTable, len(dto.Tables))
 	for _, entry := range dto.Tables {

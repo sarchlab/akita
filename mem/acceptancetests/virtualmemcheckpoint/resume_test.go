@@ -168,7 +168,7 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 	return ioMMU, itlb, l2TLB
 }
 
-func setupPageTable(s *sim.Simulation) vm.PageTable {
+func setupPageTable(s *sim.Simulation) *vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).
