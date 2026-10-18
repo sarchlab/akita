@@ -74,9 +74,10 @@ func (m *middleware) topDown() bool {
 	if !ok {
 		return false
 	}
-	_, ok = msg.Payload.(memprotocol.AccessReq)
 	req := msg
-	if !ok {
+	switch msg.Payload.(type) {
+	case memprotocol.ReadReq, memprotocol.WriteReq:
+	default:
 		panic("rob: unsupported top-port message type")
 	}
 

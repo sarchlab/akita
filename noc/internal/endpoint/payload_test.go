@@ -203,3 +203,5 @@ func TestTransportTaskIDsSurviveCheckpoint(t *testing.T) {
 	}
 	t.Log("restored flits retained handles and reassembled without requiring task history")
 }
+
+func (o payloadOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

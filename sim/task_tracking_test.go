@@ -58,7 +58,6 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 	s := sim.MakeBuilder().WithTaskTracking().
 		WithOutputPath(filepath.Join(t.TempDir(), "manual") + ".sqlite3").Build()
 	defer s.Terminate()
-	require.Nil(t, s.Monitor())
 	require.NotNil(t, s.VisTracer())
 	require.False(t, s.VisTracer().IsTracing())
 	require.NoError(t, s.Initialize())

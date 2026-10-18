@@ -19,7 +19,7 @@ type walkMW struct {
 	comp *Comp
 
 	// pageTable is Resources.PageTable, taken by Middlewares.Initialize.
-	pageTable vm.PageTable
+	pageTable *vm.PageTable
 }
 
 func (m *walkMW) topPort() messaging.Port {

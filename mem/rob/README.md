@@ -21,7 +21,7 @@ Top ──► topDown ──► Bottom ──► (bottom unit) ──► Bottom 
                               bottomUp ──► Top   (released in arrival order)
 ```
 
-1. **topDown** — Peeks a `memprotocol.AccessReq` (a `memprotocol.ReadReq` or `memprotocol.WriteReq`) from
+1. **topDown** — Peeks a `memprotocol.ReadReq` or `memprotocol.WriteReq` payload from
    `Top`, builds a fresh *shadow* request with a new ID, rewrites its `Dst` to
    the configured `Bottom`, sends it on `Bottom`, and appends a transaction
    to the FIFO list. Stalls when the list reaches `BufferSize`.

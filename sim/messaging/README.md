@@ -130,16 +130,20 @@ type Port interface {
     RetrieveIncoming() (Msg, bool)
 
     // For the connection side
+    CanDeliver() bool
     Deliver(msg Msg)
     PeekOutgoing() (Msg, bool)
     RetrieveOutgoing() (Msg, bool)
     NotifyAvailable()
 
     BindConnection(conn Connection)
+    Connection() Connection
     Owner() PortOwner
     BindOwner(owner PortOwner, name string)
-    NumIncoming() int
-    NumOutgoing() int
+    IncomingBuf() BufferView
+    OutgoingBuf() BufferView
+    AddIncomingMilestone(reason WaitReason)
+    AddOutgoingMilestone(reason WaitReason)
 }
 ```
 
@@ -163,16 +167,34 @@ Reads return `(Msg{}, false)` when empty. `Peek` leaves the message queued;
 gains space. A successful read returns `true`. Capacity and peek checks do not
 reserve buffer space or messages.
 
+Buffer observation is required on the single Port interface:
+
+```go
+type BufferView interface {
+    Size() int
+    Capacity() int
+}
+```
+
+The accessors return live, read-only views of the port's own buffers. A nil view
+means that direction has no buffer; an empty buffer returns a nonnil view with
+size zero. Views preserve synchronization and observe checkpoint restoration.
+Separate calls do not form an atomic snapshot. Hooks must not call these views
+while the port holds its buffer lock. Milestones and message hooks remain on Port.
+
+Custom ports and connections implement the same interfaces and validate transport
+compatibility when binding. They are not universally interchangeable: NoC requires
+`*twowaybuffered.Port`. The wire transport remains deferred under #496.
+
 ### Connection
 
 ```go
 type Connection interface {
     naming.Named
-    hooking.Hookable
 
     BindPort(port Port)
     NotifyAvailable(port Port)
-    NotifySend()
+    NotifySend(port Port)
 }
 ```
 
@@ -183,19 +205,20 @@ in `sim/messaging/direct` is the simplest implementation.
 
 ```go
 type PortOwner interface {
+    naming.Named
+    BindPort(slot string, port Port)
     NotifyRecv(port Port)
     NotifyPortFree(port Port)
 }
 ```
 
 A port notifies its owner when a message arrives in an empty incoming buffer
-and when it can send again. The owner is usually a component
-(`modeling.Component`), but `messaging` asks only for these two methods. The
-interface says nothing about which ports an owner has or how it reaches them.
+and when it can send again. The owner is usually a component. Its name and `BindPort` setup entry point are
+part of the contract; local storage of its ports is up to the implementation.
 A component defined by a component model (`modeling/ticking` and its
 siblings) holds its ports in a typed `Ports` struct: the system builder creates
-each unnamed port and calls `component.BindPort("Field", port)`. Custom owners
-call `port.BindOwner(owner, fullName)` and register their ports themselves.
+each unnamed port and calls `component.BindPort("Field", port)`. Custom owners implement `BindPort` by assigning the slot and full name through
+`port.BindOwner(owner, fullName)` and registering the port themselves.
 A port must have an owner before `AsRemote` or message traffic.
 
 ## How It Works

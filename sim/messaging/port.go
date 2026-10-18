@@ -37,7 +37,18 @@ type WaitReason struct {
 // A RemotePort is a string that refers to another port.
 type RemotePort string
 
-// A Port is owned by a component and is used to plug in connections.
+// BufferView provides read-only observation of a live buffer. Implementations
+// synchronize observations with buffer operations and checkpoint restoration.
+// Separate Size and Capacity calls do not promise an atomic snapshot.
+type BufferView interface {
+	Size() int
+	Capacity() int
+}
+
+// A Port is owned by a component and is used to plug in compatible connections.
+// Custom implementations use this same contract; transports can restrict which
+// ports they accept. Unsupported transport operations must not be called by a
+// compatible connection.
 // Peek and Retrieve return Msg{}, false when the corresponding buffer is empty.
 // Retrieve removes a message and notifies its sender when a full buffer gains
 // space. Capacity and peek checks do not reserve space or messages.
@@ -75,7 +86,9 @@ type Port interface {
 	// Retrieve adds the default reason only for time left since the last milestone.
 	AddOutgoingMilestone(reason WaitReason)
 
-	// Buffer counts
-	NumIncoming() int
-	NumOutgoing() int
+	// IncomingBuf and OutgoingBuf observe this port's own buffers. Nil means
+	// no buffer in that direction; an empty existing buffer is nonnil. Views
+	// remain live across checkpoint restoration and expose no mutation methods.
+	IncomingBuf() BufferView
+	OutgoingBuf() BufferView
 }

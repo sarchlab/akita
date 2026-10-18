@@ -48,7 +48,7 @@ func (c *loopbackConnection) NotifyAvailable(messaging.Port) {
 	// No-op for the tests.
 }
 
-func (c *loopbackConnection) NotifySend() {
+func (c *loopbackConnection) NotifySend(_ messaging.Port) {
 	c.transfer()
 }
 
@@ -469,3 +469,6 @@ func Example() {
 	// Achieved bandwidth: 64.00 GB/s
 	// Average latency: 7.00 cycles
 }
+
+func (a *testAgent) BindPort(slot string, p messaging.Port)      { p.BindOwner(a, a.Name()+"."+slot) }
+func (a *bandwidthAgent) BindPort(slot string, p messaging.Port) { p.BindOwner(a, a.Name()+"."+slot) }

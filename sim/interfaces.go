@@ -1,5 +1,7 @@
 package sim
 
+import "github.com/sarchlab/akita/v5/sim/messaging"
+
 // Entity is the abstract base interface for every registered runtime object.
 // Components, ports, connections, and resources all satisfy it. It is the
 // common vocabulary the global state manager uses to track entities and resolve
@@ -15,13 +17,8 @@ type Component interface {
 	Entity
 }
 
-// Port is the minimal port contract the simulation runtime needs to register
-// and monitor a port. Every messaging.Port satisfies it.
-type Port interface {
-	Entity
-	NumIncoming() int
-	NumOutgoing() int
-}
+// Port is the common messaging contract used by the runtime inventory.
+type Port = messaging.Port
 
 // Connection is the minimal connection contract the simulation runtime needs.
 // Every messaging.Connection satisfies it.

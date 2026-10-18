@@ -26,7 +26,7 @@ func (c *noopConn) Name() string                     { return "NoopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the Top, Bottom, and Control ports of the cache named
 // name, each with the given buffer size.

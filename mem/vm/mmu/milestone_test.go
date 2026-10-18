@@ -65,7 +65,7 @@ var _ = Describe("MMU milestones", func() {
 	var (
 		engine    timing.Engine
 		sim       timing.Simulation
-		pageTable vm.PageTable
+		pageTable *vm.PageTable
 		mmuComp   *Comp
 		topPort   messaging.Port
 		mw        *translationMW

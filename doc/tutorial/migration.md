@@ -196,6 +196,8 @@ does not enable it. MGPUSim migration is a separate change.
 ```go
 monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().WithMonitor(monitor).Build()
+// Assemble components and bind ports before initialization.
+if err := s.Initialize(); err != nil { panic(err) }
 defer s.Terminate()
 bar := monitor.CreateProgressBar("kernels", 100)
 ```
@@ -206,9 +208,9 @@ Tracing remains independent. Move `WithMonitorPort(port)` configuration to
 variable for progress bars and other monitor-specific operations.
 
 Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
-`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` during
-`Build` to bind the simulation and start the server, then `Stop()` during termination. Component
-State and Middlewares are created later by `Initialize`.
+`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` after successful
+`Initialize` to bind the simulation and start the server, then `Stop()` during
+termination. Component State and Middlewares already exist at monitor startup.
 A monitor can be started only once, even after stopping, and progress bars must
 be created after startup.
 
@@ -915,7 +917,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
    - A checkpoint serializes the State; loading one replaces it wholesale.
 
 3. Resources (references supplied by the system builder)
-   - References to shared objects — a `*mem.Storage` or a `vm.PageTable` — passed with `WithResources`.
+   - References to shared objects — a `*mem.Storage` or a `*vm.PageTable` — passed with `WithResources`.
    - Not checkpointed. A shared object that holds data checkpoints itself as a registered resource, and the rebuild supplies the same references again.
 
 4. Ports (declared by the component, created by the system builder)
@@ -1281,3 +1283,29 @@ frontends. It also installs the locked `doc-site` dependencies and builds the
 site with broken-link and anchor checks enabled. Commands run from the
 repository root or their explicit working directory; there is no `v5/`
 subdirectory. Runner selection is recorded in the workflow.
+
+## Final public interface contracts (#538)
+
+- Replace `vm.PageTable` interface fields with `*vm.PageTable`; builders now
+  return the concrete pointer. Use its page-size, identity, and checkpoint
+  methods directly. Tests can use the in-memory table.
+- Port owners implement `Name()` and `BindPort(slot string, port messaging.Port)`
+  as well as their receive/free callbacks. Connections retain `BindPort`, drop
+  the Hookable requirement, and receive the source in `NotifySend(port)`.
+- Keep one `messaging.Port`; `sim.Port` is its alias. Replace `NumIncoming()`
+  and `NumOutgoing()` with `IncomingBuf()`/`OutgoingBuf()` and read `Size()` or
+  `Capacity()` after checking for nil. Nil means no buffer, not an empty one.
+  Milestones and hooks remain on Port. Compatible custom transports are allowed;
+  NoC still requires `*twowaybuffered.Port`, and wire remains deferred in #496.
+- Custom monitors implement only `Start(*sim.Simulation)` and `Stop()`. Discover
+  components/ports from the simulation's copied inventory slices at Start.
+  Remove monitor registration calls and `Simulation.Monitor()`; retain the
+  supplied concrete monitor and create progress bars after initialization.
+- Replace `AccessReq` and its accessor methods with concrete read/write payload
+  switches and fields. `AccessRsp` remains removed; response routing is in Msg.
+- Remove references to `modeling.Component`. Concrete component models still
+  support custom hooks; standard task tracing uses the task tracker.
+
+These changes preserve the existing page-table and port checkpoint payload
+formats. Checkpoints still enforce the normal same-build requirement. MGPUSim
+migration is deferred until after the Akita v5 release and is not part of this PR.

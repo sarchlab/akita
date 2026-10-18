@@ -73,7 +73,7 @@ func (t *Tracker) start(o Owner, info StartInfo) uint64 {
 	task = t.parents.resolveStart(task)
 	e := &entry{task: task, owner: o.Name()}
 	if port, ok := o.(messaging.Port); ok {
-		if component, ok := port.Owner().(Owner); ok {
+		if component := port.Owner(); component != nil {
 			e.component = component.Name()
 		}
 	}

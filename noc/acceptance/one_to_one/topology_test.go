@@ -32,3 +32,5 @@ func TestDirectNetworkFingerprint(t *testing.T) {
 	require.ErrorContains(t, n.LoadCheckpoint(bytes.NewReader(saved.Bytes())), "spec hash mismatch")
 	t.Log("One direct-network fingerprint restores matching topology and rejects changed device order or peer pairing")
 }
+
+func (o topologyOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

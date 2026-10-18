@@ -71,3 +71,6 @@ func buildDRAM(sim timing.Simulation, spec Spec, name string, bufSize int) *Comp
 	builtComponent.BindPort("Control", builtComponentPorts.Control)
 	return builtComponent
 }
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

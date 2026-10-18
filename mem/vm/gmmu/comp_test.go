@@ -26,13 +26,13 @@ func (c *noopConn) Name() string                     { return "NoopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 var _ = Describe("GMMU", func() {
 	var (
 		engine     timing.Engine
 		sim        timing.Simulation
-		pageTable  vm.PageTable
+		pageTable  *vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
 		bottomPort messaging.Port

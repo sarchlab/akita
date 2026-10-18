@@ -498,3 +498,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(flushed).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"slices"
+
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -22,6 +24,7 @@ type Simulation struct {
 	metaRecorder     *metaRecorder
 	topologyRecorder *topologyRecorder
 	monitor          Monitor
+	monitorStarted   bool
 
 	// components and ports are kept in registration order for the topology
 	// recorder.
@@ -70,10 +73,13 @@ func (s *Simulation) TraceDBPath() string {
 	return s.outputPath
 }
 
-// Monitor returns the live monitor attached to the simulation, if enabled.
-func (s *Simulation) Monitor() Monitor {
-	return s.monitor
-}
+// Components returns a copy of the registered component inventory, in registration order.
+// The objects themselves remain live. Inventory is frozen after initialization.
+func (s *Simulation) Components() []Component { return slices.Clone(s.components) }
+
+// Ports returns a copy of the registered port inventory, in registration order.
+// The objects themselves remain live. Inventory is frozen after initialization.
+func (s *Simulation) Ports() []Port { return slices.Clone(s.ports) }
 
 // registerEntity records a live entity in the single, flat inventory. It is the
 // only cross-kind uniqueness check — names must be globally unique across all
@@ -103,10 +109,6 @@ func (s *Simulation) registerEntity(e Entity) {
 func (s *Simulation) RegisterComponent(c naming.Named) {
 	s.registerEntity(c)
 	s.components = append(s.components, c)
-
-	if s.monitor != nil {
-		s.monitor.RegisterComponent(c)
-	}
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
@@ -121,10 +123,6 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
-
-	if s.monitor != nil {
-		s.monitor.RegisterPort(port)
-	}
 }
 
 // RegisterConnection registers a connection with the simulation runtime
@@ -149,8 +147,9 @@ func (s *Simulation) RegisterResource(r naming.Named) {
 
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
-	if s.monitor != nil {
+	if s.monitorStarted {
 		s.monitor.Stop()
+		s.monitorStarted = false
 	}
 
 	if s.visTracer != nil {
@@ -175,7 +174,16 @@ func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
 
 // Initialize validates the completed wiring, freezes topology, and creates state
 // and middleware. Call it once before seeding work or loading a checkpoint.
-func (s *Simulation) Initialize() error { return s.setup.Initialize() }
+func (s *Simulation) Initialize() error {
+	if err := s.setup.Initialize(); err != nil {
+		return err
+	}
+	if s.monitor != nil {
+		s.monitor.Start(s)
+		s.monitorStarted = true
+	}
+	return nil
+}
 
 // Run executes queued events after successful initialization.
 func (s *Simulation) Run() error {

@@ -26,7 +26,7 @@ func TestNewConnectionUsesExplicitFrequency(t *testing.T) {
 
 	s := testsim.New(engine, false)
 	conn := NewConnection("Link", s, 500*timing.MHz)
-	conn.NotifySend()
+	conn.NotifySend(nil)
 }
 
 func TestNewConnectionCheckpointFrequency(t *testing.T) {

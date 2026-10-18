@@ -31,7 +31,7 @@ func (c *noopConn) Name() string                     { return "NoopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // Historical default port buffer sizes for the address translator. Buffer size
 // is now the caller's choice (the Spec no longer carries *PortBufferSize

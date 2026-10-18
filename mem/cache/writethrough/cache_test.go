@@ -264,3 +264,6 @@ var _ = Describe("Cache", func() {
 	})
 
 })
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

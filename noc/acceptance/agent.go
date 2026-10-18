@@ -18,6 +18,7 @@ type Agent struct {
 	hooking.HookableBase
 
 	name       string
+	simulation timing.Simulation
 	test       *Test
 	AgentPorts []messaging.Port
 	MsgsToSend []messaging.Msg
@@ -35,9 +36,10 @@ func NewAgent(
 	test *Test,
 ) *Agent {
 	a := &Agent{
-		Scheduler: ticking.NewScheduler(name, sim, freq),
-		name:      name,
-		test:      test,
+		Scheduler:  ticking.NewScheduler(name, sim, freq),
+		name:       name,
+		simulation: sim,
+		test:       test,
 	}
 
 	sim.Engine().RegisterHandler(name, a)
@@ -45,9 +47,7 @@ func NewAgent(
 	sim.RegisterComponent(a)
 
 	for i, p := range ports {
-		p.BindOwner(a, fmt.Sprintf("%s.Port[%d]", name, i))
-		sim.RegisterPort(p)
-		a.AgentPorts = append(a.AgentPorts, p)
+		a.BindPort(fmt.Sprintf("Port[%d]", i), p)
 	}
 
 	return a
@@ -134,4 +134,14 @@ func (a *Agent) recv() bool {
 	}
 
 	return madeProgress
+}
+
+// BindPort attaches and registers an agent port during network assembly.
+func (a *Agent) BindPort(slot string, p messaging.Port) {
+	a.simulation.RequireSetup()
+	name := a.Name() + "." + slot
+	a.simulation.RequireNameAvailable(name)
+	p.BindOwner(a, name)
+	a.simulation.RegisterPort(p)
+	a.AgentPorts = append(a.AgentPorts, p)
 }

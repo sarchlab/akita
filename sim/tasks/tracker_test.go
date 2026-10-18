@@ -76,7 +76,7 @@ func (r *recorder) MilestoneAdded(v tasks.Milestone) {
 type connection struct{ hooking.HookableBase }
 
 func (*connection) Name() string                   { return "Link" }
-func (*connection) NotifySend()                    {}
+func (*connection) NotifySend(_ messaging.Port)    {}
 func (*connection) NotifyAvailable(messaging.Port) {}
 func (c *connection) BindPort(p messaging.Port)    { p.BindConnection(c) }
 
@@ -498,3 +498,5 @@ func TestLateSubscribersCountFullIntervals(t *testing.T) {
 	require.Equal(t, timing.VTimeInPicoSec(20), total.TotalTime())
 	t.Log("Subscribed at 20 to task [10,30]: busy, average, and total each report 20; no earlier events replayed")
 }
+
+func (o *owner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

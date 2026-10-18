@@ -2,7 +2,6 @@ package addresstranslator
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -46,13 +45,13 @@ func (m *parseTranslateMW) translate() bool {
 		return false
 	}
 
-	item := itemI
-	vAddr := item.Payload.(memprotocol.AccessReq).AccessAddress()
+	incoming := msgToIncomingReqState(itemI)
+	vAddr := incoming.Address
 	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
-		PID:      item.Payload.(memprotocol.AccessReq).AccessPID(),
+		PID:      incoming.PID,
 		VAddr:    vPageID,
 		DeviceID: spec.DeviceID},
 		ID:  m.comp.NewID(),
@@ -70,8 +69,6 @@ func (m *parseTranslateMW) translate() bool {
 	// reached the head of the Top buffer — is over. The req_in opened just below
 	// starts at retrieve and covers only the processing that follows.
 	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindNetworkBusy, m.translationPort().Name()))
-
-	incoming := msgToIncomingReqState(itemI)
 
 	nextState := &m.comp.State
 

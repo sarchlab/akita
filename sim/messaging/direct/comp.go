@@ -100,7 +100,7 @@ func (c *Connection) NotifyAvailable(p messaging.Port) {
 }
 
 // NotifySend is called by a port to notify the connection can start ticking.
-func (c *Connection) NotifySend() {
+func (c *Connection) NotifySend(_ messaging.Port) {
 	c.ticks.TickNow()
 }
 

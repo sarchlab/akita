@@ -39,3 +39,6 @@ type testOwner struct{}
 
 func (testOwner) NotifyRecv(messaging.Port)     {}
 func (testOwner) NotifyPortFree(messaging.Port) {}
+
+func (o testOwner) Name() string                           { return "TestOwner" }
+func (o testOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

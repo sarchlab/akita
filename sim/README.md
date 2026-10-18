@@ -85,9 +85,9 @@ defer s.Terminate()
 
 `MakeBuilder().Build()` starts no monitoring server. To enable the web UI,
 import `github.com/sarchlab/akita/v5/monitoring` and supply a monitor as shown
-above. After creating the engine, tracer, and recorder, the runner calls
-`Start(s)` to bind and start the monitor. It forwards component and port
-registrations and stops the monitor before closing those resources in `Terminate`.
+above. After successful `Initialize`, the runner calls `Start(s)` to bind and
+start the monitor. The monitor discovers complete component and port inventories
+and stops before those recording resources close in `Terminate`.
 Each monitor belongs to one simulation and must not be reused.
 
 Recording is enabled explicitly by `WithOutputPath`, `WithVisTracingOnStart`, or
@@ -101,7 +101,8 @@ Monitors can access runtime services through `Engine()`, `DataRecorder()`,
 `VisTracer()`, and `TraceDBPath()` without changing their lifecycle interface.
 
 A custom monitor implements `sim.Monitor` with `Start(*sim.Simulation)`,
-`RegisterComponent`, `RegisterPort`, and `Stop`. Keep the concrete monitor in
+and `Stop()`. Discover objects through `s.Components()` and `s.Ports()`, which
+return copied slices of live objects. Keep the concrete monitor in
 application setup for implementation-specific features such as
 `monitor.CreateProgressBar`.
 The `sim` runtime has no dependency on monitoring, Daisen, or component libraries;

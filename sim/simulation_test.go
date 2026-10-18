@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
@@ -74,22 +75,11 @@ func (c *testConnection) Name() string {
 }
 
 type testPort struct {
-	name     string
-	incoming int
-	outgoing int
+	*twowaybuffered.Port
+	name string
 }
 
-func (p testPort) Name() string {
-	return p.name
-}
-
-func (p testPort) NumIncoming() int {
-	return p.incoming
-}
-
-func (p testPort) NumOutgoing() int {
-	return p.outgoing
-}
+func (p testPort) Name() string { return p.name }
 
 type testComponent struct {
 	name string
@@ -108,7 +98,7 @@ var _ = Describe("Simulation", func() {
 
 	BeforeEach(func() {
 		simulation = MakeBuilder().Build()
-		port = testPort{name: "port"}
+		port = testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
 		comp = testComponent{name: "comp"}
 	})
 
@@ -139,7 +129,7 @@ var _ = Describe("Simulation", func() {
 	It("should reject duplicate port names", func() {
 		simulation.RegisterPort(port)
 
-		dupPort := testPort{name: "port"}
+		dupPort := testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
 
 		Expect(func() {
 			simulation.RegisterPort(dupPort)

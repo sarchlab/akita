@@ -15,12 +15,17 @@ func (c *portPresenceOwner) NotifyRecv(messaging.Port)     { c.received++ }
 func (c *portPresenceOwner) NotifyPortFree(messaging.Port) { c.freed++ }
 
 type portPresenceConnection struct {
-	messaging.Connection
 	available, sent int
+	lastSender      messaging.Port
 }
 
 func (c *portPresenceConnection) NotifyAvailable(messaging.Port) { c.available++ }
-func (c *portPresenceConnection) NotifySend()                    { c.sent++ }
+func (c *portPresenceConnection) NotifySend(p messaging.Port)    { c.sent++; c.lastSender = p }
+
+func (c *portPresenceConnection) Name() string              { return "Connection" }
+func (c *portPresenceConnection) BindPort(p messaging.Port) { p.BindConnection(c) }
+
+var _ messaging.Connection = (*portPresenceConnection)(nil)
 
 type portPresenceHook struct{ incoming, outgoing []messaging.Msg }
 
@@ -104,6 +109,11 @@ func assertPortPeeks(t *testing.T, p messaging.Port, first messaging.Msg) {
 		require.True(t, ok)
 		require.Equal(t, first, msg)
 	}
-	require.Equal(t, 2, p.NumIncoming())
-	require.Equal(t, 2, p.NumOutgoing())
+	require.Equal(t, 2, p.IncomingBuf().Size())
+	require.Equal(t, 2, p.OutgoingBuf().Size())
+}
+
+func (c *portPresenceOwner) Name() string { return "PortPresenceOwner" }
+func (c *portPresenceOwner) BindPort(slot string, p messaging.Port) {
+	p.BindOwner(c, c.Name()+"."+slot)
 }

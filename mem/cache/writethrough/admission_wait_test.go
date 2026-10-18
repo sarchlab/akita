@@ -26,7 +26,7 @@ func (c *admissionClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 type admissionConnection struct{ hooking.HookableBase }
 
 func (*admissionConnection) Name() string                   { return "Link" }
-func (*admissionConnection) NotifySend()                    {}
+func (*admissionConnection) NotifySend(_ messaging.Port)    {}
 func (*admissionConnection) NotifyAvailable(messaging.Port) {}
 func (c *admissionConnection) BindPort(p messaging.Port)    { p.BindConnection(c) }
 
@@ -109,7 +109,7 @@ func TestAdmissionWaitTransitionsAcrossCheckpoint(t *testing.T) {
 	clock.now = 40
 	require.True(t, tick())
 	require.Len(t, c.State.Transactions, 1)
-	require.Zero(t, c.Ports.Top.NumIncoming())
+	require.Zero(t, c.Ports.Top.IncomingBuf().Size())
 	ms := rec.milestonesOn(bufferID)
 	require.Len(t, ms, 2)
 	for i, want := range []struct {

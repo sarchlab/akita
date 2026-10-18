@@ -12,17 +12,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// pageTable aggregates all the methods of the page table that are used in the
-// MMU package.
-type pageTable interface {
-	Insert(page vm.Page)
-	Remove(pid vm.PID, vAddr uint64)
-	Find(pid vm.PID, Addr uint64) (vm.Page, bool)
-	Update(page vm.Page)
-	ReverseLookup(pAddr uint64) (vm.Page, bool)
-	Log2PageSize() uint64
-}
-
 // translationMW handles translation requests: parsing from top,
 // page table walks, and sending responses for local hits.
 type translationMW struct {
@@ -35,7 +24,7 @@ func (m *translationMW) topPort() messaging.Port {
 	return m.comp.Ports.Top
 }
 
-func (m *translationMW) pageTable() vm.PageTable {
+func (m *translationMW) pageTable() *vm.PageTable {
 	return m.comp.Resources.PageTable
 }
 

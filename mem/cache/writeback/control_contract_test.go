@@ -19,7 +19,7 @@ func (c *ccNoopConn) Name() string                     { return "noopConn" }
 func (c *ccNoopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *ccNoopConn) Unplug(_ messaging.Port)          {}
 func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *ccNoopConn) NotifySend()                      {}
+func (c *ccNoopConn) NotifySend(_ messaging.Port)      {}
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {

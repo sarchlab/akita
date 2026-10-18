@@ -14,7 +14,7 @@ type testLink struct {
 }
 
 func (*testLink) Name() string                   { return "TestLink" }
-func (*testLink) NotifySend()                    {}
+func (*testLink) NotifySend(_ messaging.Port)    {}
 func (*testLink) NotifyAvailable(messaging.Port) {}
 func (l *testLink) BindPort(p messaging.Port)    { p.BindConnection(l); l.ports = append(l.ports, p) }
 func connectPeer(s timing.Simulation, port messaging.Port) messaging.Port {

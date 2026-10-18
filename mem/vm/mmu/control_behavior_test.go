@@ -27,7 +27,7 @@ var _ = Describe("MMU control behavior", func() {
 	var (
 		engine    timing.Engine
 		sim       timing.Simulation
-		pageTable vm.PageTable
+		pageTable *vm.PageTable
 		comp      *Comp
 		topPort   messaging.Port
 		ctrlPort  messaging.Port

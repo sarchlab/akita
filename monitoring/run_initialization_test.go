@@ -1,10 +1,8 @@
 package monitoring
 
 import (
-	"log"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,21 +22,16 @@ func TestMonitorRunRequiresInitialization(t *testing.T) {
 	handled := make(monitoredRunEvents, 1)
 	s.Engine().RegisterHandler("probe", handled)
 	s.Engine().Schedule(timing.EventBase{At: 1, Handler: "probe"})
-	messages := make(runLog, 1)
-	previous := log.Writer()
-	log.SetOutput(messages)
-	defer log.SetOutput(previous)
+	require.Nil(t, m.httpServer, "uninitialized simulation must not serve monitor requests")
+	require.Nil(t, m.runSimulation)
+	require.Error(t, s.Run())
+	require.Empty(t, handled)
+	require.NoError(t, s.Initialize())
 	m.run(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/run", nil))
 	select {
-	case message := <-messages:
-		require.True(t, strings.Contains(message, "Initialize"), message)
 	case <-handled:
-		t.Fatal("monitor ran a queued event before initialization")
 	case <-time.After(5 * time.Second):
-		t.Fatal("monitor did not report the initialization error")
+		t.Fatal("initialized monitor did not run queued event")
 	}
-	require.NoError(t, s.Initialize())
-	require.NoError(t, s.Run())
-	require.Len(t, handled, 1, "rejected monitor run must leave the event queued")
-	t.Log("POST /api/run reported Initialize and left the event queued; it executed once after initialization")
+	t.Log("No monitor listener existed before Initialize; POST /api/run executed the queued event after startup")
 }

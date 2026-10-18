@@ -10,3 +10,5 @@ func newTestMonitorWithSimulation(s timing.Simulation) *Monitor {
 	m.runSimulation = s.Engine().Run
 	return m
 }
+
+func (m *Monitor) addTestComponent(c Component) { m.components = append(m.components, c) }

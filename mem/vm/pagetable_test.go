@@ -8,7 +8,7 @@ import (
 var _ = Describe("PageTable", func() {
 
 	var (
-		pageTable PageTable
+		pageTable *PageTable
 		page      Page
 	)
 

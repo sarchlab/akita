@@ -28,7 +28,7 @@ func (c *noopConn) Name() string                     { return "NoopConn" }
 func (c *noopConn) BindPort(port messaging.Port)     { port.BindConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
-func (c *noopConn) NotifySend()                      {}
+func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the ports of the controller named name: a Top port with
 // the given buffer size and a Control port with a 16-message buffer.

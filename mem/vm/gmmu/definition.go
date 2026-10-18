@@ -25,6 +25,10 @@ func (m *middlewares) Initialize(c *Comp) {
 		panic("gmmu: Resources.PageTable is required")
 	}
 
+	if pt.Log2PageSize() != c.Spec.Log2PageSize {
+		panic("page table page size does not match GMMU page size")
+	}
+
 	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Walk:    &walkMW{comp: c, pageTable: pt},

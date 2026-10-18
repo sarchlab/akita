@@ -162,3 +162,6 @@ var _ = Describe("DRAM Statistics", func() {
 		Expect(dram.WriteBandwidth(dramComp)).To(BeNumerically(">", 0))
 	})
 })
+
+func (o testDriver) Name() string                           { return "TestDriver" }
+func (o testDriver) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

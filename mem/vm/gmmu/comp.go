@@ -107,7 +107,7 @@ type Resources struct {
 	// PageTable holds the pages the GMMU translates with. It is required; the
 	// system builder creates it (usually with page size 2^Spec.Log2PageSize)
 	// and may share it with other components.
-	PageTable vm.PageTable `json:"-"`
+	PageTable *vm.PageTable `json:"-"`
 }
 
 // Ports holds the GMMU's ports.

@@ -48,3 +48,6 @@ func TestConnectionBindingIsOneTimeAndAtomic(t *testing.T) {
 	t.Log("Rejected unowned, nil, duplicate and late bindings " +
 		"without changing connection membership or port attachment")
 }
+
+func (o *bindingOwner) Name() string                           { return "BindingOwner" }
+func (o *bindingOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

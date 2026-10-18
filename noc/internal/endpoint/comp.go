@@ -104,7 +104,7 @@ func (d *deviceSide) NotifyAvailable(_ messaging.Port) {
 }
 
 // NotifySend wakes the endpoint when a device port has a message to send.
-func (d *deviceSide) NotifySend() {
+func (d *deviceSide) NotifySend(_ messaging.Port) {
 	d.TickLater()
 }
 

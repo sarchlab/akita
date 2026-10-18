@@ -21,6 +21,12 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
+// owner is the behavior the shared model base needs from its concrete model.
+type owner interface {
+	timing.Handler
+	messaging.PortOwner
+}
+
 // ComponentBase is what every component model shares: an instance's five
 // structs — Spec, State, Resources, Ports, and Middlewares — and the methods
 // that do not depend on how the instance is scheduled. The Component of each
@@ -50,7 +56,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Middlewares M
 
 	name        string
-	owner       modeling.Component
+	owner       owner
 	simulation  timing.Simulation
 	taskTracker *tasks.Tracker
 	initialize  func()
@@ -61,7 +67,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 // State and Middlewares are created later by the deferred initializer.
 func Init[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
-	owner modeling.Component,
+	owner owner,
 	sim timing.Simulation,
 	name string,
 	spec S,

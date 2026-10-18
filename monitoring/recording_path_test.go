@@ -16,6 +16,7 @@ func TestExecutionInfoUsesLiteralRecordingPath(t *testing.T) {
 	path := filepath.Join(dir, "live #?.sqlite3")
 	m := MakeBuilder().Build()
 	s := sim.MakeBuilder().WithOutputPath(path).WithMonitor(m).Build()
+	require.NoError(t, s.Initialize())
 	terminated := false
 	t.Cleanup(func() {
 		if !terminated {
