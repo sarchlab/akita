@@ -391,10 +391,10 @@ func TestPredefinedSpecs(t *testing.T) {
 //nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestProtocolEnums(t *testing.T) {
 	t.Run("should have new protocol values after HMC", func(t *testing.T) {
-		require.True(t, (int(protoDDR5)) > (int(protoHMC)), "expected int(protoDDR5) > int(protoHMC)")
-		require.True(t, (int(protoHBM3)) > (int(protoDDR5)), "expected int(protoHBM3) > int(protoDDR5)")
-		require.True(t, (int(protoLPDDR5)) > (int(protoHBM3)), "expected int(protoLPDDR5) > int(protoHBM3)")
-		require.True(t, (int(protoHBM3E)) > (int(protoLPDDR5)), "expected int(protoHBM3E) > int(protoLPDDR5)")
+		require.Greater(t, int(protoDDR5), int(protoHMC))
+		require.Greater(t, int(protoHBM3), int(protoDDR5))
+		require.Greater(t, int(protoLPDDR5), int(protoHBM3))
+		require.Greater(t, int(protoHBM3E), int(protoLPDDR5))
 	})
 
 	t.Run("should recognize HBM3 as HBM", func(t *testing.T) {

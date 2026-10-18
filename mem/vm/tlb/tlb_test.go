@@ -667,6 +667,6 @@ func TestTLBIntegration(t *testing.T) {
 
 		time3 := engine.CurrentTime()
 
-		require.True(t, (time3-time2) < (time2-time1), "expected time3 - time2 < time2-time1")
+		require.Less(t, time3-time2, time2-time1)
 	})
 }

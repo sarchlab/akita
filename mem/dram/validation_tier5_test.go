@@ -192,16 +192,14 @@ func dramsim3RefLatency(t *testing.T, scnName string) float64 {
 	require.True(t, ok, "%s: missing dramsim3 row in reference.csv", scnName)
 	lat := row.avgReadLatency
 	require.False(t, math.IsNaN(lat), "%s: dramsim3 latency not recorded", scnName)
-	require.True(t, (lat) > (0), "%s: dramsim3 latency must be positive", scnName)
+	require.Greater(t, lat, 0.0, "%s: dramsim3 latency must be positive", scnName)
 	return lat
 }
 
 //nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
-	setup1 := requireReference
-
 	t.Run("matches command counts where the two oracles agree", func(t *testing.T) {
-		setup1(t)
+		requireReference(t)
 
 		checked := 0
 		for _, s := range scen {
@@ -222,11 +220,11 @@ func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 			assertIfAgree(t, "writes", ds3.writes, ram.writes, akita.writes)
 			checked++
 		}
-		require.True(t, (checked) > (0), "expected checked > 0")
+		require.Greater(t, checked, 0)
 	})
 
 	t.Run("matches DRAMSim3 read latency within 15% (enforced scenarios)", func(t *testing.T) {
-		setup1(t)
+		requireReference(t)
 
 		checked := 0
 		for _, s := range scen {
@@ -236,9 +234,10 @@ func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 			refLat := dramsim3RefLatency(t, s.Name)
 			akita := runAkita(t, s).avgReadLatency
 			relErr := math.Abs(akita-refLat) / refLat
-			require.True(
+			require.LessOrEqual(
 				t,
-				(relErr) <= (latencyTolerance),
+				relErr,
+				latencyTolerance,
 				"%s: Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off)",
 				s.Name,
 				akita,
@@ -247,7 +246,7 @@ func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 			)
 			checked++
 		}
-		require.True(t, (checked) > (0), "expected checked > 0")
+		require.Greater(t, checked, 0)
 	})
 
 	// KNOWN GAPS — probe a feature Akita does not yet support. The suite records
@@ -255,7 +254,7 @@ func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 	// closes (<=15%), this spec FAILS — the signal to move the scenario to
 	// read_latency="enforced".
 	t.Run("records the known feature gaps (currently exceeding 15%)", func(t *testing.T) {
-		setup1(t)
+		requireReference(t)
 
 		checked := 0
 		for _, s := range scen {
@@ -268,15 +267,16 @@ func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 			t.Logf(
 				"KNOWN GAP %-16s Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off) — %s\n",
 				s.Name, akita, refLat, relErr*100, s.GapReason)
-			require.True(
+			require.Greater(
 				t,
-				(relErr) > (latencyTolerance),
+				relErr,
+				latencyTolerance,
 				"%s gap closed (now %.0f%% off) — promote to read_latency=enforced",
 				s.Name,
 				relErr*100,
 			)
 			checked++
 		}
-		require.True(t, (checked) > (0), "no known_gap scenarios ran — if all gaps are fixed, delete this spec")
+		require.Greater(t, checked, 0, "no known_gap scenarios ran — if all gaps are fixed, delete this spec")
 	})
 }

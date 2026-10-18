@@ -86,9 +86,9 @@ func TestP1CommandTracing(t *testing.T) {
 
 		// The tracer saw sub-transaction tasks and command milestones (at least
 		// an ACT plus column commands) on them.
-		require.True(t, (tracer.subTasks) > (0), "expected tracer.subTasks > 0")
-		require.True(t, (tracer.count) > (0), "expected tracer.count > 0")
-		require.True(t, (tracer.byKind["ACT"]) > (0), "expected tracer.byKind[\"ACT\"] > 0")
+		require.Greater(t, tracer.subTasks, 0)
+		require.Greater(t, tracer.count, 0)
+		require.Greater(t, tracer.byKind["ACT"], 0)
 
 		// Results are identical to the untraced run.
 		require.Len(t, tracedWrites, len(plainWrites))

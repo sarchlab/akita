@@ -215,7 +215,7 @@ func TestCache(t *testing.T) {
 		require.Len(t, rsps, 1)
 		require.Equal(t, []byte{5, 6, 7, 8}, rsps[0].Payload.(memprotocol.DataReadyRsp).Data)
 
-		require.True(t, (t2-t1) < (t1), "expected t2 - t1 < t1")
+		require.Less(t, t2-t1, t1)
 	})
 
 	t.Run("should write partial line", func(t *testing.T) {

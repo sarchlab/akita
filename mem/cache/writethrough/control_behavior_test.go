@@ -191,7 +191,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 
 		// Teeth: at least one transaction is genuinely in flight, waiting on
 		// a bottom response.
-		require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+		require.Greater(t, inflightCount(), 0)
 
 		// Issue Drain.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -209,7 +209,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			require.False(t, present1)
 		}
 		require.True(t, comp.State.IsDraining)
-		require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+		require.Greater(t, inflightCount(), 0)
 
 		// Now feed the matching fill for every captured bottom read.
 		for _, br := range bottomReads {
@@ -267,7 +267,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		require.Len(t, bottomReads, 1)
-		require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+		require.Greater(t, inflightCount(), 0)
 
 		// Begin draining, then a Pause arrives mid-drain. Control commands are
 		// serialized, so the Pause stays queued until the drain finishes; it
@@ -324,7 +324,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		require.Len(t, bottomReads, 1)
-		require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+		require.Greater(t, inflightCount(), 0)
 
 		// Pause: the in-flight transaction freezes (pipeline stops).
 		pause := makeCtrlReq(memcontrolprotocol.CmdPause)
@@ -343,7 +343,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		}
 		require.True(t, pausedAck)
 		require.True(t, comp.State.IsPaused)
-		require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+		require.Greater(t, inflightCount(), 0)
 
 		// Make the fill available, then Drain from the paused state. The drain
 		// must clear the pause so the pipeline resumes, retire the frozen
@@ -409,7 +409,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			for i := 0; i < 256 && inflightCount() == 0; i++ {
 				modelingtest.Tick(comp)
 			}
-			require.True(t, (inflightCount()) > (0), "expected inflightCount() > 0")
+			require.Greater(t, inflightCount(), 0)
 
 			setStart()
 

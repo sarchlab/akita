@@ -172,6 +172,6 @@ func TestDRAMRefreshStallAttribution(t *testing.T) {
 		// resumes issuing once the window ends: at least one refresh milestone
 		// (one per stall window the command waited through) is charged to it,
 		// rather than the window being invisible in the trace.
-		require.True(t, (len(refreshMs)) >= (1), "expected len(refreshMs) >= 1")
+		require.GreaterOrEqual(t, len(refreshMs), 1)
 	})
 }

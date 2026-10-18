@@ -851,8 +851,8 @@ func TestTimingCrossValidation(t *testing.T) {
 			achievableBW := bytesPerRead / cyclesPerRead * freq / 1e9
 
 			ratio := achievableBW / peakBWGBs
-			require.True(t, (ratio) >= (0.40), fmt.Sprintf("DDR4 achievable BW ratio %.2f < 0.40", ratio))
-			require.True(t, (ratio) <= (0.90), fmt.Sprintf("DDR4 achievable BW ratio %.2f > 0.90", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("DDR4 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 0.90, fmt.Sprintf("DDR4 achievable BW ratio %.2f > 0.90", ratio))
 		})
 
 		t.Run("HBM2-2Gbps streaming reads: 40-90% of 32 GB/s peak", func(t *testing.T) {
@@ -870,8 +870,8 @@ func TestTimingCrossValidation(t *testing.T) {
 			achievableBW := bytesPerRead / cyclesPerRead * freq / 1e9
 
 			ratio := achievableBW / peakBWGBs
-			require.True(t, (ratio) >= (0.40), fmt.Sprintf("HBM2 achievable BW ratio %.2f < 0.40", ratio))
-			require.True(t, (ratio) <= (0.90), fmt.Sprintf("HBM2 achievable BW ratio %.2f > 0.90", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("HBM2 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 0.90, fmt.Sprintf("HBM2 achievable BW ratio %.2f > 0.90", ratio))
 		})
 
 		t.Run("DDR5-4800 streaming reads: 40-100% of 19.2 GB/s peak", func(t *testing.T) {
@@ -891,8 +891,8 @@ func TestTimingCrossValidation(t *testing.T) {
 			// DDR5 has tCCDL == burstCycle == 8, so row-buffer-hit reads can
 			// theoretically achieve 100% of peak. Use 40-100% range.
 			ratio := achievableBW / peakBWGBs
-			require.True(t, (ratio) >= (0.40), fmt.Sprintf("DDR5 achievable BW ratio %.2f < 0.40", ratio))
-			require.True(t, (ratio) <= (1.00), fmt.Sprintf("DDR5 achievable BW ratio %.2f > 1.00", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("DDR5 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 1.00, fmt.Sprintf("DDR5 achievable BW ratio %.2f > 1.00", ratio))
 		})
 	})
 }

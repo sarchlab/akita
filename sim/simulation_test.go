@@ -134,16 +134,9 @@ func TestSimulation(t *testing.T) {
 
 		dup := testComponent{name: "comp"}
 
-		func() {
-			defer func() {
-				recovered := recover()
-				require.NotNil(t, recovered)
-				require.Contains(t, fmt.Sprint(recovered), "already registered")
-			}()
-			(func() {
-				simulation.RegisterComponent(dup)
-			})()
-		}()
+		requirePanicContains(t, "already registered", func() {
+			simulation.RegisterComponent(dup)
+		})
 	})
 
 	t.Run("should reject duplicate port names", func(t *testing.T) {
@@ -154,16 +147,9 @@ func TestSimulation(t *testing.T) {
 
 		dupPort := testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
 
-		func() {
-			defer func() {
-				recovered := recover()
-				require.NotNil(t, recovered)
-				require.Contains(t, fmt.Sprint(recovered), "already registered")
-			}()
-			(func() {
-				simulation.RegisterPort(dupPort)
-			})()
-		}()
+		requirePanicContains(t, "already registered", func() {
+			simulation.RegisterPort(dupPort)
+		})
 	})
 
 	t.Run("should register shared state resources directly", func(t *testing.T) {
@@ -199,16 +185,9 @@ func TestSimulation(t *testing.T) {
 
 		simulation.RegisterResource(resource)
 
-		func() {
-			defer func() {
-				recovered := recover()
-				require.NotNil(t, recovered)
-				require.Contains(t, fmt.Sprint(recovered), "already registered")
-			}()
-			(func() {
-				simulation.RegisterResource(duplicate)
-			})()
-		}()
+		requirePanicContains(t, "already registered", func() {
+			simulation.RegisterResource(duplicate)
+		})
 	})
 
 	t.Run("should return all registered entities", func(t *testing.T) {
@@ -389,7 +368,7 @@ func TestSimulation(t *testing.T) {
 
 			full, err := os.ReadFile(path)
 			require.NoError(t, err)
-			require.True(t, (len(full)) > (4), "expected len(full) > 4")
+			require.Greater(t, len(full), 4)
 			require.NoError(t, os.WriteFile(path, full[:len(full)/2], 0o644))
 
 			require.NoError(t, simulation.Initialize())
@@ -424,16 +403,9 @@ func TestGlobalStateManager(t *testing.T) {
 
 			sim.RegisterComponent(testComponent{name: "shared"})
 
-			func() {
-				defer func() {
-					recovered := recover()
-					require.NotNil(t, recovered)
-					require.Contains(t, fmt.Sprint(recovered), "already registered")
-				}()
-				(func() {
-					sim.RegisterConnection(newTestConnection("shared"))
-				})()
-			}()
+			requirePanicContains(t, "already registered", func() {
+				sim.RegisterConnection(newTestConnection("shared"))
+			})
 		})
 
 		t.Run("should reject a resource whose name collides with a component", func(t *testing.T) {
@@ -442,22 +414,15 @@ func TestGlobalStateManager(t *testing.T) {
 
 			sim.RegisterComponent(testComponent{name: "Program.Memory"})
 
-			func() {
-				defer func() {
-					recovered := recover()
-					require.NotNil(t, recovered)
-					require.Contains(t, fmt.Sprint(recovered), "already registered")
-				}()
-				(func() {
-					sim.RegisterResource(testResource{
-						name:     "Program.Memory",
-						kind:     "test.Resource",
-						format:   "json",
-						ext:      ".json",
-						identity: "resource-1",
-					})
-				})()
-			}()
+			requirePanicContains(t, "already registered", func() {
+				sim.RegisterResource(testResource{
+					name:     "Program.Memory",
+					kind:     "test.Resource",
+					format:   "json",
+					ext:      ".json",
+					identity: "resource-1",
+				})
+			})
 		})
 	})
 
@@ -532,11 +497,11 @@ type timeSetter struct{}
 
 func (timeSetter) Handle(timing.Event) {}
 
-// advanceTo moves the engine's clock forward to t with an empty event.
-func advanceTo(t *testing.T, engine *timing.SerialEngine, subject timing.VTimeInPicoSec) {
+// advanceTo moves the engine's clock forward to at with an empty event.
+func advanceTo(t *testing.T, engine *timing.SerialEngine, at timing.VTimeInPicoSec) {
 	t.Helper()
 
-	engine.Schedule(timing.MakeEventBase(0, subject, "TimeSetter"))
+	engine.Schedule(timing.MakeEventBase(0, at, "TimeSetter"))
 	require.NoError(t, engine.Run())
 }
 
@@ -847,4 +812,14 @@ func (m *tickCountMWs) Initialize(c *tickCountComp) {
 
 func (m *wakeMWs) Initialize(c *wakeComp) {
 	*m = wakeMWs{Counter: &wakeMW{comp: c}}
+}
+
+func requirePanicContains(t *testing.T, substring string, fn func()) {
+	t.Helper()
+	defer func() {
+		recovered := recover()
+		require.NotNil(t, recovered)
+		require.Contains(t, fmt.Sprint(recovered), substring)
+	}()
+	fn()
 }

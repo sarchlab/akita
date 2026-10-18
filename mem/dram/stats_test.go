@@ -144,22 +144,18 @@ func TestDRAMStatistics(t *testing.T) {
 		require.NoError(t, engine.Run())
 
 		state := &dramComp.State
-		require.True(t, (state.CompletedReads) >= (1), "expected state.CompletedReads >= 1")
-		require.True(t, (state.CompletedWrites) >= (1), "expected state.CompletedWrites >= 1")
-		require.True(t, (state.TotalReadLatencyCycles) > (0), "expected state.TotalReadLatencyCycles > 0")
-		require.True(t, (state.TotalWriteLatencyCycles) > (0), "expected state.TotalWriteLatencyCycles > 0")
-		require.True(t, (state.BytesRead) > (0), "expected state.BytesRead > 0")
-		require.True(t, (state.BytesWritten) > (0), "expected state.BytesWritten > 0")
-		require.True(t, (state.TotalCycles) > (0), "expected state.TotalCycles > 0")
-		require.True(
-			t,
-			(state.RowBufferHits+state.RowBufferMisses) > (0),
-			"expected state.RowBufferHits + state.RowBufferMisses > 0",
-		)
-		require.True(t, (dram.AverageReadLatency(dramComp)) > (0), "expected dram.AverageReadLatency(dramComp) > 0")
-		require.True(t, (dram.AverageWriteLatency(dramComp)) > (0), "expected dram.AverageWriteLatency(dramComp) > 0")
-		require.True(t, (dram.ReadBandwidth(dramComp)) > (0), "expected dram.ReadBandwidth(dramComp) > 0")
-		require.True(t, (dram.WriteBandwidth(dramComp)) > (0), "expected dram.WriteBandwidth(dramComp) > 0")
+		require.GreaterOrEqual(t, state.CompletedReads, uint64(1))
+		require.GreaterOrEqual(t, state.CompletedWrites, uint64(1))
+		require.Greater(t, state.TotalReadLatencyCycles, uint64(0))
+		require.Greater(t, state.TotalWriteLatencyCycles, uint64(0))
+		require.Greater(t, state.BytesRead, uint64(0))
+		require.Greater(t, state.BytesWritten, uint64(0))
+		require.Greater(t, state.TotalCycles, uint64(0))
+		require.Greater(t, state.RowBufferHits+state.RowBufferMisses, uint64(0))
+		require.Greater(t, dram.AverageReadLatency(dramComp), 0.0)
+		require.Greater(t, dram.AverageWriteLatency(dramComp), 0.0)
+		require.Greater(t, dram.ReadBandwidth(dramComp), 0.0)
+		require.Greater(t, dram.WriteBandwidth(dramComp), 0.0)
 	})
 }
 

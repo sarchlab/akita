@@ -321,7 +321,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 		// TotalCycles is cleared by the reset, then counts only post-reset
 		// cycles, so it is far below the pre-reset value rather than carrying
 		// it forward.
-		require.True(t, (comp.State.TotalCycles) < (100), "expected comp.State.TotalCycles < 100")
+		require.Less(t, comp.State.TotalCycles, uint64(100))
 	})
 
 	t.Run("clears in-flight pending completions on Reset", func(t *testing.T) {

@@ -29,8 +29,8 @@ func newP0Harness(t *testing.T, spec Spec, tracers ...tasks.Observer) *p0Harness
 	engine := sim.Engine().(*timing.SerialEngine)
 
 	dramComp := buildDRAM(sim, spec, "P0DRAM", 1024)
-	for _, subject := range tracers {
-		dramComp.TaskTracker().Subscribe(subject, dramComp)
+	for _, observer := range tracers {
+		dramComp.TaskTracker().Subscribe(observer, dramComp)
 	}
 
 	top := dramComp.Ports.Top
@@ -238,17 +238,20 @@ func TestP0ChannelGuard(t *testing.T) {
 	}
 
 	t.Run("should reject NumChannel > 1 at build time", func(t *testing.T) {
-		func() {
-			defer func() {
-				recovered := recover()
-				require.NotNil(t, recovered)
-				require.Contains(t, fmt.Sprint(recovered), "NumChannel > 1")
-			}()
-			(build(t, 2))()
-		}()
+		requirePanicContains(t, "NumChannel > 1", build(t, 2))
 	})
 
 	t.Run("should still build with a single channel", func(t *testing.T) {
 		require.NotPanics(t, build(t, 1))
 	})
+}
+
+func requirePanicContains(t *testing.T, substring string, fn func()) {
+	t.Helper()
+	defer func() {
+		recovered := recover()
+		require.NotNil(t, recovered)
+		require.Contains(t, fmt.Sprint(recovered), substring)
+	}()
+	fn()
 }

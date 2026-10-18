@@ -322,8 +322,8 @@ func TestTLBMilestones(t *testing.T) {
 				topIdx = i
 			}
 		}
-		require.True(t, (transIdx) >= (0), "expected transIdx >= 0")
-		require.True(t, (topIdx) >= (0), "expected topIdx >= 0")
-		require.True(t, (transIdx) < (topIdx), "expected transIdx < topIdx")
+		require.GreaterOrEqual(t, transIdx, 0)
+		require.GreaterOrEqual(t, topIdx, 0)
+		require.Less(t, transIdx, topIdx)
 	})
 }

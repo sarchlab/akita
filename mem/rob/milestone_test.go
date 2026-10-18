@@ -252,6 +252,6 @@ func TestReorderBufferMilestones(t *testing.T) {
 				topSendIdx = i
 			}
 		}
-		require.True(t, (depIdx) < (topSendIdx), "expected depIdx < topSendIdx")
+		require.Less(t, depIdx, topSendIdx)
 	})
 }
