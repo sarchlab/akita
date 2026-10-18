@@ -1,8 +1,8 @@
 package gmmu
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -28,7 +29,8 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
-var _ = Describe("GMMU", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestGMMU(t *testing.T) {
 	var (
 		engine     timing.Engine
 		sim        timing.Simulation
@@ -73,7 +75,6 @@ var _ = Describe("GMMU", func() {
 			panic(err)
 		}
 		mw = gmmuComp.Middlewares.Walk
-
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {
@@ -90,33 +91,41 @@ var _ = Describe("GMMU", func() {
 		return req
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		pageTable = vm.NewPageTable(12)
 		build()
-	})
+	}
 
-	Context("GMMU Builder", func() {
-		It("should build GMMU correctly", func() {
-			Expect(gmmuComp.Spec.Freq).To(Equal(1 * timing.GHz))
-			Expect(gmmuComp.Spec.MaxRequestsInFlight).To(Equal(16))
-			Expect(mw.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.Spec.DeviceID).To(Equal(uint64(0)))
+	t.Run("GMMU Builder", func(t *testing.T) {
+		t.Run("should build GMMU correctly", func(t *testing.T) {
+			setup1(t)
+
+			require.Equal(t, 1*timing.GHz, gmmuComp.Spec.Freq)
+			require.Equal(t, 16, gmmuComp.Spec.MaxRequestsInFlight)
+			require.Equal(t, pageTable, mw.pageTable)
+			require.Equal(t, uint64(0), gmmuComp.Spec.DeviceID)
 		})
 	})
 
-	Context("GMMU parse from top", func() {
-		It("should process translation request", func() {
+	t.Run("GMMU parse from top", func(t *testing.T) {
+		t.Run("should process translation request", func(t *testing.T) {
+			setup1(t)
+
 			topPort.Deliver(makeTranslationReq(0x00000000))
 
 			mw.Handle(modelingtest.TickEvent(gmmuComp))
 
 			state := &gmmuComp.State
-			Expect(state.WalkingTranslations).To(HaveLen(1))
+			require.Len(t, state.WalkingTranslations, 1)
 		})
 
-		It("should walk page table", func() {
+		t.Run("should walk page table", func(t *testing.T) {
+			setup1(t)
+
 			page := vm.Page{
 				PID:      vm.PID(1),
 				VAddr:    0x10000000,
@@ -136,13 +145,15 @@ var _ = Describe("GMMU", func() {
 			modelingtest.Tick(gmmuComp)
 
 			rspI, _ := topPort.RetrieveOutgoing()
-			Expect(rspI).NotTo(BeNil())
+			require.NotNil(t, rspI)
 			rsp := rspI
-			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
-			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page.PID).To(Equal(vm.PID(1)))
+			require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+			require.Equal(t, vm.PID(1), rsp.Payload.(vmprotocol.TranslationRsp).Page.PID)
 		})
 
-		It("should send request remotely", func() {
+		t.Run("should send request remotely", func(t *testing.T) {
+			setup1(t)
+
 			page := vm.Page{
 				PID:      vm.PID(1),
 				VAddr:    0x10000000,
@@ -161,13 +172,15 @@ var _ = Describe("GMMU", func() {
 			modelingtest.Tick(gmmuComp)
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
-			Expect(reqI).NotTo(BeNil())
+			require.NotNil(t, reqI)
 			req := reqI
-			Expect(req.Dst).To(Equal(lowModulePort))
-			Expect(req.Payload.(vmprotocol.TranslationReq).VAddr).To(Equal(uint64(0x10000000)))
+			require.Equal(t, lowModulePort, req.Dst)
+			require.Equal(t, uint64(0x10000000), req.Payload.(vmprotocol.TranslationReq).VAddr)
 		})
 
-		It("should return response from remote page table", func() {
+		t.Run("should return response from remote page table", func(t *testing.T) {
+			setup1(t)
+
 			page := vm.Page{
 				PID:      vm.PID(1),
 				VAddr:    0x10000000,
@@ -186,7 +199,7 @@ var _ = Describe("GMMU", func() {
 			modelingtest.Tick(gmmuComp)
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
-			Expect(reqI).NotTo(BeNil())
+			require.NotNil(t, reqI)
 			sentReqToBottom := reqI
 
 			// Deliver the response from the bottom (remote page table).
@@ -205,10 +218,10 @@ var _ = Describe("GMMU", func() {
 			modelingtest.Tick(gmmuComp)
 
 			rspToTopI, _ := topPort.RetrieveOutgoing()
-			Expect(rspToTopI).NotTo(BeNil())
+			require.NotNil(t, rspToTopI)
 			rspToTop := rspToTopI
-			Expect(rspToTop.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
-			Expect(rspToTop.Payload.(vmprotocol.TranslationRsp).Page.PID).To(Equal(vm.PID(1)))
+			require.Equal(t, page, rspToTop.Payload.(vmprotocol.TranslationRsp).Page)
+			require.Equal(t, vm.PID(1), rspToTop.Payload.(vmprotocol.TranslationRsp).Page.PID)
 		})
 	})
-})
+}

@@ -22,15 +22,23 @@ with full CI, frontend, acceptance, or downstream MGPUSim coverage.
   - Used for generating mock implementations for testing
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
-- **ginkgo**: v2.32.1
-  - BDD testing framework
-  - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
-
 - **golangci-lint**: v2.13.2
   - Go linter aggregator
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
   - The checked-in `.golangci.yml` keeps the established linter set stable
     across the v2.13.2 compatibility update.
+
+## Writing and Running Go Tests
+
+Use the standard `testing` package for all Go tests: `TestXxx`, `t.Run`
+subtests, and `t.Cleanup` for cleanup that must run after a failure. Testify
+assertions and GoMock remain available; use `require` for checks that must
+stop the current test on failure. Pass the current subtest's `*testing.T` to
+helpers and mock controllers, and initialize fixtures separately for each case.
+
+Run all Go tests with `go test -count=1 ./...`, or select a test/subtest with
+`go test ./path/to/package -run 'TestName/subtest'`. Performance measurements
+use native `BenchmarkXxx` functions and `go test -bench`.
 
 ## Local Validation Gate Scope
 
@@ -46,15 +54,14 @@ The local gate currently performs this Go-only scope:
 2. Runs read-only dependency checks: `go list -mod=readonly -m all` and
    `go mod tidy -diff`.
 3. Installs repository-pinned tools into a temporary `GOBIN`:
-   `go.uber.org/mock/mockgen@v0.6.0`,
-   `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2`, and
-   `github.com/onsi/ginkgo/v2/ginkgo@v2.32.1`. The gate also points `GOPATH`,
+   `go.uber.org/mock/mockgen@v0.6.0` and
+   `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2`. The gate also points `GOPATH`,
    `GOMODCACHE`, `GOCACHE`, and the golangci-lint cache at the temporary
    validation directory so validation does not mutate a developer's shared Go
    dependency or build caches.
 4. Runs read-only validation commands: `go generate -mod=readonly ./...`,
    `go build -mod=readonly ./...`, `golangci-lint run --modules-download-mode=readonly ./...`,
-   and `ginkgo -r --mod=readonly`.
+   and `go test -mod=readonly -count=1 ./...`.
 5. Fails closed if `go.mod`, `go.sum`, or any tracked file has startup,
    staged, or post-validation changes.
 
@@ -106,8 +113,8 @@ grep -nE 'setup-python|python-version|python3' .github/workflows/akita_test.yml
 # Should show python3 checks/runs, and no setup-python or python-version entries.
 
 # Local Akita Go gate tool pins and read-only dependency checks
-grep -nE '^(MOCKGEN_VERSION|GINKGO_VERSION|GOLANGCI_LINT_VERSION)=' run_before_merge.sh
-grep -nE 'go list -mod=readonly -m all|go mod tidy -diff|go generate -mod=readonly|go build -mod=readonly|modules-download-mode=readonly|ginkgo.*--mod=readonly' run_before_merge.sh
+grep -nE '^(MOCKGEN_VERSION|GOLANGCI_LINT_VERSION)=' run_before_merge.sh
+grep -nE 'go list -mod=readonly -m all|go mod tidy -diff|go generate -mod=readonly|go build -mod=readonly|modules-download-mode=readonly|go test -mod=readonly' run_before_merge.sh
 # Should show the pinned Go tool versions and read-only validation commands.
 ```
 

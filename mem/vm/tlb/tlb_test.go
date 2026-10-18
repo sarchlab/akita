@@ -1,8 +1,8 @@
 package tlb
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -10,10 +10,11 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("TLB", func() {
-
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTLB(t *testing.T) {
 	var (
 		engine      timing.Engine
 		sim         timing.Simulation
@@ -26,7 +27,9 @@ var _ = Describe("TLB", func() {
 		remotePort  = messaging.RemotePort("RemotePort")
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -54,15 +57,19 @@ var _ = Describe("TLB", func() {
 
 		tlbMW = tlbComp.Middlewares.TLB
 		tlbCtrlMW = tlbComp.Middlewares.Ctrl
-	})
+	}
 
-	It("should do nothing if there is no req in TopPort", func() {
+	t.Run("should do nothing if there is no req in TopPort", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := tlbMW.insertIntoPipeline()
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should insert req into pipeline when topPort has req", func() {
+	t.Run("should insert req into pipeline when topPort has req", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
 			VAddr:    uint64(0x100),
@@ -77,15 +84,17 @@ var _ = Describe("TLB", func() {
 
 		madeProgress := tlbMW.insertIntoPipeline()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 	})
 
-	Context("hit", func() {
+	t.Run("hit", func(t *testing.T) {
 		var (
 			req messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			// Set up a page in the TLB state
 			page := vm.Page{
 				PID:   1,
@@ -105,24 +114,28 @@ var _ = Describe("TLB", func() {
 				Src: messaging.RemotePort("Agent"),
 
 				TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
-		})
+		t.Run("should respond to top", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
 
-		It("should respond to top", func() {
 			madeProgress := tlbMW.lookup(pipelineTLBReqState{Msg: req})
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			rsp, _ := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationRsp{}}))
+			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
 		})
 	})
 
-	Context("miss", func() {
+	t.Run("miss", func(t *testing.T) {
 		var (
 			req messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			// Set up a page with Valid=false to trigger miss
 			page := vm.Page{
 				PID:   1,
@@ -142,28 +155,29 @@ var _ = Describe("TLB", func() {
 				Src: messaging.RemotePort("Agent"),
 
 				TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
-		})
+		t.Run("should fetch from bottom and add entry to MSHR", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
 
-		It("should fetch from bottom and add entry to MSHR", func() {
 			madeProgress := tlbMW.lookup(pipelineTLBReqState{Msg: req})
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100))).
-				To(Equal(true))
+			require.Equal(t, true, mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100)))
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationReq{}}))
+			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationReq{}}, sent)
 			sentMsg := sent
-			Expect(sentMsg.Payload.(vmprotocol.TranslationReq).VAddr).To(Equal(uint64(0x100)))
-			Expect(sentMsg.Payload.(vmprotocol.TranslationReq).PID).To(Equal(vm.PID(1)))
-			Expect(sentMsg.Payload.(vmprotocol.TranslationReq).DeviceID).To(Equal(uint64(1)))
-			Expect(sentMsg.Dst).To(Equal(remotePort))
+			require.Equal(t, uint64(0x100), sentMsg.Payload.(vmprotocol.TranslationReq).VAddr)
+			require.Equal(t, vm.PID(1), sentMsg.Payload.(vmprotocol.TranslationReq).PID)
+			require.Equal(t, uint64(1), sentMsg.Payload.(vmprotocol.TranslationReq).DeviceID)
+			require.Equal(t, remotePort, sentMsg.Dst)
 		})
 	})
 
-	Context("parse bottom", func() {
+	t.Run("parse bottom", func(t *testing.T) {
 		var (
 			req         messaging.Msg
 			fetchBottom messaging.Msg
@@ -171,7 +185,9 @@ var _ = Describe("TLB", func() {
 			rsp         messaging.Msg
 		)
 
-		BeforeEach(func() {
+		setup4 := func(t *testing.T) {
+			t.Helper()
+
 			req = messaging.Msg{Payload: vmprotocol.TranslationReq{
 				PID:      1,
 				VAddr:    0x100,
@@ -203,16 +219,21 @@ var _ = Describe("TLB", func() {
 				Dst:          bottomPort.AsRemote(),
 				RspTo:        fetchBottom.ID,
 				TrafficClass: "vmprotocol.TranslationRsp"}
+		}
 
-		})
+		t.Run("should do nothing if no return", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
 
-		It("should do nothing if no return", func() {
 			madeProgress := tlbMW.parseBottom()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should stall if the TLB is responding to an MSHR entry", func() {
+		t.Run("should stall if the TLB is responding to an MSHR entry", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			// Set up responding MSHR entry
 			next := &tlbComp.State
 			next.HasRespondingMSHR = true
@@ -226,10 +247,13 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbMW.parseBottom()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should parse respond from bottom", func() {
+		t.Run("should parse respond from bottom", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			bottomPort.Deliver(rsp)
 
 			// Add MSHR entry
@@ -242,14 +266,16 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbMW.parseBottom()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(nextState.HasRespondingMSHR).To(BeTrue())
-			Expect(mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100))).
-				To(Equal(false))
+			require.True(t, nextState.HasRespondingMSHR)
+			require.Equal(t, false, mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100)))
 		})
 
-		It("should respond", func() {
+		t.Run("should respond", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
 			next := &tlbComp.State
 			next.HasRespondingMSHR = true
 			next.RespondingMSHRData = mshrEntryState{
@@ -260,24 +286,27 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbMW.respondMSHREntry()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(nextState.RespondingMSHRData.Requests).To(HaveLen(0))
-			Expect(nextState.HasRespondingMSHR).To(BeFalse())
+			require.Len(t, nextState.RespondingMSHRData.Requests, 0)
+			require.False(t, nextState.HasRespondingMSHR)
 
 			rsp, _ := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationRsp{}}))
+			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
 		})
 	})
 
-	Context("flush related handling", func() {
+	t.Run("flush related handling", func(t *testing.T) {
+		t.Run("should do nothing if no req", func(t *testing.T) {
+			setup1(t)
 
-		It("should do nothing if no req", func() {
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should invalidate a matching entry when paused", func() {
+		t.Run("should invalidate a matching entry when paused", func(t *testing.T) {
+			setup1(t)
+
 			next := &tlbComp.State
 			next.TLBState = tlbStatePause
 
@@ -302,19 +331,21 @@ var _ = Describe("TLB", func() {
 			controlPort.Deliver(invReq)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
-			Expect(found && gotPage.Valid).To(BeFalse())
+			require.False(t, found && gotPage.Valid)
 
 			rspMsg, _ := controlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, rspMsg)
 			rsp := rspMsg
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+			require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 		})
 
-		It("should reject Invalidate while enabled", func() {
+		t.Run("should reject Invalidate while enabled", func(t *testing.T) {
+			setup1(t)
+
 			next := &tlbComp.State
 			next.TLBState = tlbStateEnable
 
@@ -325,15 +356,17 @@ var _ = Describe("TLB", func() {
 				TrafficClass: "memcontrolprotocol.Req"}
 
 			controlPort.Deliver(invReq)
-			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+			require.True(t, tlbCtrlMW.handleIncomingCommands())
 
 			rspMsg, _ := controlPort.RetrieveOutgoing()
 			rsp := rspMsg
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
+			require.False(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, memcontrolprotocol.ErrMustBePausedOrDrained, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 		})
 
-		It("invalidates only entries matching the PID filter", func() {
+		t.Run("invalidates only entries matching the PID filter", func(t *testing.T) {
+			setup1(t)
+
 			next := &tlbComp.State
 			next.TLBState = tlbStatePause
 
@@ -352,20 +385,22 @@ var _ = Describe("TLB", func() {
 
 			controlPort.Deliver(invReq)
 
-			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+			require.True(t, tlbCtrlMW.handleIncomingCommands())
 
 			// Only the PID-1 entry is dropped; the PID-2 entry survives.
-			Expect(next.Sets[0].Blocks[0].Page.Valid).To(BeFalse())
-			Expect(next.Sets[0].Blocks[1].Page.Valid).To(BeTrue())
+			require.False(t, next.Sets[0].Blocks[0].Page.Valid)
+			require.True(t, next.Sets[0].Blocks[1].Page.Valid)
 
 			rspValue, _ := controlPort.RetrieveOutgoing()
 
 			rsp := rspValue
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+			require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 		})
 
-		It("clears cached entries on Reset", func() {
+		t.Run("clears cached entries on Reset", func(t *testing.T) {
+			setup1(t)
+
 			next := &tlbComp.State
 			page := vm.Page{PID: 1, VAddr: 0x1000, Valid: true}
 			setUpdate(&next.Sets[0], 0, page)
@@ -379,20 +414,22 @@ var _ = Describe("TLB", func() {
 
 			controlPort.Deliver(resetReq)
 
-			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+			require.True(t, tlbCtrlMW.handleIncomingCommands())
 
 			// Reset returns the TLB to its freshly-built empty state.
 			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
-			Expect(found && gotPage.Valid).To(BeFalse())
+			require.False(t, found && gotPage.Valid)
 
 			rspValue, _ := controlPort.RetrieveOutgoing()
 
 			rsp := rspValue
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 		})
 
-		It("should handle restart request", func() {
+		t.Run("should handle restart request", func(t *testing.T) {
+			setup1(t)
+
 			restartReq := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
 				ID:           sim.NewID(),
 				Src:          messaging.RemotePort("Agent"),
@@ -403,15 +440,17 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 
 			rsp, _ := controlPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, rsp)
 		})
 	})
 
-	Context("other control signals", func() {
-		It("should handle pause ctrl msg", func() {
+	t.Run("other control signals", func(t *testing.T) {
+		t.Run("should handle pause ctrl msg", func(t *testing.T) {
+			setup1(t)
+
 			pauseMsg := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdPause,
 			},
@@ -425,12 +464,14 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(nextState.TLBState).To(Equal(tlbStatePause))
+			require.Equal(t, tlbStatePause, nextState.TLBState)
 		})
 
-		It("should handle enable ctrl msg after pause", func() {
+		t.Run("should handle enable ctrl msg after pause", func(t *testing.T) {
+			setup1(t)
+
 			pause := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdPause,
 			},
@@ -444,16 +485,15 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(nextState.TLBState).To(Equal(tlbStatePause))
+			require.Equal(t, tlbStatePause, nextState.TLBState)
 
 			// Drain the Pause ack so the next ack has room in the
 			// single-slot control port outgoing buffer.
 			value0, present0 := controlPort.RetrieveOutgoing()
-			Expect(present0).To(BeTrue())
-			Expect(value0).
-				To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			require.True(t, present0)
+			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, value0)
 
 			enable := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdEnable,
@@ -467,12 +507,14 @@ var _ = Describe("TLB", func() {
 			controlPort.Deliver(enable)
 
 			madeProgress = tlbCtrlMW.handleIncomingCommands()
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState = &tlbComp.State
-			Expect(nextState.TLBState).To(Equal(tlbStateEnable))
+			require.Equal(t, tlbStateEnable, nextState.TLBState)
 		})
 
-		It("should handle drain ctrl msg", func() {
+		t.Run("should handle drain ctrl msg", func(t *testing.T) {
+			setup1(t)
+
 			drainMsg := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdDrain,
 			},
@@ -486,19 +528,20 @@ var _ = Describe("TLB", func() {
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
-			Expect(madeProgress).To(BeTrue())
+			require.True(t, madeProgress)
 			nextState := &tlbComp.State
-			Expect(nextState.TLBState).To(Equal(tlbStateDrain))
+			require.Equal(t, tlbStateDrain, nextState.TLBState)
 
 			madeProgress = tlbMW.handleDrain()
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 			nextState = &tlbComp.State
-			Expect(nextState.TLBState).To(Equal(tlbStatePause))
+			require.Equal(t, tlbStatePause, nextState.TLBState)
 		})
 	})
-})
+}
 
-var _ = Describe("TLB Integration", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTLBIntegration(t *testing.T) {
 	var (
 		engine     timing.Engine
 		sim        timing.Simulation
@@ -509,7 +552,9 @@ var _ = Describe("TLB Integration", func() {
 		page       vm.Page
 	)
 
-	BeforeEach(func() {
+	setup5 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -557,9 +602,11 @@ var _ = Describe("TLB Integration", func() {
 
 			lowModule.port.Send(rsp)
 		}
-	})
+	}
 
-	It("should do tlb miss", func() {
+	t.Run("should do tlb miss", func(t *testing.T) {
+		setup5(t)
+
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
 			VAddr:    0x1000,
@@ -572,13 +619,15 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.port.Send(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp := agent.lastDelivered
-		Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
 	})
 
-	It("should have faster hit than miss", func() {
+	t.Run("should have faster hit than miss", func(t *testing.T) {
+		setup5(t)
+
 		time1 := engine.CurrentTime()
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
@@ -592,10 +641,10 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.port.Send(req)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp := agent.lastDelivered
-		Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
 
 		time2 := engine.CurrentTime()
 
@@ -611,13 +660,13 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.port.Send(req2)
 
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		rsp = agent.lastDelivered
-		Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
 
 		time3 := engine.CurrentTime()
 
-		Expect(time3 - time2).To(BeNumerically("<", time2-time1))
+		require.Less(t, time3-time2, time2-time1)
 	})
-})
+}

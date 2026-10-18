@@ -3,8 +3,8 @@ package simplebankedmemory
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -16,6 +16,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 type loopbackConnection struct {
@@ -123,8 +124,9 @@ func (a *testAgent) Handle(timing.Event) {
 	return
 }
 
-func (a *testAgent) send(msg messaging.Msg) {
-	Expect(a.port.CanSend()).To(BeTrue())
+func (a *testAgent) send(t *testing.T, msg messaging.Msg) {
+	t.Helper()
+	require.True(t, a.port.CanSend())
 	a.port.Send(msg)
 }
 
@@ -243,7 +245,8 @@ func collectLatency(
 	return latency
 }
 
-var _ = Describe("SimpleBankedMemory", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestSimpleBankedMemory(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
@@ -253,7 +256,9 @@ var _ = Describe("SimpleBankedMemory", func() {
 		conn    *loopbackConnection
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(4 * mem.GB)
@@ -278,14 +283,18 @@ var _ = Describe("SimpleBankedMemory", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	cleanup2 := func(t *testing.T) {
+		t.Helper()
 
-	AfterEach(func() {
 		agent.received = nil
-	})
+	}
 
-	It("should return read data after configured latency", func() {
+	t.Run("should return read data after configured latency", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		data := []byte{1, 2, 3, 4}
 		storage.Write(0x0, data)
 
@@ -300,18 +309,21 @@ var _ = Describe("SimpleBankedMemory", func() {
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
 
-		agent.send(read)
+		agent.send(t, read)
 
 		for i := 0; i < 6; i++ {
 			modelingtest.Tick(memComp)
 		}
 
-		Expect(agent.received).To(HaveLen(1))
+		require.Len(t, agent.received, 1)
 		rsp := agent.received[0]
-		Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(data))
+		require.Equal(t, data, rsp.Payload.(memprotocol.DataReadyRsp).Data)
 	})
 
-	It("should commit write before serving subsequent read", func() {
+	t.Run("should commit write before serving subsequent read", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		addr := uint64(0x100)
 
 		initial := []byte{0xAA, 0xBB, 0xCC, 0xDD}
@@ -341,26 +353,29 @@ var _ = Describe("SimpleBankedMemory", func() {
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
 
-		agent.send(write)
-		agent.send(read)
+		agent.send(t, write)
+		agent.send(t, read)
 
 		for i := 0; i < 10; i++ {
 			modelingtest.Tick(memComp)
 		}
 
-		Expect(agent.received).To(HaveLen(2))
+		require.Len(t, agent.received, 2)
 		_, isWriteDone := agent.received[0].Payload.(memprotocol.WriteDoneRsp)
-		Expect(isWriteDone).To(BeTrue())
+		require.True(t, isWriteDone)
 		_, ok := agent.received[1].Payload.(memprotocol.DataReadyRsp)
 		readRsp := agent.received[1]
-		Expect(ok).To(BeTrue())
-		Expect(readRsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(newData))
+		require.True(t, ok)
+		require.Equal(t, newData, readRsp.Payload.(memprotocol.DataReadyRsp).Data)
 
 		committed := storage.Read(addr, uint64(len(newData)))
-		Expect(committed).To(Equal(newData))
+		require.Equal(t, newData, committed)
 	})
 
-	It("accesses storage at the global request address (identity)", func() {
+	t.Run("accesses storage at the global request address (identity)", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		sim = testsim.New(engine, false)
 		// Storage is global: a request's address indexes the backing store
 		// directly, with no per-controller conversion.
@@ -408,20 +423,20 @@ var _ = Describe("SimpleBankedMemory", func() {
 			TrafficBytes: 12,
 			TrafficClass: "memprotocol.ReadReq"}
 
-		agent.send(write)
-		agent.send(read)
+		agent.send(t, write)
+		agent.send(t, read)
 
 		for i := 0; i < 12; i++ {
 			modelingtest.Tick(memComp)
 		}
 
-		Expect(agent.received).To(HaveLen(2))
+		require.Len(t, agent.received, 2)
 		_, ok := agent.received[1].Payload.(memprotocol.DataReadyRsp)
 		readRsp := agent.received[1]
-		Expect(ok).To(BeTrue())
-		Expect(readRsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		require.True(t, ok)
+		require.Equal(t, []byte{1, 2, 3, 4}, readRsp.Payload.(memprotocol.DataReadyRsp).Data)
 	})
-})
+}
 
 func Example() {
 	memComp, agent, conn, freq := setupExampleSystem()

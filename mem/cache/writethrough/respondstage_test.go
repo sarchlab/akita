@@ -1,22 +1,26 @@
 package writethrough
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Respond Stage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestRespondStage(t *testing.T) {
 	var (
 		mw      *pipelineMW
 		topPort messaging.Port
 		s       *respondStage
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
 		ports := makePorts("Cache", 4)
@@ -34,24 +38,28 @@ var _ = Describe("Respond Stage", func() {
 		topPort = ports.Top
 
 		s = &respondStage{cache: mw}
-	})
+	}
 
 	// fillOutgoing pre-fills topPort's single outgoing slot so the next
 	// CanSend returns false, simulating a busy port.
-	fillOutgoing := func() {
+	fillOutgoing := func(t *testing.T) {
+		t.Helper()
+
 		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
 			Src:          topPort.AsRemote(),
 			Dst:          messaging.RemotePort("SomeSrc"),
 			TrafficClass: "rsp"}
 
-		Expect(topPort.CanSend()).To(BeTrue())
+		require.True(t, topPort.CanSend())
 		topPort.Send(dummy)
 	}
 
-	Context("read", func() {
+	t.Run("read", func(t *testing.T) {
 		var readMeta messaging.Msg
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			next := &mw.comp.State
 
 			readMeta = messaging.Msg{
@@ -70,40 +78,48 @@ var _ = Describe("Respond Stage", func() {
 					ReadPID:            1,
 				},
 			)
-		})
+		}
 
-		It("should stall if cannot send to top", func() {
+		t.Run("should stall if cannot send to top", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
-			fillOutgoing()
+			fillOutgoing(t)
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should send data ready to top", func() {
+		t.Run("should send data ready to top", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.Transactions[0].Removed).To(BeTrue())
+			require.True(t, madeProgress)
+			require.True(t, next.Transactions[0].Removed)
 
 			out, _ := topPort.RetrieveOutgoing()
 			dr := out
-			Expect(dr.RspTo).To(Equal(readMeta.ID))
-			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+			require.Equal(t, readMeta.ID, dr.RspTo)
+			require.Equal(t, []byte{1, 2, 3, 4}, dr.Payload.(memprotocol.DataReadyRsp).Data)
 		})
 	})
 
-	Context("write", func() {
+	t.Run("write", func(t *testing.T) {
 		var writeMeta messaging.Msg
 
-		BeforeEach(func() {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			next := &mw.comp.State
 
 			writeMeta = messaging.Msg{
@@ -121,31 +137,36 @@ var _ = Describe("Respond Stage", func() {
 					WritePID:     1,
 				},
 			)
-		})
+		}
 
-		It("should stall if cannot send to top", func() {
+		t.Run("should stall if cannot send to top", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			next := &mw.comp.State
 			next.Transactions[0].Done = true
-			fillOutgoing()
+			fillOutgoing(t)
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			require.False(t, madeProgress)
 		})
 
-		It("should send data ready to top", func() {
+		t.Run("should send data ready to top", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
 
 			madeProgress := s.Tick()
 
-			Expect(madeProgress).To(BeTrue())
-			Expect(next.Transactions[0].Removed).To(BeTrue())
+			require.True(t, madeProgress)
+			require.True(t, next.Transactions[0].Removed)
 
 			out, _ := topPort.RetrieveOutgoing()
-			Expect(out.RspTo).To(Equal(writeMeta.ID))
+			require.Equal(t, writeMeta.ID, out.RspTo)
 		})
 	})
-
-})
+}

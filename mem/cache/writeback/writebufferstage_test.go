@@ -1,22 +1,26 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("WriteBufferStage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestWriteBufferStage(t *testing.T) {
 	var (
 		m          *pipelineMW
 		wb         *writeBufferStage
 		bottomPort messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -57,16 +61,20 @@ var _ = Describe("WriteBufferStage", func() {
 		m.comp.State = initialState
 
 		wb = m.writeBuffer
-	})
+	}
 
-	It("should do nothing if no transactions", func() {
+	t.Run("should do nothing if no transactions", func(t *testing.T) {
+		setup1(t)
+
 		ret := wb.Tick()
 
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 	})
 
-	Context("processing new writeBufferFetch transactions", func() {
-		It("should fetch from bottom", func() {
+	t.Run("processing new writeBufferFetch transactions", func(t *testing.T) {
+		t.Run("should fetch from bottom", func(t *testing.T) {
+			setup1(t)
+
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
 				ID:           m.comp.NewID(),
 				TrafficClass: "memprotocol.ReadReq"}
@@ -90,15 +98,17 @@ var _ = Describe("WriteBufferStage", func() {
 
 			ret := wb.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next = &m.comp.State
-			Expect(next.InflightFetchIndices).To(HaveLen(1))
+			require.Len(t, next.InflightFetchIndices, 1)
 
 			out, _ := bottomPort.RetrieveOutgoing()
-			Expect(out).NotTo(BeNil())
+			require.NotNil(t, out)
 		})
 
-		It("should stall fetch if too many inflight fetches", func() {
+		t.Run("should stall fetch if too many inflight fetches", func(t *testing.T) {
+			setup1(t)
+
 			next := &m.comp.State
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
@@ -119,14 +129,16 @@ var _ = Describe("WriteBufferStage", func() {
 
 			ret := wb.Tick()
 
-			Expect(ret).To(BeFalse())
+			require.False(t, ret)
 			_, present0 := bottomPort.PeekOutgoing()
-			Expect(present0).To(BeFalse())
+			require.False(t, present0)
 		})
 	})
 
-	Context("writing evictions", func() {
-		It("should send eviction to bottom", func() {
+	t.Run("writing evictions", func(t *testing.T) {
+		t.Run("should send eviction to bottom", func(t *testing.T) {
+			setup1(t)
+
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
 				ID:           m.comp.NewID(),
 				TrafficClass: "memprotocol.ReadReq"}
@@ -146,16 +158,18 @@ var _ = Describe("WriteBufferStage", func() {
 
 			ret := wb.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next = &m.comp.State
-			Expect(next.PendingEvictionIndices).To(HaveLen(0))
-			Expect(next.InflightEvictionIndices).To(HaveLen(1))
+			require.Len(t, next.PendingEvictionIndices, 0)
+			require.Len(t, next.InflightEvictionIndices, 1)
 
 			out, _ := bottomPort.RetrieveOutgoing()
-			Expect(out).NotTo(BeNil())
+			require.NotNil(t, out)
 		})
 
-		It("should stall if too many inflight evictions", func() {
+		t.Run("should stall if too many inflight evictions", func(t *testing.T) {
+			setup1(t)
+
 			next := &m.comp.State
 			next.InflightEvictionIndices = []int{10, 11, 12, 13}
 			next.PendingEvictionIndices = []int{0}
@@ -163,14 +177,16 @@ var _ = Describe("WriteBufferStage", func() {
 
 			ret := wb.Tick()
 
-			Expect(ret).To(BeFalse())
+			require.False(t, ret)
 			_, present1 := bottomPort.PeekOutgoing()
-			Expect(present1).To(BeFalse())
+			require.False(t, present1)
 		})
 	})
 
-	Context("processing responses", func() {
-		It("should process write done response", func() {
+	t.Run("processing responses", func(t *testing.T) {
+		t.Run("should process write done response", func(t *testing.T) {
+			setup1(t)
+
 			evictWrite := messaging.Msg{Payload: memprotocol.WriteReq{},
 				ID:           9001,
 				TrafficClass: "memprotocol.WriteReq"}
@@ -199,11 +215,11 @@ var _ = Describe("WriteBufferStage", func() {
 
 			ret := wb.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next = &m.comp.State
-			Expect(next.InflightEvictionIndices).To(HaveLen(0))
+			require.Len(t, next.InflightEvictionIndices, 0)
 			_, present2 := bottomPort.PeekIncoming()
-			Expect(present2).To(BeFalse())
+			require.False(t, present2)
 		})
 	})
-})
+}

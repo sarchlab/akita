@@ -3,74 +3,66 @@ package naming
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNaming(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Naming Suite")
-}
-
-var _ = Describe("Naming", func() {
-	It("should parse name", func() {
+	t.Run("should parse name", func(t *testing.T) {
 		name := parseName("GPU[0].Core[0]")
-		Expect(name.Tokens[0].ElemName).To(Equal("GPU"))
-		Expect(name.Tokens[0].Index).To(Equal([]int{0}))
-		Expect(name.Tokens[1].ElemName).To(Equal("Core"))
-		Expect(name.Tokens[1].Index).To(Equal([]int{0}))
+		require.Equal(t, "GPU", name.Tokens[0].ElemName)
+		require.Equal(t, []int{0}, name.Tokens[0].Index)
+		require.Equal(t, "Core", name.Tokens[1].ElemName)
+		require.Equal(t, []int{0}, name.Tokens[1].Index)
 	})
 
-	It("should parse multi-dimensional index", func() {
+	t.Run("should parse multi-dimensional index", func(t *testing.T) {
 		name := parseName("GPU[0][1].Core[0][1]")
-		Expect(name.Tokens[0].ElemName).To(Equal("GPU"))
-		Expect(name.Tokens[0].Index).To(Equal([]int{0, 1}))
-		Expect(name.Tokens[1].ElemName).To(Equal("Core"))
-		Expect(name.Tokens[1].Index).To(Equal([]int{0, 1}))
+		require.Equal(t, "GPU", name.Tokens[0].ElemName)
+		require.Equal(t, []int{0, 1}, name.Tokens[0].Index)
+		require.Equal(t, "Core", name.Tokens[1].ElemName)
+		require.Equal(t, []int{0, 1}, name.Tokens[1].Index)
 	})
 
-	It("should panic if the name is empty", func() {
-		Expect(func() { MustBeValid("") }).To(Panic())
+	t.Run("should panic if the name is empty", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("") })
 	})
 
-	It("should panic if name include underscore", func() {
-		Expect(func() { MustBeValid("GPU_0") }).To(Panic())
+	t.Run("should panic if name include underscore", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("GPU_0") })
 	})
 
-	It("should panic if name include dash", func() {
-		Expect(func() { MustBeValid("GPU-0") }).To(Panic())
+	t.Run("should panic if name include dash", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("GPU-0") })
 	})
 
-	It("should panic if name is not capitalized CamelCase", func() {
-		Expect(func() { MustBeValid("gpu0") }).To(Panic())
+	t.Run("should panic if name is not capitalized CamelCase", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("gpu0") })
 	})
 
-	It("should have paired square brackets", func() {
-		Expect(func() { MustBeValid("GPU[0") }).To(Panic())
+	t.Run("should have paired square brackets", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("GPU[0") })
 	})
 
-	It("should have paired square brackets", func() {
-		Expect(func() { MustBeValid("GPU0]") }).To(Panic())
+	t.Run("should have paired square brackets", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("GPU0]") })
 	})
 
-	It("should be panic if element name is empty", func() {
-		Expect(func() { MustBeValid("GPU..0") }).To(Panic())
+	t.Run("should be panic if element name is empty", func(t *testing.T) {
+		require.Panics(t, func() { MustBeValid("GPU..0") })
 	})
 
-	It("should build name", func() {
-		Expect(BuildName("", "GPU")).To(Equal("GPU"))
-		Expect(BuildName("GPU", "Core")).To(Equal("GPU.Core"))
+	t.Run("should build name", func(t *testing.T) {
+		require.Equal(t, "GPU", BuildName("", "GPU"))
+		require.Equal(t, "GPU.Core", BuildName("GPU", "Core"))
 	})
 
-	It("should build name with index", func() {
-		Expect(BuildNameWithIndex("", "GPU", 0)).To(Equal("GPU[0]"))
-		Expect(BuildNameWithIndex("GPU", "Core", 0)).To(Equal("GPU.Core[0]"))
+	t.Run("should build name with index", func(t *testing.T) {
+		require.Equal(t, "GPU[0]", BuildNameWithIndex("", "GPU", 0))
+		require.Equal(t, "GPU.Core[0]", BuildNameWithIndex("GPU", "Core", 0))
 	})
 
-	It("should build name with multi-dimensional index", func() {
-		Expect(BuildNameWithMultiDimensionalIndex("", "GPU", []int{0})).
-			To(Equal("GPU[0]"))
-		Expect(BuildNameWithMultiDimensionalIndex("GPU", "Core", []int{0, 1})).
-			To(Equal("GPU.Core[0][1]"))
+	t.Run("should build name with multi-dimensional index", func(t *testing.T) {
+		require.Equal(t, "GPU[0]", BuildNameWithMultiDimensionalIndex("", "GPU", []int{0}))
+		require.Equal(t, "GPU.Core[0][1]", BuildNameWithMultiDimensionalIndex("GPU", "Core", []int{0, 1}))
 	})
-})
+}

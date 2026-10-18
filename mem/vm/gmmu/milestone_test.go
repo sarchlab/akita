@@ -1,8 +1,8 @@
 package gmmu
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // milestoneRecorder captures the task starts and milestones the GMMU emits, in
@@ -89,7 +90,8 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("GMMU milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestGMMUMilestones(t *testing.T) {
 	const (
 		agentPort     = messaging.RemotePort("Agent")
 		lowModulePort = messaging.RemotePort("LowModule")
@@ -107,7 +109,9 @@ var _ = Describe("GMMU milestones", func() {
 		rec        *milestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 		pageTable = vm.NewPageTable(12)
@@ -146,8 +150,7 @@ var _ = Describe("GMMU milestones", func() {
 		// The Top-port admission milestone lands on the Top-port buffer task and
 		// the Bottom-port admission milestone on the Bottom-port buffer task, so
 		// the test needs both buffer tasks to exist.
-
-	})
+	}
 
 	makeReq := func(vAddr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
@@ -163,31 +166,35 @@ var _ = Describe("GMMU milestones", func() {
 		return req
 	}
 
-	It("emits a hardware_resource admission milestone on the Top buffer task "+
-		"when it admits the head request", func() {
+	t.Run("emits a hardware_resource admission milestone on the Top buffer task "+
+		"when it admits the head request", func(t *testing.T) {
+		setup1(t)
+
 		req := makeReq(0x1000)
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
 
-		Expect(walk.parseFromTop()).To(BeTrue())
+		require.True(t, walk.parseFromTop())
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
 		reqInID := rec.taskID("req_in")
-		Expect(bufID).ToNot(BeZero())
-		Expect(reqInID).ToNot(BeZero())
-		Expect(bufID).ToNot(Equal(reqInID))
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.NotEqual(t, reqInID, bufID)
 
 		// The buffer task owns the at-head admission wait: reached the head of
 		// the Top buffer, then waited for a free walk slot.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
+		require.Len(t, bufMs, 1)
 
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindHardwareResource))
-		Expect(bufMs[0].What).To(Equal(gmmuComp.Name() + ".walk"))
+		require.Equal(t, tasks.MilestoneKindHardwareResource, bufMs[0].Kind)
+		require.Equal(t, gmmuComp.Name()+".walk", bufMs[0].What)
 	})
 
-	It("does not admit (and emits no admission milestone) while servicing "+
-		"the max in-flight requests", func() {
+	t.Run("does not admit (and emits no admission milestone) while servicing "+
+		"the max in-flight requests", func(t *testing.T) {
+		setup1(t)
+
 		gmmuComp.State.WalkingTranslations = make(
 			[]transactionState, gmmuComp.Spec.MaxRequestsInFlight)
 
@@ -195,17 +202,18 @@ var _ = Describe("GMMU milestones", func() {
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
 
-		Expect(walk.parseFromTop()).To(BeFalse())
+		require.False(t, walk.parseFromTop())
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
-		Expect(bufID).ToNot(BeZero())
+		require.NotZero(t, bufID)
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(BeEmpty())
-
+		require.Empty(t, bufMs)
 	})
 
-	It("emits a network_busy admission milestone on the Bottom buffer task "+
-		"when it admits the head response", func() {
+	t.Run("emits a network_busy admission milestone on the Bottom buffer task "+
+		"when it admits the head response", func(t *testing.T) {
+		setup1(t)
+
 		// A remote walk is outstanding so the bottom response matches a
 		// transaction and is forwarded upstream.
 		walking := transactionState{
@@ -234,22 +242,24 @@ var _ = Describe("GMMU milestones", func() {
 
 		engine.(*milestoneClock).now += 1000
 
-		Expect(respond.fetchFromBottom()).To(BeTrue())
+		require.True(t, respond.fetchFromBottom())
 
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
-		Expect(bufID).ToNot(BeZero())
+		require.NotZero(t, bufID)
 
 		// The Bottom buffer task owns the at-head admission wait: reached the
 		// head of the Bottom buffer, then waited for the busy Top port to free.
 		bufMs := rec.milestonesOn(bufID)
-		Expect(bufMs).To(HaveLen(1))
+		require.Len(t, bufMs, 1)
 
-		Expect(bufMs[0].Kind).To(Equal(tasks.MilestoneKindNetworkBusy))
-		Expect(bufMs[0].What).To(Equal(topPort.Name()))
+		require.Equal(t, tasks.MilestoneKindNetworkBusy, bufMs[0].Kind)
+		require.Equal(t, topPort.Name(), bufMs[0].What)
 	})
 
-	It("records the local page-walk latency as a work milestone on req_in "+
-		"for a local hit", func() {
+	t.Run("records the local page-walk latency as a work milestone on req_in "+
+		"for a local hit", func(t *testing.T) {
+		setup1(t)
+
 		// Page resident on this device -> the fast local-walk path.
 		page := vm.Page{
 			PID:      1,
@@ -272,15 +282,17 @@ var _ = Describe("GMMU milestones", func() {
 		modelingtest.Tick(gmmuComp)
 
 		reqInID := rec.taskID("req_in")
-		Expect(reqInID).ToNot(BeZero())
+		require.NotZero(t, reqInID)
 
 		// The local walk's processing latency is recorded as work on req_in.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
-			gmmuComp.Name()+".walk")).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
+			gmmuComp.Name()+".walk"))
 	})
 
-	It("opens the remote req_out under req_in and records the in-flight wait "+
-		"as a translation milestone on req_in for a remote walk", func() {
+	t.Run("opens the remote req_out under req_in and records the in-flight wait "+
+		"as a translation milestone on req_in for a remote walk", func(t *testing.T) {
+		setup1(t)
+
 		// Page resident on a different device -> the remote-walk path: the GMMU
 		// sends a downstream req_out on Bottom and waits for the response.
 		page := vm.Page{
@@ -304,18 +316,18 @@ var _ = Describe("GMMU milestones", func() {
 		modelingtest.Tick(gmmuComp)
 
 		reqI, _ := bottomPort.RetrieveOutgoing()
-		Expect(reqI).ToNot(BeNil())
+		require.NotNil(t, reqI)
 		downstream := reqI
 
 		reqInID := rec.taskID("req_in")
-		Expect(reqInID).ToNot(BeZero())
+		require.NotZero(t, reqInID)
 
 		// (a) The downstream req_out is a child task of req_in.
 		reqOut, hasReqOut := rec.taskStart("req_out")
-		Expect(hasReqOut).To(BeTrue())
-		Expect(reqOut.MsgID).To(Equal(downstream.ID))
-		Expect(reqOut.ID).NotTo(Equal(downstream.ID))
-		Expect(reqOut.ParentID).To(Equal(reqInID))
+		require.True(t, hasReqOut)
+		require.Equal(t, downstream.ID, reqOut.MsgID)
+		require.NotEqual(t, downstream.ID, reqOut.ID)
+		require.Equal(t, reqInID, reqOut.ParentID)
 
 		// Deliver the remote response.
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
@@ -333,12 +345,12 @@ var _ = Describe("GMMU milestones", func() {
 		modelingtest.Tick(gmmuComp)
 
 		rspToTopI, _ := topPort.RetrieveOutgoing()
-		Expect(rspToTopI).ToNot(BeNil())
+		require.NotNil(t, rspToTopI)
 
 		// (b) The remote-walk in-flight wait is recorded as a translation
 		// milestone on the ORIGINAL req_in.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
-			"translation")).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
+			"translation"))
 
 		// (c) The downstream req_out subtask is finalized when the response
 		// returns.
@@ -348,6 +360,6 @@ var _ = Describe("GMMU milestones", func() {
 				reqOutEnded = true
 			}
 		}
-		Expect(reqOutEnded).To(BeTrue())
+		require.True(t, reqOutEnded)
 	})
-})
+}

@@ -1,17 +1,19 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Bank Stage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBankStage(t *testing.T) {
 	var (
 		m       *pipelineMW
 		bs      *bankStage
@@ -21,17 +23,21 @@ var _ = Describe("Bank Stage", func() {
 
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
-	fillTop := func() {
+	fillTop := func(t *testing.T) {
+		t.Helper()
+
 		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
 			Src:          topPort.AsRemote(),
 			Dst:          messaging.RemotePort("SomeSrc"),
 			TrafficClass: "rsp"}
 
-		Expect(topPort.CanSend()).To(BeTrue())
+		require.True(t, topPort.CanSend())
 		topPort.Send(dummy)
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := state{
@@ -75,11 +81,13 @@ var _ = Describe("Bank Stage", func() {
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
 		bs = m.bankStages[0]
-	})
+	}
 
-	It("completes a later transaction while preserving a blocked zero-index head", func() {
+	t.Run("completes a later transaction while preserving a blocked zero-index head", func(t *testing.T) {
+		setup1(t)
+
 		next := &m.comp.State
-		fillTop()
+		fillTop(t)
 		next.Transactions = []transactionState{
 			{Action: bankReadHit},
 			{Action: bankEvict},
@@ -91,19 +99,21 @@ var _ = Describe("Bank Stage", func() {
 		next.BankInflightTransCounts[0] = 3
 		next.BankDownwardInflightTransCounts[0] = 1
 
-		Expect(bs.finalizeTrans()).To(BeTrue())
-		Expect(next.BankPostPipelineBufs[0].Elements()).To(Equal([]int{0, 2}))
-		Expect(next.WriteBufferBuf.Elements()).To(Equal([]int{1}))
-		Expect(next.Transactions[0].Removed).To(BeFalse())
-		Expect(next.Transactions[1].Action).To(Equal(writeBufferFlush))
-		Expect(next.BankInflightTransCounts[0]).To(Equal(2))
-		Expect(next.BankDownwardInflightTransCounts[0]).To(Equal(0))
-		Expect(bs.finalizeTrans()).To(BeFalse())
-		Expect(next.BankPostPipelineBufs[0].Elements()).To(Equal([]int{0, 2}))
+		require.True(t, bs.finalizeTrans())
+		require.Equal(t, []int{0, 2}, next.BankPostPipelineBufs[0].Elements())
+		require.Equal(t, []int{1}, next.WriteBufferBuf.Elements())
+		require.False(t, next.Transactions[0].Removed)
+		require.Equal(t, writeBufferFlush, next.Transactions[1].Action)
+		require.Equal(t, 2, next.BankInflightTransCounts[0])
+		require.Equal(t, 0, next.BankDownwardInflightTransCounts[0])
+		require.False(t, bs.finalizeTrans())
+		require.Equal(t, []int{0, 2}, next.BankPostPipelineBufs[0].Elements())
 	})
 
-	Context("completing a read hit transaction", func() {
-		BeforeEach(func() {
+	t.Run("completing a read hit transaction", func(t *testing.T) {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
@@ -136,36 +146,44 @@ var _ = Describe("Bank Stage", func() {
 			// Put transaction in bank post-pipeline buffer
 			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
-		})
+		}
 
-		It("should stall if send buffer is full", func() {
-			fillTop()
+		t.Run("should stall if send buffer is full", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
+			fillTop(t)
 
 			ret := bs.Tick()
 
-			Expect(ret).To(BeFalse())
+			require.False(t, ret)
 			next := &m.comp.State
-			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
+			require.Equal(t, 1, next.BankInflightTransCounts[0])
 		})
 
-		It("should read and send response", func() {
+		t.Run("should read and send response", func(t *testing.T) {
+			setup1(t)
+			setup2(t)
+
 			ret := bs.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
-			Expect(block.ReadCount).To(Equal(0))
-			Expect(next.Transactions[0].Removed).To(BeTrue())
-			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+			require.Equal(t, 0, block.ReadCount)
+			require.True(t, next.Transactions[0].Removed)
+			require.Equal(t, 0, next.BankInflightTransCounts[0])
 
 			out, _ := topPort.RetrieveOutgoing()
 			dr := out
-			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+			require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
 		})
 	})
 
-	Context("completing a write-hit transaction", func() {
-		BeforeEach(func() {
+	t.Run("completing a write-hit transaction", func(t *testing.T) {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
@@ -195,39 +213,47 @@ var _ = Describe("Bank Stage", func() {
 			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
-		})
+		}
 
-		It("should stall if send buffer is full", func() {
-			fillTop()
+		t.Run("should stall if send buffer is full", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
+			fillTop(t)
 
 			ret := bs.Tick()
 
-			Expect(ret).To(BeFalse())
+			require.False(t, ret)
 			next := &m.comp.State
-			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
+			require.Equal(t, 1, next.BankInflightTransCounts[0])
 		})
 
-		It("should write and send response", func() {
+		t.Run("should write and send response", func(t *testing.T) {
+			setup1(t)
+			setup3(t)
+
 			ret := bs.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			data := storage.Read(0x44, 4)
-			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
+			require.Equal(t, []byte{5, 6, 7, 8}, data)
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
-			Expect(block.IsValid).To(BeTrue())
-			Expect(block.IsLocked).To(BeFalse())
-			Expect(block.IsDirty).To(BeTrue())
-			Expect(next.Transactions[0].Removed).To(BeTrue())
-			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+			require.True(t, block.IsValid)
+			require.False(t, block.IsLocked)
+			require.True(t, block.IsDirty)
+			require.True(t, next.Transactions[0].Removed)
+			require.Equal(t, 0, next.BankInflightTransCounts[0])
 
 			out, _ := topPort.RetrieveOutgoing()
-			Expect(out).NotTo(BeNil())
+			require.NotNil(t, out)
 		})
 	})
 
-	Context("completing a write fetched transaction", func() {
-		BeforeEach(func() {
+	t.Run("completing a write fetched transaction", func(t *testing.T) {
+		setup4 := func(t *testing.T) {
+			t.Helper()
+
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
@@ -255,25 +281,29 @@ var _ = Describe("Bank Stage", func() {
 			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
-		})
+		}
 
-		It("should write to storage and send to mshr stage", func() {
+		t.Run("should write to storage and send to mshr stage", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
 
 			ret := bs.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next := &m.comp.State
 			writtenData := storage.Read(0x40, 64)
-			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
+			require.Equal(t, next.Transactions[0].MSHRData, writtenData)
 			block := &next.DirectoryState.Sets[0].Blocks[0]
-			Expect(block.IsLocked).To(BeFalse())
-			Expect(block.IsValid).To(BeTrue())
-			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+			require.False(t, block.IsLocked)
+			require.True(t, block.IsValid)
+			require.Equal(t, 0, next.BankInflightTransCounts[0])
 		})
 	})
 
-	Context("finalizing a read for eviction action", func() {
-		BeforeEach(func() {
+	t.Run("finalizing a read for eviction action", func(t *testing.T) {
+		setup5 := func(t *testing.T) {
+			t.Helper()
+
 			next := &m.comp.State
 			trans := transactionState{
 				HasVictim:          true,
@@ -295,9 +325,12 @@ var _ = Describe("Bank Stage", func() {
 			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
-		})
+		}
 
-		It("should send eviction to write buffer", func() {
+		t.Run("should send eviction to write buffer", func(t *testing.T) {
+			setup1(t)
+			setup5(t)
+
 			data := []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -312,11 +345,11 @@ var _ = Describe("Bank Stage", func() {
 
 			ret := bs.Tick()
 
-			Expect(ret).To(BeTrue())
+			require.True(t, ret)
 			next := &m.comp.State
-			Expect(next.Transactions[0].Action).To(Equal(writeBufferEvictAndFetch))
-			Expect(next.Transactions[0].EvictingData).To(Equal(data))
-			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+			require.Equal(t, writeBufferEvictAndFetch, next.Transactions[0].Action)
+			require.Equal(t, data, next.Transactions[0].EvictingData)
+			require.Equal(t, 0, next.BankInflightTransCounts[0])
 		})
 	})
-})
+}

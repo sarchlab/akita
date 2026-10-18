@@ -1,26 +1,26 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"go.uber.org/mock/gomock"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("DirectoryStage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDirectoryStage(t *testing.T) {
 	var (
-		mockCtrl *gomock.Controller
-		ds       *directoryStage
-		m        *pipelineMW
+		ds *directoryStage
+		m  *pipelineMW
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup1 := func(t *testing.T) {
+		t.Helper()
 
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
@@ -59,14 +59,12 @@ var _ = Describe("DirectoryStage", func() {
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
 		ds = m.dirStage
-	})
+	}
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	t.Run("read", func(t *testing.T) {
+		setup3 := func(t *testing.T) {
+			t.Helper()
 
-	Context("read", func() {
-		BeforeEach(func() {
 			read := messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x100,
 				PID:            1,
@@ -88,60 +86,74 @@ var _ = Describe("DirectoryStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Clear()
 			next.DirPostPipelineBuf.Push(0)
-		})
+		}
 
-		Context("mshr hit", func() {
-			BeforeEach(func() {
+		t.Run("mshr hit", func(t *testing.T) {
+			setup4 := func(t *testing.T) {
+				t.Helper()
+
 				next := &m.comp.State
 				cache.MSHRAdd(&next.MSHRState, 16, vm.PID(1), 0x100)
-			})
+			}
 
-			It("should add to MSHR", func() {
+			t.Run("should add to MSHR", func(t *testing.T) {
+				setup1(t)
+				setup3(t)
+				setup4(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
-				Expect(next.MSHRState.Entries[0].TransactionIndices).To(HaveLen(1))
+				require.Len(t, next.MSHRState.Entries[0].TransactionIndices, 1)
 			})
 		})
 
-		Context("hit", func() {
-			BeforeEach(func() {
+		t.Run("hit", func(t *testing.T) {
+			setup5 := func(t *testing.T) {
+				t.Helper()
+
 				next := &m.comp.State
 				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1
 				block.IsValid = true
-			})
+			}
 
-			It("should pass transaction to bank", func() {
+			t.Run("should pass transaction to bank", func(t *testing.T) {
+				setup1(t)
+				setup3(t)
+				setup5(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
 				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
-				Expect(block.ReadCount).To(Equal(1))
-				Expect(next.Transactions[0].Action).To(Equal(bankReadHit))
+				require.Equal(t, 1, block.ReadCount)
+				require.Equal(t, bankReadHit, next.Transactions[0].Action)
 			})
 		})
 
-		Context("miss, mshr miss, no need to evict", func() {
-			It("should create mshr entry and fetch", func() {
+		t.Run("miss, mshr miss, no need to evict", func(t *testing.T) {
+			t.Run("should create mshr entry and fetch", func(t *testing.T) {
+				setup1(t)
+				setup3(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
-				Expect(next.MSHRState.Entries).To(HaveLen(1))
+				require.Len(t, next.MSHRState.Entries, 1)
 			})
 		})
 
-		Context("miss, mshr miss, need eviction", func() {
-			BeforeEach(func() {
+		t.Run("miss, mshr miss, need eviction", func(t *testing.T) {
+			setup6 := func(t *testing.T) {
+				t.Helper()
+
 				next := &m.comp.State
 				setID := cache.DirectorySetID(0x100, 64, 64)
 				for i := range 4 {
@@ -152,21 +164,26 @@ var _ = Describe("DirectoryStage", func() {
 					block.IsValid = true
 					block.IsDirty = true
 				}
-			})
+			}
 
-			It("should do evict", func() {
+			t.Run("should do evict", func(t *testing.T) {
+				setup1(t)
+				setup3(t)
+				setup6(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
-				Expect(next.Transactions[0].Action).To(Equal(bankEvictAndFetch))
+				require.Equal(t, bankEvictAndFetch, next.Transactions[0].Action)
 			})
 		})
 	})
 
-	Context("write", func() {
-		BeforeEach(func() {
+	t.Run("write", func(t *testing.T) {
+		setup7 := func(t *testing.T) {
+			t.Helper()
+
 			write := messaging.Msg{Payload: memprotocol.WriteReq{
 				Address: 0x100,
 				PID:     1},
@@ -186,42 +203,52 @@ var _ = Describe("DirectoryStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Clear()
 			next.DirPostPipelineBuf.Push(0)
-		})
+		}
 
-		Context("hit", func() {
-			BeforeEach(func() {
+		t.Run("hit", func(t *testing.T) {
+			setup8 := func(t *testing.T) {
+				t.Helper()
+
 				next := &m.comp.State
 				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1
 				block.IsValid = true
-			})
+			}
 
-			It("should send to bank", func() {
+			t.Run("should send to bank", func(t *testing.T) {
+				setup1(t)
+				setup7(t)
+				setup8(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
-				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
+				require.Equal(t, bankWriteHit, next.Transactions[0].Action)
 			})
 		})
 
-		Context("miss, write full line, no eviction", func() {
-			BeforeEach(func() {
+		t.Run("miss, write full line, no eviction", func(t *testing.T) {
+			setup9 := func(t *testing.T) {
+				t.Helper()
+
 				next := &m.comp.State
 				next.Transactions[0].WriteData = make([]byte, 64)
-			})
+			}
 
-			It("should send to bank", func() {
+			t.Run("should send to bank", func(t *testing.T) {
+				setup1(t)
+				setup7(t)
+				setup9(t)
 
 				ret := ds.Tick()
 
-				Expect(ret).To(BeTrue())
+				require.True(t, ret)
 				next := &m.comp.State
-				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
+				require.Equal(t, bankWriteHit, next.Transactions[0].Action)
 			})
 		})
 	})
-})
+}

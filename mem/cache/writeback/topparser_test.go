@@ -1,22 +1,26 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("TopParser", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTopParser(t *testing.T) {
 	var (
 		m       *pipelineMW
 		parser  *topParser
 		topPort messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -51,22 +55,28 @@ var _ = Describe("TopParser", func() {
 		m.comp.State = initialState
 
 		parser = m.topParser
-	})
+	}
 
-	It("should return if no req to parse", func() {
+	t.Run("should return if no req to parse", func(t *testing.T) {
+		setup1(t)
+
 		ret := parser.Tick()
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 	})
 
-	It("should return if the cache is not in running stage", func() {
+	t.Run("should return if the cache is not in running stage", func(t *testing.T) {
+		setup1(t)
+
 		next := &m.comp.State
 		next.CacheState = int(cacheStateFlushing)
 
 		ret := parser.Tick()
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 	})
 
-	It("should parse read from top", func() {
+	t.Run("should parse read from top", func(t *testing.T) {
+		setup1(t)
+
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x100,
 			AccessByteSize: 64},
@@ -80,15 +90,17 @@ var _ = Describe("TopParser", func() {
 		parser.Tick()
 
 		next := &m.comp.State
-		Expect(next.Transactions).To(HaveLen(1))
-		Expect(next.Transactions[0].HasRead).To(BeTrue())
-		Expect(next.Transactions[0].ReadAddress).To(Equal(uint64(0x100)))
-		Expect(next.Transactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
+		require.Len(t, next.Transactions, 1)
+		require.True(t, next.Transactions[0].HasRead)
+		require.Equal(t, uint64(0x100), next.Transactions[0].ReadAddress)
+		require.Equal(t, uint64(64), next.Transactions[0].ReadAccessByteSize)
 		_, present0 := topPort.PeekIncoming()
-		Expect(present0).To(BeFalse())
+		require.False(t, present0)
 	})
 
-	It("should parse write from top", func() {
+	t.Run("should parse write from top", func(t *testing.T) {
+		setup1(t)
+
 		write := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x100},
 			ID: m.comp.NewID(),
@@ -101,10 +113,10 @@ var _ = Describe("TopParser", func() {
 		parser.Tick()
 
 		next := &m.comp.State
-		Expect(next.Transactions).To(HaveLen(1))
-		Expect(next.Transactions[0].HasWrite).To(BeTrue())
-		Expect(next.Transactions[0].WriteAddress).To(Equal(uint64(0x100)))
+		require.Len(t, next.Transactions, 1)
+		require.True(t, next.Transactions[0].HasWrite)
+		require.Equal(t, uint64(0x100), next.Transactions[0].WriteAddress)
 		_, present1 := topPort.PeekIncoming()
-		Expect(present1).To(BeFalse())
+		require.False(t, present1)
 	})
-})
+}

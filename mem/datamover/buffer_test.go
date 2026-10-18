@@ -1,12 +1,14 @@
 package datamover
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Buffer", func() {
-	Describe("ExtractData", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBuffer(t *testing.T) {
+	t.Run("ExtractData", func(t *testing.T) {
 		tests := []struct {
 			name        string
 			initAddr    uint64
@@ -60,8 +62,8 @@ var _ = Describe("Buffer", func() {
 		}
 
 		for _, tt := range tests {
-			Context(tt.name, func() {
-				It("should extract data correctly", func() {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Run("should extract data correctly", func(t *testing.T) {
 					bs := &bufferState{
 						Offset:      tt.initAddr,
 						Granularity: tt.granularity,
@@ -70,10 +72,10 @@ var _ = Describe("Buffer", func() {
 
 					data, ok := bufferExtractData(bs, tt.addr, tt.size)
 
-					Expect(ok).To(Equal(tt.ok))
-					Expect(data).To(Equal(tt.expected))
+					require.Equal(t, tt.ok, ok)
+					require.Equal(t, tt.expected, data)
 				})
 			})
 		}
 	})
-})
+}

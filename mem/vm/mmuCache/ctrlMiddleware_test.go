@@ -1,8 +1,8 @@
 package mmuCache
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -12,9 +12,11 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("MMUCacheCtrlMiddleware", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUCacheCtrlMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
 		sim         timing.Simulation
@@ -25,7 +27,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		controlPort messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -58,15 +62,19 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		}
 
 		ctrl = comp.Middlewares.Ctrl
-	})
+	}
 
-	It("should do nothing when no control message", func() {
+	t.Run("should do nothing when no control message", func(t *testing.T) {
+		setup1(t)
+
 		madeProgress := ctrl.Handle(modelingtest.TickEvent(comp))
 
-		Expect(madeProgress).To(BeFalse())
+		require.False(t, madeProgress)
 	})
 
-	It("should restart and drain ports", func() {
+	t.Run("should restart and drain ports", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
 			ID:           sim.NewID(),
 			Src:          messaging.RemotePort("Requester"),
@@ -98,23 +106,25 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		madeProgress := ctrl.handleReset(req)
 
 		next := &comp.State
-		Expect(madeProgress).To(BeTrue())
-		Expect(next.CurrentState).To(Equal(mmuCacheStateEnable))
+		require.True(t, madeProgress)
+		require.Equal(t, mmuCacheStateEnable, next.CurrentState)
 		_, present0 := topPort.PeekIncoming()
-		Expect(present0).To(BeFalse())
+		require.False(t, present0)
 		_, present1 := bottomPort.PeekIncoming()
-		Expect(present1).To(BeFalse())
+		require.False(t, present1)
 		rsp, _ := controlPort.RetrieveOutgoing()
 		_, ok := rsp.Payload.(memcontrolprotocol.Rsp)
 		ctrlRsp := rsp
-		Expect(ok).To(BeTrue())
-		Expect(ctrlRsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(ctrlRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(ctrlRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
-		Expect(ctrlRsp.Src).To(Equal(controlPort.AsRemote()))
+		require.True(t, ok)
+		require.Equal(t, memcontrolprotocol.CmdReset, ctrlRsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, ctrlRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, messaging.RemotePort("Requester"), ctrlRsp.Dst)
+		require.Equal(t, controlPort.AsRemote(), ctrlRsp.Src)
 	})
 
-	It("should reject Flush as unsupported", func() {
+	t.Run("should reject Flush as unsupported", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
 			ID:           sim.NewID(),
 			Src:          messaging.RemotePort("Requester"),
@@ -123,17 +133,19 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		controlPort.Deliver(req)
 
-		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
+		require.True(t, ctrl.handleIncomingCommands())
 
 		rspValue, _ := controlPort.RetrieveOutgoing()
 
 		rsp := rspValue
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdFlush))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrUnsupported))
+		require.Equal(t, memcontrolprotocol.CmdFlush, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.False(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, memcontrolprotocol.ErrUnsupported, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	})
 
-	It("should invalidate cached segments when paused", func() {
+	t.Run("should invalidate cached segments when paused", func(t *testing.T) {
+		setup1(t)
+
 		spec := comp.Spec
 		next := &comp.State
 		next.CurrentState = mmuCacheStatePause
@@ -146,7 +158,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		setVisit(&next.Table[0], wayID)
 
 		_, found := setLookup(&next.Table[0], pid, seg)
-		Expect(found).To(BeTrue())
+		require.True(t, found)
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate},
 			ID:           sim.NewID(),
@@ -156,19 +168,21 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		controlPort.Deliver(req)
 
-		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
+		require.True(t, ctrl.handleIncomingCommands())
 
 		_, found = setLookup(&next.Table[0], pid, seg)
-		Expect(found).To(BeFalse())
+		require.False(t, found)
 
 		rspValue, _ := controlPort.RetrieveOutgoing()
 
 		rsp := rspValue
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 	})
 
-	It("should reject Invalidate while enabled", func() {
+	t.Run("should reject Invalidate while enabled", func(t *testing.T) {
+		setup1(t)
+
 		next := &comp.State
 		next.CurrentState = mmuCacheStateEnable
 
@@ -180,17 +194,19 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		controlPort.Deliver(req)
 
-		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
+		require.True(t, ctrl.handleIncomingCommands())
 
 		rspValue, _ := controlPort.RetrieveOutgoing()
 
 		rsp := rspValue
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.False(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, memcontrolprotocol.ErrMustBePausedOrDrained, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	})
 
-	It("invalidates only entries matching the PID filter", func() {
+	t.Run("invalidates only entries matching the PID filter", func(t *testing.T) {
+		setup1(t)
+
 		// A two-way single-level cache so two PIDs can coexist in
 		// distinct ways and the filter's selectivity is observable.
 		spec := DefaultSpec()
@@ -240,22 +256,24 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		control2.Deliver(req)
 
-		Expect(ctrl2.handleIncomingCommands()).To(BeTrue())
+		require.True(t, ctrl2.handleIncomingCommands())
 
 		// Only the PID-1 entry is dropped; the PID-2 entry survives.
 		_, foundA := setLookup(&next.Table[0], vm.PID(1), segA)
-		Expect(foundA).To(BeFalse())
+		require.False(t, foundA)
 		_, foundB := setLookup(&next.Table[0], vm.PID(2), segB)
-		Expect(foundB).To(BeTrue())
+		require.True(t, foundB)
 
 		rspValue, _ := control2.RetrieveOutgoing()
 
 		rsp := rspValue
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 	})
 
-	It("should handle control pause", func() {
+	t.Run("should handle control pause", func(t *testing.T) {
+		setup1(t)
+
 		spec := comp.Spec
 		comp.State = state{
 			CurrentState: mmuCacheStateEnable,
@@ -276,7 +294,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		madeProgress := ctrl.handleIncomingCommands()
 
 		next := &comp.State
-		Expect(madeProgress).To(BeTrue())
-		Expect(next.CurrentState).To(Equal(mmuCacheStatePause))
+		require.True(t, madeProgress)
+		require.Equal(t, mmuCacheStatePause, next.CurrentState)
 	})
-})
+}

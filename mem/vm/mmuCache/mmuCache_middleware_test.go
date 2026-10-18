@@ -1,8 +1,8 @@
 package mmuCache
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -10,9 +10,11 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("MMUCacheMiddleware", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUCacheMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
 		sim         timing.Simulation
@@ -23,7 +25,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		controlPort messaging.Port
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -58,9 +62,11 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		}
 
 		mw = comp.Middlewares.Cache
-	})
+	}
 
-	It("should send full latency on miss", func() {
+	t.Run("should send full latency on miss", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
 			VAddr:    0x2000,
@@ -75,23 +81,25 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.lookup()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		sent, _ := bottomPort.RetrieveOutgoing()
 		_, ok := sent.Payload.(vmprotocol.TranslationReq)
 		sentReq := sent
-		Expect(ok).To(BeTrue())
-		Expect(sentReq.Payload.(vmprotocol.TranslationReq).TransLatency).To(Equal(uint64(200)))
-		Expect(sentReq.Dst).To(Equal(messaging.RemotePort("LowModule")))
-		Expect(sentReq.Src).To(Equal(bottomPort.AsRemote()))
-		Expect(sentReq.Payload.(vmprotocol.TranslationReq).PID).To(Equal(vm.PID(1)))
-		Expect(sentReq.Payload.(vmprotocol.TranslationReq).VAddr).To(Equal(uint64(0x2000)))
-		Expect(sentReq.Payload.(vmprotocol.TranslationReq).DeviceID).To(Equal(uint64(3)))
+		require.True(t, ok)
+		require.Equal(t, uint64(200), sentReq.Payload.(vmprotocol.TranslationReq).TransLatency)
+		require.Equal(t, messaging.RemotePort("LowModule"), sentReq.Dst)
+		require.Equal(t, bottomPort.AsRemote(), sentReq.Src)
+		require.Equal(t, vm.PID(1), sentReq.Payload.(vmprotocol.TranslationReq).PID)
+		require.Equal(t, uint64(0x2000), sentReq.Payload.(vmprotocol.TranslationReq).VAddr)
+		require.Equal(t, uint64(3), sentReq.Payload.(vmprotocol.TranslationReq).DeviceID)
 		_, present0 := topPort.PeekIncoming()
-		Expect(present0).To(BeFalse())
+		require.False(t, present0)
 	})
 
-	It("should reduce latency on upper-level hit", func() {
+	t.Run("should reduce latency on upper-level hit", func(t *testing.T) {
+		setup1(t)
+
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
 			VAddr:    0x3000,
@@ -115,16 +123,18 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.lookup()
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		sent, _ := bottomPort.RetrieveOutgoing()
 		_, ok := sent.Payload.(vmprotocol.TranslationReq)
 		sentReq := sent
-		Expect(ok).To(BeTrue())
-		Expect(sentReq.Payload.(vmprotocol.TranslationReq).TransLatency).To(Equal(uint64(100)))
+		require.True(t, ok)
+		require.Equal(t, uint64(100), sentReq.Payload.(vmprotocol.TranslationReq).TransLatency)
 	})
 
-	It("should forward response and update cache", func() {
+	t.Run("should forward response and update cache", func(t *testing.T) {
+		setup1(t)
+
 		page := vm.Page{
 			PID:   1,
 			VAddr: 0x4000,
@@ -149,24 +159,26 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		spec := comp.Spec
 		next := &comp.State
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 
 		sent, _ := topPort.RetrieveOutgoing()
 		_, ok := sent.Payload.(vmprotocol.TranslationRsp)
 		sentRsp := sent
-		Expect(ok).To(BeTrue())
-		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
-		Expect(sentRsp.Src).To(Equal(topPort.AsRemote()))
-		Expect(sentRsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+		require.True(t, ok)
+		require.Equal(t, messaging.RemotePort("UpModule"), sentRsp.Dst)
+		require.Equal(t, topPort.AsRemote(), sentRsp.Src)
+		require.Equal(t, page, sentRsp.Payload.(vmprotocol.TranslationRsp).Page)
 
 		for level := 0; level < spec.NumLevels; level++ {
 			seg := segForLevelSpec(spec, level, page.VAddr)
 			_, found := setLookup(&next.Table[level], page.PID, seg)
-			Expect(found).To(BeTrue())
+			require.True(t, found)
 		}
 	})
 
-	It("drops the addressed page's segments while a sibling page survives", func() {
+	t.Run("drops the addressed page's segments while a sibling page survives", func(t *testing.T) {
+		setup1(t)
+
 		pid := vm.PID(1)
 		spec := comp.Spec
 
@@ -177,10 +189,8 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		// level-0 segment must survive.
 		dropAddr := uint64(0x6000)
 		keepAddr := uint64(0x9000)
-		Expect(segForLevelSpec(spec, 0, dropAddr)).
-			ToNot(Equal(segForLevelSpec(spec, 0, keepAddr)))
-		Expect(segForLevelSpec(spec, 1, dropAddr)).
-			To(Equal(segForLevelSpec(spec, 1, keepAddr)))
+		require.NotEqual(t, segForLevelSpec(spec, 0, keepAddr), segForLevelSpec(spec, 0, dropAddr))
+		require.Equal(t, segForLevelSpec(spec, 1, keepAddr), segForLevelSpec(spec, 1, dropAddr))
 
 		next := &comp.State
 		next.CurrentState = mmuCacheStatePause
@@ -206,28 +216,28 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		controlPort.Deliver(req)
 
-		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
+		require.True(t, ctrl.handleIncomingCommands())
 
 		// The dropped address's segment is gone at every level it cached.
 		for level := 0; level < spec.NumLevels; level++ {
 			dropSeg := segForLevelSpec(spec, level, dropAddr)
 			_, dropFound := setLookup(&next.Table[level], pid, dropSeg)
-			Expect(dropFound).To(BeFalse())
+			require.False(t, dropFound)
 		}
 		// keepAddr's distinct level-0 segment survives.
 		keepSeg0 := segForLevelSpec(spec, 0, keepAddr)
 		_, keepFound := setLookup(&next.Table[0], pid, keepSeg0)
-		Expect(keepFound).To(BeTrue())
+		require.True(t, keepFound)
 
 		sentRspValue, _ := controlPort.RetrieveOutgoing()
 
 		sentRsp := sentRspValue
-		Expect(sentRsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(sentRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
-		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))
+		require.Equal(t, memcontrolprotocol.CmdInvalidate, sentRsp.Payload.(memcontrolprotocol.Rsp).Command)
+		require.True(t, sentRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, messaging.RemotePort("Requester"), sentRsp.Dst)
+		require.Equal(t, controlPort.AsRemote(), sentRsp.Src)
 	})
-})
+}
 
 func segForLevelSpec(spec Spec, level int, vAddr uint64) uint64 {
 	vpn := vAddr >> spec.Log2PageSize

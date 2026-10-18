@@ -1,18 +1,21 @@
 package vm
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("PageTable", func() {
-
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestPageTable(t *testing.T) {
 	var (
 		pageTable *PageTable
 		page      Page
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		page = Page{
 			PID:      1,
 			PAddr:    0x0,
@@ -21,30 +24,38 @@ var _ = Describe("PageTable", func() {
 			Valid:    true,
 		}
 		pageTable = NewPageTable(12)
-	})
+	}
 
-	It("should panic when inserting a page that is already exist", func() {
+	t.Run("should panic when inserting a page that is already exist", func(t *testing.T) {
+		setup1(t)
+
 		pageTable.Insert(page)
-		Expect(func() {
+		require.Panics(t, func() {
 			pageTable.Insert(page)
-		}).To(Panic())
+		})
 	})
 
-	It("should find page", func() {
+	t.Run("should find page", func(t *testing.T) {
+		setup1(t)
+
 		pageTable.Insert(page)
 		retPage, found := pageTable.Find(1, 0x1000)
-		Expect(found).To(BeTrue())
-		Expect(retPage).To(Equal(page))
+		require.True(t, found)
+		require.Equal(t, page, retPage)
 	})
 
-	It("should find page if address is not aligned", func() {
+	t.Run("should find page if address is not aligned", func(t *testing.T) {
+		setup1(t)
+
 		pageTable.Insert(page)
 		retPage, found := pageTable.Find(1, 0x1024)
-		Expect(found).To(BeTrue())
-		Expect(retPage).To(Equal(page))
+		require.True(t, found)
+		require.Equal(t, page, retPage)
 	})
 
-	It("should remove page", func() {
+	t.Run("should remove page", func(t *testing.T) {
+		setup1(t)
+
 		page1 := Page{PID: 1, VAddr: 0x1000, PageSize: 4096, Valid: true}
 		pageTable.Insert(page1)
 		page2 := Page{PID: 2, VAddr: 0x2000, PageSize: 4096, Valid: true}
@@ -53,9 +64,9 @@ var _ = Describe("PageTable", func() {
 		pageTable.Remove(2, 0x2000)
 
 		retPage1, found1 := pageTable.Find(1, 0x1000)
-		Expect(found1).To(BeTrue())
-		Expect(retPage1).To(Equal(page1))
+		require.True(t, found1)
+		require.Equal(t, page1, retPage1)
 		_, found2 := pageTable.Find(2, 0x2000)
-		Expect(found2).To(BeFalse())
+		require.False(t, found2)
 	})
-})
+}

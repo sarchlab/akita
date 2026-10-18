@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -11,17 +11,16 @@ import (
 )
 
 func TestMessageHookFiltersPositionsBeforeAssertingItem(t *testing.T) {
-	g := NewWithT(t)
 	hook := &msgHook{}
-	g.Expect(func() {
+	require.NotPanics(t, func() {
 		hook.Func(hooking.HookCtx{Pos: timing.HookPosBeforeEvent, Item: "not a message"})
-	}).NotTo(Panic())
+	})
 	for _, pos := range []*hooking.HookPos{messaging.HookPosPortMsgSend, messaging.HookPosPortMsgRecvd} {
-		g.Expect(func() {
+		require.Panics(t, func() {
 			hook.Func(hooking.HookCtx{Pos: pos, Item: "not a message"})
-		}).To(Panic())
-		g.Expect(func() {
+		})
+		require.NotPanics(t, func() {
 			hook.Func(hooking.HookCtx{Pos: pos, Item: messaging.Msg{}})
-		}).NotTo(Panic())
+		})
 	}
 }

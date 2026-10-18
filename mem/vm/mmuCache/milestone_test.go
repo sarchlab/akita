@@ -1,8 +1,8 @@
 package mmuCache
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // mmuCacheMilestoneRecorder captures the task starts, ends, and milestones the
@@ -88,7 +89,8 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("MMUCache milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMMUCacheMilestones(t *testing.T) {
 	var (
 		engine     timing.Engine
 		comp       *Comp
@@ -98,7 +100,9 @@ var _ = Describe("MMUCache milestones", func() {
 		rec        *mmuCacheMilestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim := testsim.New(engine, true)
 
@@ -138,8 +142,7 @@ var _ = Describe("MMUCache milestones", func() {
 		comp.TaskTracker().Subscribe(rec, comp)
 		// The admission milestones land on the Top/Bottom incoming-buffer tasks,
 		// so the test needs those buffer tasks to exist.
-
-	})
+	}
 
 	makeTopReq := func(vAddr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
@@ -159,12 +162,14 @@ var _ = Describe("MMUCache milestones", func() {
 	// mmuCache: deliver and forward the walk downstream, then deliver the
 	// matching bottom response and forward the translation upstream. It returns
 	// the Top request and the forwarded Bottom request ID.
-	driveRoundTrip := func(vAddr uint64) (messaging.Msg, uint64) {
+	driveRoundTrip := func(t *testing.T, vAddr uint64) (messaging.Msg, uint64) {
+		t.Helper()
+
 		req := makeTopReq(vAddr)
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
 
-		Expect(mw.lookup()).To(BeTrue())
+		require.True(t, mw.lookup())
 
 		sentValue, _ := bottomPort.RetrieveOutgoing()
 
@@ -188,7 +193,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 		engine.(*milestoneClock).now += 1000
 
-		Expect(mw.handleBottomPort()).To(BeTrue())
+		require.True(t, mw.handleBottomPort())
 
 		// Drain the upstream response so a follow-up send would not block.
 		topPort.RetrieveOutgoing()
@@ -196,30 +201,32 @@ var _ = Describe("MMUCache milestones", func() {
 		return req, bottomReqID
 	}
 
-	It("opens and closes req_in for the Top request and req_out for the "+
-		"forwarded walk", func() {
-		req, bottomReqID := driveRoundTrip(0x2000)
+	t.Run("opens and closes req_in for the Top request and req_out for the "+
+		"forwarded walk", func(t *testing.T) {
+		setup1(t)
+
+		req, bottomReqID := driveRoundTrip(t, 0x2000)
 
 		// req_in opens for the Top request and closes when the response returns.
 		// Its ID is read from the start; the completed transaction was removed.
 		reqInStart, ok := rec.firstStart("req_in")
-		Expect(ok).To(BeTrue())
-		Expect(reqInStart.ID).ToNot(BeZero())
-		Expect(reqInStart.MsgID).To(Equal(req.ID))
-		Expect(reqInStart.ParentID).To(BeZero())
-		Expect(rec.hasEnd(reqInStart.ID)).To(BeTrue())
+		require.True(t, ok)
+		require.NotZero(t, reqInStart.ID)
+		require.Equal(t, req.ID, reqInStart.MsgID)
+		require.Zero(t, reqInStart.ParentID)
+		require.True(t, rec.hasEnd(reqInStart.ID))
 
 		// req_out opens for the forwarded Bottom request, parented to req_in, and
 		// closes when its response returns.
 		reqOutStart, ok := rec.firstStart("req_out")
-		Expect(ok).To(BeTrue())
-		Expect(reqOutStart.MsgID).To(Equal(bottomReqID))
-		Expect(reqOutStart.ID).NotTo(Equal(bottomReqID))
-		Expect(reqOutStart.ParentID).To(Equal(reqInStart.ID))
-		Expect(rec.hasEnd(reqOutStart.ID)).To(BeTrue())
+		require.True(t, ok)
+		require.Equal(t, bottomReqID, reqOutStart.MsgID)
+		require.NotEqual(t, bottomReqID, reqOutStart.ID)
+		require.Equal(t, reqInStart.ID, reqOutStart.ParentID)
+		require.True(t, rec.hasEnd(reqOutStart.ID))
 
 		// The completion path released the in-flight entry — no leak.
-		Expect(comp.State.InflightReqs).To(BeEmpty())
+		require.Empty(t, comp.State.InflightReqs)
 	})
 
 	// bufTaskID returns the ID of the first incoming-buffer task located at the
@@ -235,45 +242,49 @@ var _ = Describe("MMUCache milestones", func() {
 		return 0
 	}
 
-	It("attributes admission waits to the incoming-buffer tasks", func() {
-		driveRoundTrip(0x2000)
+	t.Run("attributes admission waits to the incoming-buffer tasks", func(t *testing.T) {
+		setup1(t)
+
+		driveRoundTrip(t, 0x2000)
 
 		// The Top buffer task has no queue delay and waited
 		// for the Bottom port to be free to forward the walk.
 		topBufID := bufTaskID(topPort.Name())
-		Expect(topBufID).ToNot(BeZero())
-		Expect(rec.kindsOn(topBufID)).To(Equal([]tasks.MilestoneKind{
+		require.NotZero(t, topBufID)
+		require.Equal(t, []tasks.MilestoneKind{
 			tasks.MilestoneKindNetworkBusy,
-		}))
+		}, rec.kindsOn(topBufID))
 		topBufMs := rec.milestonesOn(topBufID)
 
-		Expect(topBufMs[0].What).To(Equal(bottomPort.Name()))
+		require.Equal(t, bottomPort.Name(), topBufMs[0].What)
 
 		// The Bottom buffer task has no queue delay and
 		// waited for the Top port to be free to forward the response upstream.
 		bottomBufID := bufTaskID(bottomPort.Name())
-		Expect(bottomBufID).ToNot(BeZero())
-		Expect(rec.kindsOn(bottomBufID)).To(Equal([]tasks.MilestoneKind{
+		require.NotZero(t, bottomBufID)
+		require.Equal(t, []tasks.MilestoneKind{
 			tasks.MilestoneKindNetworkBusy,
-		}))
+		}, rec.kindsOn(bottomBufID))
 		bottomBufMs := rec.milestonesOn(bottomBufID)
 
-		Expect(bottomBufMs[0].What).To(Equal(topPort.Name()))
+		require.Equal(t, topPort.Name(), bottomBufMs[0].What)
 	})
 
-	It("charges the downstream walk-fetch wait to the req_in as a "+
-		"translation milestone", func() {
-		driveRoundTrip(0x2000)
+	t.Run("charges the downstream walk-fetch wait to the req_in as a "+
+		"translation milestone", func(t *testing.T) {
+		setup1(t)
+
+		driveRoundTrip(t, 0x2000)
 
 		// req_in opens at retrieve and is completed when the downstream response
 		// returns. Read its original identity from the recorded start.
 		reqInStart, ok := rec.firstStart("req_in")
-		Expect(ok).To(BeTrue())
+		require.True(t, ok)
 
 		// The in-flight wait on the forwarded walk is charged to the original
 		// req_in as a translation milestone when the response returns.
 		reqInMs := rec.milestonesOn(reqInStart.ID)
-		Expect(reqInMs).ToNot(BeEmpty())
+		require.NotEmpty(t, reqInMs)
 
 		var translationMs *tasks.Milestone
 		for i := range reqInMs {
@@ -282,31 +293,33 @@ var _ = Describe("MMUCache milestones", func() {
 				break
 			}
 		}
-		Expect(translationMs).ToNot(BeNil())
-		Expect(translationMs.What).To(Equal("translation"))
+		require.NotNil(t, translationMs)
+		require.Equal(t, "translation", translationMs.What)
 	})
 
-	It("ends the in-flight req_in and req_out on a mid-walk reset so no "+
-		"tasks are left unended", func() {
+	t.Run("ends the in-flight req_in and req_out on a mid-walk reset so no "+
+		"tasks are left unended", func(t *testing.T) {
+		setup1(t)
+
 		req := makeTopReq(0x2000)
 		topPort.Deliver(req)
 		engine.(*milestoneClock).now += 1000
-		Expect(mw.lookup()).To(BeTrue())
+		require.True(t, mw.lookup())
 		sentValue, _ := bottomPort.RetrieveOutgoing()
 		sent := sentValue
 		bottomReqID := sent.ID
 
 		// The walk is in flight: req_in and req_out are open but not yet ended,
 		// and the response has not returned.
-		Expect(comp.State.InflightReqs).To(HaveLen(1))
+		require.Len(t, comp.State.InflightReqs, 1)
 		reqInStart, ok := rec.firstStart("req_in")
-		Expect(ok).To(BeTrue())
+		require.True(t, ok)
 		reqOutStart, ok := rec.firstStart("req_out")
-		Expect(ok).To(BeTrue())
-		Expect(reqOutStart.MsgID).To(Equal(bottomReqID))
-		Expect(reqOutStart.ID).NotTo(Equal(bottomReqID))
-		Expect(rec.hasEnd(reqInStart.ID)).To(BeFalse())
-		Expect(rec.hasEnd(reqOutStart.ID)).To(BeFalse())
+		require.True(t, ok)
+		require.Equal(t, bottomReqID, reqOutStart.MsgID)
+		require.NotEqual(t, bottomReqID, reqOutStart.ID)
+		require.False(t, rec.hasEnd(reqInStart.ID))
+		require.False(t, rec.hasEnd(reqOutStart.ID))
 
 		// Reset while the walk is in flight.
 		reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
@@ -325,14 +338,13 @@ var _ = Describe("MMUCache milestones", func() {
 					Command == memcontrolprotocol.CmdReset {
 					acked = true
 				}
-
 			}
 		}
-		Expect(acked).To(BeTrue())
+		require.True(t, acked)
 
 		// Reset ends both original tasks before clearing the in-flight table.
-		Expect(rec.hasEnd(reqInStart.ID)).To(BeTrue())
-		Expect(rec.hasEnd(reqOutStart.ID)).To(BeTrue())
-		Expect(comp.State.InflightReqs).To(BeEmpty())
+		require.True(t, rec.hasEnd(reqInStart.ID))
+		require.True(t, rec.hasEnd(reqOutStart.ID))
+		require.Empty(t, comp.State.InflightReqs)
 	})
-})
+}

@@ -1,11 +1,8 @@
 package writethrough
 
 import (
-	"log"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -62,12 +59,6 @@ func buildStageTestCache(
 	comp.State = state
 
 	return comp.Middlewares.Pipeline
-}
-
-func TestWriteThroughCache(t *testing.T) {
-	log.SetOutput(GinkgoWriter)
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "WriteThroughCache Suite")
 }
 
 func TestValidateState(t *testing.T) {

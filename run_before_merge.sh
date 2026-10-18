@@ -3,7 +3,6 @@
 set -Eeuo pipefail
 
 MOCKGEN_VERSION="v0.6.0"
-GINKGO_VERSION="v2.32.1"
 GOLANGCI_LINT_VERSION="v2.13.2"
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,13 +85,12 @@ run env "${go_env[@]}" go mod tidy -diff
 
 run env "${go_env[@]}" GOBIN="${bin_dir}" go install "go.uber.org/mock/mockgen@${MOCKGEN_VERSION}"
 run env "${go_env[@]}" GOBIN="${bin_dir}" go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
-run env "${go_env[@]}" GOBIN="${bin_dir}" go install "github.com/onsi/ginkgo/v2/ginkgo@${GINKGO_VERSION}"
 
 run env "${go_env[@]}" PATH="${bin_dir}:${PATH}" go generate -mod=readonly ./...
 run env "${go_env[@]}" go build -mod=readonly ./...
 run env "${go_env[@]}" GOLANGCI_LINT_CACHE="${lint_cache_dir}" \
   "${bin_dir}/golangci-lint" run --timeout=10m --modules-download-mode=readonly ./...
-run env "${go_env[@]}" "${bin_dir}/ginkgo" -r --mod=readonly
+run env "${go_env[@]}" go test -mod=readonly -count=1 ./...
 
 verify_go_mod_sum_clean "validation"
 verify_tracked_clean "validation"

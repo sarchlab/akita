@@ -1,8 +1,8 @@
 package simplebankedmemory
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // These tests cover bank selection when the memory is one of several
@@ -17,7 +18,9 @@ import (
 // always global; the optional bank-selection conversion strips the upstream
 // inter-controller interleaving so a contiguous bank selector can stripe finely
 // across all banks instead of aliasing on the strided global address.
-var _ = Describe("Bank selection across interleaved controllers", func() {
+//
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 	// Four controllers interleaved at 128 B; this memory is element 1. Within
 	// element 1 the visible addresses are 64-B lines inside every 4th 128-B
 	// block: 128, 192, 640, 704, 1152, 1216, ...
@@ -62,7 +65,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 		return spec
 	}
 
-	It("collapses onto a fraction of banks without the bank conversion", func() {
+	t.Run("collapses onto a fraction of banks without the bank conversion", func(t *testing.T) {
 		spec := DefaultSpec()
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
@@ -70,40 +73,45 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 
 		banks := distinctBanks(spec, element1Addresses())
 
-		Expect(banks).To(HaveLen(2))
+		require.Len(t, banks, 2)
 	})
 
-	It("spreads finely across all banks with the bank conversion", func() {
+	t.Run("spreads finely across all banks with the bank conversion", func(t *testing.T) {
 		banks := distinctBanks(withBankConv(), element1Addresses())
 
-		Expect(banks).To(HaveLen(numBanks))
+		require.Len(t, banks, numBanks)
 	})
 
-	It("places adjacent controller-local lines on different banks", func() {
+	t.Run("places adjacent controller-local lines on different banks", func(t *testing.T) {
 		spec := withBankConv()
 
 		// The two 64-B lines of element 1's first block (128 and 192) become
 		// controller-local 0 and 64, landing on different banks — the
 		// fine-grained striping that bit-placement alone cannot achieve.
-		Expect(bankSelectionAddress(spec, 128)).To(Equal(uint64(0)))
-		Expect(bankSelectionAddress(spec, 192)).To(Equal(uint64(64)))
-		Expect(selectBank(spec, bankSelectionAddress(spec, 128))).
-			NotTo(Equal(selectBank(spec, bankSelectionAddress(spec, 192))))
+		require.Equal(t, uint64(0), bankSelectionAddress(spec, 128))
+		require.Equal(t, uint64(64), bankSelectionAddress(spec, 192))
+		require.NotEqual(
+			t,
+			selectBank(spec, bankSelectionAddress(spec, 192)),
+			selectBank(spec, bankSelectionAddress(spec, 128)),
+		)
 	})
 
-	It("leaves storage addressing untouched (storage is global)", func() {
+	t.Run("leaves storage addressing untouched (storage is global)", func(t *testing.T) {
 		// The bank conversion does not affect storage: bankSelectionAddress is
 		// only ever fed to selectBank, never to the storage access (see
 		// tickFinalizeMW, which reads/writes at the request's raw address).
 		spec := withBankConv()
-		Expect(bankSelectionAddress(spec, 640)).To(Equal(uint64(128)))
+		require.Equal(t, uint64(128), bankSelectionAddress(spec, 640))
 	})
-})
+}
 
 // This integration test confirms that, with a global identity-addressed storage
 // and the bank conversion enabled, reads and writes hit the correct global
 // offset and exercise more than one bank.
-var _ = Describe("Bank selection data correctness with global storage", func() {
+//
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
@@ -112,7 +120,9 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		conn    *loopbackConnection
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
@@ -141,18 +151,22 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
+	}
 
-	})
+	t.Run("writes and reads back at the global address across banks", func(t *testing.T) {
+		setup1(t)
 
-	It("writes and reads back at the global address across banks", func() {
 		tp := memComp.Ports.Top
 
 		// Two element-1 lines that select different banks (local 0 and 64).
 		addrs := []uint64{128, 192}
 
 		spec := memComp.Spec
-		Expect(selectBank(spec, bankSelectionAddress(spec, addrs[0]))).
-			NotTo(Equal(selectBank(spec, bankSelectionAddress(spec, addrs[1]))))
+		require.NotEqual(
+			t,
+			selectBank(spec, bankSelectionAddress(spec, addrs[1])),
+			selectBank(spec, bankSelectionAddress(spec, addrs[0])),
+		)
 
 		for i, a := range addrs {
 			w := messaging.Msg{Payload: memprotocol.WriteReq{
@@ -164,7 +178,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 				TrafficClass: "memprotocol.WriteReq"}
 
-			agent.send(w)
+			agent.send(t, w)
 		}
 
 		for i := 0; i < 20; i++ {
@@ -181,16 +195,19 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 				TrafficClass: "memprotocol.ReadReq"}
 
-			agent.send(r)
+			agent.send(t, r)
 
 			for j := 0; j < 20; j++ {
 				modelingtest.Tick(memComp)
 			}
 			_, ok := agent.received[len(agent.received)-1].Payload.(memprotocol.DataReadyRsp)
 			rsp := agent.received[len(agent.received)-1]
-			Expect(ok).To(BeTrue())
-			Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(
-				[]byte{byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)}))
+			require.True(t, ok)
+			require.Equal(
+				t,
+				[]byte{byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)},
+				rsp.Payload.(memprotocol.DataReadyRsp).Data,
+			)
 		}
 	})
-})
+}

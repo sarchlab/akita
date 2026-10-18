@@ -1,8 +1,8 @@
 package idealmemcontroller
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -13,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -39,7 +40,8 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-var _ = Describe("Ideal Memory Controller", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestIdealMemoryController(t *testing.T) {
 	var (
 		engine        timing.Engine
 		sim           timing.Simulation
@@ -71,7 +73,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
-
 	}
 
 	makeReadReq := func() messaging.Msg {
@@ -88,27 +89,33 @@ var _ = Describe("Ideal Memory Controller", func() {
 		return req
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build(16)
-	})
+	}
 
-	It("should accept read request and add to inflight transactions", func() {
+	t.Run("should accept read request and add to inflight transactions", func(t *testing.T) {
+		setup1(t)
+
 		topPort.Deliver(makeReadReq())
 
 		madeProgress := modelingtest.Tick(memController)
 
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		state := memController.State
-		Expect(state.InflightTransactions).To(HaveLen(1))
-		Expect(state.InflightTransactions[0].IsRead).To(BeTrue())
+		require.Len(t, state.InflightTransactions, 1)
+		require.True(t, state.InflightTransactions[0].IsRead)
 		// After first tick: latency=10, decrement once → 9
-		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(9))
+		require.Equal(t, 9, state.InflightTransactions[0].CycleLeft)
 	})
 
-	It("should accept write request and add to inflight transactions", func() {
+	t.Run("should accept write request and add to inflight transactions", func(t *testing.T) {
+		setup1(t)
+
 		writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address:   0,
 			Data:      []byte{0, 1, 2, 3},
@@ -122,14 +129,16 @@ var _ = Describe("Ideal Memory Controller", func() {
 		topPort.Deliver(writeReq)
 
 		madeProgress := modelingtest.Tick(memController)
-		Expect(madeProgress).To(BeTrue())
+		require.True(t, madeProgress)
 		state := memController.State
-		Expect(state.InflightTransactions).To(HaveLen(1))
-		Expect(state.InflightTransactions[0].IsRead).To(BeFalse())
-		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(9))
+		require.Len(t, state.InflightTransactions, 1)
+		require.False(t, state.InflightTransactions[0].IsRead)
+		require.Equal(t, 9, state.InflightTransactions[0].CycleLeft)
 	})
 
-	It("should send read response after latency ticks", func() {
+	t.Run("should send read response after latency ticks", func(t *testing.T) {
+		setup1(t)
+
 		topPort.Deliver(makeReadReq())
 
 		// Tick 1: take request, CycleLeft: 10 → 9
@@ -141,20 +150,22 @@ var _ = Describe("Ideal Memory Controller", func() {
 		}
 
 		state := memController.State
-		Expect(state.InflightTransactions).To(HaveLen(1))
-		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
+		require.Len(t, state.InflightTransactions, 1)
+		require.Equal(t, 1, state.InflightTransactions[0].CycleLeft)
 
 		// Tick 10: CycleLeft 1→0, then send response
 		modelingtest.Tick(memController)
 
 		state = memController.State
-		Expect(state.InflightTransactions).To(HaveLen(0))
+		require.Len(t, state.InflightTransactions, 0)
 
 		rsp, _ := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.DataReadyRsp{}}))
+		require.IsType(t, messaging.Msg{Payload: memprotocol.DataReadyRsp{}}, rsp)
 	})
 
-	It("should send write response after latency ticks", func() {
+	t.Run("should send write response after latency ticks", func(t *testing.T) {
+		setup1(t)
+
 		writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0,
 			Data:    []byte{0, 1, 2, 3}},
@@ -178,17 +189,19 @@ var _ = Describe("Ideal Memory Controller", func() {
 		modelingtest.Tick(memController)
 
 		state := memController.State
-		Expect(state.InflightTransactions).To(HaveLen(0))
+		require.Len(t, state.InflightTransactions, 0)
 
 		rsp, _ := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.WriteDoneRsp{}}))
+		require.IsType(t, messaging.Msg{Payload: memprotocol.WriteDoneRsp{}}, rsp)
 
 		// Verify data was written to storage
 		data := storage.Read(0, 4)
-		Expect(data).To(Equal([]byte{0, 1, 2, 3}))
+		require.Equal(t, []byte{0, 1, 2, 3}, data)
 	})
 
-	It("should retry send when port is busy", func() {
+	t.Run("should retry send when port is busy", func(t *testing.T) {
+		setup1(t)
+
 		// Rebuild with a single-slot Top port so the outgoing buffer can be
 		// forced full.
 		build(1)
@@ -212,27 +225,29 @@ var _ = Describe("Ideal Memory Controller", func() {
 		}
 
 		state := memController.State
-		Expect(state.InflightTransactions).To(HaveLen(1))
-		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
+		require.Len(t, state.InflightTransactions, 1)
+		require.Equal(t, 1, state.InflightTransactions[0].CycleLeft)
 
 		// Tick 10: CycleLeft 1→0, send fails (outgoing buffer full)
 		modelingtest.Tick(memController)
 
 		state = memController.State
-		Expect(state.InflightTransactions).To(HaveLen(1))
-		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
+		require.Len(t, state.InflightTransactions, 1)
+		require.Equal(t, 0, state.InflightTransactions[0].CycleLeft)
 
 		// Free the outgoing buffer, then retry succeeds.
 		value0, present0 := topPort.RetrieveOutgoing()
-		Expect(present0).To(BeTrue())
-		Expect(value0).To(Equal(dummy))
+		require.True(t, present0)
+		require.Equal(t, dummy, value0)
 		modelingtest.Tick(memController)
 
 		state = memController.State
-		Expect(state.InflightTransactions).To(HaveLen(0))
+		require.Len(t, state.InflightTransactions, 0)
 	})
 
-	It("should write with dirty mask", func() {
+	t.Run("should write with dirty mask", func(t *testing.T) {
+		setup1(t)
+
 		// Pre-write data
 		storage.Write(0, []byte{10, 20, 30, 40})
 
@@ -261,17 +276,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		// Check that only dirty bytes were written
 		data := storage.Read(0, 4)
-		Expect(data).To(Equal([]byte{10, 20, 2, 40}))
+		require.Equal(t, []byte{10, 20, 2, 40}, data)
 	})
 
-	It("should use Spec for latency and width", func() {
+	t.Run("should use Spec for latency and width", func(t *testing.T) {
+		setup1(t)
+
 		spec := memController.Spec
-		Expect(spec.Latency).To(Equal(10))
-		Expect(spec.Width).To(Equal(1))
+		require.Equal(t, 10, spec.Latency)
+		require.Equal(t, 1, spec.Width)
 	})
 
-	It("should use State for current state", func() {
+	t.Run("should use State for current state", func(t *testing.T) {
+		setup1(t)
+
 		state := memController.State
-		Expect(state.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
+		require.Equal(t, memcontrolprotocol.StateEnabled, state.ControlState)
 	})
-})
+}

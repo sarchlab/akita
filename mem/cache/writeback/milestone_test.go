@@ -1,8 +1,8 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // wbMilestoneRecorder captures the task starts, milestones, and tags the
@@ -32,8 +33,8 @@ func (r *wbMilestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *wbMilestoneRecorder) TagAdded(t tasks.Tag) {
-	r.tags = append(r.tags, t)
+func (r *wbMilestoneRecorder) TagAdded(subject tasks.Tag) {
+	r.tags = append(r.tags, subject)
 }
 
 // taskID returns the ID of the first recorded task start of the given kind.
@@ -70,7 +71,8 @@ func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
-var _ = Describe("Write-Back Cache milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestWriteBackCacheMilestones(t *testing.T) {
 	var (
 		engine      timing.Engine
 		sim         timing.Simulation
@@ -83,7 +85,9 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		rec         *wbMilestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, true)
 
@@ -126,131 +130,129 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		// also needs the incoming-buffer task to exist.
 		rec = &wbMilestoneRecorder{}
 		cacheComp.TaskTracker().Subscribe(rec, cacheComp)
+	}
 
+	t.Run("records the dir-stage-buf admission milestone on the buffer task "+
+		"and a directory-pipeline subtask parented to req_in for a read miss", func(t *testing.T) {
+		setup1(t)
+
+		dramStorage.Write(0x10000, []byte{
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+		})
+
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
+		topPort.Deliver(read)
+
+		require.NoError(t, engine.Run())
+
+		rsp, _ := agentPort.RetrieveIncoming()
+		dr := rsp
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
+		require.Equal(t, read.ID, dr.RspTo)
+
+		bufID := rec.taskID(tasks.KindIncomingBuffer)
+		reqInID := rec.taskID("req_in")
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.NotEqual(t, reqInID, bufID)
+
+		// The admission milestone (left the Top buffer because the directory
+		// stage buffer had room) lands on the incoming-buffer task, after the
+		// queue reached-head milestone the port hook emits.
+		found := false
+		for _, m := range rec.milestonesOn(bufID) {
+			if m.Kind == tasks.MilestoneKindHardwareResource {
+				require.Equal(t, cacheComp.Name()+".dir_stage_buf", m.What)
+				found = true
+			}
+		}
+		require.True(t, found, "expected a hardware_resource admission milestone on the buffer task")
+
+		// A directory-pipeline subtask exists and is parented to the
+		// request's req_in task, closing the retrieve->directory gap.
+		pipeStarts := rec.startsOfKind(tasks.KindPipeline)
+		require.NotEmpty(t, pipeStarts)
+		require.Equal(t, reqInID, pipeStarts[0].ParentID)
+		require.Equal(t, cacheComp.Name()+".dir_pipeline", pipeStarts[0].What)
 	})
 
-	It("records the dir-stage-buf admission milestone on the buffer task "+
-		"and a directory-pipeline subtask parented to req_in for a read miss",
-		func() {
-			dramStorage.Write(0x10000, []byte{
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			})
+	t.Run("records the dir-pipeline work milestone and the downstream-fetch "+
+		"data milestone on req_in for a read miss", func(t *testing.T) {
+		setup1(t)
 
-			read := messaging.Msg{Payload: memprotocol.ReadReq{
-				Address:        0x10004,
-				AccessByteSize: 4},
-				ID:  sim.NewID(),
-				Src: agentPort.AsRemote(),
-				Dst: topPort.AsRemote(),
-
-				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
-
-			topPort.Deliver(read)
-
-			Expect(engine.Run()).To(Succeed())
-
-			rsp, _ := agentPort.RetrieveIncoming()
-			dr := rsp
-			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(dr.RspTo).To(Equal(read.ID))
-
-			bufID := rec.taskID(tasks.KindIncomingBuffer)
-			reqInID := rec.taskID("req_in")
-			Expect(bufID).ToNot(BeZero())
-			Expect(reqInID).ToNot(BeZero())
-			Expect(bufID).ToNot(Equal(reqInID))
-
-			// The admission milestone (left the Top buffer because the directory
-			// stage buffer had room) lands on the incoming-buffer task, after the
-			// queue reached-head milestone the port hook emits.
-			found := false
-			for _, m := range rec.milestonesOn(bufID) {
-				if m.Kind == tasks.MilestoneKindHardwareResource {
-					Expect(m.What).To(Equal(cacheComp.Name() + ".dir_stage_buf"))
-					found = true
-				}
-			}
-			Expect(found).To(BeTrue(),
-				"expected a hardware_resource admission milestone on the buffer task")
-
-			// A directory-pipeline subtask exists and is parented to the
-			// request's req_in task, closing the retrieve->directory gap.
-			pipeStarts := rec.startsOfKind(tasks.KindPipeline)
-			Expect(pipeStarts).ToNot(BeEmpty())
-			Expect(pipeStarts[0].ParentID).To(Equal(reqInID))
-			Expect(pipeStarts[0].What).To(Equal(cacheComp.Name() + ".dir_pipeline"))
+		dramStorage.Write(0x10000, []byte{
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-	It("records the dir-pipeline work milestone and the downstream-fetch "+
-		"data milestone on req_in for a read miss",
-		func() {
-			dramStorage.Write(0x10000, []byte{
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			})
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: topPort.AsRemote(),
 
-			read := messaging.Msg{Payload: memprotocol.ReadReq{
-				Address:        0x10004,
-				AccessByteSize: 4},
-				ID:  sim.NewID(),
-				Src: agentPort.AsRemote(),
-				Dst: topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
-				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+		topPort.Deliver(read)
 
-			topPort.Deliver(read)
+		require.NoError(t, engine.Run())
 
-			Expect(engine.Run()).To(Succeed())
+		// Drive the read miss all the way through the downstream fetch
+		// response: the agent must have received the data.
+		rsp, _ := agentPort.RetrieveIncoming()
+		dr := rsp
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
+		require.Equal(t, read.ID, dr.RspTo)
 
-			// Drive the read miss all the way through the downstream fetch
-			// response: the agent must have received the data.
-			rsp, _ := agentPort.RetrieveIncoming()
-			dr := rsp
-			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(dr.RspTo).To(Equal(read.ID))
+		reqInID := rec.taskID("req_in")
+		require.NotZero(t, reqInID)
 
-			reqInID := rec.taskID("req_in")
-			Expect(reqInID).ToNot(BeZero())
+		ms := rec.milestonesOn(reqInID)
 
-			ms := rec.milestonesOn(reqInID)
-
-			// (a) The directory-pipeline-exit work milestone lands on req_in,
-			// marking the post-pipeline processing interval as work.
-			haveWork := false
-			for _, m := range ms {
-				if m.Kind == tasks.MilestoneKindWork &&
-					m.What == cacheComp.Name()+".dir_pipeline" {
-					haveWork = true
-				}
+		// (a) The directory-pipeline-exit work milestone lands on req_in,
+		// marking the post-pipeline processing interval as work.
+		haveWork := false
+		for _, m := range ms {
+			if m.Kind == tasks.MilestoneKindWork &&
+				m.What == cacheComp.Name()+".dir_pipeline" {
+				haveWork = true
 			}
-			Expect(haveWork).To(BeTrue(),
-				"expected a work/.dir_pipeline milestone on req_in")
+		}
+		require.True(t, haveWork, "expected a work/.dir_pipeline milestone on req_in")
 
-			// (b) The downstream fetch response charges a data milestone on
-			// req_in, marking the data-wait resolved at fetch-response arrival.
-			haveData := false
-			for _, m := range ms {
-				if m.Kind == tasks.MilestoneKindData &&
-					m.What == cacheComp.Name()+".Bottom" {
-					haveData = true
-				}
+		// (b) The downstream fetch response charges a data milestone on
+		// req_in, marking the data-wait resolved at fetch-response arrival.
+		haveData := false
+		for _, m := range ms {
+			if m.Kind == tasks.MilestoneKindData &&
+				m.What == cacheComp.Name()+".Bottom" {
+				haveData = true
 			}
-			Expect(haveData).To(BeTrue(),
-				"expected a data/.Bottom milestone on req_in after the fetch response")
-		})
-})
+		}
+		require.True(t, haveData, "expected a data/.Bottom milestone on req_in after the fetch response")
+	})
+}

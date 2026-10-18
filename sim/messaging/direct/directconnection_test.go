@@ -8,13 +8,14 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -25,8 +26,8 @@ func newTestMsg(sim timing.Simulation) messaging.Msg {
 	return messaging.Msg{ID: sim.NewID(), Payload: testMsg{}}
 }
 
-var _ = Describe("DirectConnection", func() {
-
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDirectConnection(t *testing.T) {
 	var (
 		mockCtrl   *gomock.Controller
 		port1      *MockPort
@@ -36,8 +37,10 @@ var _ = Describe("DirectConnection", func() {
 		connection *Connection
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
+		mockCtrl = gomock.NewController(t)
 
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().Return(messaging.RemotePort("port1")).AnyTimes()
@@ -59,13 +62,11 @@ var _ = Describe("DirectConnection", func() {
 		port2.EXPECT().Connection().Return(nil).AnyTimes()
 		port2.EXPECT().BindConnection(connection)
 		connection.BindPort(port2)
-	})
+	}
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	t.Run("should forward when handling tick event", func(t *testing.T) {
+		setup1(t)
 
-	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
 		tick := ticking.MakeEvent(sim.NewID(), timing.VTimeInPicoSec(10000), connection.Name())
@@ -93,14 +94,16 @@ var _ = Describe("DirectConnection", func() {
 		engine.EXPECT().
 			Schedule(gomock.Any()).
 			Do(func(evt ticking.Event) {
-				Expect(evt.Time()).To(Equal(timing.VTimeInPicoSec(11000)))
-				Expect(evt.IsSecondary()).To(BeTrue())
+				require.Equal(t, timing.VTimeInPicoSec(11000), evt.Time())
+				require.True(t, evt.IsSecondary())
 			})
 
 		connection.Handle(tick)
 	})
 
-	It("should keep outgoing messages queued when delivery is blocked", func() {
+	t.Run("should keep outgoing messages queued when delivery is blocked", func(t *testing.T) {
+		setup1(t)
+
 		tick := ticking.MakeEvent(sim.NewID(), timing.VTimeInPicoSec(10000), connection.Name())
 
 		msg := newTestMsg(sim)
@@ -113,7 +116,7 @@ var _ = Describe("DirectConnection", func() {
 
 		connection.Handle(tick)
 	})
-})
+}
 
 // agent is a test double that sends its messages out of OutPort and records
 // what it receives, ticking while it makes progress.
@@ -164,9 +167,9 @@ func (a *agent) Handle(timing.Event) {
 	}
 }
 
-var _ = Describe("Direct Connection Integration", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDirectConnectionIntegration(t *testing.T) {
 	var (
-		mockCtrl        *gomock.Controller
 		engine          timing.Engine
 		sim             timing.Simulation
 		connection      *Connection
@@ -175,8 +178,9 @@ var _ = Describe("Direct Connection Integration", func() {
 		numMsgsPerAgent = 1000
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	setup3 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		connection = NewConnection("Conn", sim, timing.GHz)
@@ -187,13 +191,11 @@ var _ = Describe("Direct Connection Integration", func() {
 			agents = append(agents, a)
 			connection.BindPort(a.OutPort)
 		}
-	})
+	}
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	t.Run("should deliver all messages", func(t *testing.T) {
+		setup3(t)
 
-	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
 				msg := newTestMsg(sim)
@@ -208,27 +210,31 @@ var _ = Describe("Direct Connection Integration", func() {
 			agent.TickLater()
 		}
 
-		Expect(sim.Initialize()).To(Succeed())
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, sim.Initialize())
+		require.NoError(t, engine.Run())
 
 		totalRecvedMsgCount := 0
 		for _, agent := range agents {
 			totalRecvedMsgCount += len(agent.msgsIn)
 		}
 
-		Expect(totalRecvedMsgCount).To(Equal(numAgents * numMsgsPerAgent))
+		require.Equal(t, numAgents*numMsgsPerAgent, totalRecvedMsgCount)
 	})
 
-	It("should run deterministicly", func() {
+	t.Run("should run deterministicly", func(t *testing.T) {
+		setup3(t)
+
 		seed := time.Now().UTC().UnixNano()
-		time1 := directConnectionTest(seed)
-		time2 := directConnectionTest(seed)
+		time1 := directConnectionTest(t, seed)
+		time2 := directConnectionTest(t, seed)
 
-		Expect(time1).To(Equal(time2))
+		require.Equal(t, time2, time1)
 	})
-})
+}
 
-func directConnectionTest(seed int64) timing.VTimeInPicoSec {
+func directConnectionTest(t *testing.T, seed int64) timing.VTimeInPicoSec {
+	t.Helper()
+
 	r := rand.New(rand.NewSource(seed))
 
 	numAgents := 100
@@ -263,8 +269,8 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 		agent.TickLater()
 	}
 
-	Expect(sim.Initialize()).To(Succeed())
-	Expect(engine.Run()).To(Succeed())
+	require.NoError(t, sim.Initialize())
+	require.NoError(t, engine.Run())
 
 	return engine.CurrentTime()
 }

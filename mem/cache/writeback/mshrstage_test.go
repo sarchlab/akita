@@ -1,16 +1,18 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("MSHR Stage", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestMSHRStage(t *testing.T) {
 	var (
 		m       *pipelineMW
 		ms      *mshrStage
@@ -19,17 +21,21 @@ var _ = Describe("MSHR Stage", func() {
 
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
-	fillTop := func() {
+	fillTop := func(t *testing.T) {
+		t.Helper()
+
 		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
 			Src:          topPort.AsRemote(),
 			Dst:          messaging.RemotePort("SomeSrc"),
 			TrafficClass: "rsp"}
 
-		Expect(topPort.CanSend()).To(BeTrue())
+		require.True(t, topPort.CanSend())
 		topPort.Send(dummy)
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -67,15 +73,18 @@ var _ = Describe("MSHR Stage", func() {
 		m.comp.State = initialState
 
 		ms = m.mshrStage
-	})
+	}
 
-	It("should do nothing if there is no entry in input buffer", func() {
+	t.Run("should do nothing if there is no entry in input buffer", func(t *testing.T) {
+		setup1(t)
 
 		ret := ms.Tick()
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 	})
 
-	It("should stall if topSender is busy", func() {
+	t.Run("should stall if topSender is busy", func(t *testing.T) {
+		setup1(t)
+
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x104,
 			AccessByteSize: 4},
@@ -113,16 +122,18 @@ var _ = Describe("MSHR Stage", func() {
 		next.MSHRStageBuf.Clear()
 		next.MSHRStageBuf.Push(1)
 
-		fillTop()
+		fillTop(t)
 
 		ret := ms.Tick()
 
-		Expect(ret).To(BeFalse())
+		require.False(t, ret)
 		next = &m.comp.State
-		Expect(next.HasProcessingMSHREntry).To(BeTrue())
+		require.True(t, next.HasProcessingMSHREntry)
 	})
 
-	It("should send data ready to top", func() {
+	t.Run("should send data ready to top", func(t *testing.T) {
+		setup1(t)
+
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x104,
 			AccessByteSize: 4},
@@ -161,17 +172,19 @@ var _ = Describe("MSHR Stage", func() {
 
 		ret := ms.Tick()
 
-		Expect(ret).To(BeTrue())
+		require.True(t, ret)
 		next = &m.comp.State
-		Expect(next.HasProcessingMSHREntry).To(BeFalse())
-		Expect(next.Transactions[0].Removed).To(BeTrue())
+		require.False(t, next.HasProcessingMSHREntry)
+		require.True(t, next.Transactions[0].Removed)
 
 		out, _ := topPort.RetrieveOutgoing()
 		dr := out
-		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+		require.Equal(t, []byte{5, 6, 7, 8}, dr.Payload.(memprotocol.DataReadyRsp).Data)
 	})
 
-	It("should discard the request if it is no longer inflight", func() {
+	t.Run("should discard the request if it is no longer inflight", func(t *testing.T) {
+		setup1(t)
+
 		mshrTrans := transactionState{
 			MSHRTransactionIndices: []int{99}, // index that doesn't exist
 			MSHRData: []byte{
@@ -193,8 +206,8 @@ var _ = Describe("MSHR Stage", func() {
 
 		ret := ms.Tick()
 
-		Expect(ret).To(BeTrue())
+		require.True(t, ret)
 		next = &m.comp.State
-		Expect(next.HasProcessingMSHREntry).To(BeFalse())
+		require.False(t, next.HasProcessingMSHREntry)
 	})
-})
+}

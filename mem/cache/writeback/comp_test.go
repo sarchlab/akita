@@ -1,27 +1,35 @@
 package writeback
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("State allocTransaction", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestStateAllocTransaction(t *testing.T) {
 	var st *state
 
-	BeforeEach(func() {
-		st = &state{}
-	})
+	setup1 := func(t *testing.T) {
+		t.Helper()
 
-	It("should append when no Removed slot is available", func() {
+		st = &state{}
+	}
+
+	t.Run("should append when no Removed slot is available", func(t *testing.T) {
+		setup1(t)
+
 		idx0 := st.allocTransaction(transactionState{ID: 1})
 		idx1 := st.allocTransaction(transactionState{ID: 2})
 
-		Expect(idx0).To(Equal(0))
-		Expect(idx1).To(Equal(1))
-		Expect(st.Transactions).To(HaveLen(2))
+		require.Equal(t, 0, idx0)
+		require.Equal(t, 1, idx1)
+		require.Len(t, st.Transactions, 2)
 	})
 
-	It("should reuse a Removed slot instead of growing the slice", func() {
+	t.Run("should reuse a Removed slot instead of growing the slice", func(t *testing.T) {
+		setup1(t)
+
 		st.allocTransaction(transactionState{ID: 1})
 		idx1 := st.allocTransaction(transactionState{ID: 2})
 		st.allocTransaction(transactionState{ID: 3})
@@ -30,22 +38,26 @@ var _ = Describe("State allocTransaction", func() {
 
 		reusedIdx := st.allocTransaction(transactionState{ID: 4})
 
-		Expect(reusedIdx).To(Equal(idx1))
-		Expect(st.Transactions).To(HaveLen(3))
-		Expect(st.Transactions[reusedIdx].ID).To(Equal(uint64(4)))
-		Expect(st.Transactions[reusedIdx].Removed).To(BeFalse())
+		require.Equal(t, idx1, reusedIdx)
+		require.Len(t, st.Transactions, 3)
+		require.Equal(t, uint64(4), st.Transactions[reusedIdx].ID)
+		require.False(t, st.Transactions[reusedIdx].Removed)
 	})
 
-	It("should keep the slice bounded by the active transaction count", func() {
+	t.Run("should keep the slice bounded by the active transaction count", func(t *testing.T) {
+		setup1(t)
+
 		for i := 0; i < 1000; i++ {
 			idx := st.allocTransaction(transactionState{ID: uint64(i)})
 			st.Transactions[idx].Removed = true
 		}
 
-		Expect(st.Transactions).To(HaveLen(1))
+		require.Len(t, st.Transactions, 1)
 	})
 
-	It("should not reuse the in-flight MSHR owner slot even if Removed", func() {
+	t.Run("should not reuse the in-flight MSHR owner slot even if Removed", func(t *testing.T) {
+		setup1(t)
+
 		// The MSHR stage owns ProcessingMSHREntryIdx across ticks, draining its
 		// waiter list. That owner is commonly marked Removed before the list is
 		// drained; reusing its slot would clobber MSHRTransactionIndices and
@@ -62,14 +74,13 @@ var _ = Describe("State allocTransaction", func() {
 
 		newIdx := st.allocTransaction(transactionState{ID: 3})
 
-		Expect(newIdx).NotTo(Equal(ownerIdx))
-		Expect(st.Transactions[ownerIdx].ID).To(Equal(uint64(1)))
-		Expect(st.Transactions[ownerIdx].MSHRTransactionIndices).
-			To(Equal([]int{0, 2}))
+		require.NotEqual(t, ownerIdx, newIdx)
+		require.Equal(t, uint64(1), st.Transactions[ownerIdx].ID)
+		require.Equal(t, []int{0, 2}, st.Transactions[ownerIdx].MSHRTransactionIndices)
 
 		// Once the stage releases the owner, its slot becomes reusable.
 		st.HasProcessingMSHREntry = false
 		reusedIdx := st.allocTransaction(transactionState{ID: 4})
-		Expect(reusedIdx).To(Equal(ownerIdx))
+		require.Equal(t, ownerIdx, reusedIdx)
 	})
-})
+}

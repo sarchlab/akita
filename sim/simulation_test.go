@@ -1,18 +1,20 @@
 package sim
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 type testResource struct {
@@ -89,54 +91,71 @@ func (c testComponent) Name() string {
 	return c.name
 }
 
-var _ = Describe("Simulation", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestSimulation(t *testing.T) {
 	var (
 		simulation *Simulation
 		comp       testComponent
 		port       testPort
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		simulation = MakeBuilder().Build()
 		port = testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
 		comp = testComponent{name: "comp"}
-	})
+	}
 
-	AfterEach(func() {
+	cleanup2 := func(t *testing.T) {
+		t.Helper()
+
 		simulation.Terminate()
 
 		os.Remove("akita_sim_" + simulation.ID() + ".sqlite3")
-	})
+	}
 
-	It("should register a component", func() {
+	t.Run("should register a component", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		simulation.RegisterComponent(comp)
 		simulation.RegisterPort(port)
 
-		Expect(simulation.components).To(Equal([]Component{comp}))
-		Expect(simulation.ports).To(Equal([]Port{port}))
+		require.Equal(t, []Component{comp}, simulation.components)
+		require.Equal(t, []Port{port}, simulation.ports)
 	})
 
-	It("should reject duplicate component names", func() {
+	t.Run("should reject duplicate component names", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		simulation.RegisterComponent(comp)
 
 		dup := testComponent{name: "comp"}
 
-		Expect(func() {
+		requirePanicContains(t, "already registered", func() {
 			simulation.RegisterComponent(dup)
-		}).To(PanicWith(ContainSubstring("already registered")))
+		})
 	})
 
-	It("should reject duplicate port names", func() {
+	t.Run("should reject duplicate port names", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		simulation.RegisterPort(port)
 
 		dupPort := testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
 
-		Expect(func() {
+		requirePanicContains(t, "already registered", func() {
 			simulation.RegisterPort(dupPort)
-		}).To(PanicWith(ContainSubstring("already registered")))
+		})
 	})
 
-	It("should register shared state resources directly", func() {
+	t.Run("should register shared state resources directly", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		resource := testResource{
 			name:     "Program.Memory",
 			kind:     "test.Resource",
@@ -147,10 +166,13 @@ var _ = Describe("Simulation", func() {
 
 		simulation.RegisterResource(resource)
 
-		Expect(simulation.entityByName).To(HaveKey("Program.Memory"))
+		require.Contains(t, simulation.entityByName, "Program.Memory")
 	})
 
-	It("should reject duplicate shared state names with different identities", func() {
+	t.Run("should reject duplicate shared state names with different identities", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		resource := testResource{
 			name:     "Program.Memory",
 			kind:     "test.Resource",
@@ -163,12 +185,15 @@ var _ = Describe("Simulation", func() {
 
 		simulation.RegisterResource(resource)
 
-		Expect(func() {
+		requirePanicContains(t, "already registered", func() {
 			simulation.RegisterResource(duplicate)
-		}).To(PanicWith(ContainSubstring("already registered")))
+		})
 	})
 
-	It("should return all registered entities", func() {
+	t.Run("should return all registered entities", func(t *testing.T) {
+		t.Cleanup(func() { cleanup2(t) })
+		setup1(t)
+
 		resource := testResource{
 			name:     "Program.Memory",
 			kind:     "test.Resource",
@@ -189,35 +214,41 @@ var _ = Describe("Simulation", func() {
 			names = append(names, e.Name())
 		}
 
-		Expect(names).To(ConsistOf(
-			"Engine", "IDGenerator",
-			"comp", "port", "conn", "Program.Memory",
-		))
+		require.ElementsMatch(t, []string{"Engine", "IDGenerator", "comp", "port", "conn", "Program.Memory"}, names)
 	})
 
-	Context("Builder with custom output file", func() {
+	t.Run("Builder with custom output file", func(t *testing.T) {
 		var customSim *Simulation
 
-		AfterEach(func() {
+		cleanup3 := func(t *testing.T) {
+			t.Helper()
+
 			if customSim != nil {
 				customSim.Terminate()
 				os.Remove("test_custom_output.sqlite3")
 				customSim = nil
 			}
-		})
+		}
 
-		It("should allow custom output file to be set", func() {
+		t.Run("should allow custom output file to be set", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			t.Cleanup(func() { cleanup3(t) })
+			setup1(t)
+
 			builder := MakeBuilder().
 				WithOutputPath("test_custom_output" + ".sqlite3")
 			customSim = builder.Build()
 
-			Expect(customSim).ToNot(BeNil())
-			Expect(customSim.DataRecorder()).ToNot(BeNil())
+			require.NotNil(t, customSim)
+			require.NotNil(t, customSim.DataRecorder())
 		})
 	})
 
-	Context("checkpoint foundation", func() {
-		It("should reject an entity that has no serializer", func() {
+	t.Run("checkpoint foundation", func(t *testing.T) {
+		t.Run("should reject an entity that has no serializer", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			// A bare component/port has no checkpoint serializer yet, so save
 			// must fail loudly and not leave an archive behind.
 			noSerializerSim := MakeBuilder().Build()
@@ -226,19 +257,21 @@ var _ = Describe("Simulation", func() {
 				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
 			}()
 			noSerializerSim.RegisterComponent(testComponent{name: "comp"})
-			Expect(noSerializerSim.Initialize()).To(Succeed())
+			require.NoError(t, noSerializerSim.Initialize())
 
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
 
 			err := noSerializerSim.SaveCheckpoint(path)
 
-			Expect(err).To(MatchError(ContainSubstring(
-				"has no checkpoint serializer")))
+			require.ErrorContains(t, err, "has no checkpoint serializer")
 			_, statErr := os.Stat(path)
-			Expect(os.IsNotExist(statErr)).To(BeTrue())
+			require.True(t, os.IsNotExist(statErr))
 		})
 
-		It("should reject checkpoints for parallel engines", func() {
+		t.Run("should reject checkpoints for parallel engines", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
 			parallelSim := MakeBuilder().
 				WithParallelEngine().
 				Build()
@@ -247,29 +280,34 @@ var _ = Describe("Simulation", func() {
 				os.Remove("akita_sim_" + parallelSim.ID() + ".sqlite3")
 			}()
 
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
 
-			Expect(parallelSim.Initialize()).To(Succeed())
+			require.NoError(t, parallelSim.Initialize())
 			err := parallelSim.SaveCheckpoint(path)
 
-			Expect(err).To(MatchError(ContainSubstring(
-				"only timing.SerialEngine is supported")))
+			require.ErrorContains(t, err, "only timing.SerialEngine is supported")
 		})
 
-		It("should reject a checkpoint from a different build", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+		t.Run("should reject a checkpoint from a different build", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
+			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
 
 			err := writeArchive(path, "other-build", dummyPayloads(simulation))
-			Expect(err).ToNot(HaveOccurred())
+			require.NoError(t, err)
 
-			Expect(simulation.Initialize()).To(Succeed())
+			require.NoError(t, simulation.Initialize())
 			err = simulation.LoadCheckpoint(path)
 
-			Expect(err).To(MatchError(ContainSubstring("build ID mismatch")))
+			require.ErrorContains(t, err, "build ID mismatch")
 		})
 
-		It("should reject when a rebuilt entity is missing from the checkpoint", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+		t.Run("should reject when a rebuilt entity is missing from the checkpoint", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
+			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
 
 			entries := []archiveEntry{}
 			for _, entity := range simulation.entities {
@@ -281,84 +319,102 @@ var _ = Describe("Simulation", func() {
 			}
 
 			err := writeArchive(path, simulation.buildID, entries)
-			Expect(err).ToNot(HaveOccurred())
+			require.NoError(t, err)
 
-			Expect(simulation.Initialize()).To(Succeed())
+			require.NoError(t, simulation.Initialize())
 			err = simulation.LoadCheckpoint(path)
 
-			Expect(err).To(MatchError(ContainSubstring(
-				"rebuilt entity \"IDGenerator\" is missing from checkpoint")))
+			require.ErrorContains(t, err, "rebuilt entity \"IDGenerator\" is missing from checkpoint")
 		})
 
-		It("should reject a checkpoint that carries an entity the sim does not rebuild", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+		t.Run("should reject a checkpoint that carries an entity the sim does not rebuild", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
+			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
 
 			entries := append(dummyPayloads(simulation),
 				archiveEntry{name: "GhostEntity", data: []byte("{}")})
 
 			err := writeArchive(path, simulation.buildID, entries)
-			Expect(err).ToNot(HaveOccurred())
+			require.NoError(t, err)
 
-			Expect(simulation.Initialize()).To(Succeed())
+			require.NoError(t, simulation.Initialize())
 			err = simulation.LoadCheckpoint(path)
 
-			Expect(err).To(MatchError(ContainSubstring(
-				"saved entity \"GhostEntity\" is not rebuilt")))
+			require.ErrorContains(t, err, "saved entity \"GhostEntity\" is not rebuilt")
 		})
 
-		It("should reject a corrupted archive", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "corrupt.tar.gz")
-			Expect(os.WriteFile(
-				path, []byte("this is not a gzip archive"), 0o644)).To(Succeed())
+		t.Run("should reject a corrupted archive", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
+			path := filepath.Join(t.TempDir(), "corrupt.tar.gz")
+			require.NoError(t, os.WriteFile(
+				path, []byte("this is not a gzip archive"), 0o644))
 
 			err := simulation.LoadCheckpoint(path)
 
-			Expect(err).To(HaveOccurred())
+			require.Error(t, err)
 		})
 
-		It("should reject a truncated archive", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "truncated.tar.gz")
-			Expect(writeArchive(
-				path, simulation.buildID, dummyPayloads(simulation))).To(Succeed())
+		t.Run("should reject a truncated archive", func(t *testing.T) {
+			t.Cleanup(func() { cleanup2(t) })
+			setup1(t)
+
+			path := filepath.Join(t.TempDir(), "truncated.tar.gz")
+			require.NoError(t, writeArchive(
+				path, simulation.buildID, dummyPayloads(simulation)))
 
 			full, err := os.ReadFile(path)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(len(full)).To(BeNumerically(">", 4))
-			Expect(os.WriteFile(path, full[:len(full)/2], 0o644)).To(Succeed())
+			require.NoError(t, err)
+			require.Greater(t, len(full), 4)
+			require.NoError(t, os.WriteFile(path, full[:len(full)/2], 0o644))
 
-			Expect(simulation.Initialize()).To(Succeed())
+			require.NoError(t, simulation.Initialize())
 			err = simulation.LoadCheckpoint(path)
 
-			Expect(err).To(HaveOccurred())
+			require.Error(t, err)
 		})
 	})
-})
+}
 
-var _ = Describe("Global state manager", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestGlobalStateManager(t *testing.T) {
 	var sim *Simulation
 
-	BeforeEach(func() {
-		sim = MakeBuilder().Build()
-	})
+	setup4 := func(t *testing.T) {
+		t.Helper()
 
-	AfterEach(func() {
+		sim = MakeBuilder().Build()
+	}
+
+	cleanup5 := func(t *testing.T) {
+		t.Helper()
+
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
-	})
+	}
 
-	Describe("Global name uniqueness", func() {
-		It("should reject a connection whose name collides with a component", func() {
+	t.Run("Global name uniqueness", func(t *testing.T) {
+		t.Run("should reject a connection whose name collides with a component", func(t *testing.T) {
+			t.Cleanup(func() { cleanup5(t) })
+			setup4(t)
+
 			sim.RegisterComponent(testComponent{name: "shared"})
 
-			Expect(func() {
+			requirePanicContains(t, "already registered", func() {
 				sim.RegisterConnection(newTestConnection("shared"))
-			}).To(PanicWith(ContainSubstring("already registered")))
+			})
 		})
 
-		It("should reject a resource whose name collides with a component", func() {
+		t.Run("should reject a resource whose name collides with a component", func(t *testing.T) {
+			t.Cleanup(func() { cleanup5(t) })
+			setup4(t)
+
 			sim.RegisterComponent(testComponent{name: "Program.Memory"})
 
-			Expect(func() {
+			requirePanicContains(t, "already registered", func() {
 				sim.RegisterResource(testResource{
 					name:     "Program.Memory",
 					kind:     "test.Resource",
@@ -366,12 +422,15 @@ var _ = Describe("Global state manager", func() {
 					ext:      ".json",
 					identity: "resource-1",
 				})
-			}).To(PanicWith(ContainSubstring("already registered")))
+			})
 		})
 	})
 
-	Describe("Deterministic entity inventory", func() {
-		It("should list entities in stable registration order across rebuilds", func() {
+	t.Run("Deterministic entity inventory", func(t *testing.T) {
+		t.Run("should list entities in stable registration order across rebuilds", func(t *testing.T) {
+			t.Cleanup(func() { cleanup5(t) })
+			setup4(t)
+
 			build := func() []string {
 				s := MakeBuilder().Build()
 				defer func() {
@@ -392,22 +451,25 @@ var _ = Describe("Global state manager", func() {
 				return names
 			}
 
-			Expect(build()).To(Equal(build()))
+			require.Equal(t, build(), build())
 		})
 	})
 
-	Describe("Complete state inventory", func() {
-		It("registers the engine and ID generator as entities", func() {
+	t.Run("Complete state inventory", func(t *testing.T) {
+		t.Run("registers the engine and ID generator as entities", func(t *testing.T) {
+			t.Cleanup(func() { cleanup5(t) })
+			setup4(t)
+
 			entities := sim.entities
 			names := make([]string, 0, len(entities))
 			for _, e := range entities {
 				names = append(names, e.Name())
 			}
 
-			Expect(names).To(ContainElements("Engine", "IDGenerator"))
+			require.Subset(t, names, []string{"Engine", "IDGenerator"})
 		})
 	})
-})
+}
 
 type roundTripSpec struct {
 	Freq    timing.Freq `json:"freq"`
@@ -435,14 +497,16 @@ type timeSetter struct{}
 
 func (timeSetter) Handle(timing.Event) {}
 
-// advanceTo moves the engine's clock forward to t with an empty event.
-func advanceTo(engine *timing.SerialEngine, t timing.VTimeInPicoSec) {
-	engine.Schedule(timing.MakeEventBase(0, t, "TimeSetter"))
-	Expect(engine.Run()).To(Succeed())
+// advanceTo moves the engine's clock forward to at with an empty event.
+func advanceTo(t *testing.T, engine *timing.SerialEngine, at timing.VTimeInPicoSec) {
+	t.Helper()
+
+	engine.Schedule(timing.MakeEventBase(0, at, "TimeSetter"))
+	require.NoError(t, engine.Run())
 }
 
-var _ = Describe("Checkpoint round trip", func() {
-	It("restores component state, storage, ID counter, and engine time", func() {
+func TestCheckpointRoundTrip(t *testing.T) {
+	t.Run("restores component state, storage, ID counter, and engine time", func(t *testing.T) {
 		sim := MakeBuilder().Build()
 		defer func() {
 			sim.Terminate()
@@ -472,28 +536,28 @@ var _ = Describe("Checkpoint round trip", func() {
 		for i := 0; i < 5; i++ {
 			savedCounter = sim.NewID()
 		}
-		advanceTo(engine, 100)
+		advanceTo(t, engine, 100)
 
-		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
-		Expect(sim.SaveCheckpoint(path)).To(Succeed())
+		path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
+		require.NoError(t, sim.SaveCheckpoint(path))
 
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
 		storage.Write(0, []byte{0, 0, 0, 0})
 		sim.NewID()
 		sim.NewID()
-		advanceTo(engine, 500)
+		advanceTo(t, engine, 500)
 
 		// Restore and confirm every piece came back.
-		Expect(sim.LoadCheckpoint(path)).To(Succeed())
+		require.NoError(t, sim.LoadCheckpoint(path))
 
-		Expect(comp.State.Count).To(Equal(7))
+		require.Equal(t, 7, comp.State.Count)
 		data := storage.Read(0, 4)
-		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
-		Expect(sim.NewID()).To(Equal(savedCounter + 1))
-		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))
+		require.Equal(t, []byte{1, 2, 3, 4}, data)
+		require.Equal(t, savedCounter+1, sim.NewID())
+		require.Equal(t, timing.VTimeInPicoSec(100), engine.CurrentTime())
 	})
-})
+}
 
 type resumeSpec struct {
 	Freq timing.Freq `json:"freq"`
@@ -541,9 +605,9 @@ func buildResumeSim() (*Simulation, *resumeComp) {
 	return sim, c
 }
 
-var _ = Describe("Mid-transaction resume", func() {
-	It("resumes from a checkpoint with a pending tick identically to running uninterrupted", func() {
-		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+func TestMidTransactionResume(t *testing.T) {
+	t.Run("resumes from a checkpoint with a pending tick identically to running uninterrupted", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "ck.tar.gz")
 
 		// Reference run: set up mid-transaction state (work pending, one tick
 		// already scheduled), checkpoint there, then continue to completion.
@@ -555,10 +619,10 @@ var _ = Describe("Mid-transaction resume", func() {
 		refW.State = resumeState{Pending: 5}
 		refW.TickLater() // schedule the first tick -> non-empty engine queue
 
-		Expect(refSim.SaveCheckpoint(path)).To(Succeed())
+		require.NoError(t, refSim.SaveCheckpoint(path))
 
 		refEngine := refSim.Engine().(*timing.SerialEngine)
-		Expect(refEngine.Run()).To(Succeed())
+		require.NoError(t, refEngine.Run())
 		wantDone := refW.State.Done
 		wantChecksum := refW.State.Checksum
 		wantTime := refEngine.CurrentTime()
@@ -570,17 +634,17 @@ var _ = Describe("Mid-transaction resume", func() {
 			resSim.Terminate()
 			os.Remove("akita_sim_" + resSim.ID() + ".sqlite3")
 		}()
-		Expect(resSim.LoadCheckpoint(path)).To(Succeed())
+		require.NoError(t, resSim.LoadCheckpoint(path))
 
 		resEngine := resSim.Engine().(*timing.SerialEngine)
-		Expect(resEngine.Run()).To(Succeed())
+		require.NoError(t, resEngine.Run())
 
-		Expect(resW.State.Done).To(Equal(wantDone))
-		Expect(resW.State.Checksum).To(Equal(wantChecksum))
-		Expect(resEngine.CurrentTime()).To(Equal(wantTime))
-		Expect(wantDone).To(Equal(5)) // sanity: work actually happened
+		require.Equal(t, wantDone, resW.State.Done)
+		require.Equal(t, wantChecksum, resW.State.Checksum)
+		require.Equal(t, wantTime, resEngine.CurrentTime())
+		require.Equal(t, 5, wantDone) // sanity: work actually happened
 	})
-})
+}
 
 type tickCountSpec struct {
 	Freq timing.Freq `json:"freq"`
@@ -623,10 +687,10 @@ func buildTickCountSim() (*Simulation, *tickCountComp) {
 	return sim, c
 }
 
-var _ = Describe("Tick scheduler guard restore", func() {
-	It("restores the guard from the checkpoint so a stimulus before the "+
-		"pending tick fires schedules no duplicate", func() {
-		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+func TestTickSchedulerGuardRestore(t *testing.T) {
+	t.Run("restores the guard from the checkpoint so a stimulus before the "+
+		"pending tick fires schedules no duplicate", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "ck.tar.gz")
 
 		// Checkpoint with exactly one tick pending in the engine queue and the
 		// engine still at time 0.
@@ -636,7 +700,7 @@ var _ = Describe("Tick scheduler guard restore", func() {
 			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
 		}()
 		srcC.TickLater()
-		Expect(srcSim.SaveCheckpoint(path)).To(Succeed())
+		require.NoError(t, srcSim.SaveCheckpoint(path))
 
 		// Restore into a fresh sim. The component's guard is restored directly
 		// from the checkpoint, so it already agrees that a tick is scheduled.
@@ -645,7 +709,7 @@ var _ = Describe("Tick scheduler guard restore", func() {
 			dstSim.Terminate()
 			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
 		}()
-		Expect(dstSim.LoadCheckpoint(path)).To(Succeed())
+		require.NoError(t, dstSim.LoadCheckpoint(path))
 
 		// A stimulus (what NotifyRecv does) arrives before the pending tick
 		// fires. With the guard restored, this is recognized as redundant and
@@ -653,14 +717,14 @@ var _ = Describe("Tick scheduler guard restore", func() {
 		dstC.TickLater()
 
 		engine := dstSim.Engine().(*timing.SerialEngine)
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// Exactly one tick fired. Without the restored guard the stimulus would
 		// have scheduled a duplicate (Ticks == 2); a dropped pending tick
 		// would be 0.
-		Expect(dstC.State.Ticks).To(Equal(1))
+		require.Equal(t, 1, dstC.State.Ticks)
 	})
-})
+}
 
 type wakeSpec struct {
 	Tag int `json:"tag"`
@@ -701,10 +765,10 @@ func buildWakeSim() (*Simulation, *wakeComp) {
 	return sim, c
 }
 
-var _ = Describe("Event-driven wakeup guard restore", func() {
-	It("restores the wakeup guard from the checkpoint so a redundant "+
-		"wakeup request after restore schedules no duplicate", func() {
-		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+func TestEventDrivenWakeupGuardRestore(t *testing.T) {
+	t.Run("restores the wakeup guard from the checkpoint so a redundant "+
+		"wakeup request after restore schedules no duplicate", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "ck.tar.gz")
 		const wakeTime = timing.VTimeInPicoSec(1000)
 
 		// Checkpoint with one wakeup pending in the engine queue.
@@ -714,7 +778,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
 		}()
 		srcC.WakeAt(wakeTime)
-		Expect(srcSim.SaveCheckpoint(path)).To(Succeed())
+		require.NoError(t, srcSim.SaveCheckpoint(path))
 
 		// Restore into a fresh sim, whose wakeup guard is restored directly from
 		// the checkpoint.
@@ -723,20 +787,20 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 			dstSim.Terminate()
 			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
 		}()
-		Expect(dstSim.LoadCheckpoint(path)).To(Succeed())
+		require.NoError(t, dstSim.LoadCheckpoint(path))
 
 		// A redundant request for a wakeup at the already-pending time. With the
 		// guard restored, it is recognized as redundant and queues no duplicate.
 		dstC.WakeAt(wakeTime)
 
 		engine := dstSim.Engine().(*timing.SerialEngine)
-		Expect(engine.Run()).To(Succeed())
+		require.NoError(t, engine.Run())
 
 		// Exactly one wakeup fired. Without the restored guard the redundant
 		// request would have queued a duplicate (Wakeups == 2).
-		Expect(dstC.State.Wakeups).To(Equal(1))
+		require.Equal(t, 1, dstC.State.Wakeups)
 	})
-})
+}
 
 func (m *resumeMWs) Initialize(c *resumeComp) {
 	*m = resumeMWs{Worker: &resumeWorkerMW{comp: c}}
@@ -748,4 +812,14 @@ func (m *tickCountMWs) Initialize(c *tickCountComp) {
 
 func (m *wakeMWs) Initialize(c *wakeComp) {
 	*m = wakeMWs{Counter: &wakeMW{comp: c}}
+}
+
+func requirePanicContains(t *testing.T, substring string, fn func()) {
+	t.Helper()
+	defer func() {
+		recovered := recover()
+		require.NotNil(t, recovered)
+		require.Contains(t, fmt.Sprint(recovered), substring)
+	}()
+	fn()
 }

@@ -23,7 +23,6 @@ linters:
     - forbidigo
     - forcetypeassert
     - funcorder
-    - ginkgolinter
     - gochecknoglobals
     - gochecknoinits
     - goconst

@@ -6,20 +6,14 @@ import (
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-func TestNetworkconnector(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Networkconnector Suite")
-}
-
-var _ = Describe("Connector", func() {
-	It("should establish route in a simple network", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestConnector(t *testing.T) {
+	t.Run("should establish route in a simple network", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 		connector := MakeBuilder().
 			WithSimulation(sim).
@@ -52,10 +46,9 @@ var _ = Describe("Connector", func() {
 					},
 				})
 		}
-
 	})
 
-	It("should establish route in a small tree", func() {
+	t.Run("should establish route in a small tree", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 		connector := MakeBuilder().
 			WithSimulation(sim).
@@ -117,10 +110,9 @@ var _ = Describe("Connector", func() {
 					},
 				})
 		}
-
 	})
 
-	It("should establish route in a large tree", func() {
+	t.Run("should establish route in a large tree", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
 		connector := MakeBuilder().
 			WithSimulation(sim).
@@ -182,9 +174,8 @@ var _ = Describe("Connector", func() {
 					},
 				})
 		}
-
 	})
-})
+}
 
 type routeTestOwner struct{}
 

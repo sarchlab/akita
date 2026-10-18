@@ -1,8 +1,8 @@
 package tlb
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // tlbMilestoneRecorder captures the task starts, ends, milestones, and tags the
@@ -37,8 +38,8 @@ func (r *tlbMilestoneRecorder) MilestoneAdded(m tasks.Milestone) {
 	r.milestones = append(r.milestones, m)
 }
 
-func (r *tlbMilestoneRecorder) TagAdded(t tasks.Tag) {
-	r.tags = append(r.tags, t)
+func (r *tlbMilestoneRecorder) TagAdded(subject tasks.Tag) {
+	r.tags = append(r.tags, subject)
 }
 
 // taskID returns the ID of the first recorded task start of the given kind.
@@ -98,9 +99,9 @@ func (r *tlbMilestoneRecorder) hasMilestone(
 
 func (r *tlbMilestoneRecorder) tagsOn(taskID uint64) []string {
 	var ws []string
-	for _, t := range r.tags {
-		if t.TaskID == taskID {
-			ws = append(ws, t.What)
+	for _, subject := range r.tags {
+		if subject.TaskID == taskID {
+			ws = append(ws, subject.What)
 		}
 	}
 
@@ -116,7 +117,8 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-var _ = Describe("TLB milestones", func() {
+//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTLBMilestones(t *testing.T) {
 	const remotePort = messaging.RemotePort("RemotePort")
 
 	var (
@@ -127,7 +129,9 @@ var _ = Describe("TLB milestones", func() {
 		rec     *tlbMilestoneRecorder
 	)
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = &milestoneClock{Engine: timing.NewSerialEngine()}
 		sim = testsim.New(engine, true)
 
@@ -155,8 +159,7 @@ var _ = Describe("TLB milestones", func() {
 		tlbComp.TaskTracker().Subscribe(rec, tlbComp)
 		// The admission milestone lands on the Top-port buffer task, so the test
 		// needs the buffer task to exist.
-
-	})
+	}
 
 	makeReq := func(vAddr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
@@ -180,8 +183,10 @@ var _ = Describe("TLB milestones", func() {
 		}
 	}
 
-	It("attributes the at-head wait to the buffer task and opens a pipeline "+
-		"subtask under req_in for a hit", func() {
+	t.Run("attributes the at-head wait to the buffer task and opens a pipeline "+
+		"subtask under req_in for a hit", func(t *testing.T) {
+		setup1(t)
+
 		// Pre-load the page so the lookup hits.
 		next := &tlbComp.State
 		page := vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true}
@@ -198,19 +203,19 @@ var _ = Describe("TLB milestones", func() {
 		reqInID := rec.taskID("req_in")
 		pipeStart, hasPipe := rec.taskStart(tasks.KindPipeline)
 
-		Expect(bufID).ToNot(BeZero())
-		Expect(reqInID).ToNot(BeZero())
-		Expect(bufID).ToNot(Equal(reqInID))
-		Expect(hasPipe).To(BeTrue())
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.NotEqual(t, reqInID, bufID)
+		require.True(t, hasPipe)
 
 		// (a) The buffer task carries the hardware_resource admission milestone
 		// for the at-head wait on a free pipeline slot.
-		Expect(rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
-			tlbComp.Name()+".pipeline")).To(BeTrue())
+		require.True(t, rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
+			tlbComp.Name()+".pipeline"))
 
 		// (b) The pipeline subtask is parented to req_in.
-		Expect(pipeStart.ParentID).To(Equal(reqInID))
-		Expect(pipeStart.What).To(Equal(tlbComp.Name() + ".pipeline"))
+		require.Equal(t, reqInID, pipeStart.ParentID)
+		require.Equal(t, tlbComp.Name()+".pipeline", pipeStart.What)
 		// It is closed once the request leaves the pipeline at lookup.
 		var pipeEnded bool
 		for _, e := range rec.ends {
@@ -218,27 +223,28 @@ var _ = Describe("TLB milestones", func() {
 				pipeEnded = true
 			}
 		}
-		Expect(pipeEnded).To(BeTrue())
+		require.True(t, pipeEnded)
 
 		// The pipeline traversal is recorded as work on req_in — not a blocking
 		// reason and not the data/MSHR milestone.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
-			tlbComp.Name()+".pipeline")).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
+			tlbComp.Name()+".pipeline"))
 
 		// (c) The post-lookup data milestone and the hit tag attach to req_in.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindData,
-			tlbComp.Name()+".Sets")).To(BeTrue())
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
-			topPort.Name())).To(BeTrue())
-		Expect(rec.tagsOn(reqInID)).To(ContainElement("hit"))
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindData,
+			tlbComp.Name()+".Sets"))
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
+			topPort.Name()))
+		require.Contains(t, rec.tagsOn(reqInID), "hit")
 
 		// The admission milestone is NOT on req_in (it belongs to the buffer task).
-		Expect(rec.kindsOn(reqInID)).ToNot(
-			ContainElement(tasks.MilestoneKindHardwareResource))
+		require.NotContains(t, rec.kindsOn(reqInID), tasks.MilestoneKindHardwareResource)
 	})
 
-	It("attributes the at-head wait to the buffer task and keeps the MSHR and "+
-		"network milestones on req_in for a miss", func() {
+	t.Run("attributes the at-head wait to the buffer task and keeps the MSHR and "+
+		"network milestones on req_in for a miss", func(t *testing.T) {
+		setup1(t)
+
 		// Page present but invalid -> miss path that fetches from the bottom.
 		next := &tlbComp.State
 		page := vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: false}
@@ -255,30 +261,30 @@ var _ = Describe("TLB milestones", func() {
 		reqInID := rec.taskID("req_in")
 		pipeStart, hasPipe := rec.taskStart(tasks.KindPipeline)
 
-		Expect(bufID).ToNot(BeZero())
-		Expect(reqInID).ToNot(BeZero())
-		Expect(hasPipe).To(BeTrue())
+		require.NotZero(t, bufID)
+		require.NotZero(t, reqInID)
+		require.True(t, hasPipe)
 
 		// (a) Admission milestone on the buffer task.
-		Expect(rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
-			tlbComp.Name()+".pipeline")).To(BeTrue())
+		require.True(t, rec.hasMilestone(bufID, tasks.MilestoneKindHardwareResource,
+			tlbComp.Name()+".pipeline"))
 
 		// (b) Pipeline subtask parented to req_in.
-		Expect(pipeStart.ParentID).To(Equal(reqInID))
+		require.Equal(t, reqInID, pipeStart.ParentID)
 
 		// The pipeline traversal is recorded as work on req_in, not the MSHR.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
-			tlbComp.Name()+".pipeline")).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindWork,
+			tlbComp.Name()+".pipeline"))
 
 		// (c) The post-lookup MSHR hardware_resource and the bottom-port
 		// network_busy milestones attach to the already-open req_in; the miss tag
 		// is on req_in.
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindHardwareResource,
-			tlbComp.Name()+".MSHR")).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindHardwareResource,
+			tlbComp.Name()+".MSHR"))
 		bottomPort := tlbComp.Ports.Bottom
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
-			bottomPort.Name())).To(BeTrue())
-		Expect(rec.tagsOn(reqInID)).To(ContainElement("miss"))
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
+			bottomPort.Name()))
+		require.Contains(t, rec.tagsOn(reqInID), "miss")
 
 		// (d) Drive the downstream fetch response back. The translation wait (the
 		// time the req_out was in flight) is recorded as a translation milestone
@@ -300,10 +306,10 @@ var _ = Describe("TLB milestones", func() {
 		engine.(*milestoneClock).now += 1000
 		drive(20)
 
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
-			"translation")).To(BeTrue())
-		Expect(rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
-			topPort.Name())).To(BeTrue())
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindTranslation,
+			"translation"))
+		require.True(t, rec.hasMilestone(reqInID, tasks.MilestoneKindNetworkBusy,
+			topPort.Name()))
 
 		reqMs := rec.milestonesOn(reqInID)
 		transIdx, topIdx := -1, -1
@@ -316,8 +322,8 @@ var _ = Describe("TLB milestones", func() {
 				topIdx = i
 			}
 		}
-		Expect(transIdx).To(BeNumerically(">=", 0))
-		Expect(topIdx).To(BeNumerically(">=", 0))
-		Expect(transIdx).To(BeNumerically("<", topIdx))
+		require.GreaterOrEqual(t, transIdx, 0)
+		require.GreaterOrEqual(t, topIdx, 0)
+		require.Less(t, transIdx, topIdx)
 	})
-})
+}

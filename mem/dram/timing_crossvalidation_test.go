@@ -3,8 +3,9 @@ package dram
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------
@@ -196,13 +197,13 @@ func computeExpectedTimings(spec Spec) expectedTimings {
 // =====================================================================
 // Tier 1: Timing Formula Cross-Validation
 // =====================================================================
-var _ = Describe("Timing Cross-Validation", func() {
-
+//
+//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestTimingCrossValidation(t *testing.T) {
 	// -----------------------------------------------------------------
 	// Tier 1 tests: verify generateTiming() matches independent formulas
 	// -----------------------------------------------------------------
-	Describe("Tier 1: Timing Formula Cross-Validation", func() {
-
+	t.Run("Tier 1: Timing Formula Cross-Validation", func(t *testing.T) {
 		type specCase struct {
 			name string
 			spec Spec
@@ -216,177 +217,219 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 		for _, sc := range specs {
 			sc := sc // capture
-			Describe(sc.name, func() {
+			t.Run(sc.name, func(t *testing.T) {
 				var (
 					timing   dramTiming
 					expected expectedTimings
 				)
 
-				BeforeEach(func() {
+				setup1 := func(t *testing.T) {
+					t.Helper()
+
 					timing, _ = buildTimingForSpec(sc.spec)
 					expected = computeExpectedTimings(sc.spec)
-				})
+				}
 
 				// --- Read → Read ---
-				It("should match readToRead_L (SameBank)", func() {
+				t.Run("should match readToRead_L (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindRead, cmdKindRead)
-					Expect(ok).To(BeTrue(),
-						"Read→Read not found in SameBank")
-					Expect(got).To(Equal(expected.readToReadL),
-						fmt.Sprintf("readToReadL: got %d, want %d",
-							got, expected.readToReadL))
+					require.True(t, ok, "Read→Read not found in SameBank")
+					require.Equal(t, expected.readToReadL, got, fmt.Sprintf("readToReadL: got %d, want %d",
+						got, expected.readToReadL))
 				})
 
-				It("should match readToRead_L (OtherBanksInBankGroup)", func() {
+				t.Run("should match readToRead_L (OtherBanksInBankGroup)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(
 						timing.OtherBanksInBankGroup,
 						cmdKindRead, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToReadL))
+					require.True(t, ok)
+					require.Equal(t, expected.readToReadL, got)
 				})
 
-				It("should match readToRead_S (SameRank)", func() {
+				t.Run("should match readToRead_S (SameRank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameRank,
 						cmdKindRead, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToReadS))
+					require.True(t, ok)
+					require.Equal(t, expected.readToReadS, got)
 				})
 
-				It("should match readToRead_O (OtherRanks)", func() {
+				t.Run("should match readToRead_O (OtherRanks)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.OtherRanks,
 						cmdKindRead, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToReadO))
+					require.True(t, ok)
+					require.Equal(t, expected.readToReadO, got)
 				})
 
 				// --- Read → Write ---
-				It("should match readToWrite (SameBank)", func() {
+				t.Run("should match readToWrite (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindRead, cmdKindWrite)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToWrite))
+					require.True(t, ok)
+					require.Equal(t, expected.readToWrite, got)
 				})
 
-				It("should match readToWrite_O (OtherRanks)", func() {
+				t.Run("should match readToWrite_O (OtherRanks)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.OtherRanks,
 						cmdKindRead, cmdKindWritePrecharge)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToWriteO))
+					require.True(t, ok)
+					require.Equal(t, expected.readToWriteO, got)
 				})
 
 				// --- Write → Read ---
-				It("should match writeToRead_L (SameBank)", func() {
+				t.Run("should match writeToRead_L (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindWrite, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToReadL))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToReadL, got)
 				})
 
-				It("should match writeToRead_S (SameRank)", func() {
+				t.Run("should match writeToRead_S (SameRank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameRank,
 						cmdKindWrite, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToReadS))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToReadS, got)
 				})
 
-				It("should match writeToRead_O (OtherRanks)", func() {
+				t.Run("should match writeToRead_O (OtherRanks)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.OtherRanks,
 						cmdKindWrite, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToReadO))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToReadO, got)
 				})
 
 				// --- Write → Write ---
-				It("should match writeToWrite_L (SameBank)", func() {
+				t.Run("should match writeToWrite_L (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindWrite, cmdKindWrite)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToWriteL))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToWriteL, got)
 				})
 
-				It("should match writeToWrite_S (SameRank)", func() {
+				t.Run("should match writeToWrite_S (SameRank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameRank,
 						cmdKindWrite, cmdKindWrite)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToWriteS))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToWriteS, got)
 				})
 
-				It("should match writeToWrite_O (OtherRanks)", func() {
+				t.Run("should match writeToWrite_O (OtherRanks)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.OtherRanks,
 						cmdKindWrite, cmdKindWrite)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToWriteO))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToWriteO, got)
 				})
 
 				// --- Write → Precharge ---
-				It("should match writeToPrecharge (SameBank)", func() {
+				t.Run("should match writeToPrecharge (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindWrite, cmdKindPrecharge)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.writeToPrecharge))
+					require.True(t, ok)
+					require.Equal(t, expected.writeToPrecharge, got)
 				})
 
 				// --- Read → Precharge ---
-				It("should match readToPrecharge (SameBank)", func() {
+				t.Run("should match readToPrecharge (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindRead, cmdKindPrecharge)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.readToPrecharge))
+					require.True(t, ok)
+					require.Equal(t, expected.readToPrecharge, got)
 				})
 
 				// --- Precharge → Activate ---
-				It("should match prechargeToActivate (SameBank)", func() {
+				t.Run("should match prechargeToActivate (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindPrecharge, cmdKindActivate)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.prechargeToActivate))
+					require.True(t, ok)
+					require.Equal(t, expected.prechargeToActivate, got)
 				})
 
 				// --- Activate → Read / Write ---
-				It("should match activateToRead (SameBank)", func() {
+				t.Run("should match activateToRead (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindActivate, cmdKindRead)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToRead))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToRead, got)
 				})
 
-				It("should match activateToWrite (SameBank)", func() {
+				t.Run("should match activateToWrite (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindActivate, cmdKindWrite)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToWrite))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToWrite, got)
 				})
 
 				// --- Activate → Activate ---
-				It("should match activateToActivate (SameBank)", func() {
+				t.Run("should match activateToActivate (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindActivate, cmdKindActivate)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToActivate))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToActivate, got)
 				})
 
-				It("should match activateToActivate_L (OtherBanksInBankGroup)", func() {
+				t.Run("should match activateToActivate_L (OtherBanksInBankGroup)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(
 						timing.OtherBanksInBankGroup,
 						cmdKindActivate, cmdKindActivate)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToActivateL))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToActivateL, got)
 				})
 
-				It("should match activateToActivate_S (SameRank)", func() {
+				t.Run("should match activateToActivate_S (SameRank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameRank,
 						cmdKindActivate, cmdKindActivate)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToActivateS))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToActivateS, got)
 				})
 
 				// --- Activate → Precharge ---
-				It("should match activateToPrecharge (SameBank)", func() {
+				t.Run("should match activateToPrecharge (SameBank)", func(t *testing.T) {
+					setup1(t)
+
 					got, ok := lookupTiming(timing.SameBank,
 						cmdKindActivate, cmdKindPrecharge)
-					Expect(ok).To(BeTrue())
-					Expect(got).To(Equal(expected.activateToPrecharge))
+					require.True(t, ok)
+					require.Equal(t, expected.activateToPrecharge, got)
 				})
 			})
 		}
@@ -395,7 +438,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 	// =================================================================
 	// Tier 2: Single-Request Latency Tests (DDR4)
 	// =================================================================
-	Describe("Tier 2: Single-Request Latency", func() {
+	t.Run("Tier 2: Single-Request Latency", func(t *testing.T) {
 		var (
 			timing    dramTiming
 			cmdCycles map[commandKind]int
@@ -403,16 +446,20 @@ var _ = Describe("Timing Cross-Validation", func() {
 			spec      Spec
 		)
 
-		BeforeEach(func() {
+		setup2 := func(t *testing.T) {
+			t.Helper()
+
 			spec = DDR4Spec()
 			timing, cmdCycles = buildTimingForSpec(spec)
 			st = newStateForSpec(spec)
-		})
+		}
 
-		It("closed-bank read: total cycles = tRCD + readDelay", func() {
+		t.Run("closed-bank read: total cycles = tRCD + readDelay", func(t *testing.T) {
+			setup2(t)
+
 			// A read to a closed bank requires ACT + wait tRCD + READ.
 			bs := findBankState(&st.BankStates, 0, 0, 0)
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+			require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 
 			// Determine required command: should be Activate.
 			readCmd := &commandState{
@@ -420,7 +467,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(cmdKindActivate))
+			require.Equal(t, cmdKindActivate, reqKind)
 
 			// Issue Activate.
 			actCmd := &commandState{
@@ -431,20 +478,19 @@ var _ = Describe("Timing Cross-Validation", func() {
 			updateTiming(timing, st, actCmd)
 
 			// Activate→Read gap = tRCD - tAL = 16
-			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(
-				Equal(spec.TRCD - spec.TAL))
+			require.Equal(t, spec.TRCD-spec.TAL, bs.CyclesToCmdAvailable[cmdKindRead])
 
 			// Tick until the Activate→Read gap drains.
 			tRCDcycles := spec.TRCD - spec.TAL
 			for range tRCDcycles {
 				tickBanks(st)
 			}
-			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(0))
+			require.Equal(t, 0, bs.CyclesToCmdAvailable[cmdKindRead])
 
 			// Now issue Read.
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindRead, commandKind(ready.Kind))
 
 			startCommand(cmdCycles, st, bs, ready)
 			updateTiming(timing, st, ready)
@@ -453,16 +499,18 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// TickCount still at 0 here, the scheduled completion tick equals
 			// readDelay.
 			exp := computeExpectedTimings(spec)
-			Expect(st.PendingCompletions).NotTo(BeEmpty())
+			require.NotEmpty(t, st.PendingCompletions)
 			last := st.PendingCompletions[len(st.PendingCompletions)-1]
-			Expect(last.CompletionTick).To(Equal(uint64(exp.readDelay)))
+			require.Equal(t, uint64(exp.readDelay), last.CompletionTick)
 
 			// Total cycles = tRCD + readDelay
 			totalCycles := tRCDcycles + exp.readDelay
-			Expect(totalCycles).To(Equal(spec.TRCD - spec.TAL + exp.tRL + exp.burstCycle))
+			require.Equal(t, spec.TRCD-spec.TAL+exp.tRL+exp.burstCycle, totalCycles)
 		})
 
-		It("row-buffer-hit read: no ACT needed", func() {
+		t.Run("row-buffer-hit read: no ACT needed", func(t *testing.T) {
+			setup2(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank to row 42.
@@ -482,14 +530,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(cmdKindRead))
+			require.Equal(t, cmdKindRead, reqKind)
 
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindRead, commandKind(ready.Kind))
 		})
 
-		It("row-conflict read: PRE + tRP + ACT + tRCD + READ", func() {
+		t.Run("row-conflict read: PRE + tRP + ACT + tRCD + READ", func(t *testing.T) {
+			setup2(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank to row 100.
@@ -509,7 +559,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 200},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(cmdKindPrecharge))
+			require.Equal(t, cmdKindPrecharge, reqKind)
 
 			// Wait for activateToPrecharge timing (tRAS).
 			// After tRCD ticks the ACT→PRE constraint has partially drained.
@@ -527,7 +577,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			}
 			startCommand(cmdCycles, st, bs, preCmd)
 			updateTiming(timing, st, preCmd)
-			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
+			require.Equal(t, bankStateClosed, bankStateKind(bs.State))
 
 			// Wait tRP for Precharge to complete.
 			for range spec.TRP {
@@ -536,14 +586,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Now Activate should be ready.
 			reqKind2 := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind2).To(Equal(cmdKindActivate))
+			require.Equal(t, cmdKindActivate, reqKind2)
 
 			actCmd2 := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(actCmd2).NotTo(BeNil())
-			Expect(commandKind(actCmd2.Kind)).To(Equal(cmdKindActivate))
+			require.NotNil(t, actCmd2)
+			require.Equal(t, cmdKindActivate, commandKind(actCmd2.Kind))
 		})
 
-		It("write-then-read same bank: writeToReadL gap enforced", func() {
+		t.Run("write-then-read same bank: writeToReadL gap enforced", func(t *testing.T) {
+			setup2(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank.
@@ -568,9 +620,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// Check Write→Read constraint on same bank.
 			readKey := cmdKindRead
 			exp := computeExpectedTimings(spec)
-			Expect(bs.CyclesToCmdAvailable[readKey]).To(
-				Equal(exp.writeToReadL),
-				"writeToReadL constraint not set correctly")
+			require.Equal(t, exp.writeToReadL, bs.CyclesToCmdAvailable[readKey], "writeToReadL constraint not set correctly")
 
 			// Read should NOT be ready immediately.
 			readCmd := &commandState{
@@ -593,17 +643,17 @@ var _ = Describe("Timing Cross-Validation", func() {
 			}
 
 			// Now Read should be ready.
-			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(0))
+			require.Equal(t, 0, bs.CyclesToCmdAvailable[readKey])
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindRead, commandKind(ready.Kind))
 		})
 	})
 
 	// =================================================================
 	// Tier 3: Multi-Request Behavioral Tests (DDR4)
 	// =================================================================
-	Describe("Tier 3: Multi-Request Behavioral", func() {
+	t.Run("Tier 3: Multi-Request Behavioral", func(t *testing.T) {
 		var (
 			timing    dramTiming
 			cmdCycles map[commandKind]int
@@ -611,13 +661,17 @@ var _ = Describe("Timing Cross-Validation", func() {
 			spec      Spec
 		)
 
-		BeforeEach(func() {
+		setup3 := func(t *testing.T) {
+			t.Helper()
+
 			spec = DDR4Spec()
 			timing, cmdCycles = buildTimingForSpec(spec)
 			st = newStateForSpec(spec)
-		})
+		}
 
-		It("sequential reads to same row: only first ACT, subsequent pay CCD", func() {
+		t.Run("sequential reads to same row: only first ACT, subsequent pay CCD", func(t *testing.T) {
+			setup3(t)
+
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open the bank.
@@ -643,7 +697,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Same bank Read→Read = tCCDL (=6 for DDR4)
 			readKey := cmdKindRead
-			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(exp.readToReadL))
+			require.Equal(t, exp.readToReadL, bs.CyclesToCmdAvailable[readKey])
 
 			// Tick until read completes and CCD constraint drains.
 			drainCycles := max(exp.readDelay, exp.readToReadL)
@@ -657,15 +711,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
 			reqKind := getRequiredCommandKind(bs, read2)
-			Expect(reqKind).To(Equal(cmdKindRead),
-				"second read should not need ACT (row buffer hit)")
+			require.Equal(t, cmdKindRead, reqKind, "second read should not need ACT (row buffer hit)")
 
 			ready := getReadyCommand(&spec, st, bs, read2)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindRead, commandKind(ready.Kind))
 		})
 
-		It("parallel bank reads: bounded by tRRD", func() {
+		t.Run("parallel bank reads: bounded by tRRD", func(t *testing.T) {
+			setup3(t)
+
 			// Open two banks in different bank groups and verify
 			// the Activate→Activate constraint between them.
 			bs0 := findBankState(&st.BankStates, 0, 0, 0)
@@ -683,9 +738,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 			actKey := cmdKindActivate
 			constraint := bs1.CyclesToCmdAvailable[actKey]
 			exp := computeExpectedTimings(spec)
-			Expect(constraint).To(Equal(exp.activateToActivateS),
-				fmt.Sprintf("different bank group ACT→ACT should be tRRDS=%d",
-					exp.activateToActivateS))
+			require.Equal(t, exp.activateToActivateS, constraint, fmt.Sprintf("different bank group ACT→ACT should be tRRDS=%d",
+				exp.activateToActivateS))
 
 			// Tick until constraint drains.
 			for range constraint {
@@ -698,11 +752,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Location: location{Rank: 0, BankGroup: 1, Bank: 0, Row: 2},
 			}
 			ready := getReadyCommand(&spec, st, bs1, act1Cmd)
-			Expect(ready).NotTo(BeNil())
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
+			require.NotNil(t, ready)
+			require.Equal(t, cmdKindActivate, commandKind(ready.Kind))
 		})
 
-		It("same bank-group reads: bounded by tRRDL", func() {
+		t.Run("same bank-group reads: bounded by tRRDL", func(t *testing.T) {
+			setup3(t)
+
 			// Activate on bank (0,0,0), check constraint on bank (0,0,1).
 			bs0 := findBankState(&st.BankStates, 0, 0, 0)
 			bs1 := findBankState(&st.BankStates, 0, 0, 1)
@@ -717,12 +773,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 			actKey := cmdKindActivate
 			constraint := bs1.CyclesToCmdAvailable[actKey]
 			exp := computeExpectedTimings(spec)
-			Expect(constraint).To(Equal(exp.activateToActivateL),
-				fmt.Sprintf("same bank group ACT→ACT should be tRRDL=%d",
-					exp.activateToActivateL))
+			require.Equal(t, exp.activateToActivateL, constraint, fmt.Sprintf("same bank group ACT→ACT should be tRRDL=%d",
+				exp.activateToActivateL))
 		})
 
-		It("5+ activates: tFAW enforcement", func() {
+		t.Run("5+ activates: tFAW enforcement", func(t *testing.T) {
+			setup3(t)
+
 			// Issue 4 activates on different banks within a short window.
 			spec.TFAW = 28
 
@@ -761,31 +818,28 @@ var _ = Describe("Timing Cross-Validation", func() {
 				},
 			}
 			ready := getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).To(BeNil(),
-				"5th activate within tFAW window should be blocked")
+			require.Nil(t, ready, "5th activate within tFAW window should be blocked")
 
 			// After tFAW passes, should be allowed.
 			st.TickCount = 28
 			ready = getReadyCommand(&spec, st, bs, readCmd)
-			Expect(ready).NotTo(BeNil(),
-				"activate should be allowed after tFAW passes")
-			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
+			require.NotNil(t, ready, "activate should be allowed after tFAW passes")
+			require.Equal(t, cmdKindActivate, commandKind(ready.Kind))
 		})
 	})
 
 	// =================================================================
 	// Tier 4: Bandwidth Sanity Checks (analytical)
 	// =================================================================
-	Describe("Tier 4: Bandwidth Sanity", func() {
-
-		It("DDR4-2400 streaming reads: 40-90% of 19.2 GB/s peak", func() {
+	t.Run("Tier 4: Bandwidth Sanity", func(t *testing.T) {
+		t.Run("DDR4-2400 streaming reads: 40-90% of 19.2 GB/s peak", func(t *testing.T) {
 			spec := DDR4Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:
 			// DDR4-2400: 1200 MHz * 64 bits * 2 (DDR) / 8 = 19.2 GB/s
 			peakBWGBs := float64(1200e6) * float64(64) * 2.0 / 8.0 / 1e9
-			Expect(peakBWGBs).To(BeNumerically("~", 19.2, 0.01))
+			require.InDelta(t, 19.2, peakBWGBs, 0.01)
 
 			// Estimated achievable bandwidth from timing:
 			// For streaming reads to the same row (row-buffer hits),
@@ -797,20 +851,18 @@ var _ = Describe("Timing Cross-Validation", func() {
 			achievableBW := bytesPerRead / cyclesPerRead * freq / 1e9
 
 			ratio := achievableBW / peakBWGBs
-			Expect(ratio).To(BeNumerically(">=", 0.40),
-				fmt.Sprintf("DDR4 achievable BW ratio %.2f < 0.40", ratio))
-			Expect(ratio).To(BeNumerically("<=", 0.90),
-				fmt.Sprintf("DDR4 achievable BW ratio %.2f > 0.90", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("DDR4 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 0.90, fmt.Sprintf("DDR4 achievable BW ratio %.2f > 0.90", ratio))
 		})
 
-		It("HBM2-2Gbps streaming reads: 40-90% of 32 GB/s peak", func() {
+		t.Run("HBM2-2Gbps streaming reads: 40-90% of 32 GB/s peak", func(t *testing.T) {
 			spec := HBM2Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:
 			// HBM2: 1000 MHz * 128 bits * 2 (DDR) / 8 = 32 GB/s
 			peakBWGBs := float64(1000e6) * float64(128) * 2.0 / 8.0 / 1e9
-			Expect(peakBWGBs).To(BeNumerically("~", 32.0, 0.01))
+			require.InDelta(t, 32.0, peakBWGBs, 0.01)
 
 			bytesPerRead := float64(spec.BurstLength) * float64(spec.BusWidth) / 8.0
 			cyclesPerRead := float64(exp.readToReadL)
@@ -818,20 +870,18 @@ var _ = Describe("Timing Cross-Validation", func() {
 			achievableBW := bytesPerRead / cyclesPerRead * freq / 1e9
 
 			ratio := achievableBW / peakBWGBs
-			Expect(ratio).To(BeNumerically(">=", 0.40),
-				fmt.Sprintf("HBM2 achievable BW ratio %.2f < 0.40", ratio))
-			Expect(ratio).To(BeNumerically("<=", 0.90),
-				fmt.Sprintf("HBM2 achievable BW ratio %.2f > 0.90", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("HBM2 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 0.90, fmt.Sprintf("HBM2 achievable BW ratio %.2f > 0.90", ratio))
 		})
 
-		It("DDR5-4800 streaming reads: 40-100% of 19.2 GB/s peak", func() {
+		t.Run("DDR5-4800 streaming reads: 40-100% of 19.2 GB/s peak", func(t *testing.T) {
 			spec := DDR5Spec()
 			exp := computeExpectedTimings(spec)
 
 			// Theoretical peak bandwidth:
 			// DDR5-4800: 2400 MHz * 32 bits * 2 (DDR) / 8 = 19.2 GB/s
 			peakBWGBs := float64(2400e6) * float64(32) * 2.0 / 8.0 / 1e9
-			Expect(peakBWGBs).To(BeNumerically("~", 19.2, 0.01))
+			require.InDelta(t, 19.2, peakBWGBs, 0.01)
 
 			bytesPerRead := float64(spec.BurstLength) * float64(spec.BusWidth) / 8.0
 			cyclesPerRead := float64(exp.readToReadL)
@@ -841,10 +891,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// DDR5 has tCCDL == burstCycle == 8, so row-buffer-hit reads can
 			// theoretically achieve 100% of peak. Use 40-100% range.
 			ratio := achievableBW / peakBWGBs
-			Expect(ratio).To(BeNumerically(">=", 0.40),
-				fmt.Sprintf("DDR5 achievable BW ratio %.2f < 0.40", ratio))
-			Expect(ratio).To(BeNumerically("<=", 1.00),
-				fmt.Sprintf("DDR5 achievable BW ratio %.2f > 1.00", ratio))
+			require.GreaterOrEqual(t, ratio, 0.40, fmt.Sprintf("DDR5 achievable BW ratio %.2f < 0.40", ratio))
+			require.LessOrEqual(t, ratio, 1.00, fmt.Sprintf("DDR5 achievable BW ratio %.2f > 1.00", ratio))
 		})
 	})
-})
+}

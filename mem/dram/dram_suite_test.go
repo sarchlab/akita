@@ -3,19 +3,12 @@ package dram
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
-
-func TestDram(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Dram Suite")
-}
 
 func TestValidateState(t *testing.T) {
 	if err := modeling.ValidateState(state{}); err != nil {

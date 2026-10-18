@@ -1,8 +1,8 @@
 package datamover
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // This file holds Layer-2 control-behavior tests: it drives the data mover
@@ -19,7 +20,9 @@ import (
 // once the in-flight move finishes, Pause freezes intake, Reset wipes the
 // move from any state). The protocol surface is covered separately in
 // control_contract_test.go.
-var _ = Describe("DataMover control behavior", func() {
+//
+//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
+func TestDataMoverControlBehavior(t *testing.T) {
 	var (
 		engine       timing.Engine
 		sim          timing.Simulation
@@ -63,7 +66,6 @@ var _ = Describe("DataMover control behavior", func() {
 		if err := sim.Initialize(); err != nil {
 			panic(err)
 		}
-
 	}
 
 	// makeMove builds a 64-byte outside->inside transfer, the minimal move
@@ -134,16 +136,20 @@ var _ = Describe("DataMover control behavior", func() {
 		return read, gotRead
 	}
 
-	BeforeEach(func() {
+	setup1 := func(t *testing.T) {
+		t.Helper()
+
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		build()
-	})
+	}
 
-	It("acks Drain only after the in-flight move completes", func() {
+	t.Run("acks Drain only after the in-flight move completes", func(t *testing.T) {
+		setup1(t)
+
 		read, gotRead := startMove()
-		Expect(gotRead).To(BeTrue())
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+		require.True(t, gotRead)
+		require.True(t, dataMover.State.CurrentTransaction.Active)
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
@@ -152,11 +158,10 @@ var _ = Describe("DataMover control behavior", func() {
 		// stay pending and emit no ack.
 		for range 5 {
 			modelingtest.Tick(dataMover)
-			Expect(dataMover.State.ControlState).
-				To(Equal(memcontrolprotocol.StateDraining))
-			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+			require.Equal(t, memcontrolprotocol.StateDraining, dataMover.State.ControlState)
+			require.True(t, dataMover.State.CurrentTransaction.Active)
 			_, present0 := ctrlPort.RetrieveOutgoing()
-			Expect(present0).To(BeFalse())
+			require.False(t, present0)
 		}
 
 		// Let the move finish: answer the read, then the write it triggers.
@@ -172,7 +177,6 @@ var _ = Describe("DataMover control behavior", func() {
 			if !gotWrite {
 				if out, ok := insidePort.RetrieveOutgoing(); ok {
 					if _, ok := out.Payload.(memprotocol.WriteReq); ok {
-
 						write = out
 
 						gotWrite = true
@@ -192,23 +196,24 @@ var _ = Describe("DataMover control behavior", func() {
 
 					gotDrainRsp = true
 				}
-
 			}
 		}
 
-		Expect(gotWrite).To(BeTrue())
-		Expect(gotDrainRsp).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		require.True(t, gotWrite)
+		require.True(t, gotDrainRsp)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
 		// The move completed (response emitted) before the async Drain ack.
-		Expect(moveDone).To(BeTrue())
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
-		Expect(dataMover.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
+		require.True(t, moveDone)
+		require.False(t, dataMover.State.CurrentTransaction.Active)
+		require.Equal(t, memcontrolprotocol.StatePaused, dataMover.State.ControlState)
 	})
 
-	It("acks Drain only after outstanding destination writes are acked", func() {
+	t.Run("acks Drain only after outstanding destination writes are acked", func(t *testing.T) {
+		setup1(t)
+
 		read, gotRead := startMove()
-		Expect(gotRead).To(BeTrue())
+		require.True(t, gotRead)
 
 		// Answer the read so the data mover issues the destination write.
 		answerRead(outsidePort, read)
@@ -221,9 +226,9 @@ var _ = Describe("DataMover control behavior", func() {
 				write = out
 			}
 		}
-		Expect(gotWrite).To(BeTrue())
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
-		Expect(dataMover.State.CurrentTransaction.PendingWrite).ToNot(BeEmpty())
+		require.True(t, gotWrite)
+		require.True(t, dataMover.State.CurrentTransaction.Active)
+		require.NotEmpty(t, dataMover.State.CurrentTransaction.PendingWrite)
 
 		// Drain while the write's ack is still outstanding: the move is not
 		// complete, so Drain must stay pending and emit no move response.
@@ -232,10 +237,10 @@ var _ = Describe("DataMover control behavior", func() {
 		for range 8 {
 			modelingtest.Tick(dataMover)
 			_, present1 := topPort.RetrieveOutgoing()
-			Expect(present1).To(BeFalse())
+			require.False(t, present1)
 			_, present2 := ctrlPort.RetrieveOutgoing()
-			Expect(present2).To(BeFalse())
-			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+			require.False(t, present2)
+			require.True(t, dataMover.State.CurrentTransaction.Active)
 		}
 
 		// Ack the write; only now may the move finish and the Drain ack.
@@ -257,22 +262,23 @@ var _ = Describe("DataMover control behavior", func() {
 
 					gotDrainRsp = true
 				}
-
 			}
 		}
 
-		Expect(moveDone).To(BeTrue())
-		Expect(gotDrainRsp).To(BeTrue())
-		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-		Expect(drainRsp.RspTo).To(Equal(drain.ID))
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
-		Expect(dataMover.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
+		require.True(t, moveDone)
+		require.True(t, gotDrainRsp)
+		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
+		require.Equal(t, drain.ID, drainRsp.RspTo)
+		require.False(t, dataMover.State.CurrentTransaction.Active)
+		require.Equal(t, memcontrolprotocol.StatePaused, dataMover.State.ControlState)
 	})
 
-	It("drops a stale memory ack that arrives after Reset", func() {
+	t.Run("drops a stale memory ack that arrives after Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Move 1 issues an Outside read (readA), then is reset mid-flight.
 		readA, ok := startMove()
-		Expect(ok).To(BeTrue())
+		require.True(t, ok)
 
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
@@ -284,15 +290,14 @@ var _ = Describe("DataMover control behavior", func() {
 					Command == memcontrolprotocol.CmdReset {
 					acked = true
 				}
-
 			}
 		}
-		Expect(acked).To(BeTrue())
+		require.True(t, acked)
 
 		// Move 2 issues its own Outside read (readB) with a different ID.
 		readB, ok := startMove()
-		Expect(ok).To(BeTrue())
-		Expect(readB.ID).ToNot(Equal(readA.ID))
+		require.True(t, ok)
+		require.NotEqual(t, readA.ID, readB.ID)
 
 		// The stale response for readA arrives. It must be dropped (no panic),
 		// leaving move 2 in flight.
@@ -300,7 +305,7 @@ var _ = Describe("DataMover control behavior", func() {
 		for range 8 {
 			modelingtest.Tick(dataMover)
 		}
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+		require.True(t, dataMover.State.CurrentTransaction.Active)
 
 		// Move 2 completes once its own read and write are answered.
 		answerRead(outsidePort, readB)
@@ -311,7 +316,6 @@ var _ = Describe("DataMover control behavior", func() {
 			if !gotWrite {
 				if out, ok := insidePort.RetrieveOutgoing(); ok {
 					if _, ok := out.Payload.(memprotocol.WriteReq); ok {
-
 						gotWrite = true
 						answerWrite(insidePort, out)
 					}
@@ -323,10 +327,12 @@ var _ = Describe("DataMover control behavior", func() {
 				}
 			}
 		}
-		Expect(moveDone).To(BeTrue())
+		require.True(t, moveDone)
 	})
 
-	It("freezes incoming move requests while paused", func() {
+	t.Run("freezes incoming move requests while paused", func(t *testing.T) {
+		setup1(t)
+
 		dataMover.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeMove())
 
@@ -335,17 +341,21 @@ var _ = Describe("DataMover control behavior", func() {
 		}
 
 		_, present3 := topPort.PeekIncoming()
-		Expect(present3).To(BeTrue())
-		Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
+		require.True(t, present3)
+		require.False(t, dataMover.State.CurrentTransaction.Active)
 		_, present4 := outsidePort.RetrieveOutgoing()
-		Expect(present4).To(BeFalse())
+		require.False(t, present4)
 	})
 
-	DescribeTable("Reset wipes the in-flight move from any control state",
-		func(startState memcontrolprotocol.State) {
+	t.Run("Reset wipes the in-flight move from any control state", func(t *testing.T) {
+		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+			t.Helper()
+
+			setup1(t)
+
 			_, gotRead := startMove()
-			Expect(gotRead).To(BeTrue())
-			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+			require.True(t, gotRead)
+			require.True(t, dataMover.State.CurrentTransaction.Active)
 
 			dataMover.State.ControlState = startState
 
@@ -362,24 +372,22 @@ var _ = Describe("DataMover control behavior", func() {
 				}
 			}
 
-			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
-			Expect(rsp.RspTo).To(Equal(reset.ID))
-			Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
-			Expect(dataMover.State.CurrentTransaction.PendingRead).To(BeEmpty())
-			Expect(dataMover.State.CurrentTransaction.PendingWrite).
-				To(BeEmpty())
-			Expect(dataMover.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
-		},
-		Entry("from Enabled", memcontrolprotocol.StateEnabled),
-		Entry("from Paused", memcontrolprotocol.StatePaused),
-		// The Draining case is covered separately below: under strict
-		// serialization a Reset queued behind an in-progress Drain is not
-		// serviced until the Drain acks, so it needs its own scenario.
-	)
+			require.True(t, gotRsp)
+			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
+			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+			require.Equal(t, reset.ID, rsp.RspTo)
+			require.False(t, dataMover.State.CurrentTransaction.Active)
+			require.Empty(t, dataMover.State.CurrentTransaction.PendingRead)
+			require.Empty(t, dataMover.State.CurrentTransaction.PendingWrite)
+			require.Equal(t, memcontrolprotocol.StateEnabled, dataMover.State.ControlState)
+		}
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+	})
 
-	It("completes a pending Drain before servicing a queued Reset", func() {
+	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
+		setup1(t)
+
 		// Draining and already quiescent (no active transfer):
 		// completePendingDrain acks the Drain. Control commands are serialized
 		// with no preemption, so a Reset queued behind the drain is serviced
@@ -400,17 +408,16 @@ var _ = Describe("DataMover control behavior", func() {
 					break
 				}
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
-
 					rsps = append(rsps, out)
 				}
 			}
 		}
 
-		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
-		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
-		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(dataMover.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
+		require.Len(t, rsps, 2)
+		require.Equal(t, memcontrolprotocol.CmdDrain, rsps[0].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, uint64(999), rsps[0].RspTo)
+		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
+		require.Equal(t, reset.ID, rsps[1].RspTo)
+		require.Equal(t, memcontrolprotocol.StateEnabled, dataMover.State.ControlState)
 	})
-})
+}
