@@ -129,6 +129,10 @@ func testWorkspace(t *testing.T, now time.Time) string {
 		`{"schema":"herd-run/1","name":"c1","fields":{"w":"a"},"properties":[],"status":"ok","metrics":{"t":1}}`)
 	writeFile(t, filepath.Join(camp2, "c2", "run.json"),
 		`{"schema":"herd-run/1","name":"c2","fields":{"w":"b"},"properties":[],"status":"failed"}`)
+	// A cell with metrics and no status is done (as the campaign adapter
+	// says); one with neither is still running.
+	writeFile(t, filepath.Join(camp2, "c3", "run.json"), `{"name":"c3","fields":{"w":"c"},"metrics":{"t":2}}`)
+	writeFile(t, filepath.Join(camp2, "c4", "run.json"), `{"name":"c4","fields":{"w":"d"}}`)
 	writeFile(t, filepath.Join(ws, ".herd_archive.json"), `{"results": {"camp2": {"archived_at": "x"}}}`)
 
 	old := filepath.Join(res, "old")
@@ -313,7 +317,7 @@ func TestProbeRuns(t *testing.T) {
 	assert.Equal(t, "sensitivity", camp2.Kind)
 	assert.True(t, camp2.Archived)
 	assert.Equal(t, uint64(3), *camp2.Progress.Total)
-	assert.Equal(t, uint64(2), camp2.Progress.Finished)
+	assert.Equal(t, uint64(3), camp2.Progress.Finished)
 	assert.Equal(t, []string{"c2"}, camp2.Failures)
 }
 

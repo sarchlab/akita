@@ -324,7 +324,7 @@ func subdirCounts(dir string) campaignCounts {
 			continue
 		}
 
-		switch rec.Status {
+		switch cellStatus(rec) { // as the "runs" campaign adapter reads it
 		case "ok":
 			c.ok++
 		case "failed", "bad":

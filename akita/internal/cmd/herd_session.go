@@ -206,7 +206,7 @@ func runHerdLog(cmd *cobra.Command, args []string) error {
 	script := "if [ -f " + active + " ]; then lf=" + active + "; " +
 		"elif [ -f " + archived + " ]; then lf=" + archived + "; " +
 		"else echo " + workspace.ShellQuote("no log for session "+args[1]) + " >&2; exit 1; fi\n" +
-		tail + " \"$lf\"\n"
+		"exec " + tail + " \"$lf\"\n" // exec: stopping akita stops tail too
 
 	ctx, cancel := commandContext(cmd)
 	defer cancel()

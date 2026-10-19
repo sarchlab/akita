@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -304,6 +305,41 @@ func TestHerdCLINamesAndRecord(t *testing.T) {
 	if err != nil || rec.Property("Command") != "./sim -x" || rec.Property("Note") != "a=b" ||
 		rec.Fields["item"] != "y" {
 		t.Errorf("record: %+v %v", rec, err)
+	}
+}
+
+// Stopping `log -f` (SIGTERM) also stops its tail, which would otherwise
+// keep writing to the terminal.
+func TestHerdCLILogFollowStops(t *testing.T) {
+	c := newCLI(t, "akxfollow")
+	c.must("herd", "init")
+	c.write("logs/f.log", "[start] Fri Oct 16 01:56:33 AM UTC 2026  h  \nline\n")
+
+	var out strings.Builder
+
+	cmd := exec.Command(os.Args[0], "herd", "log", "-f", "local", "f")
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = c.project, c.env, &out, &out
+
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		if err != nil || !strings.Contains(out.String(), "line") {
+			t.Errorf("log -f: %v %s", err, out.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the output of log -f stayed open after it was stopped (tail still running)")
 	}
 }
 
