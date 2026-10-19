@@ -32,7 +32,6 @@ func newDriverPort(name string, bufSize int) messaging.Port {
 	return p
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestCache(t *testing.T) {
 	var (
 		engine              timing.Engine
@@ -116,7 +115,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read)
 
@@ -140,7 +139,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read1)
 
@@ -152,7 +151,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read2)
 
@@ -187,7 +186,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read1)
 		require.NoError(t, engine.Run())
@@ -205,7 +204,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read2)
 		require.NoError(t, engine.Run())
@@ -229,7 +228,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 4 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(write)
 
@@ -263,7 +262,7 @@ func TestCache(t *testing.T) {
 			Dst: c.Ports.Top.AsRemote(),
 
 			TrafficBytes: 64 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(write)
 		require.NoError(t, engine.Run())

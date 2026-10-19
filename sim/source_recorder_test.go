@@ -4,28 +4,21 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"io/fs"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
+	"github.com/sarchlab/akita/v5/internal/sourcefs"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
-	"github.com/sarchlab/akita/v5/sim/sourcefs"
 )
 
-// openMemRecorder returns a data recorder over a single-connection in-memory
-// SQLite DB. MaxOpenConns(1) is required: a ":memory:" database is per
-// connection, so the table the recorder creates must be read back on the same
-// connection.
-func openMemRecorder(t *testing.T) (*sql.DB, datarecording.DataRecorder) {
+// openSourceRecorder creates a real recording and a separate read-only handle.
+func openSourceRecorder(t *testing.T) (*sql.DB, datarecording.DataRecorder) {
 	t.Helper()
-
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	db.SetMaxOpenConns(1)
-	t.Cleanup(func() { db.Close() })
-
-	return db, datarecording.NewDataRecorderWithDB(db)
+	path := filepath.Join(t.TempDir(), "source.sqlite3")
+	recorder := datarecording.NewDataRecorder(path)
+	t.Cleanup(func() { _ = recorder.Close() })
+	return openRecordingDB(t, path), recorder
 }
 
 func readSourceRows(t *testing.T, db *sql.DB) (content, format map[string]string) {
@@ -66,7 +59,7 @@ func decodeArchive(t *testing.T, b64 string) map[string][]byte {
 }
 
 func TestRecordSourceArchives_RecordsAkitaFromDisk(t *testing.T) {
-	db, recorder := openMemRecorder(t)
+	db, recorder := openSourceRecorder(t)
 
 	if err := recordSourceArchives(recorder, nil); err != nil {
 		t.Fatalf("recordSourceArchives: %v", err)
@@ -92,7 +85,7 @@ func TestRecordSourceArchives_RecordsAkitaFromDisk(t *testing.T) {
 }
 
 func TestRecordSourceArchives_RecordsAuthorSource(t *testing.T) {
-	db, recorder := openMemRecorder(t)
+	db, recorder := openSourceRecorder(t)
 
 	authorFS := fstest.MapFS{
 		"cu/compute_unit.go": {Data: []byte("package cu\n// ComputeUnit is a CU.\n")},

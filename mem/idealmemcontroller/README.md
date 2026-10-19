@@ -50,7 +50,6 @@ type Spec struct {
     Freq          timing.Freq // Operating frequency
     Width         int         // Max new requests accepted per tick
     Latency       int         // Fixed response latency in cycles
-    CacheLineSize int         // Access granularity in bytes
 }
 ```
 

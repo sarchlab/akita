@@ -25,7 +25,7 @@ provide independently usable building blocks:
 | `sim/tasks` | Task lifecycles, identities, and observer subscriptions |
 | `sim/tasks/tracing` | Built-in task observers for recording and statistics |
 | `sim/datarecording` | Recording simulation results |
-| `sim/sourcefs` | Archiving and reading recorded source |
+| `internal/sourcefs` | Archiving and reading recorded source |
 
 These packages remain in the same Go module. Import, for example,
 `github.com/sarchlab/akita/v5/sim/modeling/ticking`. Runtime subpackages

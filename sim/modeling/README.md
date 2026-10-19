@@ -106,9 +106,9 @@ Each package doc shows how to declare and build a component of its model.
   (`messaging.PortOwner`).
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
   Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
-  what they save the guard through. The ticking and wakeup models each keep
-  their own scheduler next to the event it schedules; `ticking.Scheduler` is
-  exported for connections written by hand, such as `direct.Connection`.
+  what they save the guard through. Tick scheduling is shared internally
+  with direct connections; standalone schedulers are not a public extension point.
+  Component-level scheduling methods such as `TickLater()` remain public.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.

@@ -93,7 +93,7 @@ func TestDRAMAdmissionMilestones(t *testing.T) {
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -145,7 +145,7 @@ func TestDRAMRefreshStallAttribution(t *testing.T) {
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		topPort.Deliver(read)
 

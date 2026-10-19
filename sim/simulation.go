@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/idgen"
+
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -27,7 +29,7 @@ type Simulation struct {
 	id               string
 	outputPath       string
 	engine           timing.Engine
-	idGenerator      *timing.IDGenerator
+	idGenerator      *idgen.IDGenerator
 	dataRecorder     datarecording.DataRecorder
 	visTracer        *tracing.DBTracer
 	taskTracker      *tasks.Tracker

@@ -89,7 +89,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUCacheMilestones(t *testing.T) {
 	var (
 		engine     timing.Engine
@@ -152,8 +151,7 @@ func TestMMUCacheMilestones(t *testing.T) {
 			ID:  comp.NewID(),
 			Src: messaging.RemotePort("UpModule"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
@@ -183,11 +181,11 @@ func TestMMUCacheMilestones(t *testing.T) {
 			Valid: true,
 		}
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
-			ID:           comp.NewID(),
-			Src:          messaging.RemotePort("LowModule"),
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        bottomReqID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    comp.NewID(),
+			Src:   messaging.RemotePort("LowModule"),
+			Dst:   bottomPort.AsRemote(),
+			RspTo: bottomReqID,
+		}
 
 		bottomPort.Deliver(rsp)
 
@@ -323,10 +321,10 @@ func TestMMUCacheMilestones(t *testing.T) {
 
 		// Reset while the walk is in flight.
 		reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-			ID:           comp.NewID(),
-			Src:          messaging.RemotePort("CtrlAgent"),
-			Dst:          comp.Ports.Control.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  comp.NewID(),
+			Src: messaging.RemotePort("CtrlAgent"),
+			Dst: comp.Ports.Control.AsRemote(),
+		}
 
 		comp.Ports.Control.Deliver(reset)
 

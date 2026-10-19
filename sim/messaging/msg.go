@@ -10,7 +10,6 @@ type Msg struct {
 	ID           uint64     `json:"ID"`
 	Src          RemotePort `json:"Src"`
 	Dst          RemotePort `json:"Dst"`
-	TrafficClass string     `json:"TrafficClass"`
 	TrafficBytes int        `json:"TrafficBytes"`
 	RspTo        uint64     `json:"RspTo"`
 	Payload      any        `json:"-"`

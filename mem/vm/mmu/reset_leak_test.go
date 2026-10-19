@@ -18,7 +18,7 @@ import (
 // a Reset and asserts the task is ended — i.e. a mid-flight Reset that drops
 // WalkingTranslations leaves no started-never-ended task. The MMU walk is a
 // leaf page walk (no downstream req_out), so a single req_in is open per walk.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	pageTable := vm.NewPageTable(12)
@@ -66,8 +66,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		ID:  sim.NewID(),
 		Src: messaging.RemotePort("Agent"),
 		Dst: topPort.AsRemote(),
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	topPort.Deliver(req)
 
@@ -87,10 +86,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the walk is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

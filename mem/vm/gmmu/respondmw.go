@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -27,7 +26,7 @@ func (m *respondMW) bottomPort() messaging.Port {
 
 // Handle runs the respond stage. Paused GMMUs make no progress.
 func (m *respondMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 	return m.fetchFromBottom()
@@ -82,11 +81,11 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          reqTransaction.ReqSrc,
-		RspTo:        rsp.ID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   reqTransaction.ReqSrc,
+		RspTo: rsp.ID,
+	}
 
 	m.topPort().Send(rspToTop)
 

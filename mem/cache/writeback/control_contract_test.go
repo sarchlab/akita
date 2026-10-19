@@ -3,8 +3,9 @@ package writeback
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -22,7 +23,7 @@ func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *ccNoopConn) NotifySend(_ messaging.Port)      {}
 
 func TestControlContract(t *testing.T) {
-	build := func() *memcontrolprotocol.Harness {
+	build := func() *memcontroltest.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
 		storage := mem.NewStorage(1 * mem.MB)
@@ -51,7 +52,7 @@ func TestControlContract(t *testing.T) {
 			panic(err)
 		}
 
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp: comp,
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
@@ -64,8 +65,8 @@ func TestControlContract(t *testing.T) {
 	// Phase 3 adds Invalidate and the address/PID filter on Flush, so the
 	// writeback cache now satisfies the full cache-like matrix: the four
 	// universal verbs plus the two conditional verbs (Invalidate, Flush).
-	matrix := memcontrolprotocol.CacheLike()
-	memcontrolprotocol.RunContract(t, "writeback", build, matrix)
+	matrix := memcontroltest.CacheLike()
+	memcontroltest.RunContract(t, "writeback", build, matrix)
 }
 
-var _ memcontrolprotocol.Controllable = (*Comp)(nil)
+var _ memcontroltest.Controllable = (*Comp)(nil)

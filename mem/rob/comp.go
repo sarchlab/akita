@@ -1,7 +1,6 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -61,10 +60,10 @@ type state struct {
 	AdmissionMsgID   uint64 `json:"admission_msg_id"`
 	WaitingForBottom bool   `json:"waiting_for_bottom"`
 
-	Transactions  []transactionState       `json:"transactions"`
-	ControlState  memcontrolprotocol.State `json:"control_state"`
-	CurrentCmdID  uint64                   `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
+	Transactions  []transactionState   `json:"transactions"`
+	ControlState  controlState         `json:"control_state"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
 }
 
 // Ports holds the reorder buffer's ports.

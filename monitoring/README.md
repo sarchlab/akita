@@ -48,3 +48,10 @@ capacities, independent of occupancy.
 
 `ProgressBar` belongs to `monitoring`. Neither the monitor nor its progress bars
 depend on the offline Daisen viewer.
+
+Read progress through `bar.Snapshot()`, which returns a consistent independent
+`ProgressBarSnapshot`. Use `IncrementInProgress`, `IncrementFinished`, and
+`MoveInProgressToFinished` to update counters. The monitor initializes the start
+time when creating a bar; its HTTP JSON fields are unchanged. Completing an
+already-removed bar is safe. Importing monitoring does not register handlers on
+`http.DefaultServeMux`; profiling remains on the monitor's own endpoints.

@@ -40,7 +40,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 		RspTo: trans.ReadMeta.ID,
 
 		TrafficBytes: len(trans.Data) + 4,
-		TrafficClass: "rsp"}
+	}
 
 	if !s.cache.topPort().CanSend() {
 		return false
@@ -63,7 +63,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 		Dst:          trans.WriteMeta.Src,
 		RspTo:        trans.WriteMeta.ID,
 		TrafficBytes: 4,
-		TrafficClass: "rsp"}
+	}
 
 	if !s.cache.topPort().CanSend() {
 		return false

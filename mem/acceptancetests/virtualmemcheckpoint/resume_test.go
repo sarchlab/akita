@@ -65,7 +65,6 @@ func buildSim() (*sim.Simulation, *driver) {
 	return s, d
 }
 
-//nolint:funlen // wires the whole hierarchy in one place
 func buildMemoryHierarchy(s *sim.Simulation) (
 	*writethrough.Comp,
 	*writeback.Comp,
@@ -74,7 +73,6 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	memCtrlSpec := idealmemcontroller.DefaultSpec()
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
-	memCtrlSpec.CacheLineSize = 64
 	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{

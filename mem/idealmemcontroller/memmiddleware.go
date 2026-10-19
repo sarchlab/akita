@@ -3,7 +3,6 @@ package idealmemcontroller
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -30,7 +29,7 @@ func (m *memMiddleware) Handle(_ timing.Event) bool {
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	state := &m.comp.State
-	if state.ControlState != memcontrolprotocol.StateEnabled {
+	if state.ControlState != controlStateEnabled {
 		return false
 	}
 
@@ -93,7 +92,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 
 func (m *memMiddleware) processCountdowns() bool {
 	state := &m.comp.State
-	if state.ControlState == memcontrolprotocol.StatePaused {
+	if state.ControlState == controlStatePaused {
 		return false
 	}
 
@@ -143,7 +142,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		RspTo: tx.ReqID,
 
 		TrafficBytes: len(data) + 4,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+	}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -163,7 +162,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		Dst:          tx.Src,
 		RspTo:        tx.ReqID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	if !m.topPort().CanSend() {
 		return false

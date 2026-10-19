@@ -1,6 +1,10 @@
 package timing
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sarchlab/akita/v5/internal/idgen"
+)
 
 type testEvent struct {
 	EventBase
@@ -17,7 +21,7 @@ func (h *recordingHandler) Handle(e Event) {
 
 func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {
 	engine := NewSerialEngine()
-	var ids IDGenerator
+	var ids idgen.IDGenerator
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
@@ -41,7 +45,7 @@ func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {
 
 func TestSerialEngineRunsSecondaryEventsAfterPrimaryEvents(t *testing.T) {
 	engine := NewSerialEngine()
-	var ids IDGenerator
+	var ids idgen.IDGenerator
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
@@ -67,7 +71,7 @@ func TestSerialEngineRunsSecondaryEventsAfterPrimaryEvents(t *testing.T) {
 }
 
 func TestIDGeneratorSequence(t *testing.T) {
-	var ids IDGenerator
+	var ids idgen.IDGenerator
 	if got := ids.NewID(); got != 1 {
 		t.Fatalf("first ID = %d, want 1", got)
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBottomParser(t *testing.T) {
 	var (
 		bottomPort messaging.Port
@@ -83,13 +82,11 @@ func TestBottomParser(t *testing.T) {
 			writeToBottomMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			// Transaction (index 0)
@@ -109,7 +106,7 @@ func TestBottomParser(t *testing.T) {
 				ID:           c.comp.NewID(),
 				RspTo:        writeToBottomMeta.ID,
 				TrafficBytes: 4,
-				TrafficClass: "rsp"}
+			}
 
 			bottomPort.Deliver(done)
 
@@ -130,12 +127,10 @@ func TestBottomParser(t *testing.T) {
 			writeToBottomMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 
 			// Index 0 is a placeholder fetcher (the read miss that
@@ -161,7 +156,7 @@ func TestBottomParser(t *testing.T) {
 				ID:           c.comp.NewID(),
 				RspTo:        writeToBottomMeta.ID,
 				TrafficBytes: 4,
-				TrafficClass: "rsp"}
+			}
 
 			bottomPort.Deliver(done)
 
@@ -191,7 +186,6 @@ func TestBottomParser(t *testing.T) {
 			readToBottomMeta = messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			drData := []byte{
@@ -210,7 +204,7 @@ func TestBottomParser(t *testing.T) {
 				RspTo: readToBottomMeta.ID,
 
 				TrafficBytes: len(drData) + 4,
-				TrafficClass: "rsp"}
+			}
 
 			blockSetID = 4
 			blockWayID = 0
@@ -222,7 +216,6 @@ func TestBottomParser(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			// Read transaction (index 0) — the fetcher
@@ -306,7 +299,6 @@ func TestBottomParser(t *testing.T) {
 			read2Meta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -322,7 +314,6 @@ func TestBottomParser(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 16 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{

@@ -174,7 +174,6 @@ func (m *driverMW) sendNext() bool {
 			Dst: m.d.Spec.LowModule}
 
 		req.TrafficBytes = len(req.Payload.(memprotocol.WriteReq).Data) + 12
-		req.TrafficClass = "memprotocol.WriteReq"
 		port.Send(req)
 		st.PendingWrite[req.ID] = idx
 		st.WritesSent++
@@ -201,7 +200,7 @@ func (m *driverMW) sendNext() bool {
 			Dst: m.d.Spec.LowModule,
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		port.Send(req)
 		st.PendingRead[req.ID] = idx

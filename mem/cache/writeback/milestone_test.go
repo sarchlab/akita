@@ -71,7 +71,6 @@ func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestWriteBackCacheMilestones(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -155,7 +154,7 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		topPort.Deliver(read)
 
@@ -215,7 +214,7 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		topPort.Deliver(read)
 

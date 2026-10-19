@@ -179,7 +179,7 @@ component-model subpackages and mock-generation directives. The runner also move
 `github.com/sarchlab/akita/v5/simulation` to `github.com/sarchlab/akita/v5/sim`;
 its Go package is now named `sim`, while the type remains `sim.Simulation`.
 
-Source archives currently live in `sim/sourcefs`. Register a simulator's source
+Source archives currently live in `internal/sourcefs`. Register a simulator's source
 with `sim.Builder.WithSourceFS`; moving the archive implementation to `internal/`
 is tracked separately in [#539](https://github.com/sarchlab/akita/issues/539).
 
@@ -377,7 +377,7 @@ case ReadReq:
 }
 ```
 
-`Msg` contains `ID`, `Src`, `Dst`, `TrafficClass`, `TrafficBytes`, `RspTo`, and
+`Msg` contains `ID`, `Src`, `Dst`, `TrafficBytes`, `RspTo`, and
 `Payload`. `msg.IsRsp()` means `msg.RspTo != 0`. The earlier `MsgMeta` type and
 `Meta()` method are removed. Tracing task IDs live in component transaction State and port buffer entries; see the tracing migration in [V5 release notes](https://github.com/sarchlab/akita/blob/main/doc/release-notes-v5.md#simulation-scoped-task-tracking).
 
@@ -806,9 +806,17 @@ type Spec struct {
     Bottom messaging.RemotePort `json:"bottom"`
 }
 
+type controlState int
+
+const (
+    controlStateEnabled controlState = iota
+    controlStatePaused
+    controlStateDraining
+)
+
 type State struct {
     Transactions  []transactionState       `json:"transactions"`
-    ControlState  memcontrolprotocol.State `json:"control_state"`
+    ControlState  controlState `json:"control_state"`
     CurrentCmdID  uint64                   `json:"current_cmd_id"`
     CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
 }
@@ -853,7 +861,7 @@ func (m *middleware) Handle(_ timing.Event) bool {
     madeProgress = m.processControlMsg() || madeProgress
 
     switch m.comp.State.ControlState {
-    case memcontrolprotocol.StateEnabled, memcontrolprotocol.StateDraining:
+    case controlStateEnabled, controlStateDraining:
         madeProgress = m.runPipeline() || madeProgress
     }
 
@@ -969,7 +977,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Example: Ideal Memory Controller (V5)
 
 - Spec
-  - `Freq`, `Width`, `Latency`, `CacheLineSize`; defaults in `DefaultSpec()`.
+  - `Freq`, `Width`, `Latency`; defaults in `DefaultSpec()`.
 
 - State
   - Pure data transactions with countdowns (`InflightTransactions`); no ports or live pointers.
@@ -1266,10 +1274,16 @@ This aligns with V5 principles: `State` fields are value types with `json` tags,
 
 ## 10. CLI Limitations
 
-The current CLI has `akita component --create` and `akita check`, but both
-still target the legacy builder-based component layout. Their generated code
-and validation rules do not support the V5 component models. There are no
-`akita component-lint` or `akita component-create` commands.
+The `akita` executable and help remain available. `akita component --create NAME`
+and `akita check PATH` are deprecated compatibility stubs: both report that the
+feature is unavailable in V5.0 and exit with status 1. They create or modify no
+files and perform no validation. The legacy generator, templates, and checker
+have been removed; the command package is now `akita/internal/cmd`.
+
+A replacement CLI is planned for [V5.1 (#523)](https://github.com/sarchlab/akita/issues/523).
+Retaining the old command spellings preserves recognition, not functional
+compatibility or a commitment to their syntax in the replacement CLI. There are
+no `akita component-lint`, `akita component-create`, or `akita inspect` commands.
 
 For V5, follow the [component tutorial](components/01_what_is_a_component.md),
 use a package-level `DefaultSpec()` function, and add the appropriate

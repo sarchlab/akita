@@ -109,7 +109,7 @@ func (s *mshrStage) respondRead(
 		RspTo: trans.ReadMeta.ID,
 
 		TrafficBytes: len(respondData) + 4,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+	}
 
 	s.cache.topPort().Send(dataReady)
 
@@ -133,7 +133,7 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 		Dst:          trans.WriteMeta.Src,
 		RspTo:        trans.WriteMeta.ID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	s.cache.topPort().Send(writeDoneRsp)
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -31,14 +30,14 @@ func (m *translationMW) pageTable() *vm.PageTable {
 // Handle runs the translation stages. Paused MMUs make no progress;
 // draining MMUs continue walks but accept no new requests.
 func (m *translationMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
-	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
+	if m.comp.State.ControlState == controlStateEnabled {
 		madeProgress = m.parseFromTop() || madeProgress
 	}
 
@@ -109,11 +108,11 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: walking.Page,
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          walking.ReqSrc,
-		RspTo:        walking.ReqID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   walking.ReqSrc,
+		RspTo: walking.ReqID,
+	}
 
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)

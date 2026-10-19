@@ -33,8 +33,7 @@ func newSingleStageTLB(t *testing.T) *Comp {
 func deliverSingleStageRequest(comp *Comp) messaging.Msg {
 	req := messaging.Msg{
 		ID: comp.NewID(), Src: "Requester", Dst: comp.Ports.Top.AsRemote(),
-		Payload:      vmprotocol.TranslationReq{PID: 1, VAddr: 0x1000, DeviceID: 1},
-		TrafficClass: "vmprotocol.TranslationReq",
+		Payload: vmprotocol.TranslationReq{PID: 1, VAddr: 0x1000, DeviceID: 1},
 	}
 	comp.Ports.Top.Deliver(req)
 	return req
@@ -76,7 +75,6 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 	comp.Ports.Bottom.Deliver(messaging.Msg{
 		ID: comp.NewID(), Src: "Walker", Dst: comp.Ports.Bottom.AsRemote(),
 		RspTo: fetch.ID, Payload: vmprotocol.TranslationRsp{Page: page},
-		TrafficClass: "vmprotocol.TranslationRsp",
 	})
 	require.True(t, modelingtest.Tick(comp)) // Receive the downstream mapping.
 	require.True(t, modelingtest.Tick(comp)) // Respond to the original requester.

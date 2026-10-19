@@ -92,7 +92,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestAddressTranslatorMilestones(t *testing.T) {
 	var (
 		engine          timing.Engine
@@ -160,7 +159,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -171,7 +170,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: len(data) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		return req
 	}
@@ -197,9 +196,9 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		},
-			ID:           sim.NewID(),
-			RspTo:        transReqID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			RspTo: transReqID,
+		}
 
 		translationPort.Deliver(transRsp)
 
@@ -222,9 +221,9 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 
 		driveRoundTrip(t, makeRead(0x10040), func(rspTo uint64) messaging.Msg {
 			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
-				ID:           sim.NewID(),
-				RspTo:        rspTo,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				RspTo: rspTo,
+			}
 
 			return rsp
 		})
@@ -267,9 +266,9 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 			makeWrite(0x10040, []byte{1, 2, 3, 4}),
 			func(rspTo uint64) messaging.Msg {
 				rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-					ID:           sim.NewID(),
-					RspTo:        rspTo,
-					TrafficClass: "memprotocol.WriteDoneRsp"}
+					ID:    sim.NewID(),
+					RspTo: rspTo,
+				}
 
 				return rsp
 			},
@@ -317,9 +316,9 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		},
-			ID:           sim.NewID(),
-			RspTo:        transReq1ID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			RspTo: transReq1ID,
+		}
 
 		translationPort.Deliver(transRsp)
 

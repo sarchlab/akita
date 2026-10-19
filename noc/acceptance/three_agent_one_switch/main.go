@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/noc/acceptance"
+	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	nc "github.com/sarchlab/akita/v5/noc/networkconnector"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 

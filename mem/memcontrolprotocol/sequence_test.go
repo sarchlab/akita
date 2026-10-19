@@ -46,10 +46,10 @@ func driveCtrl(
 	t.Helper()
 
 	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid},
-		ID:           newIDFor(ctrl),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrl.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  newIDFor(ctrl),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrl.AsRemote(),
+	}
 
 	ctrl.Deliver(req)
 
@@ -166,11 +166,11 @@ func resolveTranslation(
 	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}},
-		ID:           newIDFor(bottom),
-		Src:          remote,
-		Dst:          bottom.AsRemote(),
-		RspTo:        botReq.ID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    newIDFor(bottom),
+		Src:   remote,
+		Dst:   bottom.AsRemote(),
+		RspTo: botReq.ID,
+	}
 
 	bottom.Deliver(rsp)
 
@@ -295,8 +295,7 @@ func makeTransReq(
 		ID:  newIDFor(top),
 		Src: messaging.RemotePort("Agent"),
 		Dst: top.AsRemote(),
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	return req
 }
@@ -312,10 +311,10 @@ func driveFlushAll(
 	t.Helper()
 
 	flush := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-		ID:           newIDFor(ctrl),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrl.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  newIDFor(ctrl),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrl.AsRemote(),
+	}
 
 	ctrl.Deliver(flush)
 
@@ -357,11 +356,11 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 			writtenBack[w.Payload.(memprotocol.WriteReq).Data[0]] = true
 		}
 		done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-			ID:           newIDFor(bottom),
-			Src:          messaging.RemotePort("LowerCache"),
-			Dst:          bottom.AsRemote(),
-			RspTo:        w.ID,
-			TrafficClass: "memprotocol.WriteDoneRsp"}
+			ID:    newIDFor(bottom),
+			Src:   messaging.RemotePort("LowerCache"),
+			Dst:   bottom.AsRemote(),
+			RspTo: w.ID,
+		}
 
 		bottom.Deliver(done)
 	}

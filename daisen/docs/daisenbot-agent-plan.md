@@ -293,7 +293,7 @@ Enumerate every route/page and, for each, list **all state that affects what is
 drawn**, classifying each field as `in-URL` / `react-state-only (gap)` /
 `derived (no-op)`.
 
-**Status: completed 2026-06-15** (audited `daisen/static/src`). Routing is
+**Status: completed 2026-06-15** (audited `daisen/internal/static/src`). Routing is
 react-router v6 (`<Routes>` / `useSearchParams`); all parameterization is via query
 string — no path params. Full route set:
 

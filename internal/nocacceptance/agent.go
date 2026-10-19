@@ -3,18 +3,19 @@ package acceptance
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Agent is a traffic generator for network tests. It sends the messages in
 // MsgsToSend out of its ports and reports every message it receives to the
 // test. It is a test double, not a modeled component, so it is written
-// directly on a ticking.Scheduler.
+// directly on a tickscheduler.Scheduler.
 type Agent struct {
-	*ticking.Scheduler
+	*tickscheduler.Scheduler
 	hooking.HookableBase
 
 	name       string
@@ -36,7 +37,7 @@ func NewAgent(
 	test *Test,
 ) *Agent {
 	a := &Agent{
-		Scheduler:  ticking.NewScheduler(name, sim, freq),
+		Scheduler:  tickscheduler.NewScheduler(name, sim, freq),
 		name:       name,
 		simulation: sim,
 		test:       test,
@@ -145,3 +146,6 @@ func (a *Agent) BindPort(slot string, p messaging.Port) {
 	a.simulation.RegisterPort(p)
 	a.AgentPorts = append(a.AgentPorts, p)
 }
+
+// NewID allocates a message ID from the owning simulation.
+func (a *Agent) NewID() uint64 { return a.simulation.NewID() }

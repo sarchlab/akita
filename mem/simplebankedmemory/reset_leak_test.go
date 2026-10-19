@@ -16,7 +16,7 @@ import (
 // req_in and pipeline subtask are open but not yet completed, then issues a
 // Reset and asserts both tasks are ended — i.e. a mid-flight Reset that rebuilds
 // the banks leaves no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	storage := mem.NewStorage(1 * mem.MB)
@@ -65,10 +65,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the read is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

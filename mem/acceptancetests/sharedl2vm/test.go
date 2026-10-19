@@ -32,10 +32,10 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
@@ -75,7 +75,7 @@ type sharedHierarchy struct {
 
 // agentChain holds an agent together with its private upstream components.
 type agentChain struct {
-	agent   *memaccessagent.MemAccessAgent
+	agent   *memaccessagent.Comp
 	rob     *rob.Comp
 	at      *addresstranslator.Comp
 	l1Cache *writethrough.Comp
@@ -156,7 +156,6 @@ func buildMemCtrl(
 	memCtrlSpec := idealmemcontroller.DefaultSpec()
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
-	memCtrlSpec.CacheLineSize = 64
 	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{
@@ -364,7 +363,7 @@ func buildAgent(
 	index int,
 	robComp *rob.Comp,
 	seed int64,
-) *memaccessagent.MemAccessAgent {
+) *memaccessagent.Comp {
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.AddressOffset = uint64(index) * agentStride()

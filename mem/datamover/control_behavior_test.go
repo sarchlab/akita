@@ -20,8 +20,6 @@ import (
 // once the in-flight move finishes, Pause freezes intake, Reset wipes the
 // move from any state). The protocol surface is covered separately in
 // control_contract_test.go.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDataMoverControlBehavior(t *testing.T) {
 	var (
 		engine       timing.Engine
@@ -80,18 +78,17 @@ func TestDataMoverControlBehavior(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Cmd"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Cmd"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -99,22 +96,22 @@ func TestDataMoverControlBehavior(t *testing.T) {
 	answerRead := func(port messaging.Port, read messaging.Msg) {
 		data := make([]byte, int(read.Payload.(memprotocol.ReadReq).AccessByteSize))
 		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: data},
-			ID:           sim.NewID(),
-			Src:          read.Dst,
-			Dst:          port.AsRemote(),
-			RspTo:        read.ID,
-			TrafficClass: "memprotocol.DataReadyRsp"}
+			ID:    sim.NewID(),
+			Src:   read.Dst,
+			Dst:   port.AsRemote(),
+			RspTo: read.ID,
+		}
 
 		port.Deliver(rsp)
 	}
 
 	answerWrite := func(port messaging.Port, write messaging.Msg) {
 		rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-			ID:           sim.NewID(),
-			Src:          write.Dst,
-			Dst:          port.AsRemote(),
-			RspTo:        write.ID,
-			TrafficClass: "memprotocol.WriteDoneRsp"}
+			ID:    sim.NewID(),
+			Src:   write.Dst,
+			Dst:   port.AsRemote(),
+			RspTo: write.ID,
+		}
 
 		port.Deliver(rsp)
 	}
@@ -158,7 +155,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		// stay pending and emit no ack.
 		for range 5 {
 			modelingtest.Tick(dataMover)
-			require.Equal(t, memcontrolprotocol.StateDraining, dataMover.State.ControlState)
+			require.Equal(t, controlStateDraining, dataMover.State.ControlState)
 			require.True(t, dataMover.State.CurrentTransaction.Active)
 			_, present0 := ctrlPort.RetrieveOutgoing()
 			require.False(t, present0)
@@ -206,7 +203,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		// The move completed (response emitted) before the async Drain ack.
 		require.True(t, moveDone)
 		require.False(t, dataMover.State.CurrentTransaction.Active)
-		require.Equal(t, memcontrolprotocol.StatePaused, dataMover.State.ControlState)
+		require.Equal(t, controlStatePaused, dataMover.State.ControlState)
 	})
 
 	t.Run("acks Drain only after outstanding destination writes are acked", func(t *testing.T) {
@@ -270,7 +267,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
 		require.Equal(t, drain.ID, drainRsp.RspTo)
 		require.False(t, dataMover.State.CurrentTransaction.Active)
-		require.Equal(t, memcontrolprotocol.StatePaused, dataMover.State.ControlState)
+		require.Equal(t, controlStatePaused, dataMover.State.ControlState)
 	})
 
 	t.Run("drops a stale memory ack that arrives after Reset", func(t *testing.T) {
@@ -333,7 +330,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 	t.Run("freezes incoming move requests while paused", func(t *testing.T) {
 		setup1(t)
 
-		dataMover.State.ControlState = memcontrolprotocol.StatePaused
+		dataMover.State.ControlState = controlStatePaused
 		topPort.Deliver(makeMove())
 
 		for range 5 {
@@ -348,7 +345,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes the in-flight move from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -379,10 +376,10 @@ func TestDataMoverControlBehavior(t *testing.T) {
 			require.False(t, dataMover.State.CurrentTransaction.Active)
 			require.Empty(t, dataMover.State.CurrentTransaction.PendingRead)
 			require.Empty(t, dataMover.State.CurrentTransaction.PendingWrite)
-			require.Equal(t, memcontrolprotocol.StateEnabled, dataMover.State.ControlState)
+			require.Equal(t, controlStateEnabled, dataMover.State.ControlState)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 
 	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -392,7 +389,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		// completePendingDrain acks the Drain. Control commands are serialized
 		// with no preemption, so a Reset queued behind the drain is serviced
 		// only after the Drain acks.
-		dataMover.State.ControlState = memcontrolprotocol.StateDraining
+		dataMover.State.ControlState = controlStateDraining
 		dataMover.State.CurrentCmdID = 999
 		dataMover.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
@@ -418,6 +415,6 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, dataMover.State.ControlState)
+		require.Equal(t, controlStateEnabled, dataMover.State.ControlState)
 	})
 }

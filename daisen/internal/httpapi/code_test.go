@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/sourcefs"
+	"github.com/sarchlab/akita/v5/internal/sourcefs"
 )
 
 func TestHTTPCodeLsEmptySource(t *testing.T) {

@@ -147,7 +147,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		Dst: lowModulePort,
 
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	trans.FetchTaskID = wb.cache.comp.TaskTracker().StartReqOut(wb.cache.comp, read, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(read)
@@ -252,7 +252,7 @@ func (wb *writeBufferStage) write() bool {
 		Dst: lowModulePort,
 
 		TrafficBytes: len(trans.EvictingData) + 12,
-		TrafficClass: "memprotocol.WriteReq"}
+	}
 
 	trans.EvictionTaskID = wb.cache.comp.TaskTracker().StartReqOut(wb.cache.comp, write, trans.RecvTaskID)
 	wb.cache.bottomPort().Send(write)

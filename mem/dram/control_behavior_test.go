@@ -18,8 +18,6 @@ import (
 // behavior the universal verbs promise (Drain quiescence, Pause freeze,
 // Reset from every state), beyond the protocol-surface checks in
 // control_contract_test.go.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDRAMControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
@@ -58,17 +56,17 @@ func TestDRAMControlBehavior(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -137,13 +135,13 @@ func TestDRAMControlBehavior(t *testing.T) {
 		// async Drain ack is sent.
 		require.Equal(t, n, completed)
 		require.Empty(t, comp.State.Transactions)
-		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
+		require.Equal(t, controlStatePaused, comp.State.ControlState)
 	})
 
 	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
 		setup1(t)
 
-		comp.State.ControlState = memcontrolprotocol.StatePaused
+		comp.State.ControlState = controlStatePaused
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
@@ -173,7 +171,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 		modelingtest.Tick(comp)
-		require.Equal(t, memcontrolprotocol.StateDraining, comp.State.ControlState)
+		require.Equal(t, controlStateDraining, comp.State.ControlState)
 
 		// A Pause arrives mid-drain. Control commands are serialized, so the
 		// Pause stays queued until the drain finishes; it must not freeze the
@@ -206,7 +204,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 		require.True(t, pauseAcked)
 		require.True(t, drainAcked)
 		require.Empty(t, comp.State.Transactions)
-		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
+		require.Equal(t, controlStatePaused, comp.State.ControlState)
 	})
 
 	t.Run("completes a pending Drain even when a non-Reset verb is queued", func(t *testing.T) {
@@ -215,7 +213,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 		// Draining and just quiescent, with a Pause queued in the same window.
 		// Commands are serialized: the in-flight Drain finishes and acks first,
 		// then the queued Pause is serviced.
-		comp.State.ControlState = memcontrolprotocol.StateDraining
+		comp.State.ControlState = controlStateDraining
 		comp.State.CurrentCmdID = 777
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.Transactions = nil
@@ -254,7 +252,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 
 		// The controller is draining and has just become quiescent (no
 		// transactions): completePendingDrain acks the Drain.
-		comp.State.ControlState = memcontrolprotocol.StateDraining
+		comp.State.ControlState = controlStateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.Transactions = nil
@@ -285,7 +283,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+		require.Equal(t, controlStateEnabled, comp.State.ControlState)
 	})
 
 	t.Run("zeroes accumulated statistics on Reset", func(t *testing.T) {
@@ -355,7 +353,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -385,9 +383,9 @@ func TestDRAMControlBehavior(t *testing.T) {
 			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 			require.Equal(t, reset.ID, rsp.RspTo)
 			require.Empty(t, comp.State.Transactions)
-			require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+			require.Equal(t, controlStateEnabled, comp.State.ControlState)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 }

@@ -9,7 +9,7 @@ import (
 	"runtime"
 
 	"github.com/pkg/browser"
-	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/daisen/internal/daisen"
 )
 
 var (

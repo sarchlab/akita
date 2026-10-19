@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -62,7 +64,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	b.simulation.RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 	c := &Component[S, T, R, P, M]{
-		ticks: NewScheduler(name, b.simulation, specFreq(name, b.spec)),
+		ticks: tickscheduler.NewScheduler(name, b.simulation, specFreq(name, b.spec)),
 	}
 	base.Init(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources)

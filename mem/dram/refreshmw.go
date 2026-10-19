@@ -1,7 +1,6 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -22,7 +21,7 @@ type refreshMiddleware struct {
 // so the refresh phase does not drift while the controller is suspended.
 func (m *refreshMiddleware) Handle(_ timing.Event) bool {
 	next := &m.comp.State
-	if next.ControlState == memcontrolprotocol.StatePaused {
+	if next.ControlState == controlStatePaused {
 		return false
 	}
 	spec := m.comp.Spec

@@ -119,9 +119,9 @@ func TestNetworkPayloadDeliveryAndCheckpoint(t *testing.T) {
 			data := []byte("network checkpoint preserves this unique write payload")
 			want := []messaging.Msg{
 				{ID: s.NewID(), Src: src.AsRemote(), Dst: dst.AsRemote(), RspTo: 41,
-					TrafficClass: "write", TrafficBytes: 160, Payload: memprotocol.WriteReq{Address: 128, Data: data}},
+					TrafficBytes: 160, Payload: memprotocol.WriteReq{Address: 128, Data: data}},
 				{ID: s.NewID(), Src: src.AsRemote(), Dst: dst.AsRemote(),
-					TrafficClass: "read", TrafficBytes: 16, Payload: memprotocol.ReadReq{Address: 256, AccessByteSize: 8}},
+					TrafficBytes: 16, Payload: memprotocol.ReadReq{Address: 256, AccessByteSize: 8}},
 				{ID: s.NewID(), Src: src.AsRemote(), Dst: dst.AsRemote(), TrafficBytes: 0},
 			}
 			for _, msg := range want {

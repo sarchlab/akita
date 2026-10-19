@@ -1,23 +1,21 @@
 package idealmemcontroller
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:          1 * timing.GHz,
-		Latency:       100,
-		Width:         1,
-		CacheLineSize: 64,
+		Freq:    1 * timing.GHz,
+		Latency: 100,
+		Width:   1,
 	}
 }
 
 // Initialize creates an enabled controller with no in-flight access.
 func (s *state) Initialize(_ *Comp) {
-	*s = state{ControlState: memcontrolprotocol.StateEnabled}
+	*s = state{ControlState: controlStateEnabled}
 }
 
 // Initialize creates the controller's middlewares. It panics if the system

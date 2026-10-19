@@ -3,28 +3,20 @@
 The protocol package for the uniform memory-agent control protocol. It
 defines the protocol (`memcontrolprotocol.Protocol` with requester/responder roles),
 its messages and verbs (`memcontrolprotocol.Req`, `memcontrolprotocol.Rsp`, `memcontrolprotocol.Command`),
-the shared control-lifecycle types, and the conformance harness every
-memory agent and its tests share.
+and conventional error strings. Internal execution states belong to each
+component. The conformance harness lives in `mem/internal/memcontroltest`.
 
 See [`../CONTROL_PROTOCOL.md`](../CONTROL_PROTOCOL.md) for the full
 protocol reference.
 
 ## What this package provides
 
-- **`State`** — the control-lifecycle enum every memory agent stores in
-  its own state struct: `StateEnabled`, `StatePausing`, `StatePaused`,
-  `StateDraining`, `StateFlushing`. `String()` gives stable names for
-  tracing.
-- **`VerbSupport`** — a per-component declaration of which verbs are
-  implemented, with the matrix constructors `Universal()`, `CacheLike()`,
-  and `TranslationCacheLike()`, plus `Supports(cmd)`.
-- **Error strings** — `ErrUnsupported` (`"unsupported"`) and
-  `ErrMustBePausedOrDrained` (`"must be paused or drained"`), the
-  conventional `Rsp.Error` values.
-- **`IsSyncVerb(cmd)`** — reports whether a verb is acked synchronously.
-- **`RunContract`** — a `*testing.T` harness that drives every verb
-  against a built component over its real `Control` port and asserts the
-  protocol response shape.
+- **Messages and roles** — `Req`, `Rsp`, `Command`, and requester/responder roles.
+- **Error strings** — `ErrUnsupported` and `ErrMustBePausedOrDrained`.
+- Zero is not a valid `Command`; receivers reject it as unsupported.
+
+Component states are private implementation details. The protocol specifies
+observable behavior and response timing, not internal enum values.
 
 ## The six verbs
 
@@ -44,7 +36,7 @@ A **sync** verb is acked in the same tick it is received; an **async**
 verb (Drain, Flush) is acked when the underlying work completes.
 
 Invalidate and Flush are only legal once the component is paused or
-drained. Issued while `StateEnabled`, they are rejected with
+drained. Issued while enabled, they are rejected with
 `Success: false, Error: ErrMustBePausedOrDrained`. Unsupported verbs
 reply with `Success: false, Error: ErrUnsupported`.
 
@@ -61,21 +53,22 @@ data); it acks `Success: true` immediately.
 
 ## Adding the contract to a component
 
+Akita's built-in component packages use the internal `memcontroltest` package.
 Each component package adds one test that builds the component and calls
 `RunContract` with its declared matrix:
 
 ```go
 func TestControlContract(t *testing.T) {
-    build := func() *memcontrolprotocol.Harness {
+    build := func() *memcontroltest.Harness {
         comp := modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(sim). /* ... */ .Build("MyComp")
-        return &memcontrolprotocol.Harness{
+        return &memcontroltest.Harness{
             Comp: comp,
             Sim:  sim,
             Ctrl: comp.Ports.Control,
         }
     }
 
-    memcontrolprotocol.RunContract(t, "mycomp", build, memcontrolprotocol.Universal())
+    memcontroltest.RunContract(t, "mycomp", build, memcontroltest.Universal())
 }
 ```
 

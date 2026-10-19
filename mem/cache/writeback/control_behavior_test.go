@@ -21,8 +21,6 @@ import (
 // control_contract_test.go. The writeback cache is downstream-dependent: a read
 // MISS issues a request out the Bottom port and only completes once the
 // matching DataReadyRsp is fed back.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestWriteBackCacheControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
@@ -75,17 +73,17 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -100,11 +98,11 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			data[i] = byte(i + 1)
 		}
 		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: data},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("LowerCache"),
-			Dst:          botPort.AsRemote(),
-			RspTo:        read.ID,
-			TrafficClass: "memprotocol.DataReadyRsp"}
+			ID:    sim.NewID(),
+			Src:   messaging.RemotePort("LowerCache"),
+			Dst:   botPort.AsRemote(),
+			RspTo: read.ID,
+		}
 
 		return rsp
 	}
@@ -475,7 +473,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 						Dst: botPort.AsRemote(),
 						RspTo: out.
 							ID,
-						TrafficClass: "memprotocol.WriteDoneRsp"}
+					}
 
 					botPort.Deliver(done)
 				}

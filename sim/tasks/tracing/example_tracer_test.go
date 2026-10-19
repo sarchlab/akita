@@ -3,6 +3,8 @@ package tracing_test
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/idgen"
+
 	"github.com/sarchlab/akita/v5/sim/naming"
 
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -50,7 +52,7 @@ func ExampleNewTotalTimeTracer() {
 	timeTeller := &SampleTimeTeller{}
 	domain := &SampleDomain{}
 
-	ids := &timing.IDGenerator{}
+	ids := &idgen.IDGenerator{}
 	domain.tracker = tasks.NewTracker(timeTeller, ids.NewID, func(n naming.Named) bool { return n == domain })
 	filter := func(t tasks.Task) bool {
 		return t.Kind == "sampleTaskKind"

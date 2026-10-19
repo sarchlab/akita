@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -27,14 +26,14 @@ func (m *ctrlParseMW) topPort() messaging.Port {
 // freeze entirely; draining ones finish the current transaction but
 // don't accept new ones.
 func (m *ctrlParseMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 
 	madeProgress := false
 
 	madeProgress = m.finishTransaction() || madeProgress
-	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
+	if m.comp.State.ControlState == controlStateEnabled {
 		madeProgress = m.parseFromCP() || madeProgress
 	}
 

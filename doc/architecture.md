@@ -116,3 +116,17 @@ pipeline latency. Other NoC packages live directly below `noc`, without a
 package is `mem/cache/writethrough`; it retains write-around, write-evict, and
 write-through policies. Group packages by responsibility and avoid redundant
 directory/package suffixes.
+
+## Public helpers and private implementation state
+
+Cache-building helpers in `mem/cache`, `mem/mshr`, and `mem/vm/lruset` remain
+public for custom components. Standalone tick schedulers, ID allocation
+implementation, source-file archives, UI assets, and acceptance/test harnesses
+are internal; component scheduling methods and simulation `NewID` remain public.
+The control protocol owns commands, responses, and observable guarantees.
+Each component owns its private control-state type, including DRAM. Zero is an
+invalid control command and receives an unsupported response.
+
+Progress bars expose update methods and an independent locked `Snapshot()`;
+live counters and synchronization stay private. Recording exposes the writer
+only; Daisen's trace reader remains internal.

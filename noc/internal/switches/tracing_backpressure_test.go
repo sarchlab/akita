@@ -41,7 +41,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 
 			flit := func() messaging.Msg {
 				return messaging.Msg{ID: s.NewID(), Src: "Source", Dst: port.AsRemote(),
-					TrafficClass: "packetization.Flit", Payload: packetization.Flit{Dst: "Destination"}}
+					Payload: packetization.Flit{Dst: "Destination"}}
 			}
 			first, second := flit(), flit()
 			port.Deliver(first)

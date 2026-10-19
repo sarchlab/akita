@@ -30,7 +30,6 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestReorderBuffer(t *testing.T) {
 	const (
 		topRemote        = messaging.RemotePort("Agent")
@@ -85,7 +84,7 @@ func TestReorderBuffer(t *testing.T) {
 			Src:          topRemote,
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -99,7 +98,7 @@ func TestReorderBuffer(t *testing.T) {
 			Src:          topRemote,
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: len(data) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		return req
 	}
@@ -191,10 +190,10 @@ func TestReorderBuffer(t *testing.T) {
 			// Fill the bottom outgoing buffer so Send fails.
 			for i := 0; i < bottomBufSize; i++ {
 				filler := messaging.Msg{Payload: memprotocol.ReadReq{Address: uint64(i)},
-					ID:           sim.NewID(),
-					Src:          bottomPort.AsRemote(),
-					Dst:          bottomUnitRemote,
-					TrafficClass: "memprotocol.ReadReq"}
+					ID:  sim.NewID(),
+					Src: bottomPort.AsRemote(),
+					Dst: bottomUnitRemote,
+				}
 
 				require.True(t, bottomPort.CanSend())
 				bottomPort.Send(filler)
@@ -212,10 +211,10 @@ func TestReorderBuffer(t *testing.T) {
 			setup1(t)
 
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-				ID:           sim.NewID(),
-				Src:          topRemote,
-				Dst:          topPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: topRemote,
+				Dst: topPort.AsRemote(),
+			}
 
 			topPort.Deliver(req)
 
@@ -235,11 +234,11 @@ func TestReorderBuffer(t *testing.T) {
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
 			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        shadowID,
-				TrafficClass: "memprotocol.WriteDoneRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: shadowID,
+			}
 
 			bottomPort.Deliver(rsp)
 
@@ -255,11 +254,11 @@ func TestReorderBuffer(t *testing.T) {
 			setup1(t)
 
 			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        999999,
-				TrafficClass: "memprotocol.WriteDoneRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: 999999,
+			}
 
 			bottomPort.Deliver(rsp)
 
@@ -273,10 +272,10 @@ func TestReorderBuffer(t *testing.T) {
 			setup1(t)
 
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: bottomUnitRemote,
+				Dst: bottomPort.AsRemote(),
+			}
 
 			bottomPort.Deliver(req)
 
@@ -302,11 +301,11 @@ func TestReorderBuffer(t *testing.T) {
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
 			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xDE, 0xAD}},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        shadowID,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: shadowID,
+			}
 
 			bottomPort.Deliver(rsp)
 
@@ -346,11 +345,11 @@ func TestReorderBuffer(t *testing.T) {
 			// Deliver the second response first; the head must still wait
 			// since its response has not arrived yet.
 			rsp2 := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x22}},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        shadow2,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: shadow2,
+			}
 
 			bottomPort.Deliver(rsp2)
 
@@ -365,11 +364,11 @@ func TestReorderBuffer(t *testing.T) {
 			// Now deliver the response for the head; both should drain in
 			// order on subsequent ticks.
 			rsp1 := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x11}},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        shadow1,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: shadow1,
+			}
 
 			bottomPort.Deliver(rsp1)
 
@@ -398,11 +397,11 @@ func TestReorderBuffer(t *testing.T) {
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x1}},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        shadowID,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: shadowID,
+			}
 
 			bottomPort.Deliver(rsp)
 
@@ -411,10 +410,10 @@ func TestReorderBuffer(t *testing.T) {
 			// Fill the top outgoing buffer so the next bottomUp Send fails.
 			for i := 0; i < topBufSize; i++ {
 				filler := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{byte(i)}},
-					ID:           sim.NewID(),
-					Src:          topPort.AsRemote(),
-					Dst:          topRemote,
-					TrafficClass: "memprotocol.DataReadyRsp"}
+					ID:  sim.NewID(),
+					Src: topPort.AsRemote(),
+					Dst: topRemote,
+				}
 
 				require.True(t, topPort.CanSend())
 				topPort.Send(filler)
@@ -441,17 +440,17 @@ func TestReorderBuffer(t *testing.T) {
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
 			},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Cmd"),
-				Dst:          ctrlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Cmd"),
+				Dst: ctrlPort.AsRemote(),
+			}
 
 			ctrlPort.Deliver(req)
 
 			modelingtest.Tick(rob)
 
 			require.Empty(t, rob.State.Transactions)
-			require.Equal(t, memcontrolprotocol.StateEnabled, rob.State.ControlState)
+			require.Equal(t, controlStateEnabled, rob.State.ControlState)
 
 			ack, _ := ctrlPort.RetrieveOutgoing()
 			require.IsType(t, messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, ack)
@@ -464,7 +463,7 @@ func TestReorderBuffer(t *testing.T) {
 		t.Run("freezes the data pipeline while paused", func(t *testing.T) {
 			setup1(t)
 
-			rob.State.ControlState = memcontrolprotocol.StatePaused
+			rob.State.ControlState = controlStatePaused
 			topPort.Deliver(makeRead(0))
 
 			progress := modelingtest.Tick(rob)
@@ -478,30 +477,30 @@ func TestReorderBuffer(t *testing.T) {
 		t.Run("resumes on CmdEnable, draining incoming traffic", func(t *testing.T) {
 			setup1(t)
 
-			rob.State.ControlState = memcontrolprotocol.StatePaused
+			rob.State.ControlState = controlStatePaused
 
 			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
 			stray := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xFF}},
-				ID:           sim.NewID(),
-				Src:          bottomUnitRemote,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        0xDEAD,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+				ID:    sim.NewID(),
+				Src:   bottomUnitRemote,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: 0xDEAD,
+			}
 
 			bottomPort.Deliver(stray)
 
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Cmd"),
-				Dst:          ctrlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Cmd"),
+				Dst: ctrlPort.AsRemote(),
+			}
 
 			ctrlPort.Deliver(req)
 
 			modelingtest.Tick(rob)
 
-			require.Equal(t, memcontrolprotocol.StateEnabled, rob.State.ControlState)
+			require.Equal(t, controlStateEnabled, rob.State.ControlState)
 			_, present8 := topPort.PeekIncoming()
 			require.False(t, present8)
 			_, present9 := bottomPort.PeekIncoming()
@@ -513,10 +512,10 @@ func TestReorderBuffer(t *testing.T) {
 
 		makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Cmd"),
-				Dst:          ctrlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Cmd"),
+				Dst: ctrlPort.AsRemote(),
+			}
 
 			return req
 		}
@@ -549,7 +548,7 @@ func TestReorderBuffer(t *testing.T) {
 			// fed yet), Drain must stay pending and emit no ack.
 			for range 5 {
 				modelingtest.Tick(rob)
-				require.Equal(t, memcontrolprotocol.StateDraining, rob.State.ControlState)
+				require.Equal(t, controlStateDraining, rob.State.ControlState)
 				_, present10 := ctrlPort.RetrieveOutgoing()
 				require.False(t, present10)
 			}
@@ -558,11 +557,11 @@ func TestReorderBuffer(t *testing.T) {
 			// Now let the in-flight reads complete.
 			for _, id := range shadowIDs {
 				rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x1}},
-					ID:           sim.NewID(),
-					Src:          bottomUnitRemote,
-					Dst:          bottomPort.AsRemote(),
-					RspTo:        id,
-					TrafficClass: "memprotocol.DataReadyRsp"}
+					ID:    sim.NewID(),
+					Src:   bottomUnitRemote,
+					Dst:   bottomPort.AsRemote(),
+					RspTo: id,
+				}
 
 				bottomPort.Deliver(rsp)
 			}
@@ -597,11 +596,11 @@ func TestReorderBuffer(t *testing.T) {
 			// All in-flight reads finished before the async Drain ack.
 			require.Equal(t, n, completed)
 			require.Empty(t, rob.State.Transactions)
-			require.Equal(t, memcontrolprotocol.StatePaused, rob.State.ControlState)
+			require.Equal(t, controlStatePaused, rob.State.ControlState)
 		})
 
 		t.Run("Reset wipes in-flight transactions from any state", func(t *testing.T) {
-			runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+			runCase := func(t *testing.T, startState controlState) {
 				t.Helper()
 
 				setup1(t)
@@ -630,10 +629,10 @@ func TestReorderBuffer(t *testing.T) {
 				require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 				require.Equal(t, reset.ID, rsp.RspTo)
 				require.Empty(t, rob.State.Transactions)
-				require.Equal(t, memcontrolprotocol.StateEnabled, rob.State.ControlState)
+				require.Equal(t, controlStateEnabled, rob.State.ControlState)
 			}
-			t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-			t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+			t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+			t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 		})
 
 		t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -643,7 +642,7 @@ func TestReorderBuffer(t *testing.T) {
 			// completePendingDrain acks the Drain. Control commands are
 			// serialized with no preemption, so a Reset queued behind the
 			// drain is serviced only after the Drain acks.
-			rob.State.ControlState = memcontrolprotocol.StateDraining
+			rob.State.ControlState = controlStateDraining
 			rob.State.CurrentCmdID = 999
 			rob.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 			rob.State.Transactions = nil
@@ -670,7 +669,7 @@ func TestReorderBuffer(t *testing.T) {
 			require.Equal(t, uint64(999), rsps[0].RspTo)
 			require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 			require.Equal(t, reset.ID, rsps[1].RspTo)
-			require.Equal(t, memcontrolprotocol.StateEnabled, rob.State.ControlState)
+			require.Equal(t, controlStateEnabled, rob.State.ControlState)
 		})
 	})
 }

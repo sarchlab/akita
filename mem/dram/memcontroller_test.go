@@ -73,7 +73,6 @@ func TestTransactionSplitting(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBankOperations(t *testing.T) {
 	t.Run("should get required command kind for closed bank", func(t *testing.T) {
 		bs := &bankState{
@@ -205,7 +204,6 @@ func TestQueueOperations(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDRAMIntegration(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -241,7 +239,7 @@ func TestDRAMIntegration(t *testing.T) {
 			Src:          srcPort.AsRemote(),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: len(writeData) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        0x40,
@@ -251,7 +249,7 @@ func TestDRAMIntegration(t *testing.T) {
 			Src:          srcPort.AsRemote(),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		srcPort.Send(write)
 		srcPort.Send(read)
@@ -294,7 +292,6 @@ func TestDRAMIntegration(t *testing.T) {
 // New feature tests below
 // ========================================================================
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestPredefinedSpecs(t *testing.T) {
 	t.Run("should build with DDR4 spec", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()
@@ -388,7 +385,6 @@ func TestPredefinedSpecs(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestProtocolEnums(t *testing.T) {
 	t.Run("should have new protocol values after HMC", func(t *testing.T) {
 		require.Greater(t, int(protoDDR5), int(protoHMC))
@@ -456,7 +452,6 @@ func TestProtocolEnums(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestOpenPagePolicy(t *testing.T) {
 	var (
 		ids  timing.Simulation
@@ -710,7 +705,6 @@ func TestOpenPagePolicy(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestFRFCFSScheduling(t *testing.T) {
 	var (
 		spec *Spec
@@ -846,7 +840,6 @@ func TestFRFCFSScheduling(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestReadWriteQueueSeparation(t *testing.T) {
 	var (
 		ids  timing.Simulation
@@ -1113,7 +1106,6 @@ func TestReadWriteQueueSeparation(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBuilderConfiguration(t *testing.T) {
 	t.Run("should set page policy via builder", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()

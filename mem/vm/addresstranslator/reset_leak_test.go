@@ -17,7 +17,7 @@ import (
 // its req_in and the translation req_out tasks are open (a transaction awaiting
 // translation), then issues a Reset and asserts both tasks are ended — i.e. a
 // mid-flight Reset leaves no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
@@ -64,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		Src:          messaging.RemotePort("Agent"),
 		Dst:          topPort.AsRemote(),
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	topPort.Deliver(read)
 
@@ -93,10 +93,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight (translation never answered).
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

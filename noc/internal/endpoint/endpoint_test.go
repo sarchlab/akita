@@ -15,7 +15,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestEndPoint(t *testing.T) {
 	var (
 		mockCtrl          *gomock.Controller
@@ -140,15 +139,15 @@ func TestEndPoint(t *testing.T) {
 			SeqID:        0,
 			NumFlitInMsg: 2,
 			MsgID:        msg.ID, Dst: msg.Dst, Msg: msg},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		flit1 := messaging.Msg{Payload: packetization.Flit{
 			SeqID:        1,
 			NumFlitInMsg: 2,
 			MsgID:        msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0, true)
 		networkPort.EXPECT().PeekIncoming().Return(flit1, true)

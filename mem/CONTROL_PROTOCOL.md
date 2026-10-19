@@ -74,26 +74,24 @@ The primitives compose. The protocol stays small.
    `memcontrolprotocol.Rsp` out (by value). Workload requests (reads, writes,
    translations, data-move requests) use other ports (`Top`,
    `Bottom`, `Inside`, `Outside`, etc.), never `Control`.
-2. **One control state per component.** Every agent holds a
-   `memcontrolprotocol.State` value in its own state struct. Values are
-   `StateEnabled`, `StatePausing`, `StatePaused`, `StateDraining`,
-   `StateFlushing`. Reset and Invalidate are operations within these
-   states, not separate states; Reset always lands the component in
-   `StateEnabled`.
+2. **Component-owned execution states.** Each component defines its private
+   control-state representation. The protocol defines observable guarantees,
+   not a shared enum. Reset returns the component to its enabled behavior;
+   implementations may use their own intermediate drain or flush stages.
 3. **Unsupported verbs always reply.** A component that does not
    implement a verb sends `Rsp{Command: <verb>, Success:
    false, Error: memcontrolprotocol.ErrUnsupported}`. It never panics on a
    well-formed verb.
 4. **Illegal-state verbs reply with a reason.** Invalidate and Flush
-   require the component to be in `StatePaused` or `StateDraining`.
-   Issuing them while `StateEnabled` returns `Success: false,
+   require the component to be in a paused state after Pause or completed Drain.
+   Issuing them while enabled returns `Success: false,
    Error: memcontrolprotocol.ErrMustBePausedOrDrained`.
 5. **Control commands are processed serially.** A component handles one
    control command at a time, to completion, before it dequeues the next.
    While an async verb (Drain or Flush) is in progress the component does
    **not** accept another control command — the next command stays queued
    on the `Control` port and is taken only once the component settles
-   (the async verb acks and the state lands in `StatePaused`), so each
+   (the async verb acks and the state becomes paused), so each
    command is always handled from a clean, fully-settled state. There is
    no priority or preemption: a Reset queued behind an in-flight Drain
    waits for the Drain to finish and ack, then runs. Issuing a new control
@@ -160,14 +158,14 @@ does no work; **—** = unsupported (replies `Success: false,
 Error: "unsupported"`).
 
 The matrix corresponds directly to the `VerbSupport` each component
-declares to `memcontrolprotocol.RunContract`:
+declares to `memcontroltest.RunContract`:
 
-- `cache/writeback`, `cache/writethrough` → `memcontrolprotocol.CacheLike()`
+- `cache/writeback`, `cache/writethrough` → `memcontroltest.CacheLike()`
   (Universal + Invalidate + Flush).
-- `vm/tlb`, `vm/mmuCache` → `memcontrolprotocol.TranslationCacheLike()`
+- `vm/tlb`, `vm/mmuCache` → `memcontroltest.TranslationCacheLike()`
   (Universal + Invalidate; Flush is **not** supported because
   translations are never dirty).
-- everyone else → `memcontrolprotocol.Universal()` (Pause, Drain, Enable, Reset).
+- everyone else → `memcontroltest.Universal()` (Pause, Drain, Enable, Reset).
 
 `mshr` is not in the matrix — it is a substructure of a cache, not a
 component. Its state is part of the enclosing cache and is wiped by the
@@ -206,7 +204,7 @@ Error: "must be paused or drained"`.
 ### Memory controllers
 
 **`idealmemcontroller`** — `Universal`; state in `State.ControlState`
-(`memcontrolprotocol.State`).
+(a private component-local type).
 - Drain acks once `len(State.InflightTransactions) == 0`.
 - Reset discards `InflightTransactions`.
 
@@ -300,22 +298,20 @@ pipeline.
 - Reset wipes the current transaction and the data buffer and drains the
   Top/Inside/Outside ports.
 
-## Helpers in `mem/memcontrolprotocol`
+## Protocol constants and internal test helpers
 
 ```go
 import "github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 
-// State enum used by every component for its control bookkeeping.
-memcontrolprotocol.State            // StateEnabled, StatePausing, StatePaused, ...
-
+// Built-in tests only: mem/internal/memcontroltest.
 // Per-component declaration of which verbs are supported.
-memcontrolprotocol.VerbSupport{...}
-memcontrolprotocol.Universal()                  // {Pause, Drain, Enable, Reset}
-memcontrolprotocol.CacheLike()                  // Universal + Invalidate + Flush
-memcontrolprotocol.TranslationCacheLike()       // Universal + Invalidate
+memcontroltest.VerbSupport{...}
+memcontroltest.Universal()                  // {Pause, Drain, Enable, Reset}
+memcontroltest.CacheLike()                  // Universal + Invalidate + Flush
+memcontroltest.TranslationCacheLike()       // Universal + Invalidate
 
 // Verb classification.
-memcontrolprotocol.IsSyncVerb(memcontrolprotocol.CmdPause)     // true
+memcontroltest.IsSyncVerb(memcontrolprotocol.CmdPause)     // true
 
 // Error string constants on Rsp.
 memcontrolprotocol.ErrUnsupported
@@ -338,20 +334,21 @@ memcontrolprotocol.ErrMustBePausedOrDrained
        Build("MyComp")
 
    ```
-2. Add a `memcontrolprotocol.State` field to the component's `State` struct so
-   the control bookkeeping is uniform and serializable.
+2. Define a private control-state type in the component and store it in its
+   checkpointed State. Its representation is not part of the protocol.
 3. Add a control middleware that peeks the `Control` port, dispatches
    on `req.Command`, mutates `State.ControlState`, and sends the
    response per the sync/async timing rules.
 4. For any verb you do not implement, reply with
    `Rsp{Success: false, Error: memcontrolprotocol.ErrUnsupported}`.
-5. Declare the component's support matrix via a `VerbSupport` helper
+5. For Akita's built-in tests, declare the component's support matrix via a `VerbSupport` helper
    (`Universal()`, `CacheLike()`, or a literal).
-6. Add one test that calls `memcontrolprotocol.RunContract`:
+6. Built-in tests call `memcontroltest.RunContract`; external components can
+   test the same requests and responses directly:
    ```go
    func TestControlContract(t *testing.T) {
-       memcontrolprotocol.RunContract(t, "mycomp", buildMyComp,
-           memcontrolprotocol.Universal())
+       memcontroltest.RunContract(t, "mycomp", buildMyComp,
+           memcontroltest.Universal())
    }
    ```
 7. Add component-specific behavior tests separately — the contract
@@ -361,14 +358,14 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    dirty data, etc. Those are component-internal invariants and belong
    in the component's own test file.
 
-## Conformance harness: `memcontrolprotocol.RunContract`
+## Conformance harness: `memcontroltest.RunContract`
 
 ```go
 func RunContract(
     t *testing.T,
     name string,
-    build memcontrolprotocol.BuildFunc, // func() *memcontrolprotocol.Harness
-    matrix memcontrolprotocol.VerbSupport,
+    build memcontrolprotocol.BuildFunc, // func() *memcontroltest.Harness
+    matrix memcontroltest.VerbSupport,
 )
 
 type Harness struct {

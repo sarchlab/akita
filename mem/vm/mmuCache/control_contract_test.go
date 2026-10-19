@@ -3,14 +3,15 @@ package mmuCache
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 func TestControlContract(t *testing.T) {
-	build := func() *memcontrolprotocol.Harness {
+	build := func() *memcontroltest.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -38,7 +39,7 @@ func TestControlContract(t *testing.T) {
 			panic(err)
 		}
 
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp: comp,
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
@@ -50,7 +51,7 @@ func TestControlContract(t *testing.T) {
 
 	// An mmuCache caches translations (never dirty), so it supports
 	// Invalidate but not Flush.
-	memcontrolprotocol.RunContract(t, "mmuCache", build, memcontrolprotocol.TranslationCacheLike())
+	memcontroltest.RunContract(t, "mmuCache", build, memcontroltest.TranslationCacheLike())
 }
 
-var _ memcontrolprotocol.Controllable = (*Comp)(nil)
+var _ memcontroltest.Controllable = (*Comp)(nil)

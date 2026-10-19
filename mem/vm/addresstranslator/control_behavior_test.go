@@ -22,8 +22,6 @@ import (
 // a Drain cannot complete until every request it forwarded to its Bottom
 // port has been answered, so the Drain test must feed the matching bottom
 // responses before the Drain ack can appear.
-//
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestAddressTranslatorControlBehavior(t *testing.T) {
 	var (
 		engine          timing.Engine
@@ -77,17 +75,17 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -104,7 +102,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 			Dst: messaging.RemotePort("MemPort"),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -138,7 +136,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 			Dst:          bottomPort.AsRemote(),
 			RspTo:        rspTo,
 			TrafficBytes: 4,
-			TrafficClass: "memprotocol.DataReadyRsp"}
+		}
 
 		bottomPort.Deliver(dataReady)
 	}
@@ -183,7 +181,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 				}
 			}
 		}
-		require.Equal(t, memcontrolprotocol.StateDraining, translator.State.ControlState)
+		require.Equal(t, controlStateDraining, translator.State.ControlState)
 		require.Len(t, translator.State.InflightReqToBottom, 2)
 
 		// Positive phase: feed the matching bottom responses. respond() retires
@@ -223,13 +221,13 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 		require.Equal(t, 2, topResponses)
 		require.Empty(t, translator.State.Transactions)
 		require.Empty(t, translator.State.InflightReqToBottom)
-		require.Equal(t, memcontrolprotocol.StatePaused, translator.State.ControlState)
+		require.Equal(t, controlStatePaused, translator.State.ControlState)
 	})
 
 	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
 		setup1(t)
 
-		translator.State.ControlState = memcontrolprotocol.StatePaused
+		translator.State.ControlState = controlStatePaused
 		topPort.Deliver(makeRead(0x100))
 
 		for range 5 {
@@ -248,7 +246,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -279,10 +277,10 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 			require.Equal(t, reset.ID, rsp.RspTo)
 			require.Empty(t, translator.State.Transactions)
 			require.Empty(t, translator.State.InflightReqToBottom)
-			require.Equal(t, memcontrolprotocol.StateEnabled, translator.State.ControlState)
+			require.Equal(t, controlStateEnabled, translator.State.ControlState)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 
 	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -291,7 +289,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 		// Draining and already quiescent: completePendingDrain acks the Drain.
 		// Control commands are serialized with no preemption, so a Reset queued
 		// behind the drain is serviced only after the Drain acks.
-		translator.State.ControlState = memcontrolprotocol.StateDraining
+		translator.State.ControlState = controlStateDraining
 		translator.State.CurrentCmdID = 999
 		translator.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		translator.State.Transactions = nil
@@ -319,6 +317,6 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, translator.State.ControlState)
+		require.Equal(t, controlStateEnabled, translator.State.ControlState)
 	})
 }

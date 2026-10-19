@@ -31,7 +31,6 @@ func newDriverPort(name string, bufSize int) messaging.Port {
 	return p
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDRAMStatistics(t *testing.T) {
 	// Unit tests for stat computation functions
 	t.Run("should compute row buffer hit rate", func(t *testing.T) {
@@ -125,7 +124,6 @@ func TestDRAMStatistics(t *testing.T) {
 			Dst: topPort.AsRemote()}
 
 		write.TrafficBytes = len(write.Payload.(memprotocol.WriteReq).Data) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
 		srcPort.Send(write)
 
 		// Send a read request
@@ -137,7 +135,7 @@ func TestDRAMStatistics(t *testing.T) {
 			Src:          srcPort.AsRemote(),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		srcPort.Send(read)
 

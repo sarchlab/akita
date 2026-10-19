@@ -3,7 +3,8 @@ package addresstranslator
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -13,7 +14,7 @@ import (
 // universal control verbs. Invalidate and Flush must respond as
 // unsupported — the translator holds no cache of memory.
 func TestControlContract(t *testing.T) {
-	build := func() *memcontrolprotocol.Harness {
+	build := func() *memcontroltest.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -43,7 +44,7 @@ func TestControlContract(t *testing.T) {
 			panic(err)
 		}
 
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp: comp,
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
@@ -54,7 +55,7 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	memcontrolprotocol.RunContract(t, "addresstranslator", build, memcontrolprotocol.Universal())
+	memcontroltest.RunContract(t, "addresstranslator", build, memcontroltest.Universal())
 }
 
-var _ memcontrolprotocol.Controllable = (*Comp)(nil)
+var _ memcontroltest.Controllable = (*Comp)(nil)

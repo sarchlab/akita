@@ -24,7 +24,6 @@ func (subject *testTimeTeller) SetCurrentTime(time timing.VTimeInPicoSec) {
 	subject.currentTime = time
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 	var (
 		timeTeller   *testTimeTeller

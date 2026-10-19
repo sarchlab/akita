@@ -18,8 +18,6 @@ import (
 // behavior the universal verbs promise (Drain quiescence, Pause freeze,
 // Reset from every state), beyond the protocol-surface checks in
 // control_contract_test.go.
-//
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 	var (
 		engine        timing.Engine
@@ -34,7 +32,6 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 		spec := DefaultSpec()
 		spec.Width = 4
 		spec.Latency = 10
-		spec.CacheLineSize = 64
 
 		memController = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
@@ -63,17 +60,17 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -131,13 +128,13 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 		// async Drain ack is sent.
 		require.Equal(t, n, completed)
 		require.Empty(t, memController.State.InflightTransactions)
-		require.Equal(t, memcontrolprotocol.StatePaused, memController.State.ControlState)
+		require.Equal(t, controlStatePaused, memController.State.ControlState)
 	})
 
 	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
 		setup1(t)
 
-		memController.State.ControlState = memcontrolprotocol.StatePaused
+		memController.State.ControlState = controlStatePaused
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
@@ -154,7 +151,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -186,10 +183,10 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 			require.Equal(t, reset.ID, rsp.RspTo)
 			require.Empty(t, memController.State.InflightTransactions)
-			require.Equal(t, memcontrolprotocol.StateEnabled, memController.State.ControlState)
+			require.Equal(t, controlStateEnabled, memController.State.ControlState)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 
 	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -199,7 +196,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 		// completePendingDrain acks the Drain. Control commands are serialized
 		// with no preemption, so a Reset queued behind the drain is serviced
 		// only after the Drain acks.
-		memController.State.ControlState = memcontrolprotocol.StateDraining
+		memController.State.ControlState = controlStateDraining
 		memController.State.CurrentCmdID = 999
 		memController.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		memController.State.InflightTransactions = nil
@@ -226,7 +223,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, memController.State.ControlState)
+		require.Equal(t, controlStateEnabled, memController.State.ControlState)
 	})
 
 	t.Run("drops Top traffic queued at Reset", func(t *testing.T) {
@@ -234,7 +231,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 
 		// Queue a read on Top while paused, so it sits unconsumed in the Top
 		// port's incoming queue.
-		memController.State.ControlState = memcontrolprotocol.StatePaused
+		memController.State.ControlState = controlStatePaused
 		topPort.Deliver(makeRead(0))
 		for range 3 {
 			modelingtest.Tick(memController)

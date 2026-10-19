@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -77,7 +76,7 @@ func (m *dataTransferMW) mapperFor(side string) mem.AddressMapper {
 // draining data movers continue to let the current transaction
 // complete so a drain can converge.
 func (m *dataTransferMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 
@@ -131,7 +130,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		Dst: m.findSrcPort(addr),
 
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	if !srcP.CanSend() {
 		return false
@@ -227,7 +226,7 @@ func (m *dataTransferMW) writeToDst() bool {
 		Dst: m.findDstPort(trans.NextWriteAddr),
 
 		TrafficBytes: len(data) + 12,
-		TrafficClass: "memprotocol.WriteReq"}
+	}
 
 	if !dstP.CanSend() {
 		return false

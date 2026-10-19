@@ -18,7 +18,7 @@ import (
 // access latency elapses (the request is still in flight) and asserts both
 // kinds of task are ended — i.e. a mid-flight Reset leaves no
 // started-never-ended task. DRAM is a leaf, so there is no downstream req_out.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	comp := modeling.MakeBuilder[*Comp](DefaultSpec()).
@@ -52,7 +52,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		Src:          messaging.RemotePort("Agent"),
 		Dst:          topPort.AsRemote(),
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	topPort.Deliver(read)
 
@@ -80,10 +80,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

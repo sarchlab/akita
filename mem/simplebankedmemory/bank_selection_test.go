@@ -18,8 +18,6 @@ import (
 // always global; the optional bank-selection conversion strips the upstream
 // inter-controller interleaving so a contiguous bank selector can stripe finely
 // across all banks instead of aliasing on the strided global address.
-//
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 	// Four controllers interleaved at 128 B; this memory is element 1. Within
 	// element 1 the visible addresses are 64-B lines inside every 4th 128-B
@@ -109,8 +107,6 @@ func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 // This integration test confirms that, with a global identity-addressed storage
 // and the bank conversion enabled, reads and writes hit the correct global
 // offset and exercise more than one bank.
-//
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -138,7 +134,7 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 
 		memComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+			WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("MemBank")
 		memCompPorts := makePorts("MemBank", 8, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
@@ -175,8 +171,7 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 				ID:  sim.NewID(),
 				Src: agent.port.AsRemote(),
 				Dst: tp.AsRemote(),
-
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			agent.send(t, w)
 		}
@@ -192,8 +187,7 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 				ID:  sim.NewID(),
 				Src: agent.port.AsRemote(),
 				Dst: tp.AsRemote(),
-
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			agent.send(t, r)
 

@@ -1,4 +1,4 @@
-package timing
+package idgen
 
 import (
 	"encoding/json"

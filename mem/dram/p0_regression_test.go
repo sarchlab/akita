@@ -53,7 +53,7 @@ func (h *p0Harness) read(addr uint64) messaging.Msg {
 		Src:          h.src.AsRemote(),
 		Dst:          h.top.AsRemote(),
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	return r
 }
@@ -67,7 +67,7 @@ func (h *p0Harness) write(addr uint64, data []byte) messaging.Msg {
 		Src:          h.src.AsRemote(),
 		Dst:          h.top.AsRemote(),
 		TrafficBytes: len(data) + 12,
-		TrafficClass: "memprotocol.WriteReq"}
+	}
 
 	return w
 }
@@ -101,7 +101,6 @@ func (h *p0Harness) collect() (
 // addresses that differ only in bits [6,12] hit the same bank+row, while a
 // change in bit [17] is a same-bank row conflict.
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestP0OpenPagePanicRegression(t *testing.T) {
 	openPageSpec := func() Spec {
 		spec := DefaultSpec()

@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUCacheMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -74,8 +73,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("UpModule"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		topPort.Deliver(req)
 
@@ -107,8 +105,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("UpModule"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		// Compute seg and wayID for level 1
 		spec := comp.Spec
@@ -144,11 +141,11 @@ func TestMMUCacheMiddleware(t *testing.T) {
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: page,
 		},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("LowModule"),
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        sim.NewID(),
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   messaging.RemotePort("LowModule"),
+			Dst:   bottomPort.AsRemote(),
+			RspTo: sim.NewID(),
+		}
 
 		bottomPort.Deliver(rsp)
 
@@ -209,10 +206,10 @@ func TestMMUCacheMiddleware(t *testing.T) {
 			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},
 		},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		controlPort.Deliver(req)
 

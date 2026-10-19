@@ -180,7 +180,7 @@ func (m *agentMiddleware) doRead() bool {
 		Dst: m.lowModule(),
 
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	if !m.memPort().CanSend() {
 		return false
@@ -263,7 +263,7 @@ func (m *agentMiddleware) doWrite() bool {
 		Dst: m.lowModule(),
 
 		TrafficBytes: len(writeData) + 12,
-		TrafficClass: "memprotocol.WriteReq"}
+	}
 
 	if !m.memPort().CanSend() {
 		return false

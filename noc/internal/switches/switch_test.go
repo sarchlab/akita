@@ -15,7 +15,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSwitch(t *testing.T) {
 	var (
 		mockCtrl     *gomock.Controller
@@ -116,9 +115,9 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			Dst:          port1.AsRemote(),
-			TrafficClass: "packetization.Flit"}
+			ID:  sim.NewID(),
+			Dst: port1.AsRemote(),
+		}
 
 		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port1.EXPECT().RetrieveIncoming()
@@ -143,9 +142,9 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			Dst:          port1.AsRemote(),
-			TrafficClass: "packetization.Flit"}
+			ID:  sim.NewID(),
+			Dst: port1.AsRemote(),
+		}
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
@@ -188,8 +187,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Place item in route buffer for port1
 		next := &sw.State
@@ -219,8 +218,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
@@ -246,8 +245,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
@@ -273,8 +272,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
@@ -300,8 +299,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
@@ -329,8 +328,8 @@ func TestSwitch(t *testing.T) {
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
 			MsgID: msg.ID, Dst: msg.Dst},
-			ID:           sim.NewID(),
-			TrafficClass: "packetization.Flit"}
+			ID: sim.NewID(),
+		}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State

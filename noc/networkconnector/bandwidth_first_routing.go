@@ -21,10 +21,8 @@ type bfRouteInfo struct {
 func (r BandwidthFirstRouter) EstablishRoute(nodes []Node) {
 	table := make([][]bfRouteInfo, len(nodes))
 	r.floydWarshallInit(table, nodes)
-	// r.dumpTable(table)
 
 	r.floydWarshall(table)
-	// r.dumpTable(table)
 
 	r.tableToRoute(table, nodes)
 }
@@ -100,36 +98,6 @@ func (r BandwidthFirstRouter) tableToRoute(
 		}
 	}
 }
-
-// func (r BandwidthFirstRouter) dumpTable(table [][]bfRouteInfo) {
-// 	fmt.Println("")
-// 	for i := range table {
-// 		for j := range table[i] {
-// 			cell := ""
-// 			cell += fmt.Sprintf("%f ", table[i][j].bandwidth)
-
-// 			if table[i][j].nextHop != nil {
-// 				cell += fmt.Sprintf("%s->%s->%s\t",
-// 					table[i][j].src.Name(),
-// 					table[i][j].nextHop.RemoteNode.Name(),
-// 					table[i][j].dst.Name(),
-// 				)
-// 			} else {
-// 				cell += fmt.Sprintf("%s->XXX->%s\t",
-// 					table[i][j].src.Name(),
-// 					table[i][j].dst.Name(),
-// 				)
-// 			}
-
-// 			for i := len(cell); i < 100; i++ {
-// 				cell += " "
-// 			}
-
-// 			fmt.Print(cell)
-// 		}
-// 		fmt.Printf("\n")
-// 	}
-// }
 
 func (r BandwidthFirstRouter) min(a, b float64) float64 {
 	if a < b {

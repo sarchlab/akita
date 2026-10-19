@@ -196,7 +196,6 @@ func dramsim3RefLatency(t *testing.T, scnName string) float64 {
 	return lat
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTier5DifferentialValidationVsDRAMSim3Ramulator2(t *testing.T) {
 	t.Run("matches command counts where the two oracles agree", func(t *testing.T) {
 		requireReference(t)

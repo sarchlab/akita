@@ -18,16 +18,13 @@ import (
 
 // DataRecorder is a backend that can record and store data.
 // The SQLite implementation supports concurrent CreateTable, InsertData,
-// ListTables, and Flush calls. Stop producers before calling Close.
+// and Flush calls. Stop producers before calling Close.
 type DataRecorder interface {
 	// CreateTable creates a new table with given filename
 	CreateTable(tableName string, sampleEntry any)
 
 	// InsertData writes an entry into a table that already exists.
 	InsertData(tableName string, entry any)
-
-	// ListTable returns a slice containing names of all tables
-	ListTables() []string
 
 	// Flush flushes all the buffered task into database
 	Flush()
@@ -46,17 +43,6 @@ func NewDataRecorder(path string) DataRecorder {
 	}
 
 	w.Init()
-
-	return w
-}
-
-// NewDataRecorderWithDB creates a new DataRecorder with a given database.
-func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
-	w := &sqliteWriter{
-		DB:        db,
-		batchSize: 100000,
-		tables:    make(map[string]*table),
-	}
 
 	return w
 }
@@ -346,18 +332,6 @@ func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	if t.entryCount >= t.batchSize {
 		t.flushLocked()
 	}
-}
-
-func (t *sqliteWriter) ListTables() []string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	tables := make([]string, 0, len(t.tables))
-	for table := range t.tables {
-		tables = append(tables, table)
-	}
-
-	return tables
 }
 
 func (t *sqliteWriter) Flush() {

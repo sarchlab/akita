@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sarchlab/akita/v5/daisen/static"
-	"github.com/sarchlab/akita/v5/sim/sourcefs"
+	"github.com/sarchlab/akita/v5/daisen/internal/static"
+	"github.com/sarchlab/akita/v5/internal/sourcefs"
 )
 
 // Server is the Daisen replay server. It reads trace data from a SQLite file

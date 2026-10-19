@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -34,7 +33,7 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 // transactions; draining and enabled agents do, so a Drain can
 // converge.
 func (m *respondPipelineMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 
@@ -163,7 +162,7 @@ func (m *respondPipelineMW) respond() bool {
 				Dst:          reqFromTopState.ReqFromTopSrc,
 				RspTo:        reqFromTopState.ReqFromTopID,
 				TrafficBytes: len(content.Data) + 4,
-				TrafficClass: "memprotocol.DataReadyRsp", Payload: memprotocol.DataReadyRsp{
+				Payload: memprotocol.DataReadyRsp{
 					Data: content.Data,
 				}}
 			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
@@ -183,7 +182,7 @@ func (m *respondPipelineMW) respond() bool {
 				Dst:          reqFromTopState.ReqFromTopSrc,
 				RspTo:        reqFromTopState.ReqFromTopID,
 				TrafficBytes: 4,
-				TrafficClass: "memprotocol.WriteDoneRsp", Payload: memprotocol.WriteDoneRsp{}}
+				Payload:      memprotocol.WriteDoneRsp{}}
 			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tasks.MilestoneKindSubTask,

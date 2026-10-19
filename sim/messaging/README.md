@@ -48,7 +48,6 @@ port and connection implementations. NoC builders support only
 type Msg struct {
     ID           uint64
     Src, Dst     RemotePort
-    TrafficClass string
     TrafficBytes int
     RspTo        uint64
     Payload      any

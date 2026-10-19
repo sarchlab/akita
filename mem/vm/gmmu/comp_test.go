@@ -29,7 +29,6 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestGMMU(t *testing.T) {
 	var (
 		engine     timing.Engine
@@ -85,8 +84,7 @@ func TestGMMU(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agentPort,
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
@@ -206,11 +204,11 @@ func TestGMMU(t *testing.T) {
 			rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: page,
 			},
-				ID:           sim.NewID(),
-				Src:          lowModulePort,
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        sentReqToBottom.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				Src:   lowModulePort,
+				Dst:   bottomPort.AsRemote(),
+				RspTo: sentReqToBottom.ID,
+			}
 
 			bottomPort.Deliver(rsp)
 

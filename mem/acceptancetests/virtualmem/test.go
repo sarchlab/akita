@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
@@ -33,12 +33,12 @@ var maxAddressFlag = flag.Uint64("max-address", 1*mem.GB, "Max memory address")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-var agent *memaccessagent.MemAccessAgent
+var agent *memaccessagent.Comp
 
 //nolint:funlen // wires the whole simulation in one place
 func setupTest(
 	seed int64,
-) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+) (*sim.Simulation, timing.Engine, *memaccessagent.Comp) {
 	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
@@ -129,7 +129,6 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	memCtrlSpec := idealmemcontroller.DefaultSpec()
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
-	memCtrlSpec.CacheLineSize = 64
 	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{
@@ -285,7 +284,7 @@ func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 
 func setupConnection(
 	s *sim.Simulation,
-	agent *memaccessagent.MemAccessAgent,
+	agent *memaccessagent.Comp,
 	ROB *rob.Comp,
 	AT *addresstranslator.Comp,
 	TLB, L2TLB *tlb.Comp,

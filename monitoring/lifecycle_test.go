@@ -120,7 +120,7 @@ func (o monitorPortOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(
 func checkProgressBar(t *testing.T, m *Monitor) {
 	t.Helper()
 	bar := m.CreateProgressBar("work", 10)
-	if bar.ID == 0 || bar.Total != 10 {
+	if snapshot := bar.Snapshot(); snapshot.ID == 0 || snapshot.Total != 10 || snapshot.StartTime.IsZero() {
 		t.Fatal("progress bar was not initialized")
 	}
 	m.CompleteProgressBar(bar)

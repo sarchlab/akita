@@ -189,10 +189,10 @@ func (f *fuzzer) issueWrite() {
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 	}
 	req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
-		ID:           f.h.cache.NewID(),
-		Src:          f.h.agent,
-		Dst:          f.h.top.AsRemote(),
-		TrafficClass: "memprotocol.WriteReq"}
+		ID:  f.h.cache.NewID(),
+		Src: f.h.agent,
+		Dst: f.h.top.AsRemote(),
+	}
 
 	f.h.top.Deliver(req)
 
@@ -207,10 +207,10 @@ func (f *fuzzer) issueRead() {
 		return
 	}
 	req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
-		ID:           f.h.cache.NewID(),
-		Src:          f.h.agent,
-		Dst:          f.h.top.AsRemote(),
-		TrafficClass: "memprotocol.ReadReq"}
+		ID:  f.h.cache.NewID(),
+		Src: f.h.agent,
+		Dst: f.h.top.AsRemote(),
+	}
 
 	f.h.top.Deliver(req)
 
@@ -220,10 +220,10 @@ func (f *fuzzer) issueRead() {
 
 func (f *fuzzer) issueControl(cmd memcontrolprotocol.Command) {
 	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-		ID:           f.h.cache.NewID(),
-		Src:          f.h.agent,
-		Dst:          f.h.ctrl.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  f.h.cache.NewID(),
+		Src: f.h.agent,
+		Dst: f.h.ctrl.AsRemote(),
+	}
 
 	f.h.ctrl.Deliver(req)
 	f.ctrlIDs[req.ID] = cmd

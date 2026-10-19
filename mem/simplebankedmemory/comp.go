@@ -2,7 +2,6 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
@@ -18,11 +17,6 @@ type Spec struct {
 	StageLatency        int         `json:"stage_latency"`
 	PostPipelineBufSize int         `json:"post_pipeline_buf_size"`
 
-	// Capacity is the size in bytes of the memory. The component does not
-	// read it: the system builder sizes the Resources.Storage it supplies
-	// with it.
-	Capacity                       uint64 `json:"capacity"`
-	BankSelectorKind               string `json:"bank_selector_kind"`
 	BankSelectorLog2InterleaveSize uint64 `json:"bank_selector_log2_interleave_size"`
 
 	// Bank-selection address conversion. Bank selection runs on this
@@ -68,16 +62,16 @@ type bankState struct {
 
 // state contains mutable runtime data for the simple banked memory.
 type state struct {
-	ControlState  memcontrolprotocol.State `json:"control_state"`
-	CurrentCmdID  uint64                   `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
-	Banks         []bankState              `json:"banks"`
+	ControlState  controlState         `json:"control_state"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
+	Banks         []bankState          `json:"banks"`
 }
 
 // Resources holds the shared resources referenced by the memory.
 type Resources struct {
 	// Storage holds the memory's data. It is required; the system builder
-	// creates it (usually sized by Spec.Capacity) and may share it with other
+	// sizes it and may share it with other
 	// components.
 	Storage *mem.Storage
 }

@@ -18,7 +18,7 @@ import (
 // and the downstream req_out tracing tasks are both open — then issues a Reset
 // without ever answering the remote request and asserts both tasks are ended.
 // A mid-flight Reset must leave no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	const (
 		deviceID  = uint64(0)
 		lowModule = messaging.RemotePort("LowModule")
@@ -74,8 +74,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		ID:  sim.NewID(),
 		Src: agentPort,
 		Dst: topPort.AsRemote(),
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	topPort.Deliver(req)
 
@@ -102,10 +101,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Reset while the remote walk is in flight; the remote response is never
 	// delivered.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

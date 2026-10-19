@@ -16,7 +16,7 @@ import (
 // TestResetEndsInflightTracingTasks drives a request into the ROB so its req_in
 // and shadow req_out tasks are open, then issues a Reset and asserts both tasks
 // are ended — i.e. a mid-flight Reset leaves no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
@@ -52,10 +52,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Admit a read: topDown opens the top req_in and the shadow req_out, then
 	// waits on the bottom response (which never comes — the request is in flight).
 	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Agent"),
-		Dst:          topPort.AsRemote(),
-		TrafficClass: "memprotocol.ReadReq"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Agent"),
+		Dst: topPort.AsRemote(),
+	}
 
 	topPort.Deliver(read)
 	modelingtest.Tick(rob)
@@ -71,10 +71,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

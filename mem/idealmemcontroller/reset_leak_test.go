@@ -19,7 +19,7 @@ import (
 // than the access latency), then issues a Reset and asserts the req_in task is
 // ended — i.e. a mid-flight Reset leaves no started-never-ended task. The
 // controller is a leaf, so the only open task per access is its req_in.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	storage := mem.NewStorage(1 * mem.MB)
@@ -29,7 +29,6 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// A long latency keeps the access in flight: one Tick admits it into
 	// InflightTransactions (opening req_in) but is far short of completing it.
 	spec.Latency = 100
-	spec.CacheLineSize = 64
 
 	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
@@ -54,10 +53,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Admit a read: takeNewReqs opens the req_in task and parks the access in
 	// InflightTransactions; the access never completes within the ticks below.
 	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Agent"),
-		Dst:          topPort.AsRemote(),
-		TrafficClass: "memprotocol.ReadReq"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Agent"),
+		Dst: topPort.AsRemote(),
+	}
 
 	topPort.Deliver(read)
 	modelingtest.Tick(comp)
@@ -73,10 +72,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the access is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

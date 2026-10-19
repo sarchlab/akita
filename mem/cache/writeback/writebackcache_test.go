@@ -98,7 +98,6 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 1
 	dramSpec.Latency = 200
-	dramSpec.CacheLineSize = 64
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
@@ -110,7 +109,6 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 	return dram.Ports.Top
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestWriteBackCacheIntegration(t *testing.T) {
 	var (
 		engine              timing.Engine
@@ -197,7 +195,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read)
 
@@ -240,7 +238,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: len([]byte{9, 9, 9, 9}) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(write)
 
@@ -280,7 +278,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read)
 
@@ -314,7 +312,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read1)
 
@@ -326,7 +324,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read2)
 
@@ -364,7 +362,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: len(writeData) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(write)
 
@@ -376,7 +374,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read)
 
@@ -427,7 +425,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(read)
 
@@ -450,7 +448,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: len([]byte{1, 2, 3, 4}) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(write1)
 
@@ -462,7 +460,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			Dst: cacheComp.Ports.Top.AsRemote(),
 
 			TrafficBytes: len([]byte{1, 2, 3, 4}) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		cacheComp.Ports.Top.Deliver(write2)
 
@@ -472,10 +470,10 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		require.False(t, present0)
 		// Flush is a conditional verb: pause first so it is legal.
 		pause := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause},
-			ID:           m.comp.NewID(),
-			Src:          controlAgentPort.AsRemote(),
-			Dst:          cacheComp.Ports.Control.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  m.comp.NewID(),
+			Src: controlAgentPort.AsRemote(),
+			Dst: cacheComp.Ports.Control.AsRemote(),
+		}
 
 		cacheComp.Ports.Control.Deliver(pause)
 
@@ -487,10 +485,10 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		require.True(t, pauseRsp.Payload.(memcontrolprotocol.Rsp).Success)
 
 		flush := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-			ID:           m.comp.NewID(),
-			Src:          controlAgentPort.AsRemote(),
-			Dst:          cacheComp.Ports.Control.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  m.comp.NewID(),
+			Src: controlAgentPort.AsRemote(),
+			Dst: cacheComp.Ports.Control.AsRemote(),
+		}
 
 		cacheComp.Ports.Control.Deliver(flush)
 

@@ -35,7 +35,6 @@ func newDDR4State() *state {
 	return st
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTimingValidation(t *testing.T) {
 	var (
 		timing    dramTiming

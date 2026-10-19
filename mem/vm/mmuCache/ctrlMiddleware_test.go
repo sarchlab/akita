@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUCacheCtrlMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -76,9 +75,9 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		setup1(t)
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+		}
 
 		topMsg := messaging.Msg{Payload: vmprotocol.TranslationReq{
 			PID:      1,
@@ -87,19 +86,18 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Requester"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		topPort.Deliver(topMsg)
 
 		bottomMsg := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{},
 		},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("LowModule"),
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        sim.NewID(),
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   messaging.RemotePort("LowModule"),
+			Dst:   bottomPort.AsRemote(),
+			RspTo: sim.NewID(),
+		}
 
 		bottomPort.Deliver(bottomMsg)
 
@@ -126,10 +124,10 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		setup1(t)
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		controlPort.Deliver(req)
 
@@ -161,10 +159,10 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		require.True(t, found)
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		controlPort.Deliver(req)
 
@@ -187,10 +185,10 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		next.CurrentState = mmuCacheStateEnable
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		controlPort.Deliver(req)
 
@@ -249,10 +247,10 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		setVisit(&next.Table[0], 1)
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 1},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Requester"),
-			Dst:          control2.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: control2.AsRemote(),
+		}
 
 		control2.Deliver(req)
 
@@ -287,7 +285,7 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 			Src:          messaging.RemotePort("Requester"),
 			Dst:          controlPort.AsRemote(),
 			TrafficBytes: 4,
-			TrafficClass: "memcontrolprotocol.Req"}
+		}
 
 		controlPort.Deliver(msg)
 

@@ -11,7 +11,7 @@ import (
 	// Enable profiling
 	_ "net/http/pprof"
 
-	"github.com/sarchlab/akita/v5/noc/acceptance"
+	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/nvlink"
 
 	"github.com/sarchlab/akita/v5/sim"

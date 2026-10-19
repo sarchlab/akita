@@ -2,7 +2,6 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -10,10 +9,9 @@ import (
 
 // Spec contains immutable configuration for the ideal memory controller.
 type Spec struct {
-	Freq          timing.Freq `json:"freq"`
-	Width         int         `json:"width"`
-	Latency       int         `json:"latency"`
-	CacheLineSize int         `json:"cache_line_size"`
+	Freq    timing.Freq `json:"freq"`
+	Width   int         `json:"width"`
+	Latency int         `json:"latency"`
 }
 
 // inflightTransaction tracks an in-progress memory request with a countdown.
@@ -31,10 +29,10 @@ type inflightTransaction struct {
 
 // state contains mutable runtime data for the ideal memory controller.
 type state struct {
-	InflightTransactions []inflightTransaction    `json:"inflight_transactions"`
-	ControlState         memcontrolprotocol.State `json:"control_state"`
-	CurrentCmdID         uint64                   `json:"current_cmd_id"`
-	CurrentCmdSrc        messaging.RemotePort     `json:"current_cmd_src"`
+	InflightTransactions []inflightTransaction `json:"inflight_transactions"`
+	ControlState         controlState          `json:"control_state"`
+	CurrentCmdID         uint64                `json:"current_cmd_id"`
+	CurrentCmdSrc        messaging.RemotePort  `json:"current_cmd_src"`
 }
 
 // Resources holds the shared resources referenced by the memory controller,

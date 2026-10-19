@@ -202,11 +202,11 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: page,
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          reqMsg.Src,
-		RspTo:        reqMsg.ID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   reqMsg.Src,
+		RspTo: reqMsg.ID,
+	}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -317,11 +317,11 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: page,
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          msg.Src,
-		RspTo:        msg.ID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   msg.Src,
+		RspTo: msg.ID,
+	}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -370,8 +370,7 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
 		Dst: spec.Bottom.Find(request.VAddr),
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	if !m.bottomPort().CanSend() {
 		return false

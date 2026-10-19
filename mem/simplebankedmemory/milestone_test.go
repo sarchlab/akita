@@ -94,7 +94,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -142,7 +141,7 @@ func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -175,7 +174,6 @@ func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -243,7 +241,7 @@ func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 			Src:          agent.port.AsRemote(),
 			Dst:          topPort.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		agent.send(t, read)
 		conn.transfer()
@@ -286,7 +284,6 @@ func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 			Dst: topPort.AsRemote()}
 
 		write.TrafficBytes = len(write.Payload.(memprotocol.WriteReq).Data) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
 
 		agent.send(t, write)
 		conn.transfer()

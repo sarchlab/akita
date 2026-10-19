@@ -56,9 +56,7 @@ type Spec struct {
     BankPipelineDepth   int         // Pipeline stages per bank
     StageLatency        int         // Cycles per pipeline stage
     PostPipelineBufSize int         // Post-pipeline buffer depth per bank
-    Capacity            uint64      // Memory size; sizes the Storage the system builder supplies
 
-    BankSelectorKind               string // "interleaved"
     BankSelectorLog2InterleaveSize uint64 // log2 of the bank interleave stride
 
     // Optional bank-selection address conversion (bank selection only;
@@ -82,7 +80,7 @@ Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component), `WithResources` (the backing storage, required), and
 `component.BindPort` after Build (the port instances). The component does not build a storage of its
-own: the system builder creates one, usually sized by `Spec.Capacity`, and may
+own: the system builder creates and sizes one and may
 share it with other components. `Build` panics if `Resources.Storage` is nil.
 
 ```go

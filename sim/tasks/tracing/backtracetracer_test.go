@@ -8,7 +8,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBackTraceTracer(t *testing.T) {
 	var (
 		mockCtrl        *gomock.Controller

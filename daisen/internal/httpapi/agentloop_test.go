@@ -273,7 +273,7 @@ func TestFormatRowsByteCap(t *testing.T) {
 // TestRunAgentLoop_MockProvider is the end-to-end "preview": a scripted mock LLM
 // drives the real loop against a real trace DB. Turn 1 asks for a data_query;
 // the loop runs the SQL; turn 2 returns the final answer from the observation.
-func TestRunAgentLoop_MockProvider(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
+func TestRunAgentLoop_MockProvider(t *testing.T) {
 	// Allow the loopback httptest server through the SSRF-guarded dialer.
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
@@ -405,7 +405,7 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 // model asks for daisen_view, the loop emits a `render` event, the test (playing
 // the browser) POSTs an image to /api/agent/capture, and the loop resumes with
 // the image as a multimodal observation and produces the final answer.
-func TestAgentCaptureRoundTrip(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
+func TestAgentCaptureRoundTrip(t *testing.T) {
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
 	seedAgentTrace(t, reader)
@@ -505,7 +505,7 @@ func TestAgentCaptureRoundTrip(t *testing.T) { //nolint:funlen // end-to-end tes
 // assistant turn makes several tool calls and one returns an image, every tool
 // response must immediately follow the assistant message — the image user message
 // must come AFTER all tool responses, not between them.
-func TestAgentLoopMultiToolImageOrdering(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
+func TestAgentLoopMultiToolImageOrdering(t *testing.T) {
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
 	seedAgentTrace(t, reader)

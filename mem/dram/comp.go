@@ -2,7 +2,6 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -281,9 +280,9 @@ type dramTiming struct {
 
 // state contains mutable runtime data for the DRAM memory controller.
 type state struct {
-	ControlState  memcontrolprotocol.State `json:"control_state"`
-	CurrentCmdID  uint64                   `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
+	ControlState  controlState         `json:"control_state"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
 
 	Transactions  []transactionState `json:"transactions"`
 	SubTransQueue subTransQueueState `json:"sub_trans_queue"`

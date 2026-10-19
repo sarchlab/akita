@@ -22,14 +22,12 @@ import (
 // The mmuCache differs from the idealmemcontroller reference in two ways:
 //   - Its control state is a STRING field comp.State.CurrentState with values
 //     mmuCacheStateEnable / mmuCacheStatePause / mmuCacheStateDrain (not the
-//     memcontrolprotocol.State enum).
+//     other components' private control states).
 //   - It is a stateless forwarder with no MSHR: a Top lookup is forwarded down
 //     the Bottom port (an empty cache always misses), and it does not emit a
 //     Top response on its own. So "completion" for the Drain test is the
 //     request appearing on the Bottom port's outgoing queue, and Drain
 //     quiesces when both Top and Bottom incoming queues are empty.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUCacheControlBehavior(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -80,18 +78,17 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Requester"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -106,11 +103,11 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 				PAddr: 0x5000, Valid: true,
 			},
 		},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("LowModule"),
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        fwd.ID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   messaging.RemotePort("LowModule"),
+			Dst:   bottomPort.AsRemote(),
+			RspTo: fwd.ID,
+		}
 
 		return rsp
 	}
