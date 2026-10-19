@@ -20,6 +20,8 @@ in the meantime.
 `networkconnector.LinkEndSwitchParameter.PortName` are removed. Size the backing
 `Storage` explicitly. The generic `DataReader` API, `NewDataRecorderWithDB`, and
 the writer's `ListTables` are removed; use SQLite directly for custom analysis.
+The unused `mem.AddressConverter` interface is removed; the concrete
+`mem.InterleavingConverter` and `mem.ConvertAddress` helper remain available.
 
 The standalone ticking scheduler, ID generator, source archive helpers, Daisen
 server library/assets, monitoring assets, and acceptance/test helpers are now

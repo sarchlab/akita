@@ -343,14 +343,16 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    `Rsp{Success: false, Error: memcontrolprotocol.ErrUnsupported}`.
 5. For Akita's built-in tests, declare the component's support matrix via a `VerbSupport` helper
    (`Universal()`, `CacheLike()`, or a literal).
-6. Built-in tests call `memcontroltest.RunContract`; external components can
-   test the same requests and responses directly:
+6. Akita's built-in tests use the internal harness:
    ```go
    func TestControlContract(t *testing.T) {
        memcontroltest.RunContract(t, "mycomp", buildMyComp,
            memcontroltest.Universal())
    }
    ```
+   External components cannot import `memcontroltest`. Their tests should send
+   `memcontrolprotocol.Req` values through the Control port and check the
+   resulting `Rsp` values against the same protocol guarantees.
 7. Add component-specific behavior tests separately — the contract
    harness only enforces the protocol surface (verb roundtrip, ack
    timing, supported/unsupported response shape). It does **not** check
@@ -364,7 +366,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
 func RunContract(
     t *testing.T,
     name string,
-    build memcontrolprotocol.BuildFunc, // func() *memcontroltest.Harness
+    build memcontroltest.BuildFunc, // func() *memcontroltest.Harness
     matrix memcontroltest.VerbSupport,
 )
 
@@ -377,7 +379,7 @@ type Harness struct {
 }
 ```
 
-For each of the six verbs the harness:
+For each of the six verbs and the invalid zero command, the harness:
 
 - rebuilds the component fresh (verb tests are independent of each
   other),
@@ -395,6 +397,7 @@ points at exactly which verb the component handles wrong.
 
 - `mem/memcontrolprotocol/protocol.go` — the request/response type definitions.
 - [`mem/memcontrolprotocol/README.md`](memcontrolprotocol/README.md) — the `memcontrolprotocol` package
-  overview (State, VerbSupport, errors, `RunContract`).
-- `mem/memcontrolprotocol/state.go` — `State` enum, `VerbSupport`, helpers.
-- `mem/memcontrolprotocol/contract.go` — the `RunContract` harness.
+  overview (messages, verbs, and errors).
+- `mem/memcontrolprotocol/errors.go` — conventional response errors.
+- `mem/internal/memcontroltest/support.go` — built-in test support matrices.
+- `mem/internal/memcontroltest/contract.go` — the internal `RunContract` harness.

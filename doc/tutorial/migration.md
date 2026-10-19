@@ -169,8 +169,7 @@ attached. Wire support and non-ideal link timing remain separate changes.
 ## Simulation umbrella and tool names
 
 The runtime packages now live below `sim/`: `naming`, `hooking`,
-`queueing`, `timing`, `messaging`, `modeling`, `tasks`, `datarecording`, and
-`sourcefs`.
+`queueing`, `timing`, `messaging`, `modeling`, `tasks`, and `datarecording`.
 Task observers live in `sim/tasks/tracing`; replace old `sim/tracing` imports
 with `sim/tasks` for task commands and `sim/tasks/tracing` for observers.
 Change imports such as `github.com/sarchlab/akita/v5/timing` to
@@ -179,13 +178,13 @@ component-model subpackages and mock-generation directives. The runner also move
 `github.com/sarchlab/akita/v5/simulation` to `github.com/sarchlab/akita/v5/sim`;
 its Go package is now named `sim`, while the type remains `sim.Simulation`.
 
-Source archives currently live in `internal/sourcefs`. Register a simulator's source
-with `sim.Builder.WithSourceFS`; moving the archive implementation to `internal/`
-is tracked separately in [#539](https://github.com/sarchlab/akita/issues/539).
+Source archive implementation lives in `internal/sourcefs`. Register a simulator's
+source with the public `sim.Builder.WithSourceFS` entry point.
 
-The live monitor is now `github.com/sarchlab/akita/v5/monitoring` and the
-visualizer is `github.com/sarchlab/akita/v5/daisen`. The old package paths are
-removed. Browser watched-property storage keys are retained so the rename
+The live monitor is now `github.com/sarchlab/akita/v5/monitoring`. Run the
+visualizer through `github.com/sarchlab/akita/v5/daisen/cmd/daisen`; its server
+library is internal. The old package paths are removed.
+Browser watched-property storage keys are retained so the rename
 preserves existing saved preferences.
 
 **Monitoring default changed:** building a simulation no longer starts a web
