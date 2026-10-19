@@ -18,17 +18,20 @@ type bufferEntry struct {
 
 var _ tasks.Owner = (*Port)(nil)
 
-// taskTracker returns the owning component's tracker, or nil for an untracked owner.
-func (p *Port) taskTracker() *tasks.Tracker {
-	if owner, ok := p.owner.(interface{ TaskTracker() *tasks.Tracker }); ok {
-		return owner.TaskTracker()
+// BindTaskTracker supplies the port's simulation task service once during setup.
+// Simulation.RegisterPort calls it automatically. Standalone ports may bind
+// explicitly before buffering messages. A nil tracker disables task tracking.
+func (p *Port) BindTaskTracker(tracker *tasks.Tracker) {
+	if p.taskTrackerBound {
+		panic("twowaybuffered: task tracker already bound")
 	}
-	return nil
+	p.taskTracker = tracker
+	p.taskTrackerBound = true
 }
 
 // AddIncomingMilestone records a resolved wait on the current incoming head.
 func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
-	if p.taskTracker() == nil {
+	if p.taskTracker == nil {
 		return
 	}
 	p.lock.Lock()
@@ -38,7 +41,7 @@ func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
 
 // AddOutgoingMilestone records a resolved wait on the current outgoing head.
 func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
-	if p.taskTracker() == nil {
+	if p.taskTracker == nil {
 		return
 	}
 	p.lock.Lock()
@@ -48,7 +51,7 @@ func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
 
 func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	entry := bufferEntry{Message: msg}
-	tracker := p.taskTracker()
+	tracker := p.taskTracker
 	if tracker == nil {
 		return entry
 	}
@@ -100,7 +103,7 @@ func (p *Port) bufferMilestone(entry *bufferEntry, reason messaging.WaitReason) 
 	if entry.TaskID == 0 {
 		return
 	}
-	tracker := p.taskTracker()
+	tracker := p.taskTracker
 	if tracker == nil {
 		return
 	}
@@ -117,7 +120,7 @@ func (p *Port) endBufferTask(entry *bufferEntry, incoming bool) {
 	if entry.TaskID == 0 {
 		return
 	}
-	tracker := p.taskTracker()
+	tracker := p.taskTracker
 	if tracker == nil {
 		return
 	}

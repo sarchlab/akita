@@ -122,7 +122,8 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. A component model's BindPort registers each port it binds;
+// name and monitored. It also supplies task tracking to ports that support it.
+// A component model's BindPort registers each port it binds;
 // an owner written without a component model registers its own ports.
 func (s *Simulation) RegisterPort(p naming.Named) {
 	port, ok := p.(Port)
@@ -131,6 +132,12 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 			p.Name())
 	}
 
+	// Check setup and name collisions before binding. Binding also prevents
+	// a port from moving between simulations.
+	s.RequireNameAvailable(port.Name())
+	if tracked, ok := port.(interface{ BindTaskTracker(*tasks.Tracker) }); ok {
+		tracked.BindTaskTracker(s.taskTracker)
+	}
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
 }

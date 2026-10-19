@@ -106,6 +106,7 @@ func newOwner(name string, simulation *testSimulation) *owner {
 func port(o *owner) *twowaybuffered.Port {
 	p := twowaybuffered.NewPort(8, 8)
 	p.BindOwner(o, o.name+".Port")
+	p.BindTaskTracker(o.tracker)
 	(&connection{}).BindPort(p)
 	return p
 }
@@ -178,9 +179,16 @@ func TestBufferIdentityWithPreexistingHead(t *testing.T) {
 			a := messaging.Msg{ID: o.NewID(), Src: p.AsRemote(), Dst: "Remote"}
 			b := a
 			b.ID = o.NewID()
-			o.tracker = nil
-			enqueue(a) // Equivalent to an untracked message restored with tracking on.
-			o.tracker = tr.Tracker
+			// Restore an untracked head into a port assembled with tracking on.
+			untracked := port(newOwner("Owner", nil))
+			if incoming {
+				untracked.Deliver(a)
+			} else {
+				untracked.Send(a)
+			}
+			var snapshot bytes.Buffer
+			require.NoError(t, untracked.SaveCheckpoint(&snapshot))
+			require.NoError(t, p.LoadCheckpoint(&snapshot))
 			enqueue(b)
 			require.Len(t, r.starts, 1)
 			tr.now = 10
@@ -210,6 +218,7 @@ func TestSubscriptionScopes(t *testing.T) {
 	p := port(o)
 	sibling := twowaybuffered.NewPort(8, 8)
 	sibling.BindOwner(o, "UnrelatedName") // Actual ownership, not a name prefix.
+	sibling.BindTaskTracker(o.tracker)
 	(&connection{}).BindPort(sibling)
 	foreign := newOwner("Owner.Port.PrefixOnly", tr)
 	all, component, justPort := &recorder{}, &recorder{}, &recorder{}

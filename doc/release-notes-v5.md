@@ -62,7 +62,7 @@ and constructors are removed.
 
 NoC builders now explicitly support buffered ports and ideal direct connections.
 The port factory is removed; endpoint device wiring rejects unsupported device
-ports. Port checkpoints store messages without tracing IDs.
+ports. Port checkpoints retain messages, buffer task IDs, and wait boundaries.
 
 ## Explicit component assembly
 
@@ -130,6 +130,9 @@ With tracking disabled, `s.VisTracer()` is nil and no tracing tables are created
 `WithOutputPath` to create a recorder and visualization tracer for manual
 `StartTracing`. Obtain `tracker := s.TaskTracker()`; component models expose the
 same service through `TaskTracker()`. `tasks.Owner` embeds only `naming.Named`.
+Ports keep their own private tracker reference, bound once by `RegisterPort`;
+they no longer obtain it through an owning component getter. Standalone ports
+can bind the service explicitly through `BindTaskTracker` during setup.
 The tracker owns task operations and stamps time and IDs using simulation
 services. Nil tracker methods do nothing and allocate no IDs. Built-in observers
 move from `sim/tracing` to

@@ -90,11 +90,15 @@ followed by observer locks. Querying Owner/Name on a port is safe.
 
 ## Buffer identity
 
-`twowaybuffered.Port` is a task owner with its own name and the owning
-component's tracker, clock, and ID allocator. Owners without `tasks.Owner` have
-untracked ports. Send/Deliver start a task and store its ID beside the message;
-RetrieveIncoming/Outgoing end that task. No hook or port registration is needed
-for tracking. Generic message hooks remain independent and carry Msg in Item.
+`twowaybuffered.Port` is a task owner with its own name and a private tracker
+reference. `Simulation.RegisterPort` binds that reference to the simulation's
+tracker once during assembly; component models register ports through `BindPort`.
+The owning component needs no `TaskTracker()` method. Standalone ports can call
+`BindTaskTracker(tracker)` explicitly before buffering messages; a nil or unbound
+tracker disables tracing. The tracker supplies all timestamps and IDs.
+Send/Deliver start a task and store its ID beside the message;
+RetrieveIncoming/Outgoing end that task. Generic message hooks remain independent
+and carry Msg in Item.
 
 ```go
 msg, ok := port.PeekIncoming()

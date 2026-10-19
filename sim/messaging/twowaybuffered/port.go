@@ -22,6 +22,9 @@ type Port struct {
 	owner messaging.PortOwner
 	conn  messaging.Connection
 
+	taskTracker      *tasks.Tracker
+	taskTrackerBound bool
+
 	incomingBuf queueing.Buffer[bufferEntry]
 	outgoingBuf queueing.Buffer[bufferEntry]
 }
