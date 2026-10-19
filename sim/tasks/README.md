@@ -155,8 +155,10 @@ structures are unexported. `Owner` provides identity only.
 Frameworks construct `NewTracker(clock, newID, owns)` using the simulation's
 clock, existing ID allocator, and a scope predicate that checks registered object
 identity. This preserves scope isolation even if two simulations reuse names.
-Components obtain the tracker from their simulation. Built-in ports use their
-owning component's tracker privately; they expose no clock, ID, or tracker methods.
+Components obtain the tracker from their simulation. Ports retain a private
+tracker reference bound once by `Simulation.RegisterPort`, or explicitly through
+`BindTaskTracker` for standalone ports. They expose no clock or ID methods and
+require no tracker getter on their owner.
 `Tracker.SaveCheckpoint` and `Tracker.LoadCheckpoint` operate while execution is
 stopped. These are supported exported framework APIs. Ordinary applications use
 the simulation builder, which owns checkpoint entity registration.
