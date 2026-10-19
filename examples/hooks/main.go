@@ -179,8 +179,14 @@ func main() {
 	engine := sim.Engine().(*timing.SerialEngine)
 
 	// Choose buffer sizes; binding below assigns each port its name.
-	outA := twowaybuffered.NewPort(4, 4)
-	outB := twowaybuffered.NewPort(4, 4)
+	outA := twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
+	outB := twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
 
 	agentA := modeling.MakeBuilder[*Comp](Spec{Freq: 1 * timing.GHz, PingDst: "AgentB.Out", NumPings: 1}).
 		WithSimulation(sim).

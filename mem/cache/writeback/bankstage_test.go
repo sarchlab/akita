@@ -3,6 +3,8 @@ package writeback
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -68,9 +70,10 @@ func TestBankStage(t *testing.T) {
 
 		// The stage sends on the Top port, so the test gives it a single-slot
 		// Top port to simulate a busy port.
-		ports := makePorts("Cache", 4)
-		ports.Top = twowaybuffered.NewPort(1, 1)
-		comp := buildStageTestComp(spec, Resources{Storage: storage}, ports)
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		ports := makePorts(sim, "Cache", 4)
+		ports.Top = twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
+		comp := buildStageTestComp(sim, spec, Resources{Storage: storage}, ports)
 		topPort = comp.Ports.Top
 
 		m = comp.Middlewares.Pipeline

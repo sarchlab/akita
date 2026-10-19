@@ -18,7 +18,7 @@ import (
 func TestMMUCacheCtrlMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		comp        *Comp
 		ctrl        *ctrlMiddleware
 		topPort     messaging.Port
@@ -43,7 +43,7 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("MMUCache")
-		compPorts := defaultPorts("MMUCache")
+		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)
@@ -219,7 +219,7 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 		comp2 := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(reg2).
 			Build("MMUCache2")
-		comp2Ports := defaultPorts("MMUCache2")
+		comp2Ports := defaultPorts(reg2, "MMUCache2")
 		comp2.BindPort("Top", comp2Ports.Top)
 		comp2.BindPort("Bottom", comp2Ports.Bottom)
 		comp2.BindPort("Control", comp2Ports.Control)

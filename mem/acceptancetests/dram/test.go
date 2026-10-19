@@ -38,12 +38,14 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 
 	s := simBuilder.Build()
 	engine := s.Engine()
+	ports := twowaybuffered.MakeBuilder().WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16})
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	// The agent sends to the memory controller's Top port, so the
 	// controller's ports are created before the agent is built.
-	memCtrlTop := twowaybuffered.NewPort(16, 16)
+	memCtrlTop := ports.Build()
 
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
@@ -56,7 +58,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 		WithSimulation(s).
 		Build("MemAccessAgent")
 
-	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
+	agent.BindPort("Mem", ports.Build())
 
 	dramSpec := dram.DefaultSpec()
 	dramSpec.Freq = 1 * timing.GHz
@@ -72,7 +74,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 		Build("Mem")
 
 	memCtrl.BindPort("Top", memCtrlTop)
-	memCtrl.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	memCtrl.BindPort("Control", ports.Build())
 
 	conn.BindPort(agent.Ports.Mem)
 	conn.BindPort(memCtrl.Ports.Top)

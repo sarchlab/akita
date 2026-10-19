@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -36,7 +35,7 @@ func TestControlContract(t *testing.T) {
 		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("DataMover")
-		compPorts := makePorts("DataMover", 16, 16, 16, 16)
+		compPorts := makePorts(sim, "DataMover", 16, 16, 16, 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Inside", compPorts.Inside)
 		comp.BindPort("Outside", compPorts.Outside)

@@ -21,7 +21,7 @@ import (
 func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 	var (
 		engine        timing.Engine
-		sim           timing.Simulation
+		sim           *testsim.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -37,7 +37,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("MemCtrl")
-		memControllerPorts := makePorts("MemCtrl", 16)
+		memControllerPorts := makePorts(sim, "MemCtrl", 16)
 		memController.BindPort("Top", memControllerPorts.Top)
 		memController.BindPort("Control", memControllerPorts.Control)
 

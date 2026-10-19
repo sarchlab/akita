@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/networkconnector"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -22,7 +24,7 @@ type tile struct {
 // device ports in arbitration order.
 type Connector struct {
 	name                    string
-	simulation              timing.Simulation
+	simulation              modeling.Simulation
 	connector               *networkconnector.Connector
 	freq                    timing.Freq
 	switchLatency, flitSize int
@@ -34,7 +36,7 @@ type Connector struct {
 
 // Builder configures a rectangular mesh connector.
 type Builder struct {
-	simulation              timing.Simulation
+	simulation              modeling.Simulation
 	freq                    timing.Freq
 	switchLatency, flitSize int
 	linkTransferPerCycle    float64
@@ -46,7 +48,7 @@ func MakeBuilder() Builder {
 }
 
 // WithSimulation sets the owning simulation.
-func (b Builder) WithSimulation(s timing.Simulation) Builder { b.simulation = s; return b }
+func (b Builder) WithSimulation(s modeling.Simulation) Builder { b.simulation = s; return b }
 
 // WithFreq sets the switch frequency.
 func (b Builder) WithFreq(f timing.Freq) Builder { b.freq = f; return b }
@@ -78,7 +80,7 @@ func (b Builder) Build(name string) *Connector {
 
 // AddTile binds devices and creates any newly required transit tiles and links.
 func (c *Connector) AddTile(loc [3]int, ports []messaging.Port) {
-	c.simulation.RequireSetup()
+	assembly.RequireSetup(c.simulation)
 	for _, coordinate := range loc {
 		if coordinate < 0 {
 			panic("coordinate is negative")

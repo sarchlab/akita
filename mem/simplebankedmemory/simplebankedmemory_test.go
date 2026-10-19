@@ -2,7 +2,6 @@ package simplebankedmemory
 
 import (
 	"fmt"
-
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -88,14 +87,17 @@ type testAgent struct {
 	received []messaging.Msg
 }
 
-func newTestAgent(name string) *testAgent {
+func newTestAgent(sim modeling.Simulation, name string) *testAgent {
 	naming.MustBeValid(name)
 
 	a := &testAgent{
 		name: name,
 	}
 
-	a.port = twowaybuffered.NewPort(4, 4)
+	a.port = twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
 	a.port.BindOwner(a, fmt.Sprintf("%s.Port", name))
 
 	return a
@@ -139,14 +141,17 @@ type bandwidthAgent struct {
 	completedIDs []uint64
 }
 
-func newBandwidthAgent(name string) *bandwidthAgent {
+func newBandwidthAgent(sim modeling.Simulation, name string) *bandwidthAgent {
 	naming.MustBeValid(name)
 
 	a := &bandwidthAgent{
 		name: name,
 	}
 
-	a.port = twowaybuffered.NewPort(8, 8)
+	a.port = twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build()
 	a.port.BindOwner(a, fmt.Sprintf("%s.Port", name))
 
 	return a
@@ -196,12 +201,12 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 		Build("Mem")
-	memCompPorts := makePorts("Mem", 32, 16)
+	memCompPorts := makePorts(sim, "Mem", 32, 16)
 	memComp.BindPort("Top", memCompPorts.Top)
 	memComp.BindPort("Control", memCompPorts.Control)
 
 	topPort := memComp.Ports.Top
-	agent := newBandwidthAgent("Agent")
+	agent := newBandwidthAgent(sim, "Agent")
 	conn := newLoopbackConnection("Conn")
 	conn.BindPort(topPort)
 	conn.BindPort(agent.port)
@@ -248,7 +253,7 @@ func collectLatency(
 func TestSimpleBankedMemory(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		memComp *Comp
 		storage *mem.Storage
 		agent   *testAgent
@@ -270,12 +275,12 @@ func TestSimpleBankedMemory(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
-		memCompPorts := makePorts("Mem", 4, 16)
+		memCompPorts := makePorts(sim, "Mem", 4, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
 		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort := memComp.Ports.Top
-		agent = newTestAgent("Agent")
+		agent = newTestAgent(sim, "Agent")
 		conn = newLoopbackConnection("Conn")
 		conn.BindPort(topPort)
 		conn.BindPort(agent.port)
@@ -386,12 +391,12 @@ func TestSimpleBankedMemory(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("MemGlobal")
-		memCompPorts := makePorts("MemGlobal", 4, 16)
+		memCompPorts := makePorts(sim, "MemGlobal", 4, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
 		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort := memComp.Ports.Top
-		agent = newTestAgent("AgentGlobal")
+		agent = newTestAgent(sim, "AgentGlobal")
 		conn = newLoopbackConnection("ConnGlobal")
 		conn.BindPort(topPort)
 		conn.BindPort(agent.port)

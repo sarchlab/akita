@@ -88,10 +88,22 @@ spec.Outside.Destinations = []messaging.RemotePort{"DRAM.Top"}
 mover := modeling.MakeBuilder[*datamover.Comp](spec).
     WithSimulation(sim).
     Build("DMA")
-mover.BindPort("Top", twowaybuffered.NewPort(16, 16))
-mover.BindPort("Inside", twowaybuffered.NewPort(16, 16))
-mover.BindPort("Outside", twowaybuffered.NewPort(16, 16))
-mover.BindPort("Control", twowaybuffered.NewPort(16, 16))
+mover.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+mover.BindPort("Inside", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+mover.BindPort("Outside", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+mover.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
 
 ctrlPort := mover.Ports.Control
 ```
@@ -107,7 +119,7 @@ ctrlPort := mover.Ports.Control
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

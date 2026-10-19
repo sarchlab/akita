@@ -2,7 +2,6 @@ package addresstranslator
 
 import (
 	"fmt"
-
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -25,7 +24,7 @@ import (
 func TestAddressTranslatorControlBehavior(t *testing.T) {
 	var (
 		engine          timing.Engine
-		sim             timing.Simulation
+		sim             *testsim.Simulation
 		translator      *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -44,7 +43,7 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 		translator = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("AddressTranslator")
-		tPorts := makePorts("AddressTranslator", 16)
+		tPorts := makePorts(sim, "AddressTranslator", 16)
 		translator.BindPort("Top", tPorts.Top)
 		translator.BindPort("Bottom", tPorts.Bottom)
 		translator.BindPort("Translation", tPorts.Translation)

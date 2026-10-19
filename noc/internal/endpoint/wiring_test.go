@@ -15,10 +15,10 @@ func buildWiring(t *testing.T, bound []messaging.RemotePort) (*akitasim.Simulati
 	spec := DefaultSpec()
 
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).Build("EP")
-	ep.BindPort("NetworkPort", twowaybuffered.NewPort(1, 1))
+	ep.BindPort("NetworkPort", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
 	ep.Resources.Peer = connectPeer(s, ep.Ports.NetworkPort)
 	for _, name := range bound {
-		p := twowaybuffered.NewPort(1, 1)
+		p := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 		p.BindOwner(payloadOwner{string(name)}, string(name))
 		DeviceConnection(ep).BindPort(p)
 		s.RegisterPort(p)
@@ -27,16 +27,16 @@ func buildWiring(t *testing.T, bound []messaging.RemotePort) (*akitasim.Simulati
 }
 func TestDeviceBindingOrderAndFreeze(t *testing.T) {
 	s, ep := buildWiring(t, []messaging.RemotePort{"A", "B"})
+	p := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
+	p.BindOwner(payloadOwner{"C"}, "C")
 	require.NoError(t, s.Initialize())
 	require.Len(t, ep.Middlewares.Outgoing.devicePorts, 2)
-	p := twowaybuffered.NewPort(1, 1)
-	p.BindOwner(payloadOwner{"C"}, "C")
 	require.Panics(t, func() { DeviceConnection(ep).BindPort(p) })
 	require.Nil(t, p.Connection())
 }
 func TestBindingRejectsUnownedDuplicateAndConnectedPorts(t *testing.T) {
 	s, ep := buildWiring(t, []messaging.RemotePort{"A"})
-	require.Panics(t, func() { DeviceConnection(ep).BindPort(twowaybuffered.NewPort(1, 1)) })
+	require.Panics(t, func() { DeviceConnection(ep).BindPort(twowaybuffered.MakeBuilder().WithSimulation(s).Build()) })
 	p := ep.Resources.devices.ports[0]
 	require.Panics(t, func() { DeviceConnection(ep).BindPort(p) })
 	other := MakeBuilder().WithSimulation(s).Build("Other")

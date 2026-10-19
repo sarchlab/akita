@@ -17,7 +17,7 @@ import (
 func TestDataMover(t *testing.T) {
 	var (
 		engine         timing.Engine
-		sim            timing.Simulation
+		sim            *testsim.Simulation
 		dataMover      *Comp
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage
@@ -33,7 +33,7 @@ func TestDataMover(t *testing.T) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		srcPort = newDriverPort("Src.Top", 4)
+		srcPort = newDriverPort(sim, "Src.Top", 4)
 
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
@@ -55,7 +55,7 @@ func TestDataMover(t *testing.T) {
 		dataMover = modeling.MakeBuilder[*Comp](dmSpec).
 			WithSimulation(sim).
 			Build("DataMover")
-		dataMoverPorts := makePorts("DataMover", 16, 64, 64, 40960000)
+		dataMoverPorts := makePorts(sim, "DataMover", 16, 64, 64, 40960000)
 		dataMover.BindPort("Top", dataMoverPorts.Top)
 		dataMover.BindPort("Inside", dataMoverPorts.Inside)
 		dataMover.BindPort("Outside", dataMoverPorts.Outside)

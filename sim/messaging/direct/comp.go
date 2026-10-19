@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/internal/tickscheduler"
-
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -44,18 +44,21 @@ func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
 	return p.ports[portIndex]
 }
 
+type connectionAssembly = assembly.Member
+
 // Connection is an ideal connection that connects components without latency. It is
 // a connection, not a component: ports plug into it during wiring. It ticks on
 // secondary tick events, so it runs after the components of the same cycle.
 type Connection struct {
 	hooking.HookableBase
+	connectionAssembly
 
 	// State is the connection's mutable data, saved in checkpoints.
 	State State
 
 	lock       sync.Mutex
 	name       string
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	spec       configuration
 	ticks      *tickscheduler.Scheduler
 	ports      ports
@@ -71,7 +74,7 @@ func (c *Connection) BindPort(port messaging.Port) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.simulation.RequireSetup()
+	assembly.RequireSetup(c.simulation)
 	if port == nil || (reflect.ValueOf(port).Kind() == reflect.Pointer && reflect.ValueOf(port).IsNil()) {
 		panic("direct: cannot bind a nil port")
 	}
@@ -85,6 +88,7 @@ func (c *Connection) BindPort(port messaging.Port) {
 	if _, exists := c.ports.portMap[name]; exists {
 		panic("direct: duplicate port name")
 	}
+	assembly.RequireSameSimulation(c.simulation, port)
 	port.BindConnection(c)
 	c.ports.addPort(port, name)
 }
@@ -160,6 +164,3 @@ func (c *Connection) SaveCheckpoint(w io.Writer) error {
 func (c *Connection) LoadCheckpoint(r io.Reader) error {
 	return modeling.ReadCheckpoint(r, c.spec, &c.State, c.ticks)
 }
-
-// RequireSetup rejects connection changes after simulation initialization.
-func (c *Connection) RequireSetup() { c.simulation.RequireSetup() }

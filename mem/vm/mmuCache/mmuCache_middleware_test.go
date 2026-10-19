@@ -16,7 +16,7 @@ import (
 func TestMMUCacheMiddleware(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		comp        *Comp
 		mw          *mmuCacheMiddleware
 		topPort     messaging.Port
@@ -45,7 +45,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
 			Build("MMUCache")
-		compPorts := defaultPorts("MMUCache")
+		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

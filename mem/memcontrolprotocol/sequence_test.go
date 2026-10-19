@@ -82,9 +82,18 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 		WithSimulation(sim).
 		Build("TLB")
 
-	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	comp.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
-	comp.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	comp.BindPort("Bottom", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	comp.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	tick := stepperOf(comp)
 
@@ -394,9 +403,18 @@ func buildWritebackForSequence(
 		WithResources(writeback.Resources{Storage: storage}).
 		Build("L1Cache")
 
-	comp.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	comp.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
-	comp.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	comp.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	comp.BindPort("Bottom", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	comp.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	bottom := comp.Ports.Bottom
 	ctrl := comp.Ports.Control

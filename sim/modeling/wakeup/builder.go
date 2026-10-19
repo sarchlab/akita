@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/sim/naming"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Builder builds instances of one wakeup component type. Obtain it with
 // modeling.MakeBuilder[*Comp](DefaultSpec()).
 type Builder[S, T, R, P, M any] struct {
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	spec       S
 	resources  R
 }
@@ -28,7 +28,7 @@ func (*Component[S, T, R, P, M]) MakeBuilder(spec S) Builder[S, T, R, P, M] {
 // WithSimulation sets the simulation the instance belongs to and registers
 // with.
 func (b Builder[S, T, R, P, M]) WithSimulation(
-	sim timing.Simulation,
+	sim modeling.Simulation,
 ) Builder[S, T, R, P, M] {
 	b.simulation = sim
 	return b
@@ -57,7 +57,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 			typeName[S](), name))
 	}
 
-	b.simulation.RequireNameAvailable(name)
+	assembly.SetupOf(b.simulation).RequireNameAvailable(name)
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 	c := &Component[S, T, R, P, M]{
 		wakeups: newScheduler(name, b.simulation),

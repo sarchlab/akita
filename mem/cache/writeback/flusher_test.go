@@ -3,6 +3,8 @@ package writeback
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -46,9 +48,10 @@ func TestFlusher(t *testing.T) {
 		}
 
 		spec := stageTestSpec()
-		comp := buildStageTestComp(spec,
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		comp := buildStageTestComp(sim, spec,
 			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
-			makePorts("Cache", 4))
+			makePorts(sim, "Cache", 4))
 		controlPort = comp.Ports.Control
 
 		m = comp.Middlewares.Pipeline

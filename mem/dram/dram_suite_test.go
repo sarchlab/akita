@@ -3,11 +3,12 @@ package dram
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestValidateState(t *testing.T) {
@@ -18,10 +19,16 @@ func TestValidateState(t *testing.T) {
 
 // defaultPorts creates the ports of the DRAM controller named name, each with
 // the given buffer size.
-func defaultPorts(name string, bufSize int) Ports {
+func defaultPorts(simulation modeling.Simulation, name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(bufSize, bufSize),
-		Control: twowaybuffered.NewPort(bufSize, bufSize),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
 	}
 }
 
@@ -34,10 +41,14 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
-func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(bufSize, bufSize)
+func newDriverPort(simulation modeling.Simulation, name string, bufSize int) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	p.BindOwner(testDriver{}, name)
 
+	simulation.RegisterPort(p)
 	return p
 }
 
@@ -54,12 +65,12 @@ func storageFor(spec Spec) *mem.Storage {
 
 // buildDRAM builds a DRAM controller named name from spec, backed by a
 // storage that covers its geometry, with ports of the given buffer size.
-func buildDRAM(sim timing.Simulation, spec Spec, name string, bufSize int) *Comp {
+func buildDRAM(sim *testsim.Simulation, spec Spec, name string, bufSize int) *Comp {
 	builtComponent := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storageFor(spec)}).
 		Build(name)
-	builtComponentPorts := defaultPorts(name, bufSize)
+	builtComponentPorts := defaultPorts(sim, name, bufSize)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
 	builtComponent.BindPort("Control", builtComponentPorts.Control)
 	return builtComponent

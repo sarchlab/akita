@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -25,7 +24,7 @@ func TestControlContract(t *testing.T) {
 		comp := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("MMUCache")
-		compPorts := defaultPorts("MMUCache")
+		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

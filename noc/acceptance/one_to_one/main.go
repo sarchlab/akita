@@ -7,11 +7,10 @@ import (
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -50,7 +49,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = twowaybuffered.NewPort(1, 1)
+			ports[j] = twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
@@ -60,8 +59,14 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	// The two endpoints are linked directly, so each one sends its flits to
 	// the other's network port.
 	netPorts := []messaging.Port{
-		twowaybuffered.NewPort(4, 4),
-		twowaybuffered.NewPort(4, 4),
+		twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
+		twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {

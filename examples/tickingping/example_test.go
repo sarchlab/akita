@@ -12,8 +12,14 @@ func Example() {
 	sim := akitasim.MakeBuilder().Build()
 
 	// Choose buffer sizes; binding below assigns each port its name.
-	outA := twowaybuffered.NewPort(16, 16)
-	outB := twowaybuffered.NewPort(16, 16)
+	outA := twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build()
+	outB := twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build()
 
 	specA := DefaultSpec()
 	specA.Freq = 1 * timing.Hz

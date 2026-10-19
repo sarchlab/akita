@@ -16,7 +16,7 @@ package-level `DefaultSpec()` function:
 | `Spec` | configuration: scalars, scalar arrays/slices, flat records and record slices | system builder (defaults returned by `DefaultSpec()`) |
 | `State` | mutable runtime data, saved in checkpoints | component (`State.Initialize`) |
 | `Resources` | references to shared objects | system builder |
-| `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
+| `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.MakeBuilder`) |
 | `Middlewares` | the behavior, one field per middleware | component (`Middlewares.Initialize`) |
 
 The system builder is the code that assembles a simulation. It builds every
@@ -131,7 +131,7 @@ A framework domain API with its own Spec and builder is deferred to v5.1.
 
 ## Simulation context
 
-Every builder takes a `timing.Simulation`, which supplies the engine and IDs
+Every builder takes a `modeling.Simulation`, which supplies the engine and IDs
 and registers components, connections, resources, and ports. Pass the same
 simulation to every builder in one setup. A component keeps its simulation
 to itself; allocate a message or event ID with `comp.NewID()`. The simulation

@@ -87,7 +87,7 @@ func (r *milestoneRecorder) tagsWith(what string) []tasks.Tag {
 func TestCacheMilestones(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		connection  messaging.Connection
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage
@@ -101,7 +101,7 @@ func TestCacheMilestones(t *testing.T) {
 		sim = testsim.New(engine, true)
 		connection = direct.NewConnection("Conn", sim, timing.GHz)
 
-		cuPort = newDriverPort("CU.Top", 16)
+		cuPort = newDriverPort(sim, "CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
@@ -109,8 +109,14 @@ func TestCacheMilestones(t *testing.T) {
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 
-		dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-		dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+		dram.BindPort("Top", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
+		dram.BindPort("Control", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
 
 		addressToPortMapper := dram.Ports.Top.AsRemote()
 
@@ -123,9 +129,18 @@ func TestCacheMilestones(t *testing.T) {
 			WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
 			Build("Cache")
 
-		c.BindPort("Top", twowaybuffered.NewPort(4, 4))
-		c.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-		c.BindPort("Control", twowaybuffered.NewPort(4, 4))
+		c.BindPort("Top", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
+		c.BindPort("Bottom", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
+		c.BindPort("Control", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
 
 		connection.BindPort(dram.Ports.Top)
 		connection.BindPort(c.Ports.Top)

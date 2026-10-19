@@ -92,7 +92,10 @@ func TestReorderBufferMilestones(t *testing.T) {
 		spec.Bottom = bottomUnitRemote
 
 		port := func(name string, bufSize int) messaging.Port {
-			return twowaybuffered.NewPort(bufSize, bufSize)
+			return twowaybuffered.MakeBuilder().
+				WithSimulation(sim).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+				Build()
 		}
 
 		topPort = port("Top", 4)

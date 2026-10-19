@@ -17,7 +17,7 @@ var _ = messaging.DefineProtocol(messaging.RoleDef{
 })
 
 func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
-	p := NewPort(1, 1)
+	p := newTestPort(1, 1)
 	p.BindOwner(&portPresenceOwner{}, "Src")
 	p.BindConnection(&benchmarkConnection{})
 	for _, v := range []any{&registryTestMsg{}, (*registryTestMsg)(nil), struct{ Unregistered int }{}} {
@@ -29,7 +29,7 @@ func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 		}
 	}
 	for _, payload := range []any{nil, registryTestMsg{Value: 42}} {
-		p := NewPort(1, 1)
+		p := newTestPort(1, 1)
 		p.BindOwner(&portPresenceOwner{}, "Src")
 		p.BindConnection(&benchmarkConnection{})
 		p.Send(messaging.Msg{ID: 1, Src: "Src", Dst: "dst", Payload: payload})

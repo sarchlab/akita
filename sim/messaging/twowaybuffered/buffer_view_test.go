@@ -10,7 +10,7 @@ import (
 )
 
 func TestBufferViewsObserveTrafficAndRestoration(t *testing.T) {
-	p := NewPort(2, 3)
+	p := newTestPort(2, 3)
 	owner := &portPresenceOwner{}
 	owner.BindPort("P", p)
 	conn := &portPresenceConnection{}
@@ -42,7 +42,7 @@ func TestBufferViewsObserveTrafficAndRestoration(t *testing.T) {
 }
 
 func TestBufferViewsSynchronizeWithTraffic(t *testing.T) {
-	p := NewPort(2, 3)
+	p := newTestPort(2, 3)
 	(&portPresenceOwner{}).BindPort("P", p)
 	p.BindConnection(&portPresenceConnection{})
 	in, out := p.IncomingBuf(), p.OutgoingBuf()

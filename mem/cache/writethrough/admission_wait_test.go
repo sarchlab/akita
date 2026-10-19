@@ -66,7 +66,10 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *admissionRecorde
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).Build("Cache")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
-		p := twowaybuffered.NewPort(2, 2)
+		p := twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 2}).
+			Build()
 		c.BindPort(name, p)
 		(&admissionConnection{}).BindPort(p)
 	}

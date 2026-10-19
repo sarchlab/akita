@@ -146,10 +146,13 @@ type Port interface {
 }
 ```
 
-Create a buffered port with `twowaybuffered.NewPort`:
+Create a buffered port with `twowaybuffered.MakeBuilder`:
 
 ```go
-port := twowaybuffered.NewPort(incomingCap, outgoingCap)
+port := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: incomingCap, OutgoingCapacity: outgoingCap}).
+    Build()
 ```
 
 Call `component.BindPort("Top", port)` after building the component. This assigns

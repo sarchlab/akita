@@ -38,8 +38,14 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		Build("DRAM")
 
-	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	dram.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}

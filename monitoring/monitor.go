@@ -23,13 +23,12 @@ import (
 	"unsafe"
 
 	_ "github.com/glebarez/go-sqlite"
-
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 	"github.com/sarchlab/akita/v5/monitoring/internal/static"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/shirou/gopsutil/v4/process"
@@ -39,7 +38,7 @@ import (
 // Component is the minimal component contract required by the monitor.
 type Component = sim.Component
 
-type monitorPort = sim.Port
+type monitorPort = messaging.Port
 
 var _ sim.Monitor = (*Monitor)(nil)
 
@@ -47,7 +46,7 @@ type Monitor struct {
 	// Configuration (set before Start).
 	port       int
 	engine     timing.Engine
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	// Execution uses Simulation.Run; the engine provides timing and controls.
 	runSimulation func() error
 	visTracer     *tracing.DBTracer

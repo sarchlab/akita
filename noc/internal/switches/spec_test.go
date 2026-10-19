@@ -32,7 +32,7 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 	require.Empty(t, sw.State.PortComplexes)
 
 	s = sim.MakeBuilder().Build()
-	port := twowaybuffered.NewPort(1, 1)
+	port := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	sw = modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).WithSimulation(s).
 		WithResources(switches.Resources{Wiring: wiring}).Build("Switch")
 	sw.BindPort("Links[0]", port)
@@ -42,7 +42,7 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 }
 func TestInvalidLinkRejectedAtInitialization(t *testing.T) {
 	s := sim.MakeBuilder().Build()
-	port := twowaybuffered.NewPort(1, 1)
+	port := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	wiring := &fixtureWiring{links: []switches.Link{{Remote: "Peer.Top",
 		Latency:          -1,
 		NumInputChannel:  1,

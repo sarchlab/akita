@@ -3,7 +3,7 @@
 //
 // The controller is a ticking component. The system builder builds it with
 // modeling.MakeBuilder[*Comp](DefaultSpec()), supplying the backing storage in Resources (required)
-// and the Top and Control port instances, created with twowaybuffered.NewPort, with
+// and the Top and Control port instances, created with twowaybuffered.MakeBuilder, with
 // BindPort after construction.
 package idealmemcontroller
 

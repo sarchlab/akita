@@ -65,7 +65,7 @@ func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func TestMMUMilestones(t *testing.T) {
 	var (
 		engine    timing.Engine
-		sim       timing.Simulation
+		sim       *testsim.Simulation
 		pageTable *vm.PageTable
 		mmuComp   *Comp
 		topPort   messaging.Port
@@ -84,7 +84,7 @@ func TestMMUMilestones(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			Build("MMU")
-		mmuCompPorts := makePorts("MMU", 16)
+		mmuCompPorts := makePorts(sim, "MMU", 16)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
 

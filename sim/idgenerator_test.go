@@ -27,7 +27,7 @@ func buildIDTestSimulation(t *testing.T, parallel bool) *Simulation {
 }
 
 type allocatingHandler struct {
-	ids       timing.Simulation
+	ids       *Simulation
 	allocated uint64
 }
 

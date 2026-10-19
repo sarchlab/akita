@@ -57,9 +57,18 @@ spec.Bottom.Destinations = []messaging.RemotePort{"MMU.Top"}
 t := modeling.MakeBuilder[*tlb.Comp](spec).
     WithSimulation(sim).
     Build("L2TLB")
-t.BindPort("Top", twowaybuffered.NewPort(4, 4))
-t.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-t.BindPort("Control", twowaybuffered.NewPort(4, 4))
+t.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+t.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+t.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 ```
 
 | Method | Description |
@@ -71,7 +80,7 @@ t.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

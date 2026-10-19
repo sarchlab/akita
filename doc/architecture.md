@@ -78,7 +78,7 @@ Initialize, and Stop precedes recording teardown. The exported `sim.Monitor`
 contract contains Start/Stop only. Monitors discover copied component and port
 inventory slices; callers retain the monitor they supplied.
 
-Use one `messaging.Port` contract (also aliased by `sim.Port`) for components,
+Use one `messaging.Port` contract for components,
 connections, and setup. PortOwner includes Name and BindPort; Connection keeps
 BindPort, receives the source in NotifySend, and does not require Hookable.
 Custom ports are allowed with compatible connections; NoC accepts only
@@ -132,3 +132,23 @@ invalid control command and receives an unsupported response.
 Progress bars expose update methods and an independent locked `Snapshot()`;
 live counters and synchronization stay private. Recording exposes the writer
 only; Daisen's trace reader remains internal.
+
+### Simulation services and buffered-port construction
+
+`modeling.Simulation` is the shared service contract for builders and simulation
+elements: engine, IDs, task tracker, and registration. `sim.Simulation` owns
+`Initialize`; framework validation and initialization dispatch are internal.
+Component authors may implement `State.Initialize(*Comp)` and
+`Middlewares.Initialize(*Comp)`, but do not implement framework lifecycle methods.
+Resources need only `naming.Named`. Keep the domain types `sim.Entity`,
+`sim.Component`, `sim.Connection`, and `sim.Resource`; ports use `messaging.Port`.
+
+Build buffered ports with
+`twowaybuffered.MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()`.
+`DefaultSpec()` has incoming/outgoing capacities 1/1; both must be positive.
+Each port retains its simulation for task tracking, clock access, and setup
+checks. Build does not assign a name or register the port. The existing
+component `BindPort(slot, port)` and connection `BindPort(port)` coordinate
+both ends of their respective bindings. A custom owner calls `BindOwner` and
+registers the port explicitly. Binding and registration reject elements from
+another simulation, and binding after initialization is rejected.

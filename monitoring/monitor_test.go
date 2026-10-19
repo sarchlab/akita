@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -711,9 +711,12 @@ type portedComponent struct {
 	port messaging.Port
 }
 
-func newPortedComponent(name string) *portedComponent {
+func newPortedComponent(simulation modeling.Simulation, name string) *portedComponent {
 	c := &portedComponent{name: name}
-	c.port = twowaybuffered.NewPort(4, 4)
+	c.port = twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
 	c.port.BindOwner(c, name+".P")
 
 	return c
@@ -783,7 +786,7 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 	monitor := newTestMonitorWithSimulation(testsim.New(timing.NewSerialEngine(), false))
-	comp := newPortedComponent("Comp")
+	comp := newPortedComponent(monitor.simulation, "Comp")
 	monitor.addTestComponent(comp)
 	monitor.ports = append(monitor.ports, comp.port)
 

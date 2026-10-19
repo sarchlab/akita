@@ -32,17 +32,23 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the ports of the controller named name: a Top port with
 // the given buffer size and a Control port with a 16-message buffer.
-func makePorts(name string, topBufSize int) Ports {
+func makePorts(simulation modeling.Simulation, name string, topBufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(topBufSize, topBufSize),
-		Control: twowaybuffered.NewPort(16, 16),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: topBufSize, OutgoingCapacity: topBufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
 	}
 }
 
 func TestIdealMemoryController(t *testing.T) {
 	var (
 		engine        timing.Engine
-		sim           timing.Simulation
+		sim           *testsim.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -61,7 +67,7 @@ func TestIdealMemoryController(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("MemCtrl")
-		memControllerPorts := makePorts("MemCtrl", topBufSize)
+		memControllerPorts := makePorts(sim, "MemCtrl", topBufSize)
 		memController.BindPort("Top", memControllerPorts.Top)
 		memController.BindPort("Control", memControllerPorts.Control)
 

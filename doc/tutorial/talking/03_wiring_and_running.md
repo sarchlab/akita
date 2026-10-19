@@ -14,8 +14,14 @@ pages actually talk.
 sim := sim.MakeBuilder().Build()
 
 // Choose buffer sizes; binding below assigns each port its name.
-outA := twowaybuffered.NewPort(16, 16)
-outB := twowaybuffered.NewPort(16, 16)
+outA := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build()
+outB := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build()
 
 specA := DefaultSpec()
 specA.Freq = 1 * timing.Hz
@@ -90,7 +96,7 @@ cycle.
 - **A component = five structs + a `Comp` alias + `DefaultSpec()`.** The same shape as the
   single component, now with a port and a second middleware.
 - **The system builder owns the wiring.** It creates every port with
-  `twowaybuffered.NewPort`, binds them with `component.BindPort`, and
+  `twowaybuffered.MakeBuilder`, binds them with `component.BindPort`, and
   attaches them with `connection.BindPort`.
 - **Ports buffer messages.** Messages are value types: construct them with
   no `&`, check `CanSend()` before `Send` because the outgoing buffer can
@@ -99,7 +105,7 @@ cycle.
   any plugged port can reach any other.
 - **Components use builders; ports and connections use constructors.** Build
   components with `modeling.MakeBuilder[*Comp](DefaultSpec()).WithX().Build(name)`. Create ports with
-  `twowaybuffered.NewPort(in, out)` and connections with
+  `twowaybuffered.MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()` and connections with
   `direct.NewConnection(name, sim, freq)`.
 
 ## Where to Next

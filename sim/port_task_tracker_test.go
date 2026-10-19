@@ -46,7 +46,10 @@ func TestRegisteredPortTracksWithoutOwnerTrackerMethod(t *testing.T) {
 			s := builder.Build()
 			owner := &namedPortOwner{name: "Agent"}
 			s.RegisterComponent(owner)
-			p := twowaybuffered.NewPort(2, 2)
+			p := twowaybuffered.MakeBuilder().
+				WithSimulation(s).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 2}).
+				Build()
 			owner.BindPort("Port", p)
 			s.RegisterPort(p)
 			(&taskPortConnection{}).BindPort(p)
@@ -99,27 +102,29 @@ func TestPortTrackerCannotBeReboundAcrossSimulations(t *testing.T) {
 				builder = builder.WithTaskTracking()
 			}
 			first, second := builder.Build(), sim.MakeBuilder().WithTaskTracking().Build()
-			p := twowaybuffered.NewPort(1, 1)
+			p := twowaybuffered.MakeBuilder().WithSimulation(first).Build()
 			(&namedPortOwner{name: "Agent"}).BindPort("Port", p)
 			first.RegisterPort(p)
-			require.PanicsWithValue(t, "twowaybuffered: task tracker already bound", func() { second.RegisterPort(p) })
+			require.PanicsWithValue(t, "assembly: element belongs to another simulation", func() { second.RegisterPort(p) })
 			require.Empty(t, second.Ports())
-			require.NotPanics(t, func() { second.RequireNameAvailable(p.Name()) })
+			own := twowaybuffered.MakeBuilder().WithSimulation(second).Build()
+			(&namedPortOwner{name: "Agent"}).BindPort("Port", own)
+			require.NotPanics(t, func() { second.RegisterPort(own) })
 			require.NoError(t, first.Terminate())
 			require.NoError(t, second.Terminate())
 		})
 	}
 }
 
-func TestRejectedPortNameDoesNotBindTracker(t *testing.T) {
-	first, second := sim.MakeBuilder().WithTaskTracking().Build(), sim.MakeBuilder().Build()
+func TestDuplicatePortRegistrationLeavesInventoryUnchanged(t *testing.T) {
+	s := sim.MakeBuilder().WithTaskTracking().Build()
 	owner := &namedPortOwner{name: "Agent"}
-	p, duplicate := twowaybuffered.NewPort(1, 1), twowaybuffered.NewPort(1, 1)
+	p := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
+	duplicate := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	owner.BindPort("Port", p)
 	owner.BindPort("Port", duplicate)
-	first.RegisterPort(p)
-	require.Panics(t, func() { first.RegisterPort(duplicate) })
-	require.NotPanics(t, func() { second.RegisterPort(duplicate) })
-	require.NoError(t, first.Terminate())
-	require.NoError(t, second.Terminate())
+	s.RegisterPort(p)
+	require.Panics(t, func() { s.RegisterPort(duplicate) })
+	require.Equal(t, []messaging.Port{p}, s.Ports())
+	require.NoError(t, s.Terminate())
 }

@@ -21,7 +21,10 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	if monitor.started || monitor.httpServer != nil {
 		t.Fatal("monitor started during Build")
 	}
-	portUnderTest := twowaybuffered.NewPort(2, 2)
+	portUnderTest := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 2}).
+		Build()
 	portUnderTest.BindOwner(monitorPortOwner{}, "Agent.Port")
 	s.RegisterPort(portUnderTest)
 	if err := s.Initialize(); err != nil {

@@ -3,10 +3,11 @@ package acceptance
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/internal/tickscheduler"
-
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -19,7 +20,7 @@ type Agent struct {
 	hooking.HookableBase
 
 	name       string
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	test       *Test
 	AgentPorts []messaging.Port
 	MsgsToSend []messaging.Msg
@@ -30,7 +31,7 @@ type Agent struct {
 // NewAgent creates a new agent and registers it (and its ports) with the
 // simulation, so the agent appears in the simulation's topology and trace.
 func NewAgent(
-	sim timing.Simulation,
+	sim modeling.Simulation,
 	freq timing.Freq,
 	name string,
 	ports []messaging.Port,
@@ -139,9 +140,10 @@ func (a *Agent) recv() bool {
 
 // BindPort attaches and registers an agent port during network assembly.
 func (a *Agent) BindPort(slot string, p messaging.Port) {
-	a.simulation.RequireSetup()
+	assembly.RequireSetup(a.simulation)
 	name := a.Name() + "." + slot
-	a.simulation.RequireNameAvailable(name)
+	assembly.SetupOf(a.simulation).RequireNameAvailable(name)
+	assembly.RequireSameSimulation(a.simulation, p)
 	p.BindOwner(a, name)
 	a.simulation.RegisterPort(p)
 	a.AgentPorts = append(a.AgentPorts, p)

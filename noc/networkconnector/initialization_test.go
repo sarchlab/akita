@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -49,8 +50,11 @@ func topologyParameters() (DeviceToSwitchLinkParameter, SwitchToSwitchLinkParame
 			LinkParam:      link},
 		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end, LinkParam: link}
 }
-func topologyPort(s timing.Simulation, name string) messaging.Port {
-	p := twowaybuffered.NewPort(2, 2)
+func topologyPort(s modeling.Simulation, name string) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 2}).
+		Build()
 	p.BindOwner(routeTestOwner{}, name)
 	s.RegisterPort(p)
 	return p
@@ -59,7 +63,7 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 	for _, late := range []bool{false, true} {
 		t.Run(fmt.Sprint(late), func(t *testing.T) {
 			s := sim.MakeBuilder().Build()
-			var service timing.Simulation = s
+			var service modeling.Simulation = s
 			delayed := &lateResources{Simulation: s}
 			if late {
 				service = delayed
@@ -74,7 +78,7 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			c.ConnectSwitches(a, b, sp)
 			require.Nil(t, c.switches[a].Routes())
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)
-			_ = (&networkCheckpoint{c}).record()
+			_ = (&networkCheckpoint{c: c}).record()
 			require.Zero(t, router.calls)
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)
 			for _, sw := range c.switches {

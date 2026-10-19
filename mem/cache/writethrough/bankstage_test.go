@@ -1,14 +1,14 @@
 package writethrough
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/cache"
-
-	"github.com/sarchlab/akita/v5/sim/queueing"
-
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +43,8 @@ func TestBankstage(t *testing.T) {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c = buildStageTestCache(
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		c = buildStageTestCache(sim,
 			Spec{Bottom: mem.AddressMapper{Destinations: []messaging.RemotePort{"Memory.Top"}},
 				Freq:             1 * timing.GHz,
 				BankLatency:      10,
@@ -55,7 +56,7 @@ func TestBankstage(t *testing.T) {
 				WritePolicyType:  "write-around",
 			},
 			Resources{Storage: storage},
-			makePorts("Cache", 4),
+			makePorts(sim, "Cache", 4),
 			initialState,
 		)
 

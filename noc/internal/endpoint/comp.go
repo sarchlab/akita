@@ -3,6 +3,7 @@ package endpoint
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -78,13 +79,10 @@ func DeviceConnection(c *Comp) messaging.Connection { return c.Resources.devices
 
 // BindPort appends a device in arbitration order during setup.
 func (d *deviceSide) BindPort(port messaging.Port) {
-	d.RequireSetup()
+	assembly.RequireSetup(d)
 	mustBeBufferedDevicePort(port)
 	if port.Owner() == nil {
 		panic("endpoint: device port has no owner")
-	}
-	if owner, ok := port.Owner().(interface{ RequireSetup() }); ok {
-		owner.RequireSetup()
 	}
 	for _, existing := range d.ports {
 		if existing == port {

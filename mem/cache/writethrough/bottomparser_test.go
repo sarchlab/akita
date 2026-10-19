@@ -1,16 +1,16 @@
 package writethrough
 
 import (
+	"testing"
+
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-
-	"github.com/sarchlab/akita/v5/sim/queueing"
-
-	"testing"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -43,8 +43,9 @@ func TestBottomParser(t *testing.T) {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		ports := makePorts("Cache", 4)
-		c = buildStageTestCache(
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		ports := makePorts(sim, "Cache", 4)
+		c = buildStageTestCache(sim,
 			Spec{Bottom: mem.AddressMapper{Destinations: []messaging.RemotePort{"Memory.Top"}},
 				Freq:             1 * timing.GHz,
 				Log2BlockSize:    6,

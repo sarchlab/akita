@@ -54,8 +54,14 @@ m := modeling.MakeBuilder[*mmu.Comp](spec).
     WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
-m.BindPort("Top", twowaybuffered.NewPort(16, 16))
-m.BindPort("Control", twowaybuffered.NewPort(4, 4))
+m.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+m.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 ```
 
 | Method | Description |
@@ -67,7 +73,7 @@ m.BindPort("Control", twowaybuffered.NewPort(4, 4))
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

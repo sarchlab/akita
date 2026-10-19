@@ -49,9 +49,18 @@ func buildEnvironment(
 	// The agent sends to the cache's Top port, so the cache's ports are
 	// created before the agent is built.
 	cachePorts := writethrough.Ports{
-		Top:     twowaybuffered.NewPort(16, 16),
-		Bottom:  twowaybuffered.NewPort(16, 16),
-		Control: twowaybuffered.NewPort(16, 16),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
 	}
 
 	agentSpec := memaccessagent.DefaultSpec()
@@ -64,7 +73,10 @@ func buildEnvironment(
 		WithSimulation(s).
 		Build("MemAccessAgent")
 
-	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
+	agent.BindPort("Mem", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
 		WithSimulation(s).
@@ -76,8 +88,14 @@ func buildEnvironment(
 		}).
 		Build("DRAM")
 
-	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	dram.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	cacheSpec := writethrough.DefaultSpec()
 	cacheSpec.WritePolicyType = "write-through"

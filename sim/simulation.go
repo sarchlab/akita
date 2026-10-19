@@ -7,17 +7,21 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/sarchlab/akita/v5/internal/idgen"
-
 	"github.com/sarchlab/akita/v5/internal/assembly"
+	"github.com/sarchlab/akita/v5/internal/idgen"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
+type simulationContext = assembly.Context
+
 type Simulation struct {
+	simulationContext
 	// lifecycle serializes snapshots and cleanup. activeOperation spans callbacks
 	// made by Initialize and Run, without holding the mutex during those callbacks.
 	// Engine.WithIdle also excludes calls made directly through Engine().
@@ -25,7 +29,6 @@ type Simulation struct {
 	activeOperation  string
 	terminated       bool
 	terminateErr     error
-	setup            assembly.Setup
 	id               string
 	outputPath       string
 	engine           timing.Engine
@@ -41,7 +44,7 @@ type Simulation struct {
 	// components and ports are kept in registration order for the topology
 	// recorder.
 	components []Component
-	ports      []Port
+	ports      []messaging.Port
 
 	// entities is the single, flat inventory of every registered runtime object
 	// (components, ports, connections, resources, the engine, and the ID
@@ -53,6 +56,8 @@ type Simulation struct {
 	entities     []Entity
 	entityByName map[string]int
 }
+
+func (s *Simulation) setup() *assembly.Setup { return assembly.SetupOf(&s.simulationContext) }
 
 // ID returns the ID of the simulation. An ID is a UUID that is generated when
 // the simulation is created.
@@ -91,7 +96,7 @@ func (s *Simulation) Components() []Component { return slices.Clone(s.components
 
 // Ports returns a copy of the registered port inventory, in registration order.
 // The objects themselves remain live. Inventory is frozen after initialization.
-func (s *Simulation) Ports() []Port { return slices.Clone(s.ports) }
+func (s *Simulation) Ports() []messaging.Port { return slices.Clone(s.ports) }
 
 // registerEntity records a live entity in the single, flat inventory. It is the
 // only cross-kind uniqueness check — names must be globally unique across all
@@ -104,7 +109,7 @@ func (s *Simulation) registerEntity(e Entity) {
 			panic("simulation: TaskTracker is a reserved entity name")
 		}
 	}
-	s.setup.Register(e)
+	s.setup().Register(e)
 	name := e.Name()
 
 	if s.entityByName == nil {
@@ -115,31 +120,19 @@ func (s *Simulation) registerEntity(e Entity) {
 	s.entityByName[name] = len(s.entities) - 1
 }
 
-// RegisterComponent registers a component with the simulation. It accepts any
-// named object so that component builders can register through the
-// timing.Simulation interface without importing this package.
-func (s *Simulation) RegisterComponent(c naming.Named) {
+// RegisterComponent registers a port-owning component with the simulation.
+func (s *Simulation) RegisterComponent(c messaging.PortOwner) {
+	assembly.RequireSameSimulation(s, c)
 	s.registerEntity(c)
 	s.components = append(s.components, c)
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. It also supplies task tracking to ports that support it.
+// name and monitored. Ports receive simulation services through their builder.
 // A component model's BindPort registers each port it binds;
 // an owner written without a component model registers its own ports.
-func (s *Simulation) RegisterPort(p naming.Named) {
-	port, ok := p.(Port)
-	if !ok {
-		panic("simulation: RegisterPort requires a messaging.Port, got " +
-			p.Name())
-	}
-
-	// Check setup and name collisions before binding. Binding also prevents
-	// a port from moving between simulations.
-	s.RequireNameAvailable(port.Name())
-	if tracked, ok := port.(interface{ BindTaskTracker(*tasks.Tracker) }); ok {
-		tracked.BindTaskTracker(s.taskTracker)
-	}
+func (s *Simulation) RegisterPort(port messaging.Port) {
+	assembly.RequireSameSimulation(s, port)
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
 }
@@ -148,7 +141,8 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 // inventory. Setup code still owns topology construction and BindPort calls, but
 // registered connections are tracked as runtime entities in the global state
 // manager.
-func (s *Simulation) RegisterConnection(c naming.Named) {
+func (s *Simulation) RegisterConnection(c messaging.Connection) {
+	assembly.RequireSameSimulation(s, c)
 	s.registerEntity(c)
 }
 
@@ -161,6 +155,7 @@ func (s *Simulation) RegisterResource(r naming.Named) {
 		panic("resource cannot be nil")
 	}
 
+	assembly.RequireSameSimulation(s, r)
 	s.registerEntity(r)
 }
 
@@ -228,7 +223,7 @@ func (s *Simulation) Initialize() error {
 	s.activeOperation = "initialization"
 	s.lifecycle.Unlock()
 	defer s.finishOperation()
-	if err := s.setup.Initialize(); err != nil {
+	if err := s.setup().Initialize(); err != nil {
 		return err
 	}
 	if s.monitor != nil {
@@ -245,7 +240,7 @@ func (s *Simulation) Run() error {
 		s.lifecycle.Unlock()
 		return err
 	}
-	if err := s.setup.Ready(); err != nil {
+	if err := s.setup().Ready(); err != nil {
 		s.lifecycle.Unlock()
 		return err
 	}
@@ -280,12 +275,6 @@ func (s *Simulation) whileIdle(fn func() error) error {
 	return s.engine.WithIdle(fn)
 }
 
-// RequireSetup rejects structural changes after initialization begins.
-func (s *Simulation) RequireSetup() { s.setup.RequireSetup() }
-
-// RequireNameAvailable validates a name before a binding changes either side.
-func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvailable(name) }
-
 // TaskTracker returns the simulation task service, or nil when tracking is disabled.
 func (s *Simulation) TaskTracker() *tasks.Tracker { return s.taskTracker }
 
@@ -294,3 +283,5 @@ func (s *Simulation) ownsEntity(named naming.Named) bool {
 	i, ok := s.entityByName[named.Name()]
 	return ok && reflect.TypeOf(named).Comparable() && s.entities[i] == named
 }
+
+var _ modeling.Simulation = (*Simulation)(nil)

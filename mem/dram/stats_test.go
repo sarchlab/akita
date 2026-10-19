@@ -24,10 +24,14 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
-func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(bufSize, bufSize)
+func newDriverPort(simulation modeling.Simulation, name string, bufSize int) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	p.BindOwner(testDriver{}, name)
 
+	simulation.RegisterPort(p)
 	return p
 }
 
@@ -103,11 +107,17 @@ func TestDRAMStatistics(t *testing.T) {
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("StatsDRAM")
 
-		dramComp.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
-		dramComp.BindPort("Control", twowaybuffered.NewPort(1024, 1024))
+		dramComp.BindPort("Top", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 1024, OutgoingCapacity: 1024}).
+			Build())
+		dramComp.BindPort("Control", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 1024, OutgoingCapacity: 1024}).
+			Build())
 
 		topPort := dramComp.Ports.Top
-		srcPort := newDriverPort("Src.Top", 1024)
+		srcPort := newDriverPort(sim, "Src.Top", 1024)
 		conn.BindPort(topPort)
 		conn.BindPort(srcPort)
 		if err := sim.Initialize(); err != nil {

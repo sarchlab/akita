@@ -70,16 +70,15 @@ func DefaultSpec() Spec {
 	return Spec{Freq: 1 * timing.GHz, Depth: 2}
 }
 
-func newSim() timing.Simulation {
+func newSim() *akitasim.Simulation {
 	return akitasim.MakeBuilder().Build()
 }
 
-func newPort(name string) messaging.Port {
-	return twowaybuffered.NewPort(1, 1)
+func newPort(simulation modeling.Simulation, name string) messaging.Port {
+	return twowaybuffered.MakeBuilder().WithSimulation(simulation).Build()
 }
 
-func build(ports Ports) *Comp {
-	setupSim1 := newSim()
+func build(setupSim1 *akitasim.Simulation, ports Ports) *Comp {
 	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(setupSim1).Build("C")
 	builtComponentPorts := ports
 	builtComponent.BindPort("In", builtComponentPorts.In)
@@ -114,8 +113,9 @@ func mustPanic(t *testing.T, substr string, f func()) {
 // --- Tests ---
 
 func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
-	in := newPort("C.In")
-	c := build(Ports{In: in})
+	sim := newSim()
+	in := newPort(sim, "C.In")
+	c := build(sim, Ports{In: in})
 
 	if in.Owner() != c || c.Ports.In != in {
 		t.Errorf("port In is not bound to the component")
@@ -138,7 +138,7 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 	c := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("C")
-	cPorts := Ports{In: newPort("C.In")}
+	cPorts := Ports{In: newPort(sim, "C.In")}
 	c.BindPort("In", cPorts.In)
 	for i, p := range cPorts.Links {
 		c.BindPort(fmt.Sprintf("Links[%d]", i), p)
@@ -161,7 +161,8 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 }
 
 func TestHandlePassesEveryEventToTheMiddlewares(t *testing.T) {
-	c := build(Ports{In: newPort("C.In")})
+	sim := newSim()
+	c := build(sim, Ports{In: newPort(sim, "C.In")})
 
 	c.Handle(pokeEvent{timing.EventBase{Handler: "C"}})
 
@@ -172,7 +173,8 @@ func TestHandlePassesEveryEventToTheMiddlewares(t *testing.T) {
 }
 
 func TestCheckpointRoundTrip(t *testing.T) {
-	c := build(Ports{In: newPort("C.In")})
+	sim := newSim()
+	c := build(sim, Ports{In: newPort(sim, "C.In")})
 	c.State.Count = 7
 
 	var buf bytes.Buffer
@@ -181,7 +183,8 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	}
 	saved := buf.Bytes()
 
-	restored := build(Ports{In: newPort("C.In")})
+	restoreSim := newSim()
+	restored := build(restoreSim, Ports{In: newPort(restoreSim, "C.In")})
 	if err := restored.LoadCheckpoint(bytes.NewReader(saved)); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -196,7 +199,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		WithSimulation(setupSim2).
 		WithSpec(spec).
 		Build("C")
-	otherPorts := Ports{In: newPort("C.In")}
+	otherPorts := Ports{In: newPort(setupSim2, "C.In")}
 	other.BindPort("In", otherPorts.In)
 	for i, p := range otherPorts.Links {
 		other.BindPort(fmt.Sprintf("Links[%d]", i), p)
@@ -232,7 +235,7 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 			builtComponent := def.
 				WithSimulation(setupSim3).
 				Build("C")
-			builtComponentPorts := Ports{In: newPort("C.In")}
+			builtComponentPorts := Ports{In: newPort(setupSim3, "C.In")}
 			builtComponent.BindPort("In", builtComponentPorts.In)
 			for i, p := range builtComponentPorts.Links {
 				builtComponent.BindPort(fmt.Sprintf("Links[%d]", i), p)
@@ -255,7 +258,7 @@ func TestBuildRejectsBadShapes(t *testing.T) {
 			builtComponent := def.
 				WithSimulation(setupSim4).
 				Build("C")
-			builtComponentPorts := Ports{In: newPort("C.In")}
+			builtComponentPorts := Ports{In: newPort(setupSim4, "C.In")}
 			builtComponent.BindPort("In", builtComponentPorts.In)
 			for i, p := range builtComponentPorts.Links {
 				builtComponent.BindPort(fmt.Sprintf("Links[%d]", i), p)

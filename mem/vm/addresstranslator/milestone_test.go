@@ -95,7 +95,7 @@ func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func TestAddressTranslatorMilestones(t *testing.T) {
 	var (
 		engine          timing.Engine
-		sim             timing.Simulation
+		sim             *testsim.Simulation
 		at              *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -121,7 +121,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 		at = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("AddressTranslator")
-		atPorts := makePorts("AddressTranslator", topBufSize)
+		atPorts := makePorts(sim, "AddressTranslator", topBufSize)
 		at.BindPort("Top", atPorts.Top)
 		at.BindPort("Bottom", atPorts.Bottom)
 		at.BindPort("Translation", atPorts.Translation)

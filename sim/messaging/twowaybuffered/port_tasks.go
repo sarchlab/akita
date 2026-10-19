@@ -18,20 +18,9 @@ type bufferEntry struct {
 
 var _ tasks.Owner = (*Port)(nil)
 
-// BindTaskTracker supplies the port's simulation task service once during setup.
-// Simulation.RegisterPort calls it automatically. Standalone ports may bind
-// explicitly before buffering messages. A nil tracker disables task tracking.
-func (p *Port) BindTaskTracker(tracker *tasks.Tracker) {
-	if p.taskTrackerBound {
-		panic("twowaybuffered: task tracker already bound")
-	}
-	p.taskTracker = tracker
-	p.taskTrackerBound = true
-}
-
 // AddIncomingMilestone records a resolved wait on the current incoming head.
 func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
-	if p.taskTracker == nil {
+	if p.simulation.TaskTracker() == nil {
 		return
 	}
 	p.lock.Lock()
@@ -41,7 +30,7 @@ func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
 
 // AddOutgoingMilestone records a resolved wait on the current outgoing head.
 func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
-	if p.taskTracker == nil {
+	if p.simulation.TaskTracker() == nil {
 		return
 	}
 	p.lock.Lock()
@@ -51,7 +40,7 @@ func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
 
 func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	entry := bufferEntry{Message: msg}
-	tracker := p.taskTracker
+	tracker := p.simulation.TaskTracker()
 	if tracker == nil {
 		return entry
 	}
@@ -68,7 +57,7 @@ func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	}
 	entry.TaskID = tracker.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
 		What: what, Location: p.name + direction, Detail: msg})
-	entry.LastMilestoneTime = tracker.CurrentTime()
+	entry.LastMilestoneTime = p.simulation.Engine().CurrentTime()
 	return entry
 }
 
@@ -103,11 +92,11 @@ func (p *Port) bufferMilestone(entry *bufferEntry, reason messaging.WaitReason) 
 	if entry.TaskID == 0 {
 		return
 	}
-	tracker := p.taskTracker
+	tracker := p.simulation.TaskTracker()
 	if tracker == nil {
 		return
 	}
-	now := tracker.CurrentTime()
+	now := p.simulation.Engine().CurrentTime()
 	if now <= entry.LastMilestoneTime {
 		return
 	}
@@ -120,7 +109,7 @@ func (p *Port) endBufferTask(entry *bufferEntry, incoming bool) {
 	if entry.TaskID == 0 {
 		return
 	}
-	tracker := p.taskTracker
+	tracker := p.simulation.TaskTracker()
 	if tracker == nil {
 		return
 	}

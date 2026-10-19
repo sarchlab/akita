@@ -3,6 +3,7 @@ package wakeup
 import (
 	"sync"
 
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -25,7 +26,7 @@ func init() {
 type scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
-	simulation timing.Simulation
+	simulation modeling.Simulation
 
 	at        timing.VTimeInPicoSec
 	scheduled bool
@@ -33,7 +34,7 @@ type scheduler struct {
 
 // newScheduler creates a scheduler for the wakeup events of the handler with
 // the given ID.
-func newScheduler(handlerID string, sim timing.Simulation) *scheduler {
+func newScheduler(handlerID string, sim modeling.Simulation) *scheduler {
 	return &scheduler{handlerID: handlerID, simulation: sim}
 }
 

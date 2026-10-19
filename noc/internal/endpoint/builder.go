@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Builder creates an endpoint and its device-side connection together.
@@ -17,7 +16,7 @@ type Builder struct {
 func MakeBuilder() Builder { return Builder{builder: modeling.MakeBuilder[*Comp](DefaultSpec())} }
 
 // WithSimulation sets the owning simulation.
-func (b Builder) WithSimulation(s timing.Simulation) Builder {
+func (b Builder) WithSimulation(s modeling.Simulation) Builder {
 	b.builder = b.builder.WithSimulation(s)
 	return b
 }

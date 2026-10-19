@@ -81,7 +81,7 @@ func (t *treeTracer) print() {
 
 // buildCache builds a cache level that forwards its misses to lower, the Top
 // port of the level below.
-func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache.Comp {
+func buildCache(sim modeling.Simulation, name string, lower messaging.Port) *cache.Comp {
 	spec := cache.DefaultSpec()
 	spec.Downstream = lower.AsRemote()
 
@@ -89,8 +89,14 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 		WithSimulation(sim).
 		Build(name)
 
-	builtComponent.BindPort("Top", twowaybuffered.NewPort(4, 4))
-	builtComponent.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
+	builtComponent.BindPort("Bottom", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	return builtComponent
 }
 
@@ -103,7 +109,10 @@ func main() {
 		WithSimulation(sim).
 		Build("Memory")
 
-	mem.BindPort("Top", twowaybuffered.NewPort(4, 4))
+	mem.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	l2 := buildCache(sim, "L2", mem.Ports.Top)
 	l1 := buildCache(sim, "L1", l2.Ports.Top)
@@ -114,7 +123,10 @@ func main() {
 		WithSimulation(sim).
 		Build("Client")
 
-	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))
+	cli.BindPort("Out", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	connect := func(name string, a, b messaging.Port) {
 		conn := direct.NewConnection(name, sim, timing.GHz)

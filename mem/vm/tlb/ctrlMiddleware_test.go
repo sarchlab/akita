@@ -14,7 +14,7 @@ import (
 func TestTLBCtrlMiddleware(t *testing.T) {
 	var (
 		engine timing.Engine
-		sim    timing.Simulation
+		sim    *testsim.Simulation
 		comp   *Comp
 		ctrlMW *ctrlMiddleware
 	)
@@ -31,7 +31,7 @@ func TestTLBCtrlMiddleware(t *testing.T) {
 		comp = modeling.MakeBuilder[*Comp](routingSpec1).
 			WithSimulation(sim).
 			Build("TLB")
-		compPorts := defaultPorts("TLB")
+		compPorts := defaultPorts(sim, "TLB")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

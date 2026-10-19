@@ -29,7 +29,7 @@ provide independently usable building blocks:
 
 These packages remain in the same Go module. Import, for example,
 `github.com/sarchlab/akita/v5/sim/modeling/ticking`. Runtime subpackages
-use the `timing.Simulation` interface rather than importing the parent runner.
+use the `modeling.Simulation` interface rather than importing the parent runner.
 Hardware models (`mem`, `noc`) and tools (`monitoring`, `daisen`, `inspect`)
 remain outside this directory. The runner has no dependency on either UI.
 

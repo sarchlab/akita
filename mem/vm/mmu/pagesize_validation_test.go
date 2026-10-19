@@ -23,7 +23,7 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
-	ports := makePorts("", 4096)
+	ports := makePorts(sim, "", 4096)
 	mmu.BindPort("Top", ports.Top)
 	mmu.BindPort("Control", ports.Control)
 	if mmu == nil {
@@ -51,7 +51,7 @@ func TestPageSizeValidation(t *testing.T) {
 	}()
 
 	bad := builder2.Build("MismatchedPageSizes")
-	badPorts := makePorts("", 4096)
+	badPorts := makePorts(sim, "", 4096)
 	bad.BindPort("Top", badPorts.Top)
 	bad.BindPort("Control", badPorts.Control)
 	if err := sim.Initialize(); err != nil {
@@ -74,7 +74,7 @@ func TestPageTableRequired(t *testing.T) {
 	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("NoPageTable")
-	builtComponentPorts := makePorts("NoPageTable", 4096)
+	builtComponentPorts := makePorts(sim, "NoPageTable", 4096)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
 	builtComponent.BindPort("Control", builtComponentPorts.Control)
 	if err := sim.Initialize(); err != nil {

@@ -16,7 +16,7 @@ import (
 func TestTLB(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		tlbComp     *Comp
 		tlbMW       *tlbMiddleware
 		tlbCtrlMW   *ctrlMiddleware
@@ -41,7 +41,7 @@ func TestTLB(t *testing.T) {
 		tlbComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("TLB")
-		tlbCompPorts := defaultPorts("TLB")
+		tlbCompPorts := defaultPorts(sim, "TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)
 		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
 		tlbComp.BindPort("Control", tlbCompPorts.Control)
@@ -537,7 +537,7 @@ func TestTLB(t *testing.T) {
 func TestTLBIntegration(t *testing.T) {
 	var (
 		engine     timing.Engine
-		sim        timing.Simulation
+		sim        *testsim.Simulation
 		tlbComp    *Comp
 		lowModule  *idealEndpoint
 		agent      *idealEndpoint
@@ -553,8 +553,8 @@ func TestTLBIntegration(t *testing.T) {
 
 		connection = makeDirectConnection(sim)
 
-		lowModule = newIdealEndpoint("LowModule")
-		agent = newIdealEndpoint("Agent")
+		lowModule = newIdealEndpoint(sim, "LowModule")
+		agent = newIdealEndpoint(sim, "Agent")
 
 		routingSpec2 := DefaultSpec()
 
@@ -562,7 +562,7 @@ func TestTLBIntegration(t *testing.T) {
 		tlbComp = modeling.MakeBuilder[*Comp](routingSpec2).
 			WithSimulation(sim).
 			Build("TLB")
-		tlbCompPorts := defaultPorts("TLB")
+		tlbCompPorts := defaultPorts(sim, "TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)
 		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
 		tlbComp.BindPort("Control", tlbCompPorts.Control)

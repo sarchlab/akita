@@ -27,8 +27,14 @@ func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
 		WithResources(idealmemcontroller.Resources{Storage: mem.NewStorage(4096)}).
 		Build("Mem")
 
-	controller.BindPort("Top", twowaybuffered.NewPort(4, 4))
-	controller.BindPort("Control", twowaybuffered.NewPort(4, 4))
+	controller.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
+	controller.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	spec := memaccessagent.DefaultSpec()
 	spec.MaxAddress, spec.WriteLeft, spec.ReadLeft = 4096, 8, 8
@@ -36,7 +42,10 @@ func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
 	agent := modeling.MakeBuilder[*memaccessagent.Comp](spec).WithSimulation(s).
 		Build("Agent")
 
-	agent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	agent.BindPort("Mem", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	connection := direct.NewConnection("Conn", s, timing.GHz)
 	connection.BindPort(agent.Ports.Mem)

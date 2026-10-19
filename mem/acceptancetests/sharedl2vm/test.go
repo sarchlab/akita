@@ -164,8 +164,8 @@ func buildMemCtrl(
 		}).
 		Build("MemCtrl")
 
-	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
-	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
+	memCtrl.BindPort("Top", newPort(s, "MemCtrl.Top"))
+	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
 
 	return memCtrl
 }
@@ -186,9 +186,9 @@ func buildL2Cache(
 		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
-	l2Cache.BindPort("Top", newPort("L2Cache.Top"))
-	l2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
-	l2Cache.BindPort("Control", newPort("L2Cache.Control"))
+	l2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
+	l2Cache.BindPort("Bottom", newPort(s, "L2Cache.Bottom"))
+	l2Cache.BindPort("Control", newPort(s, "L2Cache.Control"))
 
 	return l2Cache
 }
@@ -206,8 +206,8 @@ func buildMMU(
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
-	ioMMU.BindPort("Top", newPort("IoMMU.Top"))
-	ioMMU.BindPort("Control", newPort("IoMMU.Control"))
+	ioMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
+	ioMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
 
 	return ioMMU
 }
@@ -227,9 +227,9 @@ func buildL2TLB(
 		WithSimulation(s).
 		Build("L2TLB")
 
-	l2TLB.BindPort("Top", newPort("L2TLB.Top"))
-	l2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
-	l2TLB.BindPort("Control", newPort("L2TLB.Control"))
+	l2TLB.BindPort("Top", newPort(s, "L2TLB.Top"))
+	l2TLB.BindPort("Bottom", newPort(s, "L2TLB.Bottom"))
+	l2TLB.BindPort("Control", newPort(s, "L2TLB.Control"))
 
 	return l2TLB
 }
@@ -278,9 +278,9 @@ func buildL1Cache(
 		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, name+".Storage")}).
 		Build(name)
 
-	l1Cache.BindPort("Top", newPort(name+".Top"))
-	l1Cache.BindPort("Bottom", newPort(name+".Bottom"))
-	l1Cache.BindPort("Control", newPort(name+".Control"))
+	l1Cache.BindPort("Top", newPort(s, name+".Top"))
+	l1Cache.BindPort("Bottom", newPort(s, name+".Bottom"))
+	l1Cache.BindPort("Control", newPort(s, name+".Control"))
 
 	return l1Cache
 }
@@ -303,9 +303,9 @@ func buildL1TLB(
 		WithSimulation(s).
 		Build(name)
 
-	l1TLB.BindPort("Top", newPort(name+".Top"))
-	l1TLB.BindPort("Bottom", newPort(name+".Bottom"))
-	l1TLB.BindPort("Control", newPort(name+".Control"))
+	l1TLB.BindPort("Top", newPort(s, name+".Top"))
+	l1TLB.BindPort("Bottom", newPort(s, name+".Bottom"))
+	l1TLB.BindPort("Control", newPort(s, name+".Control"))
 
 	return l1TLB
 }
@@ -329,10 +329,10 @@ func buildAddressTranslator(
 		WithSimulation(s).
 		Build(name)
 
-	at.BindPort("Top", newPort(name+".Top"))
-	at.BindPort("Bottom", newPort(name+".Bottom"))
-	at.BindPort("Translation", newPort(name+".Translation"))
-	at.BindPort("Control", newPort(name+".Control"))
+	at.BindPort("Top", newPort(s, name+".Top"))
+	at.BindPort("Bottom", newPort(s, name+".Bottom"))
+	at.BindPort("Translation", newPort(s, name+".Translation"))
+	at.BindPort("Control", newPort(s, name+".Control"))
 
 	return at
 }
@@ -352,9 +352,9 @@ func buildROB(
 		WithSimulation(s).
 		Build(name)
 
-	builtComponent.BindPort("Top", newPort(name+".Top"))
-	builtComponent.BindPort("Bottom", newPort(name+".Bottom"))
-	builtComponent.BindPort("Control", newPort(name+".Control"))
+	builtComponent.BindPort("Top", newPort(s, name+".Top"))
+	builtComponent.BindPort("Bottom", newPort(s, name+".Bottom"))
+	builtComponent.BindPort("Control", newPort(s, name+".Control"))
 	return builtComponent
 }
 
@@ -377,7 +377,7 @@ func buildAgent(
 		WithSimulation(s).
 		Build(name)
 
-	agent.BindPort("Mem", newPort(name+".Mem"))
+	agent.BindPort("Mem", newPort(s, name+".Mem"))
 
 	return agent
 }
@@ -461,8 +461,11 @@ func setupConnections(
 
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports during wiring. BindPort names, binds, and registers it.
-func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(16, 16)
+func newPort(simulation modeling.Simulation, fullName string) messaging.Port {
+	return twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build()
 }
 
 // newStorage builds a storage of the given capacity that registers with the

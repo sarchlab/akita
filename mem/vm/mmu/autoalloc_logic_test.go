@@ -20,7 +20,7 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
-	mmuPorts := makePorts("TestMMU", 4096)
+	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
 	if err := sim.Initialize(); err != nil {
@@ -87,7 +87,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
-	mmuPorts := makePorts("TestMMU", 4096)
+	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
 	if err := sim.Initialize(); err != nil {
@@ -131,7 +131,7 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
 		Build("TestMMU")
-	mmuPorts := makePorts("TestMMU", 4096)
+	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
 	if err := sim.Initialize(); err != nil {
@@ -154,7 +154,7 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build("TestMMU")
-	mmuPorts := makePorts("TestMMU", 4096)
+	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
 	if err := sim.Initialize(); err != nil {

@@ -25,7 +25,7 @@ func buildWired(res Resources, spec Spec) *Comp {
 		WithSimulation(sim).
 		WithResources(res).
 		Build("Cache")
-	builtComponentPorts := makePorts("Cache", 4)
+	builtComponentPorts := makePorts(sim, "Cache", 4)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
 	builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
 	builtComponent.BindPort("Control", builtComponentPorts.Control)
@@ -118,7 +118,7 @@ func TestBuildRequiresStorage(t *testing.T) {
 		builtComponent := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(setupSim1).
 			Build("Cache")
-		builtComponentPorts := makePorts("Cache", 4)
+		builtComponentPorts := makePorts(setupSim1, "Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)
 		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
 		builtComponent.BindPort("Control", builtComponentPorts.Control)

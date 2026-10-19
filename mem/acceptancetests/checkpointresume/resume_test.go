@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -194,7 +196,7 @@ func (m *driverMW) sendNext() bool {
 	return false
 }
 
-func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
+func buildDriver(s *testsim.Simulation, lowModule messaging.Port) *driver {
 	routingSpec1 := DefaultSpec()
 	routingSpec1.LowModule = lowModule.AsRemote()
 	builtComponent := modeling.MakeBuilder[*driver](routingSpec1).
@@ -202,7 +204,10 @@ func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
 		WithResources(driverResources{}).
 		Build("Driver")
 
-	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("Mem", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	return builtComponent
 }
 
@@ -225,8 +230,14 @@ func buildSim() (*sim.Simulation, *driver) {
 		}).
 		Build("DRAM")
 
-	dram.BindPort("Top", twowaybuffered.NewPort(8, 8))
-	dram.BindPort("Control", twowaybuffered.NewPort(8, 8))
+	dram.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build())
+	dram.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build())
 
 	d := buildDriver(s, dram.Ports.Top)
 

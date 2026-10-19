@@ -39,7 +39,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		Build("GMMU")
-	compPorts := defaultPorts("GMMU")
+	compPorts := defaultPorts(sim, "GMMU")
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Bottom", compPorts.Bottom)
 	comp.BindPort("Control", compPorts.Control)

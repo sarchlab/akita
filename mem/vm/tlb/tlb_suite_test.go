@@ -3,6 +3,7 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
@@ -37,16 +38,22 @@ func plugNoopConn(comp *Comp) {
 
 // defaultPorts creates the ports of the TLB named name, with the historical
 // default buffer sizes.
-func defaultPorts(name string) Ports {
+func defaultPorts(simulation modeling.Simulation, name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(4, 4),
-		Bottom:  twowaybuffered.NewPort(4, 4),
-		Control: twowaybuffered.NewPort(1, 1),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().WithSimulation(simulation).Build(),
 	}
 }
 
 // makeDirectConnection builds a direct connection using the given simulation.
-func makeDirectConnection(sim timing.Simulation) messaging.Connection {
+func makeDirectConnection(sim *testsim.Simulation) messaging.Connection {
 	return direct.NewConnection("Conn", sim, timing.GHz)
 }
 
@@ -62,11 +69,14 @@ type idealEndpoint struct {
 	lastDelivered messaging.Msg
 }
 
-func newIdealEndpoint(name string) *idealEndpoint {
+func newIdealEndpoint(sim modeling.Simulation, name string) *idealEndpoint {
 	ep := &idealEndpoint{
 		name: name,
 	}
-	ep.port = twowaybuffered.NewPort(4, 4)
+	ep.port = twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
 	ep.port.BindOwner(ep, name+".Port")
 
 	return ep

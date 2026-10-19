@@ -39,7 +39,10 @@ func main() {
 		WithSimulation(sim).
 		Build("Server")
 
-	srv.BindPort("Out", twowaybuffered.NewPort(4, 4))
+	srv.BindPort("Out", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	clientSpec := client.DefaultSpec()
 	clientSpec.Dst = srv.Ports.Out.AsRemote()
@@ -49,7 +52,10 @@ func main() {
 		WithSimulation(sim).
 		Build("Client")
 
-	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))
+	cli.BindPort("Out", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
 	conn.BindPort(cli.Ports.Out)

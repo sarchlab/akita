@@ -22,7 +22,10 @@ func makeMesh(t *testing.T, farFirst bool) (*sim.Simulation, *Connector, []messa
 	c := MakeBuilder().WithSimulation(s).WithSwitchLatency(2).Build("Mesh")
 	ports := make([]messaging.Port, 0, 3)
 	for _, name := range []string{"Origin", "Extra", "Far"} {
-		p := twowaybuffered.NewPort(8, 8)
+		p := twowaybuffered.MakeBuilder().
+			WithSimulation(s).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+			Build()
 		p.BindOwner(meshOwner{name}, name+".Port")
 		s.RegisterPort(p)
 		ports = append(ports, p)

@@ -16,12 +16,24 @@ func TestValidateState(t *testing.T) {
 
 // makePorts creates the ports of the data mover named name, with the given
 // buffer sizes (each used for both the incoming and outgoing buffer).
-func makePorts(name string, top, inside, outside, control int) Ports {
+func makePorts(simulation modeling.Simulation, name string, top, inside, outside, control int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(top, top),
-		Inside:  twowaybuffered.NewPort(inside, inside),
-		Outside: twowaybuffered.NewPort(outside, outside),
-		Control: twowaybuffered.NewPort(control, control),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: top, OutgoingCapacity: top}).
+			Build(),
+		Inside: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: inside, OutgoingCapacity: inside}).
+			Build(),
+		Outside: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: outside, OutgoingCapacity: outside}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: control, OutgoingCapacity: control}).
+			Build(),
 	}
 }
 
@@ -34,10 +46,14 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
-func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(bufSize, bufSize)
+func newDriverPort(simulation modeling.Simulation, name string, bufSize int) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	p.BindOwner(testDriver{}, name)
 
+	simulation.RegisterPort(p)
 	return p
 }
 

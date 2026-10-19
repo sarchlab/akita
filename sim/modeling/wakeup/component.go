@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -46,7 +47,7 @@ type Component[S, T, R, P, M any] struct {
 // instance wakes again at the same time, so it keeps running until no
 // middleware has work ready. The instance handles one event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
-	c.RequireInitialized()
+	base.RequireInitialized(&c.ComponentBase)
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
@@ -78,14 +79,14 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 
 // SaveCheckpoint writes the instance's spec hash, State, and wakeup guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
-	c.RequireInitialized()
+	base.RequireInitialized(&c.ComponentBase)
 	return modeling.WriteCheckpoint(w, c.Spec, c.State, c.wakeups)
 }
 
 // LoadCheckpoint restores the State and wakeup guard after verifying that the
 // saved spec hash matches this instance's.
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
-	c.RequireInitialized()
+	base.RequireInitialized(&c.ComponentBase)
 	return modeling.ReadCheckpoint(r, c.Spec, &c.State, c.wakeups)
 }
 
@@ -104,3 +105,11 @@ func (c *Component[S, T, R, P, M]) NewID() uint64 {
 func (c *Component[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
 	return c.ComponentBase.CurrentTime()
 }
+
+// BindPort assigns a declared slot, binds its owner and name, and registers the port.
+func (c *Component[S, T, R, P, M]) BindPort(slot string, port messaging.Port) {
+	c.ComponentBase.BindPort(slot, port)
+}
+
+// TaskTracker returns the simulation's task tracker, or nil when tracking is disabled.
+func (c *Component[S, T, R, P, M]) TaskTracker() *tasks.Tracker { return c.ComponentBase.TaskTracker() }

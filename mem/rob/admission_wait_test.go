@@ -30,7 +30,10 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *milestoneRecorde
 	spec.Bottom = "Remote"
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("Rob")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
-		p := twowaybuffered.NewPort(2, 1)
+		p := twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 1}).
+			Build()
 		c.BindPort(name, p)
 		(&noopConn{}).BindPort(p)
 	}

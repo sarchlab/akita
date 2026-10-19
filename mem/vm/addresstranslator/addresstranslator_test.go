@@ -2,7 +2,6 @@ package addresstranslator
 
 import (
 	"fmt"
-
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -47,19 +46,31 @@ const (
 // makePorts creates the four ports (Top, Bottom, Translation, Control) of the
 // translator named name, with the given Top buffer size and the historical
 // defaults for the rest.
-func makePorts(name string, topBufSize int) Ports {
+func makePorts(simulation modeling.Simulation, name string, topBufSize int) Ports {
 	return Ports{
-		Top:         twowaybuffered.NewPort(topBufSize, topBufSize),
-		Bottom:      twowaybuffered.NewPort(bottomBufSize, bottomBufSize),
-		Translation: twowaybuffered.NewPort(translationBufSize, translationBufSize),
-		Control:     twowaybuffered.NewPort(ctrlBufSize, ctrlBufSize),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: topBufSize, OutgoingCapacity: topBufSize}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bottomBufSize, OutgoingCapacity: bottomBufSize}).
+			Build(),
+		Translation: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: translationBufSize, OutgoingCapacity: translationBufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: ctrlBufSize, OutgoingCapacity: ctrlBufSize}).
+			Build(),
 	}
 }
 
 func TestAddressTranslator(t *testing.T) {
 	var (
 		engine          timing.Engine
-		sim             timing.Simulation
+		sim             *testsim.Simulation
 		translator      *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -82,7 +93,7 @@ func TestAddressTranslator(t *testing.T) {
 		translator = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("AddressTranslator")
-		tPorts := makePorts("AddressTranslator", topBufSize)
+		tPorts := makePorts(sim, "AddressTranslator", topBufSize)
 		translator.BindPort("Top", tPorts.Top)
 		translator.BindPort("Bottom", tPorts.Bottom)
 		translator.BindPort("Translation", tPorts.Translation)

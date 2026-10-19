@@ -3,6 +3,8 @@ package writeback
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -45,9 +47,10 @@ func TestTopParser(t *testing.T) {
 		}
 
 		spec := stageTestSpec()
-		comp := buildStageTestComp(spec,
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		comp := buildStageTestComp(sim, spec,
 			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
-			makePorts("Cache", 4))
+			makePorts(sim, "Cache", 4))
 		topPort = comp.Ports.Top
 
 		m = comp.Middlewares.Pipeline

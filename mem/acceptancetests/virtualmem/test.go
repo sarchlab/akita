@@ -67,10 +67,10 @@ func setupTest(
 		WithSimulation(s).
 		Build("AT")
 
-	at.BindPort("Top", newPort("AT.Top"))
-	at.BindPort("Bottom", newPort("AT.Bottom"))
-	at.BindPort("Translation", newPort("AT.Translation"))
-	at.BindPort("Control", newPort("AT.Control"))
+	at.BindPort("Top", newPort(s, "AT.Top"))
+	at.BindPort("Bottom", newPort(s, "AT.Bottom"))
+	at.BindPort("Translation", newPort(s, "AT.Translation"))
+	at.BindPort("Control", newPort(s, "AT.Control"))
 
 	// Insert a reorder buffer between the agent and the address translator so
 	// the trace exercises the ROB instrumentation end-to-end.
@@ -86,7 +86,7 @@ func setupTest(
 		WithSimulation(s).
 		Build("MemAccessAgent")
 
-	agent.BindPort("Mem", newPort("MemAccessAgent.Mem"))
+	agent.BindPort("Mem", newPort(s, "MemAccessAgent.Mem"))
 
 	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,
@@ -114,9 +114,9 @@ func buildROB(s *sim.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
 		WithSimulation(s).
 		Build("ROB")
 
-	builtComponent.BindPort("Top", newPort("ROB.Top"))
-	builtComponent.BindPort("Bottom", newPort("ROB.Bottom"))
-	builtComponent.BindPort("Control", newPort("ROB.Control"))
+	builtComponent.BindPort("Top", newPort(s, "ROB.Top"))
+	builtComponent.BindPort("Bottom", newPort(s, "ROB.Bottom"))
+	builtComponent.BindPort("Control", newPort(s, "ROB.Control"))
 	return builtComponent
 }
 
@@ -136,8 +136,8 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		}).
 		Build("MemCtrl")
 
-	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
-	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
+	memCtrl.BindPort("Top", newPort(s, "MemCtrl.Top"))
+	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
 
 	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
@@ -151,9 +151,9 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
-	L2Cache.BindPort("Top", newPort("L2Cache.Top"))
-	L2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
-	L2Cache.BindPort("Control", newPort("L2Cache.Control"))
+	L2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
+	L2Cache.BindPort("Bottom", newPort(s, "L2Cache.Bottom"))
+	L2Cache.BindPort("Control", newPort(s, "L2Cache.Control"))
 
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
@@ -167,9 +167,9 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage")}).
 		Build("L1Cache")
 
-	L1Cache.BindPort("Top", newPort("L1Cache.Top"))
-	L1Cache.BindPort("Bottom", newPort("L1Cache.Bottom"))
-	L1Cache.BindPort("Control", newPort("L1Cache.Control"))
+	L1Cache.BindPort("Top", newPort(s, "L1Cache.Top"))
+	L1Cache.BindPort("Bottom", newPort(s, "L1Cache.Bottom"))
+	L1Cache.BindPort("Control", newPort(s, "L1Cache.Control"))
 
 	return L1Cache, L2Cache, memCtrl
 }
@@ -193,8 +193,8 @@ func buildTranslationHierarchy(
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
-	IoMMU.BindPort("Top", newPort("IoMMU.Top"))
-	IoMMU.BindPort("Control", newPort("IoMMU.Control"))
+	IoMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
+	IoMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
 
 	L2TLBMapper := IoMMU.Ports.Top.AsRemote()
 
@@ -209,9 +209,9 @@ func buildTranslationHierarchy(
 		WithSimulation(s).
 		Build("L2TLB")
 
-	L2TLB.BindPort("Top", newPort("L2TLB.Top"))
-	L2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
-	L2TLB.BindPort("Control", newPort("L2TLB.Control"))
+	L2TLB.BindPort("Top", newPort(s, "L2TLB.Top"))
+	L2TLB.BindPort("Bottom", newPort(s, "L2TLB.Bottom"))
+	L2TLB.BindPort("Control", newPort(s, "L2TLB.Control"))
 
 	tlbSpec := tlb.DefaultSpec()
 	tlbSpec.NumWays = 8
@@ -224,9 +224,9 @@ func buildTranslationHierarchy(
 		WithSimulation(s).
 		Build("TLB")
 
-	TLB.BindPort("Top", newPort("TLB.Top"))
-	TLB.BindPort("Bottom", newPort("TLB.Bottom"))
-	TLB.BindPort("Control", newPort("TLB.Control"))
+	TLB.BindPort("Top", newPort(s, "TLB.Top"))
+	TLB.BindPort("Bottom", newPort(s, "TLB.Bottom"))
+	TLB.BindPort("Control", newPort(s, "TLB.Control"))
 
 	return IoMMU, TLB, L2TLB
 }
@@ -259,8 +259,11 @@ func setupPageTable(maxAddress uint64, s *sim.Simulation) *vm.PageTable {
 
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports during wiring. BindPort names, binds, and registers it.
-func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(16, 16)
+func newPort(simulation modeling.Simulation, fullName string) messaging.Port {
+	return twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build()
 }
 
 // newStorage builds a storage of the given capacity that registers with the

@@ -98,11 +98,13 @@ Link bandwidth and latency modeling are a separate change.
 ## Port and connection packages
 
 Buffered ports move to `sim/messaging/twowaybuffered` as `Port`, constructed by
-`NewPort(in, out)`. Ideal connections move from `noc/directconnection` to
+`MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()`. The port `Spec`
+sets `IncomingCapacity` and `OutgoingCapacity`; `DefaultSpec()` uses 1/1.
+`WithSimulation` is required and both capacities must be positive. Ideal connections move from `noc/directconnection` to
 `sim/messaging/direct` as `Connection`, constructed with
-`NewConnection(name, simulation, frequency)`. Frequency is explicit; ports and
-connections have no component `Definition`, default spec, or builder. Old paths
-and constructors are removed.
+`NewConnection(name, simulation, frequency)`. Frequency is explicit. Connections retain this constructor. Buffered ports use
+their own value builder and are unnamed, unowned, and unregistered until binding.
+Old paths and constructors, including `twowaybuffered.NewPort`, are removed.
 
 NoC builders now explicitly support buffered ports and ideal direct connections.
 The port factory is removed; endpoint device wiring rejects unsupported device
@@ -113,7 +115,7 @@ ports. Port checkpoints retain messages, buffer task IDs, and wait boundaries.
 Component builders accept Spec and Resources, without `WithPorts`. Build leaves
 runtime State and Middlewares unset. Use `component.BindPort("Top", port)` to
 assign the slot, owner and full name, and `connection.BindPort(port)` to attach
-both sides of a link. Ports use `NewPort(in, out)`; `SetOwner`, `SetConnection`,
+both sides of a link. Ports use the simulation-aware builder; `SetOwner`, `SetConnection`,
 and connection `PlugIn` are removed in favor of one-time bindings.
 
 Call `simulation.Initialize()` after wiring and before seeding work, running,
@@ -174,9 +176,9 @@ With tracking disabled, `s.VisTracer()` is nil and no tracing tables are created
 `WithOutputPath` to create a recorder and visualization tracer for manual
 `StartTracing`. Obtain `tracker := s.TaskTracker()`; component models expose the
 same service through `TaskTracker()`. `tasks.Owner` embeds only `naming.Named`.
-Ports keep their own private tracker reference, bound once by `RegisterPort`;
-they no longer obtain it through an owning component getter. Standalone ports
-can bind the service explicitly through `BindTaskTracker` during setup.
+Ports retain the simulation supplied by `WithSimulation` and obtain its tracker
+and clock directly. `BindTaskTracker` is removed; custom owners register their
+ports after assigning the owner and name. `tasks.NewTracker` remains public.
 The tracker owns task operations and stamps time and IDs using simulation
 services. Nil tracker methods do nothing and allocate no IDs. Built-in observers
 move from `sim/tracing` to
@@ -319,3 +321,16 @@ The exported Monitor contract contains only Start/Stop. Simulation provides copi
 Components/Ports inventories, removes its Monitor getter, and starts the monitor
 after initialization. Monitor registration methods are removed; buffer inspection
 includes State and omits absent buffers. See the migration guide for caller changes.
+
+## Simulation services and lifecycle API
+
+Builders and elements share `modeling.Simulation`, replacing `timing.Simulation`.
+It exposes the engine, ID allocation, task tracker, and typed registration for
+components, ports, connections, and named resources. `RegisterResource` accepts
+`naming.Named`; no resource marker or base type is required. Use `messaging.Port`
+directly. `sim.Entity`, `sim.Component`, `sim.Connection`, and `sim.Resource` remain.
+
+Call `s.Initialize()` on the concrete simulation after wiring. Framework setup
+validation and component initialization are internal; component authors only
+implement optional `State.Initialize(*Comp)` and `Middlewares.Initialize(*Comp)`.
+Checkpoint helpers and `timing.Engine.WithIdle` retain their existing APIs.

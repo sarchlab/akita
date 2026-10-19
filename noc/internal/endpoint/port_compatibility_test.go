@@ -33,7 +33,7 @@ func TestRejectFrozenDeviceOwnerBeforeAttaching(t *testing.T) {
 	def := modeling.MakeBuilder[*ticking.Component[
 		Spec, modeling.None, modeling.None, Ports, modeling.None]](Spec{Freq: timing.GHz})
 	owner := def.WithSimulation(frozen).Build("FrozenDevice")
-	late := twowaybuffered.NewPort(1, 1)
+	late := twowaybuffered.MakeBuilder().WithSimulation(frozen).Build()
 	owner.BindPort("NetworkPort", late)
 	require.NoError(t, frozen.Initialize())
 

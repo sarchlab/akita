@@ -22,7 +22,7 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 		WithSimulation(setupSim1).
 		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
 		Build("Cache")
-	compPorts := makePorts("Cache", 4)
+	compPorts := makePorts(setupSim1, "Cache", 4)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Bottom", compPorts.Bottom)
 	comp.BindPort("Control", compPorts.Control)
@@ -49,7 +49,7 @@ func TestBuildRequiresStorage(t *testing.T) {
 		builtComponent := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(setupSim2).
 			Build("Cache")
-		builtComponentPorts := makePorts("Cache", 4)
+		builtComponentPorts := makePorts(setupSim2, "Cache", 4)
 		builtComponent.BindPort("Top", builtComponentPorts.Top)
 		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
 		builtComponent.BindPort("Control", builtComponentPorts.Control)

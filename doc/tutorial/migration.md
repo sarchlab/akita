@@ -17,9 +17,15 @@ then bind ports and connections. Finally initialize the shared simulation:
 spec := rob.DefaultSpec()
 spec.BufferSize = 8
 r := modeling.MakeBuilder[*rob.Comp](spec).WithSimulation(s).Build("GPU.ROB")
-r.BindPort("Top", twowaybuffered.NewPort(8, 8))
-r.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
-r.BindPort("Control", twowaybuffered.NewPort(1, 1))
+r.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+r.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+r.BindPort("Control", twowaybuffered.MakeBuilder().WithSimulation(sim).Build())
 conn := direct.NewConnection("GPU.Link", s, timing.GHz)
 conn.BindPort(r.Ports.Top)
 // Bind the other components and links before initialization.
@@ -139,7 +145,7 @@ Concrete ports and connections now live under `sim/messaging`:
 
 | Before | After |
 |---|---|
-| `messaging.NewPort(name, in, out)` | `twowaybuffered.NewPort(in, out)` |
+| `messaging.NewPort(name, in, out)` | `twowaybuffered.MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()` |
 | `noc/directconnection` | `sim/messaging/direct` |
 | `directconnection.Comp` | `direct.Connection` |
 | `directconnection.MakeBuilder()...Build(name)` | `direct.NewConnection(name, s, freq)` |
@@ -147,7 +153,7 @@ Concrete ports and connections now live under `sim/messaging`:
 
 Import `github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered` for port
 construction. Components continue to declare `messaging.Port` fields, while
-`NewPort` now returns the concrete `*twowaybuffered.Port`. Old constructors and
+`Build` returns the concrete `*twowaybuffered.Port`. Old constructors and
 import paths are removed. Calls that type-asserted the old constructor result
 can now call checkpoint methods directly on the returned pointer.
 
@@ -155,9 +161,9 @@ Ports are now unnamed until their owner binds them. `SetOwner`, `SetConnection`,
 `WithPorts`, and connection `PlugIn` are removed. Buffer behavior and message
 checkpoint encoding are unchanged.
 
-Direct connections use a constructor, just like ports. Pass an explicit frequency
+Direct connections retain their constructor. Pass an explicit frequency
 (`timing.GHz` preserves the former default); the constructor registers the
-connection and its event handler with the simulation. Neither ports nor direct
+connection and its event handler with the simulation. Buffered ports have their own value builder. Neither ports nor direct
 connections use the component builder.
 
 The NoC connector creates only buffered ports and ideal direct connections.
@@ -420,12 +426,12 @@ the component itself and the message ID, so simulations that reuse IDs stay
 apart.
 
 Pass the simulation to builders with `WithSimulation(sim)`. All component and
-package builders accept the shared `timing.Simulation` interface. A component
+package builders accept the shared `modeling.Simulation` interface. A component
 keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `sim.MakeBuilder().Build()` once and share that instance with
-all builders. A custom task owner implements `tasks.Owner`: `Name`,
-`CurrentTime`, `NewID`, and `TaskTracker`, all backed by the same simulation.
+all builders. A custom task owner implements `tasks.Owner` with only `Name() string`
+and obtains task operations from `sim.TaskTracker()`.
 Tracking does not require a hook interface. Monitors receive the simulation
 through `Start(s)` so progress IDs come from the same counter.
 
@@ -766,7 +772,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | **Spec** | Configuration | System builder (defaults in `DefaultSpec()`) | Scalars (bool, numbers, strings, and named types based on them), scalar slices/arrays, and flat records or slices of flat records with explicit JSON tags; record fields may be scalars or scalar slices. No maps, nested records, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`State.Initialize`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
-| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.MakeBuilder`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`Middlewares.Initialize`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
@@ -897,9 +903,18 @@ spec.Bottom = bottomUnit.AsRemote()
 r := modeling.MakeBuilder[*rob.Comp](spec).
     WithSimulation(sim).
     Build("ROB")
-r.BindPort("Top", twowaybuffered.NewPort(4, 4))
-r.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-r.BindPort("Control", twowaybuffered.NewPort(4, 4))
+r.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+r.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+r.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 
 conn.BindPort(r.Ports.Top)
 ```
@@ -933,7 +948,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 4. Ports (declared by the component, created by the system builder)
    - A component declares the ports it has as the fields of its `Ports` struct, tagged with the protocol roles they speak, but never constructs the instances or owns connections.
-   - The system builder creates each port with `twowaybuffered.NewPort(in, out)`, choosing its buffer sizes, and binds each declared slot with `component.BindPort("Field", port)`.
+   - The system builder creates each port with `twowaybuffered.MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()`, choosing its buffer sizes, and binds each declared slot with `component.BindPort("Field", port)`.
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
@@ -1046,7 +1061,7 @@ unchanged by this migration.
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `(*Middlewares).Initialize(c *Comp)` method. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `func DefaultSpec() Spec { return Spec{...} }`. Initialize State and Middlewares through their own optional methods.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
+- In the system builder, create every port with `twowaybuffered.MakeBuilder().WithSimulation(sim).WithSpec(spec).Build()` and build with `modeling.MakeBuilder[*Comp](DefaultSpec()).WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, (*Comp)(nil), DefaultSpec())` test.
 
 ---
@@ -1130,8 +1145,14 @@ ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
-ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
-ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
+ctrl.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 1024, OutgoingCapacity: 1024}).
+    Build())
+ctrl.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 ```
 
 ### Statistics
@@ -1179,8 +1200,14 @@ ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
-ctrl.BindPort("Top", twowaybuffered.NewPort(4, 4))
-ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
+ctrl.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+ctrl.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 ```
 
 ---
@@ -1190,7 +1217,7 @@ ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
 In V4, ports were created internally by component builders. In V5, the
 component owns its port *topology* — the fields of its `Ports` struct say
 which ports it has — but it does not create the instances. The system builder
-creates each port with `twowaybuffered.NewPort` and assigns it with
+creates each port with `twowaybuffered.MakeBuilder` and assigns it with
 `component.BindPort` after Build. This makes wiring explicit and lets ports be sized or
 implemented differently without changing the component.
 
@@ -1211,9 +1238,18 @@ cache := modeling.MakeBuilder[*writeback.Comp](spec).
     WithSimulation(sim).
     WithResources(writeback.Resources{Storage: storage}).
     Build("Cache")
-cache.BindPort("Top", twowaybuffered.NewPort(4, 4))
-cache.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-cache.BindPort("Control", twowaybuffered.NewPort(4, 4))
+cache.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+cache.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+cache.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 
 conn.BindPort(cache.Ports.Top)
 ```
@@ -1309,7 +1345,7 @@ subdirectory. Runner selection is recorded in the workflow.
 - Port owners implement `Name()` and `BindPort(slot string, port messaging.Port)`
   as well as their receive/free callbacks. Connections retain `BindPort`, drop
   the Hookable requirement, and receive the source in `NotifySend(port)`.
-- Keep one `messaging.Port`; `sim.Port` is its alias. Replace `NumIncoming()`
+- Use `messaging.Port` directly; the `sim.Port` alias is removed. Replace `NumIncoming()`
   and `NumOutgoing()` with `IncomingBuf()`/`OutgoingBuf()` and read `Size()` or
   `Capacity()` after checking for nil. Nil means no buffer, not an empty one.
   Milestones and hooks remain on Port. Compatible custom transports are allowed;

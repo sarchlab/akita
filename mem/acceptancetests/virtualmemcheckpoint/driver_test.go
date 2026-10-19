@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
+
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -211,7 +213,7 @@ func (m *driverMW) sendNext() bool {
 	return false
 }
 
-func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
+func buildDriver(sim *testsim.Simulation, lowModule messaging.Port) *driver {
 	spec := DefaultSpec()
 	spec.NumOps = numOps
 
@@ -221,6 +223,9 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 		WithResources(driverResources{}).
 		Build("Driver")
 
-	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("Mem", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	return builtComponent
 }

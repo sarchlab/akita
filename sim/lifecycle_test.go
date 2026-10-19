@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
+
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/assert"
@@ -174,19 +176,20 @@ func assertTerminated(t *testing.T, s *Simulation, path string) {
 }
 
 type lifecycleInitializer struct {
+	assembly.Member
 	s      *Simulation
 	errors []error
 }
 
-func (*lifecycleInitializer) Name() string         { return "Initializer" }
-func (*lifecycleInitializer) ValidateSetup() error { return nil }
-func (p *lifecycleInitializer) InitializeComponent() {
+func (*lifecycleInitializer) Name() string { return "Initializer" }
+func (p *lifecycleInitializer) initializeComponent() {
 	p.errors = []error{p.s.Run(), p.s.SaveCheckpoint("unused"),
 		p.s.LoadCheckpoint("unused"), p.s.Terminate(), p.s.Initialize()}
 }
 func TestInitializerLifecycleCallsAreRejectedWithoutBlocking(t *testing.T) {
 	s := MakeBuilder().Build()
 	probe := &lifecycleInitializer{s: s}
+	probe.Member = assembly.NewMember(s, nil, probe.initializeComponent)
 	s.RegisterResource(probe)
 	require.NoError(t, s.Initialize())
 	require.Len(t, probe.errors, 5)

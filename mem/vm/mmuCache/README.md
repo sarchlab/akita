@@ -64,9 +64,18 @@ c := modeling.MakeBuilder[*mmuCache.Comp](spec).
         UpModulePort:  tlbPort,
     }).
     Build("MMUCache")
-c.BindPort("Top", twowaybuffered.NewPort(16, 16))
-c.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
-c.BindPort("Control", twowaybuffered.NewPort(16, 16))
+c.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+c.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+c.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
 ```
 
 | Method | Description |
@@ -78,7 +87,7 @@ c.BindPort("Control", twowaybuffered.NewPort(16, 16))
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

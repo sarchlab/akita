@@ -15,13 +15,19 @@ func Example_pingWithEvents() {
 		WithSimulation(sim).
 		Build("AgentA")
 
-	agentA.BindPort("Out", twowaybuffered.NewPort(16, 16))
+	agentA.BindPort("Out", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	agentB := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		Build("AgentB")
 
-	agentB.BindPort("Out", twowaybuffered.NewPort(16, 16))
+	agentB.BindPort("Out", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
 

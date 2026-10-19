@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
+
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -17,7 +19,7 @@ type lifecycleMonitor struct {
 	runtime    *sim.Simulation
 	path       string
 	components []sim.Component
-	ports      []sim.Port
+	ports      []messaging.Port
 }
 
 func (m *lifecycleMonitor) Start(s *sim.Simulation) {
@@ -38,23 +40,36 @@ func (m *lifecycleMonitor) Stop() {
 	recorder.Flush()
 }
 
-type initializedComponent struct{ ready, invalid bool }
+type initializedComponent struct {
+	assembly.Member
+	ready, invalid bool
+}
 
 func (*initializedComponent) Name() string { return "Agent" }
-func (c *initializedComponent) ValidateSetup() error {
+func (c *initializedComponent) validateSetup() error {
 	if c.invalid {
 		return errors.New("invalid setup")
 	}
 	return nil
 }
-func (c *initializedComponent) InitializeComponent() { c.ready = true }
+func (c *initializedComponent) initializeComponent() { c.ready = true }
+
+func (c *initializedComponent) BindPort(slot string, p messaging.Port) {
+	p.BindOwner(c, c.Name()+"."+slot)
+}
+func (*initializedComponent) NotifyRecv(messaging.Port)     {}
+func (*initializedComponent) NotifyPortFree(messaging.Port) {}
 
 func TestInjectedMonitorLifecycle(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "recording.sqlite3")
 	monitor := &lifecycleMonitor{}
 	s := sim.MakeBuilder().WithOutputPath(output).WithMonitor(monitor).Build()
 	component := &initializedComponent{invalid: true}
-	port := twowaybuffered.NewPort(2, 3)
+	component.Member = assembly.NewMember(s, component.validateSetup, component.initializeComponent)
+	port := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 3}).
+		Build()
 	port.BindOwner(monitorPortOwner{}, "Agent.Port")
 	s.RegisterComponent(component)
 	s.RegisterPort(port)

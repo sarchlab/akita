@@ -94,9 +94,18 @@ cache := modeling.MakeBuilder[*writeback.Comp](spec).
         Storage:             mem.NewStorage(spec.TotalByteSize),
     }).
     Build("L1Cache")
-cache.BindPort("Top", twowaybuffered.NewPort(8, 8))
-cache.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
-cache.BindPort("Control", twowaybuffered.NewPort(8, 8))
+cache.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+cache.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+cache.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
 
 topPort := cache.Ports.Top
 ```
@@ -140,7 +149,7 @@ The cache operates in one of six states (the `cacheState` constants):
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

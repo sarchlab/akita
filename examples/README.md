@@ -58,7 +58,7 @@ messages. Each has two middlewares, run in order every tick:
   incoming messages.
 
 **Key concepts**: a component package (five structs, a `Comp` alias, and `DefaultSpec()`),
-ports created by the system builder with `twowaybuffered.NewPort` and assigned
+ports created by the system builder with `twowaybuffered.MakeBuilder` and assigned
 with `BindPort` after Build, a `Spec` field naming a peer's port, `modelingtest.CheckTicking`.
 
 ```bash

@@ -3,9 +3,8 @@ package dram
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -32,7 +31,7 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
-		compPorts := defaultPorts("DRAM", 16)
+		compPorts := defaultPorts(sim, "DRAM", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Control", compPorts.Control)
 

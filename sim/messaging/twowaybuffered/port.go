@@ -6,24 +6,28 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
+type portAssembly = assembly.Member
+
 // Port implements messaging.Port with independently sized incoming and outgoing buffers.
 type Port struct {
 	hooking.HookableBase
+	portAssembly
 
 	lock  sync.Mutex
 	name  string
 	owner messaging.PortOwner
 	conn  messaging.Connection
 
-	taskTracker      *tasks.Tracker
-	taskTrackerBound bool
+	simulation modeling.Simulation
 
 	incomingBuf queueing.Buffer[bufferEntry]
 	outgoingBuf queueing.Buffer[bufferEntry]
@@ -40,17 +44,13 @@ func (p *Port) AsRemote() messaging.RemotePort {
 // BindConnection sets the reverse attachment once, during setup.
 // Assemblers normally call Connection.BindPort, which updates both sides.
 func (p *Port) BindConnection(conn messaging.Connection) {
+	assembly.RequireSetup(p)
 	if conn == nil || (reflect.ValueOf(conn).Kind() == reflect.Pointer && reflect.ValueOf(conn).IsNil()) {
 		panic("twowaybuffered: cannot bind a nil connection")
 	}
+	assembly.RequireSameSimulation(p.simulation, conn)
 	if p.owner == nil {
 		panic("twowaybuffered: bind owner before connection")
-	}
-	if owner, ok := p.owner.(interface{ RequireSetup() }); ok {
-		owner.RequireSetup()
-	}
-	if c, ok := conn.(interface{ RequireSetup() }); ok {
-		c.RequireSetup()
 	}
 	if p.conn != nil {
 		panic("twowaybuffered: port already has a connection")
@@ -74,16 +74,15 @@ func (p *Port) Owner() messaging.PortOwner {
 // BindOwner assigns the owner and name once. Component.BindPort coordinates
 // the declared slot and registration; custom owners call this method directly.
 func (p *Port) BindOwner(owner messaging.PortOwner, name string) {
+	assembly.RequireSetup(p)
 	if owner == nil || (reflect.ValueOf(owner).Kind() == reflect.Pointer && reflect.ValueOf(owner).IsNil()) {
 		panic("twowaybuffered: cannot bind a nil owner")
 	}
+	assembly.RequireSameSimulation(p.simulation, owner)
 	if p.owner != nil {
 		panic("twowaybuffered: port already has an owner")
 	}
 	naming.MustBeValid(name)
-	if c, ok := owner.(interface{ RequireSetup() }); ok {
-		c.RequireSetup()
-	}
 	p.owner = owner
 	p.name = name
 }
@@ -311,23 +310,6 @@ func (p *Port) mustHaveOwner() messaging.PortOwner {
 	}
 
 	return p.owner
-}
-
-// NewPort creates a port with default behavior, an incoming buffer, and an
-// outgoing buffer. The port has no owner yet: a component's BindPort binds it to
-// the component, and an owner written without a component model calls
-// BindOwner.
-func NewPort(incomingBufCap, outgoingBufCap int) *Port {
-	if incomingBufCap <= 0 {
-		panic(fmt.Sprintf("twowaybuffered: incomingBufCap must be greater than 0, got %d", incomingBufCap))
-	}
-	if outgoingBufCap <= 0 {
-		panic(fmt.Sprintf("twowaybuffered: outgoingBufCap must be greater than 0, got %d", outgoingBufCap))
-	}
-	p := new(Port)
-	p.incomingBuf = queueing.MakeBuffer[bufferEntry](incomingBufCap)
-	p.outgoingBuf = queueing.MakeBuffer[bufferEntry](outgoingBufCap)
-	return p
 }
 
 func (p *Port) msgMustBeValid(msg messaging.Msg) {

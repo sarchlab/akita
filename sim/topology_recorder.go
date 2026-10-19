@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // componentSpecTableName holds one row per component: its name, the Go type of
@@ -62,7 +63,7 @@ func newTopologyRecorder(recorder datarecording.DataRecorder) *topologyRecorder 
 
 // Record writes the component specs and the port inventory. It is called from
 // Terminate, by which point every component, port, and connection is registered.
-func (r *topologyRecorder) Record(components []Component, ports []Port) {
+func (r *topologyRecorder) Record(components []Component, ports []messaging.Port) {
 	r.recordComponentSpecs(components)
 	r.recordPorts(ports)
 	r.recorder.Flush()
@@ -86,7 +87,7 @@ func (r *topologyRecorder) recordComponentSpecs(components []Component) {
 // recordPorts records every registered port together with the connection it is
 // plugged into, if any. Unconnected ports are recorded with an empty Connection
 // so the table is the complete port inventory, not only the connection graph.
-func (r *topologyRecorder) recordPorts(ports []Port) {
+func (r *topologyRecorder) recordPorts(ports []messaging.Port) {
 	for _, p := range ports {
 		entry := portEntry{Port: p.Name()}
 

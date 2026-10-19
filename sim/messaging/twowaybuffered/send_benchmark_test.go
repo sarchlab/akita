@@ -20,7 +20,7 @@ type benchmarkPayload struct {
 
 // BenchmarkSend measures Send plus resetting the outgoing buffer for reuse.
 func BenchmarkSend(b *testing.B) {
-	p := NewPort(1, 1)
+	p := newTestPort(1, 1)
 	p.BindOwner(&portPresenceOwner{}, "Src")
 	p.BindConnection(&benchmarkConnection{})
 	payload := benchmarkPayload{Data: make([]byte, 64)}
@@ -39,7 +39,7 @@ func BenchmarkSendParallel(b *testing.B) {
 	msg := messaging.Msg{ID: 1, Src: "Src", Dst: "dst", TrafficBytes: 64, Payload: payload}
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
-		p := NewPort(1, 1)
+		p := newTestPort(1, 1)
 		p.BindOwner(&portPresenceOwner{}, "Src")
 		p.BindConnection(&benchmarkConnection{})
 		for pb.Next() {

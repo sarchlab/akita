@@ -110,7 +110,7 @@ func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		memComp *Comp
 		agent   *testAgent
 		conn    *loopbackConnection
@@ -136,11 +136,11 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("MemBank")
-		memCompPorts := makePorts("MemBank", 8, 16)
+		memCompPorts := makePorts(sim, "MemBank", 8, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
 		memComp.BindPort("Control", memCompPorts.Control)
 
-		agent = newTestAgent("AgentBank")
+		agent = newTestAgent(sim, "AgentBank")
 		conn = newLoopbackConnection("ConnBank")
 		conn.BindPort(memComp.Ports.Top)
 		conn.BindPort(agent.port)

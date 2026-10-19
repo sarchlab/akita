@@ -30,7 +30,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	at := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
 		Build("AddressTranslator")
-	atPorts := makePorts("AddressTranslator", 16)
+	atPorts := makePorts(sim, "AddressTranslator", 16)
 	at.BindPort("Top", atPorts.Top)
 	at.BindPort("Bottom", atPorts.Bottom)
 	at.BindPort("Translation", atPorts.Translation)

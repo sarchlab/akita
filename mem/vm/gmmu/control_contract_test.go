@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -29,7 +28,7 @@ func TestControlContract(t *testing.T) {
 				PageTable: vm.NewPageTable(spec.Log2PageSize),
 			}).
 			Build("GMMU")
-		compPorts := defaultPorts("GMMU")
+		compPorts := defaultPorts(sim, "GMMU")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

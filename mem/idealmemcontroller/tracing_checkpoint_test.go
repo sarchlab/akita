@@ -46,8 +46,14 @@ func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(s).WithResources(Resources{
 		Storage: mem.MakeStorageBuilder().WithCapacity(1024).WithSimulation(s).Build("Storage"),
 	}).Build("Memory")
-	c.BindPort("Top", twowaybuffered.NewPort(8, 8))
-	c.BindPort("Control", twowaybuffered.NewPort(8, 8))
+	c.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build())
+	c.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build())
 	(&noopConn{}).BindPort(c.Ports.Top)
 	(&noopConn{}).BindPort(c.Ports.Control)
 	s.Engine().RegisterHandler("Clock", checkpointClock{})

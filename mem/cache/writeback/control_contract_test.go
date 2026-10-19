@@ -3,9 +3,8 @@ package writeback
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -43,7 +42,7 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
-		compPorts := makePorts("L1Cache", 4)
+		compPorts := makePorts(sim, "L1Cache", 4)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

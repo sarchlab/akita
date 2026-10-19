@@ -16,7 +16,7 @@ func TestPageTablePageSizeMustMatchGMMU(t *testing.T) {
 			WithSimulation(s).
 			WithResources(Resources{PageTable: vm.NewPageTable(bits)}).
 			Build("GMMU")
-		ports := defaultPorts("GMMU")
+		ports := defaultPorts(s, "GMMU")
 		c.BindPort("Top", ports.Top)
 		c.BindPort("Bottom", ports.Bottom)
 		c.BindPort("Control", ports.Control)
