@@ -10,6 +10,9 @@ Herd（akita herd；可以想象成一只秋田犬把一群模拟实验赶到各
 本说明按任务逐步介绍 Herd。每条命令、选项和文件格式的完整说明见
 [README](README.md)。
 
+想先在一台机器上把所有功能试一遍，见下面的
+[五分钟上手：完整演练](#五分钟上手完整演练)（与 README 中的演练相同）。
+
 ## 目录
 
 1. [基本概念](#1-基本概念)
@@ -22,6 +25,560 @@ Herd（akita herd；可以想象成一只秋田犬把一群模拟实验赶到各
 8. [配合 Akita 模拟器使用](#8-配合-akita-模拟器使用)
 9. [从 akita exp 或旧的 exp 脚本迁移](#9-从-akita-exp-或旧的-exp-脚本迁移)
 10. [常见问题](#10-常见问题)
+
+## 五分钟上手：完整演练
+
+下面这个例子在一台机器上（装有 `git`、`go`、`tmux`、`rsync` 和 `python3` 的 macOS
+或 Linux）用到 Herd 的全部功能。两台"主机" `server1` 和 `server2` 其实是临时目录
+下的两个目录，"模拟器"是一个只会 sleep 的小 Go 程序。按顺序把代码块粘贴到同一个
+shell 里；每个代码块后面是你应该看到的输出（有删节）。
+
+**1. 安装。** 在 akita 源码的根目录下，把 `akita` 装到一个临时目录，并给这次演练
+单独的用户配置和 tmux 服务器：
+
+```bash
+export T=$(mktemp -d /tmp/herd-demo.XXXXXX)
+CGO_ENABLED=0 GOBIN=$T/bin go install ./akita
+export PATH=$T/bin:$PATH AKITA_HERD_CONFIG=$T/user.json TMUX_TMPDIR=$T
+unset TMUX
+```
+**2. 建一个项目。** 里面有假模拟器 `sim`（它把进度写到 `$HERD_HEARTBEAT`，并在
+`-metrics` 所在的结果目录里写 `stats/metrics.csv`、`summary.csv`、`meta.json` 和
+带指标的 `run.json`）、`run.sh`（按 `<date>_<workload>_<config>` 形式的结果名运行
+`sim`，再用 `akita herd record` 记录 `run.json`）、`sweep.sh`（3 个负载 × 2 个配置
+的 campaign）、`flaky.sh`（在 `server1` 上因 SIGBUS 退出）和 `legacy.py`（把旧结果
+名映射成新名字）：
+
+```bash
+mkdir $T/demo && cd $T/demo && git init -q
+printf 'module demo\n\ngo 1.22\n' > go.mod
+printf 'remote/\n' > .gitignore
+mkdir sim && cat > sim/main.go <<'EOF'
+// sim is a fake simulator.
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func main() {
+	workload := flag.String("workload", "fir", "workload")
+	config := flag.String("config", "base", "configuration")
+	steps := flag.Int("steps", 5, "seconds to run")
+	metrics := flag.String("metrics", "", "results/<run>/stats/metrics.csv")
+	flag.Parse()
+
+	start := time.Now().Unix()
+	for i := 0; i <= *steps; i++ {
+		if hb := os.Getenv("HERD_HEARTBEAT"); hb != "" {
+			data, _ := json.Marshal(map[string]any{
+				"pid": os.Getpid(), "wall": time.Now().Unix(), "finished": i == *steps,
+				"progress": []any{map[string]any{"id": "steps", "name": *workload,
+					"start_time": start, "total": *steps, "finished": i}},
+			})
+			_ = os.WriteFile(hb+".tmp", data, 0o644)
+			_ = os.Rename(hb+".tmp", hb)
+		}
+		fmt.Printf("%s/%s: step %d of %d\n", *workload, *config, i, *steps)
+		if i < *steps {
+			time.Sleep(time.Second)
+		}
+	}
+
+	if *metrics == "" {
+		return
+	}
+	t := map[string]float64{"fir": 3, "mm": 8, "bfs": 5}[*workload]
+	if *config == "fast" {
+		t /= map[string]float64{"fir": 1.2, "mm": 2, "bfs": 1.5}[*workload]
+	}
+	run := filepath.Dir(filepath.Dir(*metrics))
+	_ = os.MkdirAll(filepath.Dir(*metrics), 0o755)
+	_ = os.WriteFile(*metrics, fmt.Appendf(nil, ",where,what,value\n0,driver,total_time,%g\n", t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "summary.csv"),
+		fmt.Appendf(nil, "workload,config,total_time\n%s,%s,%g\n", *workload, *config, t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "run.json"),
+		fmt.Appendf(nil, `{"metrics": {"total_time": %g}}`+"\n", t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "meta.json"), []byte(`{"exit_code": 0}`+"\n"), 0o644)
+}
+EOF
+cat > run.sh <<'EOF'
+#!/bin/sh
+# run.sh NAME SIM...: run SIM for result NAME (<date>_<workload>_<config>).
+name=$1; shift
+IFS=_ read -r date workload config <<END
+$name
+END
+"$@" -workload "$workload" -config "$config" -metrics "results/$name/stats/metrics.csv" &&
+akita herd record "results/$name" "Command=$* -workload $workload -config $config"
+EOF
+cat > sweep.sh <<'EOF'
+#!/bin/sh
+# sweep.sh CAMPAIGN SIM...: every workload x config into results/CAMPAIGN/.
+c=results/$1; date=${1%%_*}; shift
+mkdir -p "$c" && echo '{"total": 6}' > "$c/campaign.json"
+for w in fir mm bfs; do
+  for k in base fast; do
+    "$@" -steps 2 -workload $w -config $k -metrics "$c/${date}_${w}_$k/stats/metrics.csv" &&
+    akita herd record "$c/${date}_${w}_$k" || exit 1
+  done
+done
+EOF
+cat > flaky.sh <<'EOF'
+#!/bin/sh
+# flaky.sh CMD...: server1 has "bad memory": die of SIGBUS there.
+case $PWD in */server1/*) kill -BUS $$ ;; esac
+exec "$@"
+EOF
+cat > legacy.py <<'EOF'
+import sys
+for line in sys.stdin:  # old names are <workload>-<config>-<date>
+    old = line.strip()
+    parts = old.split("-")
+    new = f"{parts[2]}_{parts[0]}_{parts[1]}" if len(parts) == 3 else ""
+    print(f"{old}\t{new}")
+EOF
+chmod +x run.sh sweep.sh flaky.sh
+go run ./sim -steps 0
+```
+
+```text
+fir/base: step 0 of 0
+```
+**3. `init`，然后写配置。** `init` 写出配置骨架，再用下面的内容替换。项目配置把
+结果命名为 `<date>_<workload>_<config>`，说明怎样识别 `sim` 进程，用 `runs` 适配器
+读取 campaign，定义一张加速比图，并说明怎样构建 `sim`。用户配置把 `server1` 和
+`server2` 设为两台各有自己 root 和队列的本地主机（`server1` 只有一个槽位，并避开
+SIGBUS）：
+
+```bash
+akita herd init
+cat > herd.json <<'EOF'
+{
+  "schema": "herd-project/1",
+  "sync": {"exclude": ["*.tmp"]},
+  "naming": {
+    "separator": "_",
+    "fields": [
+      {"name": "date", "pattern": "\\d{4}"},
+      {"name": "workload", "pattern": "[a-z0-9]+"},
+      {"name": "config", "pattern": "[a-z0-9]+"}
+    ],
+    "group_by": ["workload"],
+    "compare_by": "config",
+    "legacy": "python3 legacy.py"
+  },
+  "simulators": [{"executable": "sim", "label_flag": "-workload", "output_flag": "-metrics"}],
+  "campaigns": {"detect": ["campaign.json"], "adapter": {"type": "runs"}},
+  "plots": [{"name": "speedup", "kind": "ratio", "metric": "total_time",
+             "lower_is_better": true, "x": "workload", "series": "config",
+             "baseline": "base", "summary": "gmean"}],
+  "build": {"binaries": [{"name": "sim", "dir": "sim",
+                          "command": ["go", "build", "-o", "{out}", "."],
+                          "env": {"CGO_ENABLED": "0"}}]},
+  "collect": {"exclude": ["stats/"]}
+}
+EOF
+cat > $AKITA_HERD_CONFIG <<EOF
+{
+  "hosts": [
+    {"name": "server1", "type": "local", "root": "$T/server1",
+     "queue": {"slots": 1, "mem_reserve_gb": 0.5, "mem_pause_gb": 0.2,
+               "mem_resume_gb": 0.4, "avoid_signals": ["SIGBUS"]}},
+    {"name": "server2", "type": "local", "root": "$T/server2",
+     "queue": {"slots": 4, "mem_reserve_gb": 1, "mem_pause_gb": 0.5, "mem_resume_gb": 2}}
+  ]
+}
+EOF
+git add -A && git -c user.name=demo -c user.email=demo@example.com commit -qm demo
+```
+
+```text
+wrote /tmp/herd-demo.XXXXXX/demo/herd.json
+wrote /tmp/herd-demo.XXXXXX/user.json
+```
+**4. `sync`** 把项目复制到每台主机：
+
+```bash
+akita herd sync
+ls $T/server1/demo
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+flaky.sh  go.mod  herd.json  legacy.py  run.sh  sim  sweep.sh
+```
+**5. `run`** 启动会话（会先同步）。`-g` 把会话放进一个组。第三个会话用旧的命名
+方式写一个结果：
+
+```bash
+akita herd run -g warmup server1 1018_fir_base ./run.sh 1018_fir_base go run ./sim
+akita herd run -g sweep server2 1018_all_sweep ./sweep.sh 1018_all_sweep go run ./sim
+akita herd run server1 old go run ./sim -workload fir -config fast -metrics results/fir-fast-1017/stats/metrics.csv
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> started 1018_fir_base on server1 (tmux session herd-demo-1018_fir_base), group warmup; log: /tmp/herd-demo.XXXXXX/server1/demo/logs/1018_fir_base.log
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> started 1018_all_sweep on server2 (tmux session herd-demo-1018_all_sweep), group sweep; log: ...
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> started old on server1 (tmux session herd-demo-old); log: ...
+```
+**6. `status`** 列出每台主机上的会话：
+
+```bash
+akita herd status
+```
+
+```text
+===== server1 =====
+STATE    NAME           GROUP   STARTED      DURATION
+running  old            -       10-19 14:02  0s
+running  1018_fir_base  warmup  10-19 14:02  0s
+--- old
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server1
+--- 1018_fir_base
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server1
+===== server2 =====
+STATE    NAME            GROUP  STARTED      DURATION
+running  1018_all_sweep  sweep  10-19 14:02  0s
+--- 1018_all_sweep
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server2
+```
+**7. `log`** 显示日志；`-f` 持续跟踪，直到你按 Ctrl+C（会话继续运行）：
+
+```bash
+akita herd log -f server2 1018_all_sweep
+```
+
+```text
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server2
+fir/base: step 0 of 2
+fir/base: step 1 of 2
+fir/base: step 2 of 2
+wrote results/1018_all_sweep/1018_fir_base/run.json
+fir/fast: step 0 of 2
+...
+^C
+```
+**8. `stop`** 停止一个正在运行的会话：
+
+```bash
+akita herd run server1 1018_mm_base ./run.sh 1018_mm_base go run ./sim -steps 600
+akita herd stop server1 1018_mm_base
+akita herd status -n 0 server1
+```
+
+```text
+>> stopped server1:1018_mm_base
+===== server1 =====
+STATE    NAME           GROUP   STARTED      DURATION
+stopped  1018_mm_base   -       10-19 14:02  0s
+ok       1018_fir_base  warmup  10-19 14:02  5s
+ok       old            -       10-19 14:02  5s
+```
+**9. `pull`** 把每台主机的 `logs/` 和 `results/` 复制到 `remote/<主机>/`。先等
+sweep 跑完（大约 15 秒）：
+
+```bash
+sleep 15; akita herd pull
+ls remote/*/results
+```
+
+```text
+>> pulled server1 -> remote/server1/
+>> pulled server2 -> remote/server2/
+remote/server1/results:
+1018_fir_base  fir-fast-1017
+
+remote/server2/results:
+1018_all_sweep
+```
+**10. `group`** 把会话加入一个组（`-` 表示移出所在的组）：
+
+```bash
+akita herd group server1 warmup 1018_mm_base
+```
+
+```text
+>> 1 sessions put into group warmup
+```
+**11. `record`** 写入或合并 `run.json`：字段从目录名按命名规则解析，属性来自命令
+参数，缺少的属性从 `meta.json` 补上。`run.sh` 已经在 `sim` 写完指标后运行过它；
+下面手动加一个属性：
+
+```bash
+(cd $T/server1/demo && akita herd record results/1018_fir_base Note=first)
+cat $T/server1/demo/results/1018_fir_base/run.json
+```
+
+```text
+wrote results/1018_fir_base/run.json
+{
+  "fields": {"config": "base", "date": "1018", "workload": "fir"},
+  "metrics": {"total_time": 3},
+  "name": "1018_fir_base",
+  "properties": [
+    {"property": "Command", "value": "go run ./sim -workload fir -config base"},
+    {"property": "Exit Code", "value": "0"},
+    {"property": "Note", "value": "first"}
+  ],
+  "schema": "herd-run/1"
+}
+```
+**12. `name`** 按命名规则检查名字，并用 `legacy.py` 给出的新名字重命名旧的结果
+目录：
+
+```bash
+akita herd name check 1018_fir_base fir-fast-1017
+akita herd name plan -H server1 results
+akita herd name apply -H server1 results
+```
+
+```text
+"fir-fast-1017": want 3 fields (date, workload, config) separated by "_", got 1
+Error: 1 of 2 names break the naming rule
+1018_fir_base	1018_fir_base
+fir-fast-1017	1017_fir_fast
+fir-fast-1017	1017_fir_fast
+```
+**13. `archive`** 隐藏已结束的会话（这里是组 `warmup`）和它们的结果；`--results`
+指定更多结果目录。只给主机时，列出已归档的内容。`unarchive` 撤销归档：
+
+```bash
+akita herd archive server1 warmup --results 1017_fir_fast
+akita herd archive server1
+akita herd status -a -n 0 server1
+akita herd unarchive server1 warmup --results 1017_fir_fast
+```
+
+```text
+Archiving 2 sessions (logs move to logs/archived/):
+  1018_fir_base  [group warmup]
+      result directory 1018_fir_base
+  1018_mm_base  [group warmup]
+  Result directories given with --results:
+      result directory 1017_fir_fast
+...
+Archived sessions (logs/archived/, 2 in total):
+  group warmup  2, archived 2026-10-19 14:03: 1018_fir_base, 1018_mm_base
+...
+STATE    NAME                      GROUP   STARTED      DURATION
+stopped  1018_mm_base (archived)   warmup  10-19 14:02  0s
+ok       1018_fir_base (archived)  warmup  10-19 14:02  5s
+ok       old                       -       10-19 14:02  5s
+...
+Unmarked 2 result directories as archived: 1017_fir_fast, 1018_fir_base
+```
+**14. `build`** 在当前提交（加上未提交的改动）的临时 git worktree 里构建 `sim`
+（`herd.json` 的 `build` 项）。默认目标是 `linux/amd64`；这里为本机构建：
+
+```bash
+akita herd build --target $(go env GOOS)/$(go env GOARCH)
+```
+
+```text
+>> sim  6353c7a  darwin/arm64  sha f825b239321d  .akita-herd/bin/f825b239321d/sim
+```
+**15. `agent`** 运行一台主机的队列（`submit` 会在需要时启动它）。这里 `server2`
+的 agent 从一个文件读取可用内存（`--fake-mem-file` 是测试用的参数），这样第 20 步
+不必真的占用内存就能演示内存保护：
+
+```bash
+echo 8 > $T/mem-gb
+akita herd agent start server2 --fake-mem-file $T/mem-gb
+akita herd agent start server1
+akita herd agent status server2
+```
+
+```text
+>> starting the agent of server2 (tmux session herd-agent-server2)
+>> agent of server2 runs: pid 4242, root /tmp/herd-demo.XXXXXX/server2, 4 slots
+>> starting the agent of server1 (tmux session herd-agent-server1)
+>> agent of server1 runs: pid 4250, root /tmp/herd-demo.XXXXXX/server1, 1 slots
+server2:/tmp/herd-demo.XXXXXX/server2: agent running (pid 4242, host server2), heartbeat 3s ago
+  slots 0/4 (own 0, simulators found 0), MemAvailable 8.0 GB (reserve 1, pause < 0.5, resume > 2)
+```
+**16. `submit`** 把任务放进队列。`{bin:sim}` 会换成 `sim` 最近一次构建的路径，
+`submit` 会把它上传到主机。`--file` 每行读一个 JSON 任务；用 `--hosts` 时，每个任务
+分到最空闲的主机：
+
+```bash
+akita herd submit --host server1 1019_fir_base ./run.sh 1019_fir_base {bin:sim}
+cat > tasks.jsonl <<'EOF'
+{"name": "1019_fir_fast", "cmd": "./run.sh 1019_fir_fast {bin:sim}"}
+{"name": "1019_mm_base", "cmd": "./run.sh 1019_mm_base {bin:sim}"}
+{"name": "1019_mm_fast", "cmd": "./run.sh 1019_mm_fast {bin:sim}", "priority": 1}
+EOF
+akita herd submit --hosts server1,server2 -g batch --file tasks.jsonl
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> queued 1 tasks on server1
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> queued 3 tasks on server2
+```
+**17. `queue`** 显示每台主机的 agent，以及排队、运行、暂停和已结束的任务。两台
+主机其实是同一台机器，所以每个 agent 也会把另一台的 `sim` 进程（"simulators"）算进
+自己的槽位，`1019_fir_base` 要等 `server2` 的任务结束：
+
+```bash
+sleep 6; akita herd queue
+```
+
+```text
+===== server1 =====
+agent: running (pid 4250), heartbeat 2s ago; slots 3/1 (own 0, simulators 3); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+pending  demo     1019_fir_base  5     -    6s
+===== server2 =====
+agent: running (pid 4242), heartbeat 3s ago; slots 3/4 (own 3, simulators 0); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+running  demo     1019_fir_fast  5     -    3s     pid 4310
+running  demo     1019_mm_base   5     -    3s     pid 4320
+running  demo     1019_mm_fast   1     -    3s     pid 4302
+```
+**18. `cancel`** 删除还没开始的任务（这个任务要的内存比主机多，所以一直在排队）：
+
+```bash
+akita herd submit --host server2 --mem 100 1019_bfs_base ./run.sh 1019_bfs_base {bin:sim}
+akita herd cancel server2 1019_bfs_base
+```
+
+```text
+>> queued 1 tasks on server2
+>> cancelled 1019_bfs_base on server2
+```
+**19. 重试和 `balance`。** 被主机 `avoid_signals` 中的信号杀死的任务可以重试：
+`balance` 把它重新提交到另一台主机。它还会把忙碌主机上排队的任务移到空闲主机。
+`-n` 只显示会做什么。先等 `server1` 空闲：
+
+```bash
+sleep 20
+akita herd submit --host server1 1019_bfs_fast ./run.sh 1019_bfs_fast ./flaky.sh {bin:sim}
+akita herd submit --host server1 1019_fir_long ./run.sh 1019_fir_long {bin:sim} -steps 15
+akita herd submit --host server1 1019_mm_long ./run.sh 1019_mm_long {bin:sim}
+sleep 12; akita herd queue server1
+akita herd balance -n
+akita herd balance
+```
+
+```text
+...
+===== server1 =====
+agent: running (pid 4250), heartbeat 4s ago; slots 1/1 (own 1, simulators 0); MemAvailable 8.1 GB
+STATE        PROJECT  NAME           PRIO  MEM  SINCE  INFO
+pending      demo     1019_mm_long   5     -    12s
+running      demo     1019_fir_long  5     -    4s     pid 4500
+failed(138)  demo     1019_bfs_fast  5     -    4s     SIGBUS retryable
+ok           demo     1019_fir_base  5     -    19s
+14:05:38 would retry 1019_bfs_fast (SIGBUS on server1) -> server2
+14:05:38 would move 1019_mm_long: server1 -> server2
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+14:05:39 retry 1019_bfs_fast (SIGBUS on server1) -> server2
+14:05:39 move 1019_mm_long: server1 -> server2
+```
+（SIGBUS 的退出码在 macOS 上是 138，在 Linux 上是 135。）
+
+**20. 内存保护。** 可用内存低于 `mem_pause_gb` 时，agent 暂停（SIGSTOP）优先级最低
+（`--priority` 最大）的任务中最新的一个；高于 `mem_resume_gb` 时恢复它（SIGCONT）。
+先等第 19 步的任务结束，再调低、调高假的可用内存：
+
+```bash
+sleep 10
+akita herd submit --host server2 --priority 9 1019_bfs_slow ./run.sh 1019_bfs_slow {bin:sim} -steps 12
+sleep 7; echo 0.1 > $T/mem-gb; sleep 7; akita herd queue server2
+echo 8 > $T/mem-gb; sleep 7; akita herd queue server2
+```
+
+```text
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> queued 1 tasks on server2
+===== server2 =====
+agent: running (pid 4242), heartbeat 4s ago; slots 1/4 (own 1, simulators 1); MemAvailable 0.1 GB
+STATE   PROJECT  NAME           PRIO  MEM  SINCE  INFO
+paused  demo     1019_bfs_slow  9     -    9s     pid 4600
+ok      demo     1019_bfs_fast  5     -    9s
+...
+===== server2 =====
+agent: running (pid 4242), heartbeat 0s ago; slots 1/4 (own 1, simulators 1); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+running  demo     1019_bfs_slow  9     -    16s    pid 4600
+ok       demo     1019_bfs_fast  5     -    16s
+...
+```
+**21. `collect`** 把已结束任务的结果和日志复制到 `remote/<主机>/`，每个任务只复制
+一次，不含 `collect.exclude`（这里是 `stats/`）：
+
+```bash
+sleep 15; akita herd collect
+ls remote/server2/results/1019_bfs_fast
+```
+
+```text
+14:06:25 collected server1:1019_fir_long (ok) -> remote/server1/
+14:06:25 collected server1:1019_bfs_fast (failed) -> remote/server1/
+14:06:25 collected server1:1019_fir_base (ok) -> remote/server1/
+14:06:25 collected server2:1019_bfs_slow (ok) -> remote/server2/
+14:06:25 collected server2:1019_bfs_fast (ok) -> remote/server2/
+...
+meta.json  run.json  summary.csv
+```
+**22. `web`** 在 http://127.0.0.1:8765 提供监控页面并打开浏览器（`--port` 换端口，
+`--no-browser` 不打开浏览器）。先启动一个慢会话，好看到进度条：
+
+```bash
+akita herd run server2 1019_mm_slow ./run.sh 1019_mm_slow go run ./sim -steps 60
+akita herd web
+```
+
+```text
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> started 1019_mm_slow on server2 (tmux session herd-demo-1019_mm_slow); log: ...
+akita herd web: http://127.0.0.1:8765/ (Ctrl+C to quit)
+```
+在页面上：**概览** 显示两台主机、带进度条的 `1019_mm_slow`，以及已完成的
+campaign `1018_all_sweep`（6/6）。打开 **实验**，点 `1019_mm_slow` 查看进度、`sim`
+进程、命令和日志；组（`warmup`、`sweep`、`batch`）折叠成一行。**结果** 按 workload
+分组列出结果目录，`config` 显示为彩色标签；点 `1018_fir_base` 查看属性、
+`summary.csv` 和文件。**图表**（或 campaign 旁的"画图"）：选 `1018_all_sweep`，看
+每个 workload 上 `fast` 相对 `base` 的加速比和 GMEAN（1.53）。**队列** 显示两个
+agent 和第 16 到 20 步的任务。按 Ctrl+C 停止服务。`akita herd web --balance` 还会
+每分钟运行一次 `balance`。
+
+**23. 清理。** 停止 agent（还在运行的任务会继续运行）和这次演练的 tmux 服务器，然后
+删除目录：
+
+```bash
+akita herd agent stop server1; akita herd agent stop server2
+tmux -S $T/tmux-$(id -u)/default kill-server 2>/dev/null
+cd / && rm -rf $T
+```
+**使用真实服务器。** 只需改用户配置：给每台主机写上地址（以及合适的队列设置），
+并在上面安装 `akita`（见[第 2 节](#2-安装)）：
+
+```json
+{
+  "hosts": [
+    {"name": "server1", "type": "ssh", "address": "server1",
+     "queue": {"slots": 16, "mem_reserve_gb": 16, "avoid_signals": ["SIGBUS"]}},
+    {"name": "server2", "type": "ssh", "address": "me@server2.example.edu",
+     "queue": {"slots": 32}},
+    {"name": "cluster", "type": "slurm", "address": "login.cluster.example",
+     "slurm": {"partition": "cpu", "time": "24:00:00", "cpus": 1, "mem": "16G"}}
+  ]
+}
+```
+这时 `build` 不需要 `--target`（默认就是 `linux/amd64`）；SLURM 主机没有队列，
+在那里用 `run`。
 
 ## 1. 基本概念
 

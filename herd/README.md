@@ -1,6 +1,8 @@
 # Herd
 
-New to Herd? Read the [user manual](MANUAL.md) ([中文](MANUAL.zh-CN.md)) first; this page is the reference.
+New to Herd? Try the [five-minute walkthrough](#try-it-a-five-minute-walkthrough)
+below, then read the [user manual](MANUAL.md) ([中文](MANUAL.zh-CN.md));
+the rest of this page is the reference.
 
 Herd (`akita herd`; the Akita dog herding a flock of simulations across
 servers) runs experiments on your machine, on SSH hosts, and on SLURM
@@ -12,6 +14,606 @@ your laptop does not stop anything that runs on a host.
 Herd does not depend on any particular simulator. A project's
 `herd.json` can say how its result directories are named, which processes
 are simulators, and how to read and plot campaigns (see [DESIGN.md](DESIGN.md)).
+
+## Try it: a five-minute walkthrough
+
+This example uses every feature of Herd on one machine (macOS or Linux
+with `git`, `go`, `tmux`, `rsync`, and `python3`). Two "hosts",
+`server1` and `server2`, are two directories under a temporary
+directory, and the "simulator" is a small Go program that sleeps. Paste
+the blocks in order into one shell; the text after each block is what
+you should see (abbreviated).
+
+**1. Install.** From the root of the akita checkout, install `akita`
+into a temporary directory, and give the demo its own user config and
+tmux server:
+
+```bash
+export T=$(mktemp -d /tmp/herd-demo.XXXXXX)
+CGO_ENABLED=0 GOBIN=$T/bin go install ./akita
+export PATH=$T/bin:$PATH AKITA_HERD_CONFIG=$T/user.json TMUX_TMPDIR=$T
+unset TMUX
+```
+
+**2. Make a project.** It has the fake simulator `sim` (it reports
+progress in `$HERD_HEARTBEAT` and writes `stats/metrics.csv`,
+`summary.csv`, `meta.json`, and `run.json` with the metrics into the
+result directory of `-metrics`), `run.sh` (runs `sim` for a result name
+`<date>_<workload>_<config>` and records `run.json` with `akita herd
+record`), `sweep.sh` (a campaign of 3 workloads × 2 configs), `flaky.sh`
+(dies of SIGBUS on `server1`), and `legacy.py` (maps old result names to
+new ones):
+
+```bash
+mkdir $T/demo && cd $T/demo && git init -q
+printf 'module demo\n\ngo 1.22\n' > go.mod
+printf 'remote/\n' > .gitignore
+mkdir sim && cat > sim/main.go <<'EOF'
+// sim is a fake simulator.
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func main() {
+	workload := flag.String("workload", "fir", "workload")
+	config := flag.String("config", "base", "configuration")
+	steps := flag.Int("steps", 5, "seconds to run")
+	metrics := flag.String("metrics", "", "results/<run>/stats/metrics.csv")
+	flag.Parse()
+
+	start := time.Now().Unix()
+	for i := 0; i <= *steps; i++ {
+		if hb := os.Getenv("HERD_HEARTBEAT"); hb != "" {
+			data, _ := json.Marshal(map[string]any{
+				"pid": os.Getpid(), "wall": time.Now().Unix(), "finished": i == *steps,
+				"progress": []any{map[string]any{"id": "steps", "name": *workload,
+					"start_time": start, "total": *steps, "finished": i}},
+			})
+			_ = os.WriteFile(hb+".tmp", data, 0o644)
+			_ = os.Rename(hb+".tmp", hb)
+		}
+		fmt.Printf("%s/%s: step %d of %d\n", *workload, *config, i, *steps)
+		if i < *steps {
+			time.Sleep(time.Second)
+		}
+	}
+
+	if *metrics == "" {
+		return
+	}
+	t := map[string]float64{"fir": 3, "mm": 8, "bfs": 5}[*workload]
+	if *config == "fast" {
+		t /= map[string]float64{"fir": 1.2, "mm": 2, "bfs": 1.5}[*workload]
+	}
+	run := filepath.Dir(filepath.Dir(*metrics))
+	_ = os.MkdirAll(filepath.Dir(*metrics), 0o755)
+	_ = os.WriteFile(*metrics, fmt.Appendf(nil, ",where,what,value\n0,driver,total_time,%g\n", t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "summary.csv"),
+		fmt.Appendf(nil, "workload,config,total_time\n%s,%s,%g\n", *workload, *config, t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "run.json"),
+		fmt.Appendf(nil, `{"metrics": {"total_time": %g}}`+"\n", t), 0o644)
+	_ = os.WriteFile(filepath.Join(run, "meta.json"), []byte(`{"exit_code": 0}`+"\n"), 0o644)
+}
+EOF
+cat > run.sh <<'EOF'
+#!/bin/sh
+# run.sh NAME SIM...: run SIM for result NAME (<date>_<workload>_<config>).
+name=$1; shift
+IFS=_ read -r date workload config <<END
+$name
+END
+"$@" -workload "$workload" -config "$config" -metrics "results/$name/stats/metrics.csv" &&
+akita herd record "results/$name" "Command=$* -workload $workload -config $config"
+EOF
+cat > sweep.sh <<'EOF'
+#!/bin/sh
+# sweep.sh CAMPAIGN SIM...: every workload x config into results/CAMPAIGN/.
+c=results/$1; date=${1%%_*}; shift
+mkdir -p "$c" && echo '{"total": 6}' > "$c/campaign.json"
+for w in fir mm bfs; do
+  for k in base fast; do
+    "$@" -steps 2 -workload $w -config $k -metrics "$c/${date}_${w}_$k/stats/metrics.csv" &&
+    akita herd record "$c/${date}_${w}_$k" || exit 1
+  done
+done
+EOF
+cat > flaky.sh <<'EOF'
+#!/bin/sh
+# flaky.sh CMD...: server1 has "bad memory": die of SIGBUS there.
+case $PWD in */server1/*) kill -BUS $$ ;; esac
+exec "$@"
+EOF
+cat > legacy.py <<'EOF'
+import sys
+for line in sys.stdin:  # old names are <workload>-<config>-<date>
+    old = line.strip()
+    parts = old.split("-")
+    new = f"{parts[2]}_{parts[0]}_{parts[1]}" if len(parts) == 3 else ""
+    print(f"{old}\t{new}")
+EOF
+chmod +x run.sh sweep.sh flaky.sh
+go run ./sim -steps 0
+```
+
+```text
+fir/base: step 0 of 0
+```
+
+**3. `init`, then the configs.** `init` writes skeletons; replace them.
+The project config names results `<date>_<workload>_<config>`, says how
+to recognise `sim` processes, reads campaigns with the `runs` adapter,
+defines a speedup plot, and says how to build `sim`. The user config
+makes `server1` and `server2` two local hosts with their own roots and
+queues (`server1` has one slot and avoids SIGBUS):
+
+```bash
+akita herd init
+cat > herd.json <<'EOF'
+{
+  "schema": "herd-project/1",
+  "sync": {"exclude": ["*.tmp"]},
+  "naming": {
+    "separator": "_",
+    "fields": [
+      {"name": "date", "pattern": "\\d{4}"},
+      {"name": "workload", "pattern": "[a-z0-9]+"},
+      {"name": "config", "pattern": "[a-z0-9]+"}
+    ],
+    "group_by": ["workload"],
+    "compare_by": "config",
+    "legacy": "python3 legacy.py"
+  },
+  "simulators": [{"executable": "sim", "label_flag": "-workload", "output_flag": "-metrics"}],
+  "campaigns": {"detect": ["campaign.json"], "adapter": {"type": "runs"}},
+  "plots": [{"name": "speedup", "kind": "ratio", "metric": "total_time",
+             "lower_is_better": true, "x": "workload", "series": "config",
+             "baseline": "base", "summary": "gmean"}],
+  "build": {"binaries": [{"name": "sim", "dir": "sim",
+                          "command": ["go", "build", "-o", "{out}", "."],
+                          "env": {"CGO_ENABLED": "0"}}]},
+  "collect": {"exclude": ["stats/"]}
+}
+EOF
+cat > $AKITA_HERD_CONFIG <<EOF
+{
+  "hosts": [
+    {"name": "server1", "type": "local", "root": "$T/server1",
+     "queue": {"slots": 1, "mem_reserve_gb": 0.5, "mem_pause_gb": 0.2,
+               "mem_resume_gb": 0.4, "avoid_signals": ["SIGBUS"]}},
+    {"name": "server2", "type": "local", "root": "$T/server2",
+     "queue": {"slots": 4, "mem_reserve_gb": 1, "mem_pause_gb": 0.5, "mem_resume_gb": 2}}
+  ]
+}
+EOF
+git add -A && git -c user.name=demo -c user.email=demo@example.com commit -qm demo
+```
+
+```text
+wrote /tmp/herd-demo.XXXXXX/demo/herd.json
+wrote /tmp/herd-demo.XXXXXX/user.json
+```
+
+**4. `sync`** copies the project to every host:
+
+```bash
+akita herd sync
+ls $T/server1/demo
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+flaky.sh  go.mod  herd.json  legacy.py  run.sh  sim  sweep.sh
+```
+
+**5. `run`** starts sessions (it syncs first). `-g` puts a session into a
+group. The third session writes a result under an old name:
+
+```bash
+akita herd run -g warmup server1 1018_fir_base ./run.sh 1018_fir_base go run ./sim
+akita herd run -g sweep server2 1018_all_sweep ./sweep.sh 1018_all_sweep go run ./sim
+akita herd run server1 old go run ./sim -workload fir -config fast -metrics results/fir-fast-1017/stats/metrics.csv
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> started 1018_fir_base on server1 (tmux session herd-demo-1018_fir_base), group warmup; log: /tmp/herd-demo.XXXXXX/server1/demo/logs/1018_fir_base.log
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> started 1018_all_sweep on server2 (tmux session herd-demo-1018_all_sweep), group sweep; log: ...
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> started old on server1 (tmux session herd-demo-old); log: ...
+```
+
+**6. `status`** lists the sessions of every host:
+
+```bash
+akita herd status
+```
+
+```text
+===== server1 =====
+STATE    NAME           GROUP   STARTED      DURATION
+running  old            -       10-19 14:02  0s
+running  1018_fir_base  warmup  10-19 14:02  0s
+--- old
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server1
+--- 1018_fir_base
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server1
+===== server2 =====
+STATE    NAME            GROUP  STARTED      DURATION
+running  1018_all_sweep  sweep  10-19 14:02  0s
+--- 1018_all_sweep
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server2
+```
+
+**7. `log`** shows a log; `-f` follows it until you press Ctrl+C (the
+session keeps running):
+
+```bash
+akita herd log -f server2 1018_all_sweep
+```
+
+```text
+[start] Mon Oct 19 02:02:35 PM UTC 2026  server2
+fir/base: step 0 of 2
+fir/base: step 1 of 2
+fir/base: step 2 of 2
+wrote results/1018_all_sweep/1018_fir_base/run.json
+fir/fast: step 0 of 2
+...
+^C
+```
+
+**8. `stop`** kills a running session:
+
+```bash
+akita herd run server1 1018_mm_base ./run.sh 1018_mm_base go run ./sim -steps 600
+akita herd stop server1 1018_mm_base
+akita herd status -n 0 server1
+```
+
+```text
+>> stopped server1:1018_mm_base
+===== server1 =====
+STATE    NAME           GROUP   STARTED      DURATION
+stopped  1018_mm_base   -       10-19 14:02  0s
+ok       1018_fir_base  warmup  10-19 14:02  5s
+ok       old            -       10-19 14:02  5s
+```
+
+**9. `pull`** copies `logs/` and `results/` of every host to
+`remote/<host>/`. Wait for the sweep to finish first (about 15 s):
+
+```bash
+sleep 15; akita herd pull
+ls remote/*/results
+```
+
+```text
+>> pulled server1 -> remote/server1/
+>> pulled server2 -> remote/server2/
+remote/server1/results:
+1018_fir_base  fir-fast-1017
+
+remote/server2/results:
+1018_all_sweep
+```
+
+**10. `group`** adds sessions to a group (`-` removes them):
+
+```bash
+akita herd group server1 warmup 1018_mm_base
+```
+
+```text
+>> 1 sessions put into group warmup
+```
+
+**11. `record`** writes or merges `run.json`: the fields come from the
+directory name and the naming rule, and the properties from the
+arguments; properties it lacks come from `meta.json`. `run.sh` already
+ran it after `sim` had written the metrics; add a property by hand:
+
+```bash
+(cd $T/server1/demo && akita herd record results/1018_fir_base Note=first)
+cat $T/server1/demo/results/1018_fir_base/run.json
+```
+
+```text
+wrote results/1018_fir_base/run.json
+{
+  "fields": {"config": "base", "date": "1018", "workload": "fir"},
+  "metrics": {"total_time": 3},
+  "name": "1018_fir_base",
+  "properties": [
+    {"property": "Command", "value": "go run ./sim -workload fir -config base"},
+    {"property": "Exit Code", "value": "0"},
+    {"property": "Note", "value": "first"}
+  ],
+  "schema": "herd-run/1"
+}
+```
+
+**12. `name`** checks names against the naming rule, and renames old
+result directories with the names that `legacy.py` gives:
+
+```bash
+akita herd name check 1018_fir_base fir-fast-1017
+akita herd name plan -H server1 results
+akita herd name apply -H server1 results
+```
+
+```text
+"fir-fast-1017": want 3 fields (date, workload, config) separated by "_", got 1
+Error: 1 of 2 names break the naming rule
+1018_fir_base	1018_fir_base
+fir-fast-1017	1017_fir_fast
+fir-fast-1017	1017_fir_fast
+```
+
+**13. `archive`** hides finished sessions (here the group `warmup`) and
+their results; `--results` names more result directories. With only a
+host, it lists what is archived. `unarchive` undoes it:
+
+```bash
+akita herd archive server1 warmup --results 1017_fir_fast
+akita herd archive server1
+akita herd status -a -n 0 server1
+akita herd unarchive server1 warmup --results 1017_fir_fast
+```
+
+```text
+Archiving 2 sessions (logs move to logs/archived/):
+  1018_fir_base  [group warmup]
+      result directory 1018_fir_base
+  1018_mm_base  [group warmup]
+  Result directories given with --results:
+      result directory 1017_fir_fast
+...
+Archived sessions (logs/archived/, 2 in total):
+  group warmup  2, archived 2026-10-19 14:03: 1018_fir_base, 1018_mm_base
+...
+STATE    NAME                      GROUP   STARTED      DURATION
+stopped  1018_mm_base (archived)   warmup  10-19 14:02  0s
+ok       1018_fir_base (archived)  warmup  10-19 14:02  5s
+ok       old                       -       10-19 14:02  5s
+...
+Unmarked 2 result directories as archived: 1017_fir_fast, 1018_fir_base
+```
+
+**14. `build`** builds `sim` (the `build` entry of `herd.json`) from a
+temporary git worktree of the current commit plus uncommitted changes.
+The default target is `linux/amd64`; build for this machine:
+
+```bash
+akita herd build --target $(go env GOOS)/$(go env GOARCH)
+```
+
+```text
+>> sim  6353c7a  darwin/arm64  sha f825b239321d  .akita-herd/bin/f825b239321d/sim
+```
+
+**15. `agent`** runs a host's queue (`submit` starts it when needed).
+Here `server2`'s agent reads its free memory from a file
+(`--fake-mem-file` is a flag for tests) so that step 20 can show the
+memory guard without using real memory:
+
+```bash
+echo 8 > $T/mem-gb
+akita herd agent start server2 --fake-mem-file $T/mem-gb
+akita herd agent start server1
+akita herd agent status server2
+```
+
+```text
+>> starting the agent of server2 (tmux session herd-agent-server2)
+>> agent of server2 runs: pid 4242, root /tmp/herd-demo.XXXXXX/server2, 4 slots
+>> starting the agent of server1 (tmux session herd-agent-server1)
+>> agent of server1 runs: pid 4250, root /tmp/herd-demo.XXXXXX/server1, 1 slots
+server2:/tmp/herd-demo.XXXXXX/server2: agent running (pid 4242, host server2), heartbeat 3s ago
+  slots 0/4 (own 0, simulators found 0), MemAvailable 8.0 GB (reserve 1, pause < 0.5, resume > 2)
+```
+
+**16. `submit`** queues tasks. `{bin:sim}` becomes the path of the
+latest build of `sim`, which `submit` uploads to the host. `--file`
+reads one JSON task per line; with `--hosts`, each task goes to the
+host with the most room:
+
+```bash
+akita herd submit --host server1 1019_fir_base ./run.sh 1019_fir_base {bin:sim}
+cat > tasks.jsonl <<'EOF'
+{"name": "1019_fir_fast", "cmd": "./run.sh 1019_fir_fast {bin:sim}"}
+{"name": "1019_mm_base", "cmd": "./run.sh 1019_mm_base {bin:sim}"}
+{"name": "1019_mm_fast", "cmd": "./run.sh 1019_mm_fast {bin:sim}", "priority": 1}
+EOF
+akita herd submit --hosts server1,server2 -g batch --file tasks.jsonl
+```
+
+```text
+>> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
+>> queued 1 tasks on server1
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> queued 3 tasks on server2
+```
+
+**17. `queue`** shows each host's agent, and its pending, running,
+paused, and ended tasks. Both hosts are this machine, so each agent also
+counts the other's `sim` processes ("simulators") against its slots,
+and `1019_fir_base` waits until `server2`'s tasks end:
+
+```bash
+sleep 6; akita herd queue
+```
+
+```text
+===== server1 =====
+agent: running (pid 4250), heartbeat 2s ago; slots 3/1 (own 0, simulators 3); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+pending  demo     1019_fir_base  5     -    6s
+===== server2 =====
+agent: running (pid 4242), heartbeat 3s ago; slots 3/4 (own 3, simulators 0); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+running  demo     1019_fir_fast  5     -    3s     pid 4310
+running  demo     1019_mm_base   5     -    3s     pid 4320
+running  demo     1019_mm_fast   1     -    3s     pid 4302
+```
+
+**18. `cancel`** removes a task that has not started (this one asks for
+more memory than the host has, so it stays pending):
+
+```bash
+akita herd submit --host server2 --mem 100 1019_bfs_base ./run.sh 1019_bfs_base {bin:sim}
+akita herd cancel server2 1019_bfs_base
+```
+
+```text
+>> queued 1 tasks on server2
+>> cancelled 1019_bfs_base on server2
+```
+
+**19. Retry and `balance`.** A task killed by one of its host's
+`avoid_signals` is retryable: `balance` resubmits it to another host. It
+also moves pending tasks of a busy host to an idle one. `-n` only shows
+what it would do. Wait until `server1` is idle first:
+
+```bash
+sleep 20
+akita herd submit --host server1 1019_bfs_fast ./run.sh 1019_bfs_fast ./flaky.sh {bin:sim}
+akita herd submit --host server1 1019_fir_long ./run.sh 1019_fir_long {bin:sim} -steps 15
+akita herd submit --host server1 1019_mm_long ./run.sh 1019_mm_long {bin:sim}
+sleep 12; akita herd queue server1
+akita herd balance -n
+akita herd balance
+```
+
+```text
+...
+===== server1 =====
+agent: running (pid 4250), heartbeat 4s ago; slots 1/1 (own 1, simulators 0); MemAvailable 8.1 GB
+STATE        PROJECT  NAME           PRIO  MEM  SINCE  INFO
+pending      demo     1019_mm_long   5     -    12s
+running      demo     1019_fir_long  5     -    4s     pid 4500
+failed(138)  demo     1019_bfs_fast  5     -    4s     SIGBUS retryable
+ok           demo     1019_fir_base  5     -    19s
+14:05:38 would retry 1019_bfs_fast (SIGBUS on server1) -> server2
+14:05:38 would move 1019_mm_long: server1 -> server2
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+14:05:39 retry 1019_bfs_fast (SIGBUS on server1) -> server2
+14:05:39 move 1019_mm_long: server1 -> server2
+```
+
+(The exit status of SIGBUS is 138 on macOS and 135 on Linux.)
+
+**20. Memory guard.** Below `mem_pause_gb` of free memory the agent
+pauses (SIGSTOP) the newest task of the lowest priority (the largest
+`--priority`); above `mem_resume_gb` it resumes it (SIGCONT). Wait for
+the tasks of step 19 to end, then lower and raise the fake free memory:
+
+```bash
+sleep 10
+akita herd submit --host server2 --priority 9 1019_bfs_slow ./run.sh 1019_bfs_slow {bin:sim} -steps 12
+sleep 7; echo 0.1 > $T/mem-gb; sleep 7; akita herd queue server2
+echo 8 > $T/mem-gb; sleep 7; akita herd queue server2
+```
+
+```text
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> queued 1 tasks on server2
+===== server2 =====
+agent: running (pid 4242), heartbeat 4s ago; slots 1/4 (own 1, simulators 1); MemAvailable 0.1 GB
+STATE   PROJECT  NAME           PRIO  MEM  SINCE  INFO
+paused  demo     1019_bfs_slow  9     -    9s     pid 4600
+ok      demo     1019_bfs_fast  5     -    9s
+...
+===== server2 =====
+agent: running (pid 4242), heartbeat 0s ago; slots 1/4 (own 1, simulators 1); MemAvailable 8.0 GB
+STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
+running  demo     1019_bfs_slow  9     -    16s    pid 4600
+ok       demo     1019_bfs_fast  5     -    16s
+...
+```
+
+**21. `collect`** copies the results and logs of ended tasks to
+`remote/<host>/`, once per task and without `collect.exclude` (here
+`stats/`):
+
+```bash
+sleep 15; akita herd collect
+ls remote/server2/results/1019_bfs_fast
+```
+
+```text
+14:06:25 collected server1:1019_fir_long (ok) -> remote/server1/
+14:06:25 collected server1:1019_bfs_fast (failed) -> remote/server1/
+14:06:25 collected server1:1019_fir_base (ok) -> remote/server1/
+14:06:25 collected server2:1019_bfs_slow (ok) -> remote/server2/
+14:06:25 collected server2:1019_bfs_fast (ok) -> remote/server2/
+...
+meta.json  run.json  summary.csv
+```
+
+**22. `web`** serves the monitor on http://127.0.0.1:8765 and opens it
+(`--port` to change the port, `--no-browser` to not open it). Start a
+slow session first so there is a progress bar to watch:
+
+```bash
+akita herd run server2 1019_mm_slow ./run.sh 1019_mm_slow go run ./sim -steps 60
+akita herd web
+```
+
+```text
+>> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
+>> started 1019_mm_slow on server2 (tmux session herd-demo-1019_mm_slow); log: ...
+akita herd web: http://127.0.0.1:8765/ (Ctrl+C to quit)
+```
+
+In the page: **Overview** shows both hosts, `1019_mm_slow` with its
+progress bar, and the finished campaign `1018_all_sweep` (6/6). Open
+**Sessions** and click `1019_mm_slow` for its progress, the `sim`
+process, the command, and the log; groups (`warmup`, `sweep`, `batch`)
+fold into one row. **Results** lists the result directories grouped by
+workload, with `config` as a coloured tag; click `1018_fir_base` for its
+properties, `summary.csv`, and files. **Charts** (or "Plot" next to the
+campaign): pick `1018_all_sweep` to see the speedup of `fast` over
+`base` per workload, with the GMEAN (1.53). **Queue** shows both agents
+and the tasks of steps 16 to 20. Press Ctrl+C to stop the server.
+`akita herd web --balance` also runs `balance` every minute.
+
+**23. Clean up.** Stop the agents (tasks that still run would keep
+running), the demo's tmux server, and remove the directory:
+
+```bash
+akita herd agent stop server1; akita herd agent stop server2
+tmux -S $T/tmux-$(id -u)/default kill-server 2>/dev/null
+cd / && rm -rf $T
+```
+
+**Using real servers.** Only the user config changes: give each host
+its address (and the queue settings that fit it), and install `akita`
+on it (see [Install](#install)):
+
+```json
+{
+  "hosts": [
+    {"name": "server1", "type": "ssh", "address": "server1",
+     "queue": {"slots": 16, "mem_reserve_gb": 16, "avoid_signals": ["SIGBUS"]}},
+    {"name": "server2", "type": "ssh", "address": "me@server2.example.edu",
+     "queue": {"slots": 32}},
+    {"name": "cluster", "type": "slurm", "address": "login.cluster.example",
+     "slurm": {"partition": "cpu", "time": "24:00:00", "cpus": 1, "mem": "16G"}}
+  ]
+}
+```
+
+`build` then needs no `--target` (the default is `linux/amd64`), and a
+SLURM host has no queue: use `run` there.
 
 ## Install
 

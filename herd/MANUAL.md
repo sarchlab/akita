@@ -12,6 +12,9 @@ archive, and plot what runs there. Closing the laptop stops nothing.
 
 This manual walks through Herd task by task. The [README](README.md)
 lists every command, option, and file format in reference form.
+To try every feature on one machine first, follow the
+[five-minute walkthrough](README.md#try-it-a-five-minute-walkthrough) in
+the README.
 
 ## Contents
 
