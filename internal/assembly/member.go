@@ -9,7 +9,11 @@ func (c *Context) assemblySetup() *Setup { return &c.setup }
 // SetupOf returns framework-owned assembly state. Simulation wrappers used in
 // tests embed the concrete simulation to preserve this private capability.
 func SetupOf(sim any) *Setup {
-	return sim.(interface{ assemblySetup() *Setup }).assemblySetup()
+	context, ok := sim.(interface{ assemblySetup() *Setup })
+	if !ok {
+		panic("simulation: framework builders require *sim.Simulation or a type embedding it")
+	}
+	return context.assemblySetup()
 }
 
 // Member connects an element to its simulation and optional lifecycle callbacks.

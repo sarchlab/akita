@@ -152,3 +152,8 @@ component `BindPort(slot, port)` and connection `BindPort(port)` coordinate
 both ends of their respective bindings. A custom owner calls `BindOwner` and
 registers the port explicitly. Binding and registration reject elements from
 another simulation, and binding after initialization is rejected.
+
+Framework lifecycle builders require a simulation created by `sim.MakeBuilder`,
+or a wrapper embedding `*sim.Simulation` to retain its private lifecycle state.
+Forwarding only the exported `modeling.Simulation` methods does not supply that
+state and is rejected with a diagnostic during construction.

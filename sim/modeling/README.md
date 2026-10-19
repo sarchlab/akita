@@ -139,6 +139,11 @@ owns the counter, so two components share one ID sequence even though they
 have different names. Independent simulations have separate
 sequences.
 
+Framework lifecycle builders require a simulation created by `sim.MakeBuilder`,
+or a wrapper embedding `*sim.Simulation` to retain its private lifecycle state.
+Forwarding only the exported `modeling.Simulation` methods does not supply that
+state and is rejected with a diagnostic during construction.
+
 Use the same entry point for tests, examples, and full simulations:
 
 ```go

@@ -29,16 +29,7 @@ type testSimulation struct {
 	owners map[naming.Named]bool
 }
 
-func (s *testSimulation) TaskTracker() *tasks.Tracker { return s.Tracker }
-func (s *testSimulation) Engine() timing.Engine       { return testClock{s.Simulation.Engine(), s} }
-
-type testClock struct {
-	timing.Engine
-	simulation *testSimulation
-}
-
-func (c testClock) CurrentTime() timing.VTimeInPicoSec { return c.simulation.now }
-
+func (s *testSimulation) TaskTracker() *tasks.Tracker        { return s.Tracker }
 func (s *testSimulation) CurrentTime() timing.VTimeInPicoSec { return s.now }
 func (s *testSimulation) NewID() uint64                      { return s.ids.Add(1) }
 func newTestSimulation() *testSimulation {

@@ -71,3 +71,21 @@ func TestFrameworkLifecycleIsNotPublic(t *testing.T) {
 		}
 	}
 }
+
+func TestSimulationWrappersPreserveLifecycleContext(t *testing.T) {
+	s := sim.MakeBuilder().Build()
+	// Forwarding the public interface alone loses the private lifecycle capability.
+	forwarding := struct{ modeling.Simulation }{s}
+	require.PanicsWithValue(t,
+		"simulation: framework builders require *sim.Simulation or a type embedding it",
+		func() { twowaybuffered.MakeBuilder().WithSimulation(forwarding).Build() })
+	// Embedding the concrete runtime retains both public services and setup state.
+	embedded := struct{ *sim.Simulation }{s}
+	port := twowaybuffered.MakeBuilder().WithSimulation(embedded).Build()
+	comp := modeling.MakeBuilder[*assemblyComponent](modeling.None{}).WithSimulation(s).Build("Agent")
+	comp.BindPort("In", port)
+	require.Equal(t, []messaging.Port{port}, s.Ports())
+	require.NoError(t, s.Initialize())
+	require.Panics(t, func() { twowaybuffered.MakeBuilder().WithSimulation(embedded).Build() })
+	t.Log("Concrete embedding preserves shared lifecycle state; public-interface-only forwarding has a clear diagnostic")
+}

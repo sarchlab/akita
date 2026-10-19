@@ -18,14 +18,14 @@ spec := rob.DefaultSpec()
 spec.BufferSize = 8
 r := modeling.MakeBuilder[*rob.Comp](spec).WithSimulation(s).Build("GPU.ROB")
 r.BindPort("Top", twowaybuffered.MakeBuilder().
-    WithSimulation(sim).
+    WithSimulation(s).
     WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
     Build())
 r.BindPort("Bottom", twowaybuffered.MakeBuilder().
-    WithSimulation(sim).
+    WithSimulation(s).
     WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
     Build())
-r.BindPort("Control", twowaybuffered.MakeBuilder().WithSimulation(sim).Build())
+r.BindPort("Control", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
 conn := direct.NewConnection("GPU.Link", s, timing.GHz)
 conn.BindPort(r.Ports.Top)
 // Bind the other components and links before initialization.
@@ -426,7 +426,12 @@ the component itself and the message ID, so simulations that reuse IDs stay
 apart.
 
 Pass the simulation to builders with `WithSimulation(sim)`. All component and
-package builders accept the shared `modeling.Simulation` interface. A component
+package builders accept the shared `modeling.Simulation` interface.
+Framework lifecycle builders require `*sim.Simulation` or a wrapper embedding it;
+forwarding only the public interface loses the private setup state.
+`RegisterComponent` now takes `messaging.PortOwner`; the provided component models
+already implement it. `RegisterPort` and `RegisterConnection` take their respective
+messaging contracts, while `RegisterResource` still takes `naming.Named`. A component
 keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `sim.MakeBuilder().Build()` once and share that instance with

@@ -334,3 +334,8 @@ Call `s.Initialize()` on the concrete simulation after wiring. Framework setup
 validation and component initialization are internal; component authors only
 implement optional `State.Initialize(*Comp)` and `Middlewares.Initialize(*Comp)`.
 Checkpoint helpers and `timing.Engine.WithIdle` retain their existing APIs.
+
+Framework lifecycle builders require a simulation created by `sim.MakeBuilder`,
+or a wrapper embedding `*sim.Simulation` to retain its private lifecycle state.
+Forwarding only the exported `modeling.Simulation` methods does not supply that
+state and is rejected with a diagnostic during construction.

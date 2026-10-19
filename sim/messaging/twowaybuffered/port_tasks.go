@@ -57,7 +57,7 @@ func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	}
 	entry.TaskID = tracker.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
 		What: what, Location: p.name + direction, Detail: msg})
-	entry.LastMilestoneTime = p.simulation.Engine().CurrentTime()
+	entry.LastMilestoneTime = tracker.CurrentTime()
 	return entry
 }
 
@@ -96,7 +96,7 @@ func (p *Port) bufferMilestone(entry *bufferEntry, reason messaging.WaitReason) 
 	if tracker == nil {
 		return
 	}
-	now := p.simulation.Engine().CurrentTime()
+	now := tracker.CurrentTime()
 	if now <= entry.LastMilestoneTime {
 		return
 	}

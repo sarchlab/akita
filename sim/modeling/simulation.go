@@ -10,6 +10,8 @@ import (
 // Simulation supplies the runtime services used by model builders and elements.
 // The concrete sim.Simulation owns initialization, execution and termination.
 // TaskTracker returns nil when tracking is disabled.
+// Framework lifecycle builders require *sim.Simulation (from sim.MakeBuilder)
+// or a wrapper embedding it, so their internal setup state is preserved.
 type Simulation interface {
 	Engine() timing.Engine
 	NewID() uint64
