@@ -63,6 +63,25 @@ jobs:
         working-directory: ./monitoring/internal/static
         run: npm test
 
+  experiment_ui_compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+      - name: npm install
+        working-directory: ./experiment/static
+        run: npm install
+      - name: npm run build
+        working-directory: ./experiment/static
+        run: npm run build
+      - name: npm test
+        working-directory: ./experiment/static
+        run: npm test
+
   akita_build_lint_test:
     runs-on: ubuntu-latest
     timeout-minutes: 30

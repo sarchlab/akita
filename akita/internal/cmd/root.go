@@ -54,5 +54,7 @@ func newRootCommand() *cobra.Command {
 		},
 	})
 
+	root.AddCommand(expCmd)
+
 	return root
 }
