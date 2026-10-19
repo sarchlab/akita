@@ -79,8 +79,7 @@ func (m *requestMW) send() bool {
 	}
 
 	req := memory.NewReq(m.comp.NewID(), port.AsRemote(), spec.Dst)
-	taskID := m.comp.TaskTracker( // root task, no parent
-	).StartReqOut(m.comp, req, 0)
+	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, 0) // root task, no parent
 	port.Send(req)
 	s.InFlight[req.ID] = taskID
 	s.Sent++

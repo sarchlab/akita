@@ -16,10 +16,11 @@ import (
 )
 
 type Simulation struct {
-	// lifecycle serializes snapshots and cleanup; running spans Simulation.Run.
+	// lifecycle serializes snapshots and cleanup. activeOperation spans callbacks
+	// made by Initialize and Run, without holding the mutex during those callbacks.
 	// Engine.WithIdle also excludes calls made directly through Engine().
 	lifecycle        sync.Mutex
-	running          bool
+	activeOperation  string
 	terminated       bool
 	terminateErr     error
 	setup            assembly.Setup
@@ -163,8 +164,8 @@ func (s *Simulation) Terminate() error {
 	if s.terminated {
 		return s.terminateErr
 	}
-	if s.running {
-		return fmt.Errorf("simulation: execution is active")
+	if s.activeOperation != "" {
+		return fmt.Errorf("simulation: %s is active", s.activeOperation)
 	}
 	return s.engine.WithIdle(func() error {
 		s.terminated = true
@@ -211,10 +212,13 @@ func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
 // and middleware. Call it once before seeding work or loading a checkpoint.
 func (s *Simulation) Initialize() error {
 	s.lifecycle.Lock()
-	defer s.lifecycle.Unlock()
-	if err := s.requireUsable(); err != nil {
+	if err := s.requireIdle(); err != nil {
+		s.lifecycle.Unlock()
 		return err
 	}
+	s.activeOperation = "initialization"
+	s.lifecycle.Unlock()
+	defer s.finishOperation()
 	if err := s.setup.Initialize(); err != nil {
 		return err
 	}
@@ -228,39 +232,41 @@ func (s *Simulation) Initialize() error {
 // Run executes queued events after successful initialization.
 func (s *Simulation) Run() error {
 	s.lifecycle.Lock()
-	if err := s.requireUsable(); err != nil {
+	if err := s.requireIdle(); err != nil {
 		s.lifecycle.Unlock()
 		return err
-	}
-	if s.running {
-		s.lifecycle.Unlock()
-		return fmt.Errorf("simulation: execution is active")
 	}
 	if err := s.setup.Ready(); err != nil {
 		s.lifecycle.Unlock()
 		return err
 	}
-	s.running = true
+	s.activeOperation = "execution"
 	s.lifecycle.Unlock()
-	defer func() { s.lifecycle.Lock(); s.running = false; s.lifecycle.Unlock() }()
+	defer s.finishOperation()
 	return s.engine.Run()
 }
 
-func (s *Simulation) requireUsable() error {
+func (s *Simulation) requireIdle() error {
 	if s.terminated {
 		return fmt.Errorf("simulation: terminated")
 	}
+	if s.activeOperation != "" {
+		return fmt.Errorf("simulation: %s is active", s.activeOperation)
+	}
 	return nil
+}
+
+func (s *Simulation) finishOperation() {
+	s.lifecycle.Lock()
+	s.activeOperation = ""
+	s.lifecycle.Unlock()
 }
 
 func (s *Simulation) whileIdle(fn func() error) error {
 	s.lifecycle.Lock()
 	defer s.lifecycle.Unlock()
-	if err := s.requireUsable(); err != nil {
+	if err := s.requireIdle(); err != nil {
 		return err
-	}
-	if s.running {
-		return fmt.Errorf("simulation: execution is active")
 	}
 	return s.engine.WithIdle(fn)
 }

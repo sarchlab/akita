@@ -76,8 +76,7 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	_ = msg.Payload.(ReadReq)
 	req := msg
 
-	taskID := m.comp.TaskTracker( // req_in @ Memory — a leaf task
-	).StartReqIn(m.comp, req)
+	taskID := m.comp.TaskTracker().StartReqIn(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
 	m.comp.TaskTracker().EndReqIn(taskID)
 	port.RetrieveIncoming()

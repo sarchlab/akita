@@ -94,8 +94,7 @@ func (m *forwardMW) forwardDown() bool {
 	upReq := msg
 
 	// Open the handling task for the request we received.
-	recvTaskID := m.comp.TaskTracker( // req_in @ this cache
-	).StartReqIn(m.comp, upReq)
+	recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
 	downReq := memory.NewReq(m.comp.NewID(),

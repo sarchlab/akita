@@ -172,3 +172,27 @@ func assertTerminated(t *testing.T, s *Simulation, path string) {
 	require.ErrorContains(t, s.SaveCheckpoint(path), "terminated")
 	require.ErrorContains(t, s.LoadCheckpoint(path), "terminated")
 }
+
+type lifecycleInitializer struct {
+	s      *Simulation
+	errors []error
+}
+
+func (*lifecycleInitializer) Name() string         { return "Initializer" }
+func (*lifecycleInitializer) ValidateSetup() error { return nil }
+func (p *lifecycleInitializer) InitializeComponent() {
+	p.errors = []error{p.s.Run(), p.s.SaveCheckpoint("unused"),
+		p.s.LoadCheckpoint("unused"), p.s.Terminate(), p.s.Initialize()}
+}
+func TestInitializerLifecycleCallsAreRejectedWithoutBlocking(t *testing.T) {
+	s := MakeBuilder().Build()
+	probe := &lifecycleInitializer{s: s}
+	s.RegisterResource(probe)
+	require.NoError(t, s.Initialize())
+	require.Len(t, probe.errors, 5)
+	for _, err := range probe.errors {
+		require.ErrorContains(t, err, "initialization is active")
+	}
+	require.NoError(t, s.Run())
+	require.NoError(t, s.Terminate())
+}

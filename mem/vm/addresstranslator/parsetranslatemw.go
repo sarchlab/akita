@@ -73,12 +73,11 @@ func (m *parseTranslateMW) translate() bool {
 	nextState := &m.comp.State
 
 	incoming.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, itemI)
-	translationTaskID :=
-		m.comp.TaskTracker().StartReqOut(
-			m.comp,
-			transReq,
-			incoming.RecvTaskID,
-		)
+	translationTaskID := m.comp.TaskTracker().StartReqOut(
+		m.comp,
+		transReq,
+		incoming.RecvTaskID,
+	)
 
 	m.translationPort().Send(transReq)
 
