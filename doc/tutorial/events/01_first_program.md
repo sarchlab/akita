@@ -105,7 +105,9 @@ event and returns.
 ### 6. Cleanup
 
 ```go
-s.Terminate()
+if err := s.Terminate(); err != nil {
+    panic(err)
+}
 ```
 
 `Terminate` flushes any tracing and data-recording buffers held by the

@@ -70,7 +70,11 @@ s := sim.MakeBuilder().
     WithMonitor(monitor).       // optional: enable live monitoring
     WithVisTracingOnStart().    // optional: start tracing immediately
     Build()
-defer s.Terminate()
+defer func() {
+    if err := s.Terminate(); err != nil {
+        panic(err)
+    }
+}()
 ```
 
 | Method | Description |

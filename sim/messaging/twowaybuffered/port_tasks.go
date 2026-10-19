@@ -48,7 +48,8 @@ func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
 
 func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	entry := bufferEntry{Message: msg}
-	if p.taskTracker() == nil {
+	tracker := p.taskTracker()
+	if tracker == nil {
 		return entry
 	}
 	kind, direction := tasks.KindOutgoingBuffer, ".outgoing"
@@ -62,9 +63,9 @@ func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 			what = typ.String()
 		}
 	}
-	entry.TaskID = p.taskTracker().StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
+	entry.TaskID = tracker.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
 		What: what, Location: p.name + direction, Detail: msg})
-	entry.LastMilestoneTime = p.taskTracker().CurrentTime()
+	entry.LastMilestoneTime = tracker.CurrentTime()
 	return entry
 }
 
@@ -96,22 +97,30 @@ func (p *Port) headMilestone(buf *queueing.Buffer[bufferEntry], reason messaging
 }
 
 func (p *Port) bufferMilestone(entry *bufferEntry, reason messaging.WaitReason) {
-	if entry.TaskID == 0 || p.taskTracker() == nil {
+	if entry.TaskID == 0 {
 		return
 	}
-	now := p.taskTracker().CurrentTime()
+	tracker := p.taskTracker()
+	if tracker == nil {
+		return
+	}
+	now := tracker.CurrentTime()
 	if now <= entry.LastMilestoneTime {
 		return
 	}
-	p.taskTracker().AddMilestone(tasks.Milestone{TaskID: entry.TaskID,
+	tracker.AddMilestone(tasks.Milestone{TaskID: entry.TaskID,
 		Kind: tasks.MilestoneKind(reason.Kind), What: reason.What})
 	entry.LastMilestoneTime = now
 }
 
 func (p *Port) endBufferTask(entry *bufferEntry, incoming bool) {
-	if entry.TaskID == 0 || p.taskTracker() == nil {
+	if entry.TaskID == 0 {
+		return
+	}
+	tracker := p.taskTracker()
+	if tracker == nil {
 		return
 	}
 	p.bufferMilestone(entry, p.waitReason(messaging.WaitReason{}, incoming))
-	p.taskTracker().EndTask(entry.TaskID)
+	tracker.EndTask(entry.TaskID)
 }
