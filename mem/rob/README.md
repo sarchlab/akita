@@ -56,7 +56,7 @@ The reorder buffer is a ticking component (`modeling/ticking`). The system
 builder builds it with `modeling.MakeBuilder[*rob.Comp](spec)`: configuration is supplied as a whole
 through `WithSpec` (start from `DefaultSpec()`), and the port instances
 with `component.BindPort` after Build. The system builder creates each port with
-`twowaybuffered.NewPort`, choosing its buffer sizes, and names it
+`twowaybuffered.MakeBuilder`, choosing its buffer sizes, and names it
 `component.BindPort("Field", port)`, which assigns `<instance>.<field>` and registers the port.
 
 ```go
@@ -67,9 +67,18 @@ spec.Bottom = dramPort.AsRemote()
 reorderBuffer := modeling.MakeBuilder[*rob.Comp](spec).
     WithSimulation(sim).
     Build("ROB")
-reorderBuffer.BindPort("Top", twowaybuffered.NewPort(8, 8))
-reorderBuffer.BindPort("Bottom", twowaybuffered.NewPort(8, 8))
-reorderBuffer.BindPort("Control", twowaybuffered.NewPort(8, 8))
+reorderBuffer.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+reorderBuffer.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
+reorderBuffer.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+    Build())
 
 topPort := reorderBuffer.Ports.Top
 ```

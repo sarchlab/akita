@@ -25,7 +25,7 @@ func TestBuildRequiresBlocks(t *testing.T) {
 		builtComponent := modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(setupSim1).
 			Build("MMUCache")
-		builtComponentPorts := defaultPorts("MMUCache")
+		builtComponentPorts := defaultPorts(setupSim1, "MMUCache")
 		builtComponent.BindPort("Top", builtComponentPorts.Top)
 		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
 		builtComponent.BindPort("Control", builtComponentPorts.Control)

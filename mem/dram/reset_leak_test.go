@@ -25,7 +25,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(1 * mem.MB)}).
 		Build("DRAM")
-	compPorts := defaultPorts("DRAM", 16)
+	compPorts := defaultPorts(sim, "DRAM", 16)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Control", compPorts.Control)
 

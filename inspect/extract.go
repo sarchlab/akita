@@ -24,9 +24,6 @@ var componentModels = map[string]string{
 func extractPackage(pkg *packages.Package, index pkgIndex) (schema.Definition, bool, error) {
 	obj := pkg.Types.Scope().Lookup("Comp")
 	if obj == nil {
-		if defaults := pkg.Types.Scope().Lookup("DefaultSpec"); defaults != nil {
-			return schema.Definition{}, false, posErrorf(pkg, defaults.Pos(), "DefaultSpec requires a Comp component type alias")
-		}
 		return schema.Definition{}, false, nil
 	}
 	typ := types.Unalias(obj.Type())

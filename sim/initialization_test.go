@@ -43,7 +43,10 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.NoFileExists(t, path)
 			require.ErrorContains(t, s.Initialize(), "Top")
 			require.Zero(t, calls)
-			p := twowaybuffered.NewPort(2, 2)
+			p := twowaybuffered.MakeBuilder().
+				WithSimulation(s).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 2}).
+				Build()
 			c.BindPort("Top", p)
 			conn := direct.NewConnection("Link", s, timing.GHz)
 			conn.BindPort(p)
@@ -56,9 +59,9 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 			require.NoError(t, s.Run())
 			require.Error(t, s.Initialize())
 			require.Panics(t, func() { def.WithSimulation(s).Build("Late") })
-			require.Panics(t, func() { c.BindPort("Top", twowaybuffered.NewPort(1, 1)) })
+			require.Panics(t, func() { c.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build()) })
 			require.Panics(t, func() { direct.NewConnection("Late", s, timing.GHz) })
-			require.Panics(t, func() { conn.BindPort(twowaybuffered.NewPort(1, 1)) })
+			require.Panics(t, func() { conn.BindPort(twowaybuffered.MakeBuilder().WithSimulation(s).Build()) })
 			t.Log("Build left State untouched; initialization rejected missing Top, " +
 				"then observed the completed link and froze topology")
 		})

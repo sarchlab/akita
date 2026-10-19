@@ -41,7 +41,7 @@ func main() {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
 			ports := []messaging.Port{
-				twowaybuffered.NewPort(1, 1),
+				twowaybuffered.MakeBuilder().WithSimulation(sim).Build(),
 			}
 			agent := acceptance.NewAgent(sim, freq, name, ports, test)
 			agent.TickLater()

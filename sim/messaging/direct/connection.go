@@ -3,8 +3,8 @@ package direct
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/internal/tickscheduler"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -14,7 +14,7 @@ import (
 // NewConnection creates an ideal direct connection with the given tick frequency.
 // It registers the connection and its event handler with s. Ports are attached
 // separately with BindPort. The simulation must be non-nil and the name valid.
-func NewConnection(name string, s timing.Simulation, freq timing.Freq) *Connection {
+func NewConnection(name string, s modeling.Simulation, freq timing.Freq) *Connection {
 	if s == nil {
 		panic("direct: simulation is required")
 	}
@@ -22,15 +22,16 @@ func NewConnection(name string, s timing.Simulation, freq timing.Freq) *Connecti
 	if freq == 0 {
 		panic(fmt.Sprintf("direct: connection %q requires a nonzero frequency", name))
 	}
-	s.RequireNameAvailable(name)
+	assembly.SetupOf(s).RequireNameAvailable(name)
 	naming.MustBeValid(name)
 	spec := configuration{Freq: freq}
 	modeling.MustBeCheckpointable[configuration, State](name, spec)
 
 	conn := &Connection{
-		name:       name,
-		simulation: s,
-		spec:       spec,
+		connectionAssembly: assembly.NewMember(s, nil, nil),
+		name:               name,
+		simulation:         s,
+		spec:               spec,
 		// Secondary ticks run after components in the same cycle.
 		ticks: tickscheduler.NewSecondaryScheduler(name, s, freq),
 		ports: ports{portMap: make(map[messaging.RemotePort]int)},

@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-	"github.com/sarchlab/akita/v5/sim/modeling"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
@@ -18,17 +16,27 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
 // makePorts creates the ports of the writeback cache named name, each with
 // bufSize slots in each direction.
-func makePorts(name string, bufSize int) Ports {
+func makePorts(simulation modeling.Simulation, name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(bufSize, bufSize),
-		Bottom:  twowaybuffered.NewPort(bufSize, bufSize),
-		Control: twowaybuffered.NewPort(bufSize, bufSize),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
 	}
 }
 
@@ -41,10 +49,14 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
-func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(bufSize, bufSize)
+func newDriverPort(simulation modeling.Simulation, name string, bufSize int) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	p.BindOwner(testDriver{}, name)
 
+	simulation.RegisterPort(p)
 	return p
 }
 
@@ -75,8 +87,7 @@ func stageTestSpec() Spec {
 // buildStageTestComp builds the "Cache" instance a white-box stage test
 // drives, with its ports plugged into noop connections. The test ticks the
 // stage under test directly rather than the component.
-func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
-	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
+func buildStageTestComp(setupSim1 *akitasim.Simulation, spec Spec, res Resources, ports Ports) *Comp {
 	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
 		WithResources(res).
@@ -94,7 +105,7 @@ func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
 
 // buildIdealDRAM builds a 200-cycle ideal memory controller named "DRAM",
 // backed by storage, and returns its Top port.
-func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port {
+func buildIdealDRAM(sim *testsim.Simulation, storage *mem.Storage) messaging.Port {
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 1
 	dramSpec.Latency = 200
@@ -103,8 +114,14 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		Build("DRAM")
 
-	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	dram.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	return dram.Ports.Top
 }
@@ -112,7 +129,7 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 func TestWriteBackCacheIntegration(t *testing.T) {
 	var (
 		engine              timing.Engine
-		sim                 timing.Simulation
+		sim                 *testsim.Simulation
 		addressToPortMapper messaging.RemotePort
 		cacheComp           *Comp
 		m                   *pipelineMW
@@ -129,8 +146,8 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
-		agentPort = newDriverPort("Agent.Top", 8)
-		controlAgentPort = newDriverPort("Agent.Control", 8)
+		agentPort = newDriverPort(sim, "Agent.Top", 8)
+		controlAgentPort = newDriverPort(sim, "Agent.Control", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
@@ -146,7 +163,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
-		cacheCompPorts := makePorts("Cache", 8)
+		cacheCompPorts := makePorts(sim, "Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)
 		cacheComp.BindPort("Bottom", cacheCompPorts.Bottom)
 		cacheComp.BindPort("Control", cacheCompPorts.Control)

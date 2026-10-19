@@ -27,21 +27,29 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the Top, Bottom, and Control ports of the cache named
 // name, each with the given buffer size.
-func makePorts(name string, bufSize int) Ports {
+func makePorts(simulation modeling.Simulation, name string, bufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(bufSize, bufSize),
-		Bottom:  twowaybuffered.NewPort(bufSize, bufSize),
-		Control: twowaybuffered.NewPort(bufSize, bufSize),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+			Build(),
 	}
 }
 
 // buildStageTestCache builds a cache named "Cache" for a stage test from the
 // given spec, resources, and ports, and replaces its State with state. It
 // returns the pipeline middleware the stages under test belong to.
-func buildStageTestCache(
+func buildStageTestCache(setupSim1 *akitasim.Simulation,
 	spec Spec, res Resources, ports Ports, state state,
 ) *pipelineMW {
-	setupSim1 := akitasim.MakeBuilder().WithTaskTracking().Build()
 	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
 		WithResources(res).

@@ -7,12 +7,10 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
-	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -36,17 +34,17 @@ func (c *baseComp) Handle(timing.Event)           {}
 
 // recordingSim records the ports and components registered with it.
 type recordingSim struct {
-	timing.Simulation
+	*akitasim.Simulation
 	ports      []string
 	components []string
 }
 
-func (s *recordingSim) RegisterPort(p naming.Named) {
+func (s *recordingSim) RegisterPort(p messaging.Port) {
 	s.Simulation.RegisterPort(p)
 	s.ports = append(s.ports, p.Name())
 }
 
-func (s *recordingSim) RegisterComponent(c naming.Named) {
+func (s *recordingSim) RegisterComponent(c messaging.PortOwner) {
 	s.Simulation.RegisterComponent(c)
 	s.components = append(s.components, c.Name())
 }
@@ -57,7 +55,7 @@ func newRecordingSim() *recordingSim {
 	}
 }
 
-func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
+func buildBase(sim modeling.Simulation, ports basePorts) *baseComp {
 	c := &baseComp{}
 	base.Init(&c.ComponentBase, c,
 		sim, "C", baseSpec{Size: 4}, modeling.None{})
@@ -72,8 +70,8 @@ func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
 	return c
 }
 
-func unowned(name string) messaging.Port {
-	return twowaybuffered.NewPort(1, 1)
+func unowned(simulation modeling.Simulation, name string) messaging.Port {
+	return twowaybuffered.MakeBuilder().WithSimulation(simulation).Build()
 }
 
 func expectPanic(t *testing.T, substr string, f func()) {
@@ -100,7 +98,7 @@ func TestBindPortEstablishesBothSides(t *testing.T) {
 	if c.Ports.In != nil || len(s.ports) != 0 {
 		t.Fatal("Build must leave ports unbound")
 	}
-	in, link := unowned(""), unowned("")
+	in, link := unowned(s, ""), unowned(s, "")
 	c.BindPort("In", in)
 	c.BindPort("Links[0]", link)
 	if c.Ports.In != in || in.Owner() != c || in.Name() != "C.In" || link.Name() != "C.Links[0]" {
@@ -112,14 +110,14 @@ func TestBindPortEstablishesBothSides(t *testing.T) {
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)
 	}
-	expectPanic(t, "frozen", func() { c.BindPort("Links[1]", unowned("")) })
+	expectPanic(t, "frozen", func() { c.BindPort("Links[1]", unowned(s, "")) })
 }
 func TestInvalidBindingDoesNotMutate(t *testing.T) {
 	for _, slot := range []string{"Missing", "Links", "Links[-1]", "Links[01]", "In[0]"} {
 		t.Run(slot, func(t *testing.T) {
 			s := newRecordingSim()
 			c := buildBase(s, basePorts{})
-			p := unowned("")
+			p := unowned(s, "")
 			expectPanic(t, "", func() { c.BindPort(slot, p) })
 			if p.Owner() != nil || p.Name() != "" || len(s.ports) != 0 {
 				t.Fatal("invalid binding mutated port")
@@ -127,8 +125,8 @@ func TestInvalidBindingDoesNotMutate(t *testing.T) {
 		})
 	}
 	s := newRecordingSim()
-	c := buildBase(s, basePorts{In: unowned("")})
-	replacement := unowned("")
+	c := buildBase(s, basePorts{In: unowned(s, "")})
+	replacement := unowned(s, "")
 	expectPanic(t, "already", func() { c.BindPort("In", replacement) })
 	if replacement.Owner() != nil {
 		t.Fatal("replacement was partially bound")
@@ -145,12 +143,12 @@ func TestInitializationValidatesBeforeFreezing(t *testing.T) {
 	if calls != 0 {
 		t.Fatal("initializer ran before validation")
 	}
-	c.BindPort("In", unowned(""))
-	c.BindPort("Links[1]", unowned(""))
+	c.BindPort("In", unowned(s, ""))
+	c.BindPort("Links[1]", unowned(s, ""))
 	if err := s.Initialize(); err == nil {
 		t.Fatal("slice hole accepted")
 	}
-	c.BindPort("Links[0]", unowned(""))
+	c.BindPort("Links[0]", unowned(s, ""))
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +161,8 @@ func TestInitializationValidatesBeforeFreezing(t *testing.T) {
 }
 
 func TestNameIsTheInstanceAndSpecIsKept(t *testing.T) {
-	c := buildBase(newRecordingSim(), basePorts{In: unowned("C.In")})
+	s := newRecordingSim()
+	c := buildBase(s, basePorts{In: unowned(s, "C.In")})
 
 	if c.Name() != "C" {
 		t.Errorf("Name() = %q, want the instance name C", c.Name())

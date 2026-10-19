@@ -14,13 +14,13 @@ func (h *countSendHook) Func(hooking.HookCtx) { h.calls++ }
 
 func TestPortCapacitiesMustBePositive(t *testing.T) {
 	for _, caps := range [][2]int{{0, 1}, {-1, 1}, {1, 0}, {1, -1}} {
-		require.Panics(t, func() { NewPort(caps[0], caps[1]) })
+		require.Panics(t, func() { newTestPort(caps[0], caps[1]) })
 	}
-	require.NotPanics(t, func() { NewPort(1, 1) })
+	require.NotPanics(t, func() { newTestPort(1, 1) })
 }
 
 func TestSendGuardsLeavePortUnchanged(t *testing.T) {
-	p := NewPort(2, 2)
+	p := newTestPort(2, 2)
 	p.BindOwner(&portPresenceOwner{}, "Source")
 	hook := &countSendHook{}
 	p.AcceptHook(hook)

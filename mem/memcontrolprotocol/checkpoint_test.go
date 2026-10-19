@@ -86,8 +86,14 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		Build("DRAM")
 
-	dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
+	dram.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	dramTop := dram.Ports.Top
 
@@ -104,9 +110,18 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 		Build("Cache")
 
-	cache.BindPort("Top", twowaybuffered.NewPort(256, 256))
-	cache.BindPort("Bottom", twowaybuffered.NewPort(256, 256))
-	cache.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	cache.BindPort("Top", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 256, OutgoingCapacity: 256}).
+		Build())
+	cache.BindPort("Bottom", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 256, OutgoingCapacity: 256}).
+		Build())
+	cache.BindPort("Control", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build())
 
 	h := &cacheOverDRAM{
 		cache:       cache,

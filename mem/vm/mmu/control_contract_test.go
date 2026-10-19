@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -22,7 +21,7 @@ func TestControlContract(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: vm.NewPageTable(12)}).
 			Build("MMU")
-		compPorts := makePorts("MMU", 16)
+		compPorts := makePorts(sim, "MMU", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Control", compPorts.Control)
 

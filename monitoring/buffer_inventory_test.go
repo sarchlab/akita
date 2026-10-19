@@ -71,7 +71,10 @@ func TestMonitorDiscoversInitializedStateAndAbsentBuffers(t *testing.T) {
 		WithOutputPath(filepath.Join(t.TempDir(), "monitor.sqlite3")).Build()
 	defer s.Terminate()
 	c := modeling.MakeBuilder[*inventoryComponent](struct{}{}).WithSimulation(s).Build("Comp")
-	p := twowaybuffered.NewPort(2, 3)
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 2, OutgoingCapacity: 3}).
+		Build()
 	monitorPortOwner{}.BindPort("Port", p)
 	s.RegisterPort(p)
 	s.RegisterPort(absentBufferPort{})

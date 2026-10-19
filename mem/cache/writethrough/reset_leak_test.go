@@ -41,7 +41,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		Build("L1Cache")
-	compPorts := makePorts("L1Cache", 16)
+	compPorts := makePorts(sim, "L1Cache", 16)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Bottom", compPorts.Bottom)
 	comp.BindPort("Control", compPorts.Control)
@@ -148,9 +148,10 @@ func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Lower"}
-	pipeline := buildStageTestCache(spec, Resources{
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	pipeline := buildStageTestCache(sim, spec, Resources{
 		Storage: mem.NewStorage(1 * mem.MB),
-	}, makePorts("Cache", 8), state{})
+	}, makePorts(sim, "Cache", 8), state{})
 	comp := pipeline.comp
 	rec := &resetEndCounter{ends: make(map[uint64]int)}
 	comp.TaskTracker().Subscribe(rec, comp)

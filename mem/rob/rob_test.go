@@ -38,7 +38,7 @@ func TestReorderBuffer(t *testing.T) {
 
 	var (
 		engine     timing.Engine
-		sim        timing.Simulation
+		sim        *testsim.Simulation
 		rob        *Comp
 		topPort    messaging.Port
 		bottomPort messaging.Port
@@ -51,7 +51,10 @@ func TestReorderBuffer(t *testing.T) {
 
 	build := func(spec Spec) {
 		port := func(name string, bufSize int) messaging.Port {
-			return twowaybuffered.NewPort(bufSize, bufSize)
+			return twowaybuffered.MakeBuilder().
+				WithSimulation(sim).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+				Build()
 		}
 
 		topPort = port("Top", topBufSize)

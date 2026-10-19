@@ -38,12 +38,14 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 
 	s := simBuilder.Build()
 	engine := s.Engine()
+	ports := twowaybuffered.MakeBuilder().WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16})
 
 	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	// The agent sends to the DRAM's Top port, so the DRAM's ports are created
 	// before the agent is built.
-	dramTop := twowaybuffered.NewPort(16, 16)
+	dramTop := ports.Build()
 
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
@@ -55,7 +57,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 		WithSimulation(s).
 		Build("MemAccessAgent")
 
-	agent.BindPort("Mem", twowaybuffered.NewPort(16, 16))
+	agent.BindPort("Mem", ports.Build())
 
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Width = 1
@@ -71,7 +73,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 		Build("DRAM")
 
 	dram.BindPort("Top", dramTop)
-	dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+	dram.BindPort("Control", ports.Build())
 
 	conn.BindPort(agent.Ports.Mem)
 	conn.BindPort(dram.Ports.Top)

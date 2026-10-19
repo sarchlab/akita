@@ -3,6 +3,7 @@ package networkconnector
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/noc/routing"
@@ -62,7 +63,7 @@ type SwitchToSwitchLinkParameter struct {
 // Device ports must also be *twowaybuffered.Port; wire ports are not supported.
 type Connector struct {
 	name        string
-	simulation  timing.Simulation
+	simulation  modeling.Simulation
 	defaultFreq timing.Freq
 	flitSize    int
 	router      Router
@@ -76,7 +77,7 @@ type Connector struct {
 
 // Builder configures independent network assembly instances.
 type Builder struct {
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	freq       timing.Freq
 	flitSize   int
 	router     Router
@@ -85,10 +86,10 @@ type Builder struct {
 func MakeBuilder() Builder {
 	return Builder{freq: timing.GHz, flitSize: 64, router: FloydWarshallRouter{}}
 }
-func (b Builder) WithSimulation(s timing.Simulation) Builder { b.simulation = s; return b }
-func (b Builder) WithFreq(f timing.Freq) Builder             { b.freq = f; return b }
-func (b Builder) WithFlitSize(size int) Builder              { b.flitSize = size; return b }
-func (b Builder) WithRouter(router Router) Builder           { b.router = router; return b }
+func (b Builder) WithSimulation(s modeling.Simulation) Builder { b.simulation = s; return b }
+func (b Builder) WithFreq(f timing.Freq) Builder               { b.freq = f; return b }
+func (b Builder) WithFlitSize(size int) Builder                { b.flitSize = size; return b }
+func (b Builder) WithRouter(router Router) Builder             { b.router = router; return b }
 
 // Build begins an independent network with the supplied name.
 func (b Builder) Build(name string) *Connector {
@@ -96,7 +97,7 @@ func (b Builder) Build(name string) *Connector {
 	if b.simulation == nil {
 		panic("networkconnector: WithSimulation is required")
 	}
-	b.simulation.RequireSetup()
+	assembly.RequireSetup(b.simulation)
 	if b.freq <= 0 || b.flitSize <= 0 {
 		panic("networkconnector: frequency and flit size must be positive")
 	}
@@ -104,7 +105,9 @@ func (b Builder) Build(name string) *Connector {
 		name: name, simulation: b.simulation,
 		defaultFreq: b.freq, flitSize: b.flitSize, router: b.router,
 	}
-	b.simulation.RegisterResource(&networkCheckpoint{c: c})
+	b.simulation.RegisterResource(&networkCheckpoint{
+		Member: assembly.NewMember(b.simulation, c.initializeRoutes, nil), c: c,
+	})
 	return c
 }
 
@@ -124,7 +127,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	swName string,
 	rt *routing.Table,
 ) (switchID int) {
-	c.simulation.RequireSetup()
+	assembly.RequireSetup(c.simulation)
 	switchID = len(c.switches)
 
 	spec := switches.DefaultSpec()
@@ -170,7 +173,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 	ports []messaging.Port,
 	param DeviceToSwitchLinkParameter,
 ) {
-	c.simulation.RequireSetup()
+	assembly.RequireSetup(c.simulation)
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
@@ -187,8 +190,13 @@ func (c *Connector) ConnectDeviceWithEPName(
 		device.ports = append(device.ports, ports...)
 		return
 	}
-	epPort := twowaybuffered.NewPort(param.DeviceEndParam.IncomingBufSize,
-		param.DeviceEndParam.OutgoingBufSize)
+	epPort := twowaybuffered.MakeBuilder().
+		WithSimulation(c.simulation).
+		WithSpec(twowaybuffered.Spec{
+			IncomingCapacity: param.DeviceEndParam.IncomingBufSize,
+			OutgoingCapacity: param.DeviceEndParam.OutgoingBufSize,
+		}).
+		Build()
 	swPort := swNode.addPort(param.SwitchEndParam)
 
 	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
@@ -279,7 +287,7 @@ func (c *Connector) ConnectSwitches(
 	leftSwitchID, rightSwitchID int,
 	param SwitchToSwitchLinkParameter,
 ) {
-	c.simulation.RequireSetup()
+	assembly.RequireSetup(c.simulation)
 	leftNode := c.switches[leftSwitchID]
 	rightNode := c.switches[rightSwitchID]
 

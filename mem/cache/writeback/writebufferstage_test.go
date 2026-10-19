@@ -3,6 +3,8 @@ package writeback
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -49,11 +51,12 @@ func TestWriteBufferStage(t *testing.T) {
 		spec.MaxInflightFetch = 4
 		spec.MaxInflightEviction = 4
 		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
-		comp := buildStageTestComp(spec,
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		comp := buildStageTestComp(sim, spec,
 			Resources{
 				Storage: mem.NewStorage(spec.TotalByteSize),
 			},
-			makePorts("Cache", 4))
+			makePorts(sim, "Cache", 4))
 		bottomPort = comp.Ports.Bottom
 
 		m = comp.Middlewares.Pipeline

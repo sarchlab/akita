@@ -145,8 +145,14 @@ ctrl := modeling.MakeBuilder[*dram.Comp](spec).
     WithSimulation(sim).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
-ctrl.BindPort("Top", twowaybuffered.NewPort(1024, 1024))
-ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
+ctrl.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 1024, OutgoingCapacity: 1024}).
+    Build())
+ctrl.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 
 topPort := ctrl.Ports.Top
 ```
@@ -219,7 +225,7 @@ completed requests, bytes moved, and cycles), which the monitor also shows.
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

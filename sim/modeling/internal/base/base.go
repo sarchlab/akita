@@ -12,8 +12,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/portwalk"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -26,12 +28,15 @@ type owner interface {
 	messaging.PortOwner
 }
 
+type componentAssembly = assembly.Member
+
 // ComponentBase is what every component model shares: an instance's five
 // structs — Spec, State, Resources, Ports, and Middlewares — and the methods
 // that do not depend on how the instance is scheduled. The Component of each
 // model embeds it and adds its scheduling.
 type ComponentBase[S, T, R, P, M any] struct {
 	hooking.HookableBase
+	componentAssembly
 
 	// Spec is the instance's configuration, given to Build. It is fixed from
 	// then on; Build copies its slices, so the instance shares none with
@@ -56,7 +61,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 
 	name        string
 	owner       owner
-	simulation  timing.Simulation
+	simulation  modeling.Simulation
 	taskTracker *tasks.Tracker
 	initialize  func()
 	initialized bool
@@ -67,7 +72,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 func Init[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
 	owner owner,
-	sim timing.Simulation,
+	sim modeling.Simulation,
 	name string,
 	spec S,
 	resources R,
@@ -75,9 +80,8 @@ func Init[S, T, R, P, M any](
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
-	if provider, ok := sim.(interface{ TaskTracker() *tasks.Tracker }); ok {
-		base.taskTracker = provider.TaskTracker()
-	}
+	base.componentAssembly = assembly.NewMember(sim, base.validateSetup, base.initializeComponent)
+	base.taskTracker = sim.TaskTracker()
 	base.Spec = cloneSpec(spec)
 	base.Resources = resources
 }
@@ -169,13 +173,10 @@ func isNilable(k reflect.Kind) bool {
 // SetInitializer records deferred state and middleware construction.
 func SetInitializer[S, T, R, P, M any](c *ComponentBase[S, T, R, P, M], fn func()) { c.initialize = fn }
 
-// RequireSetup checks the simulation's assembly phase.
-func (c *ComponentBase[S, T, R, P, M]) RequireSetup() { c.simulation.RequireSetup() }
-
 // BindPort assigns one declared port slot and establishes its owner and name.
 // Indexed slice slots (for example Inputs[2]) grow the group as needed.
 func (c *ComponentBase[S, T, R, P, M]) BindPort(slot string, port messaging.Port) {
-	c.RequireSetup()
+	assembly.RequireSetup(c)
 	if port == nil || (reflect.ValueOf(port).Kind() == reflect.Pointer && reflect.ValueOf(port).IsNil()) {
 		panic("modeling: cannot bind a nil port")
 	}
@@ -184,7 +185,7 @@ func (c *ComponentBase[S, T, R, P, M]) BindPort(slot string, port messaging.Port
 	}
 	name := c.name + "." + slot
 	naming.MustBeValid(name)
-	c.simulation.RequireNameAvailable(name)
+	assembly.SetupOf(c.simulation).RequireNameAvailable(name)
 	fieldName := slot
 	index := -1
 	if i := strings.IndexByte(slot, '['); i >= 0 {
@@ -218,6 +219,7 @@ func (c *ComponentBase[S, T, R, P, M]) BindPort(slot string, port messaging.Port
 			panic("modeling: port slot already bound: " + slot)
 		}
 	}
+	assembly.RequireSameSimulation(c.simulation, port)
 	port.BindOwner(c.owner, name)
 	if index < 0 {
 		field.Set(reflect.ValueOf(port))
@@ -232,8 +234,8 @@ func (c *ComponentBase[S, T, R, P, M]) BindPort(slot string, port messaging.Port
 	c.simulation.RegisterPort(port)
 }
 
-// ValidateSetup checks all declared port slots before any initializer runs.
-func (c *ComponentBase[S, T, R, P, M]) ValidateSetup() error {
+// validateSetup checks all declared port slots before any initializer runs.
+func (c *ComponentBase[S, T, R, P, M]) validateSetup() error {
 	var failures []error
 	portwalk.ForEach(&c.Ports, func(slot string, v reflect.Value) {
 		if v.IsNil() {
@@ -252,8 +254,8 @@ func (c *ComponentBase[S, T, R, P, M]) ValidateSetup() error {
 	return errors.Join(failures...)
 }
 
-// InitializeComponent is called by the simulation after all setup validates.
-func (c *ComponentBase[S, T, R, P, M]) InitializeComponent() {
+// initializeComponent is called by the simulation after all setup validates.
+func (c *ComponentBase[S, T, R, P, M]) initializeComponent() {
 	if c.initialized {
 		panic("modeling: component already initialized")
 	}
@@ -264,7 +266,7 @@ func (c *ComponentBase[S, T, R, P, M]) InitializeComponent() {
 }
 
 // RequireInitialized rejects execution or snapshots before initialization.
-func (c *ComponentBase[S, T, R, P, M]) RequireInitialized() {
+func RequireInitialized[S, T, R, P, M any](c *ComponentBase[S, T, R, P, M]) {
 	if !c.initialized {
 		panic("modeling: component is not initialized")
 	}

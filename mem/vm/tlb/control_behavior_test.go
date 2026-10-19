@@ -26,7 +26,7 @@ import (
 func TestTLBControlBehavior(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		tlbComp     *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -41,7 +41,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		tlbComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
 			Build("TLB")
-		tlbCompPorts := defaultPorts("TLB")
+		tlbCompPorts := defaultPorts(sim, "TLB")
 		tlbComp.BindPort("Top", tlbCompPorts.Top)
 		tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
 		tlbComp.BindPort("Control", tlbCompPorts.Control)

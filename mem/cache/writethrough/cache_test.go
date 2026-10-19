@@ -25,17 +25,21 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
-func newDriverPort(name string, bufSize int) messaging.Port {
-	p := twowaybuffered.NewPort(bufSize, bufSize)
+func newDriverPort(simulation modeling.Simulation, name string, bufSize int) messaging.Port {
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	p.BindOwner(testDriver{}, name)
 
+	simulation.RegisterPort(p)
 	return p
 }
 
 func TestCache(t *testing.T) {
 	var (
 		engine              timing.Engine
-		sim                 timing.Simulation
+		sim                 *testsim.Simulation
 		connection          messaging.Connection
 		addressToPortMapper messaging.RemotePort
 		dram                *idealmemcontroller.Comp
@@ -67,7 +71,7 @@ func TestCache(t *testing.T) {
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land
 		// in its incoming buffer, which the tests then drain and inspect.
-		cuPort = newDriverPort("CU.Top", 16)
+		cuPort = newDriverPort(sim, "CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = modeling.MakeBuilder[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).
@@ -75,8 +79,14 @@ func TestCache(t *testing.T) {
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 
-		dram.BindPort("Top", twowaybuffered.NewPort(16, 16))
-		dram.BindPort("Control", twowaybuffered.NewPort(16, 16))
+		dram.BindPort("Top", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
+		dram.BindPort("Control", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
 
 		addressToPortMapper = dram.Ports.Top.AsRemote()
 
@@ -90,9 +100,18 @@ func TestCache(t *testing.T) {
 			WithResources(Resources{Storage: mem.NewStorage(DefaultSpec().TotalByteSize)}).
 			Build("Cache")
 
-		c.BindPort("Top", twowaybuffered.NewPort(4, 4))
-		c.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-		c.BindPort("Control", twowaybuffered.NewPort(4, 4))
+		c.BindPort("Top", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
+		c.BindPort("Bottom", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
+		c.BindPort("Control", twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build())
 
 		connection.BindPort(dram.Ports.Top)
 		connection.BindPort(c.Ports.Top)

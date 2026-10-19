@@ -74,7 +74,7 @@ func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 func TestWriteBackCacheMilestones(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		cacheComp   *Comp
 		dramTop     messaging.Port
 		dramStorage *mem.Storage
@@ -90,7 +90,7 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, true)
 
-		agentPort = newDriverPort("Agent.Top", 8)
+		agentPort = newDriverPort(sim, "Agent.Top", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)
@@ -106,7 +106,7 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
 			Build("Cache")
-		cacheCompPorts := makePorts("Cache", 8)
+		cacheCompPorts := makePorts(sim, "Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)
 		cacheComp.BindPort("Bottom", cacheCompPorts.Bottom)
 		cacheComp.BindPort("Control", cacheCompPorts.Control)

@@ -1,12 +1,14 @@
 package mem
 
-import "github.com/sarchlab/akita/v5/sim/timing"
+import (
+	"github.com/sarchlab/akita/v5/sim/modeling"
+)
 
 // StorageBuilder builds Storage resources. WithSimulation is required; Build registers the resource.
 type StorageBuilder struct {
 	capacity   uint64
 	unitSize   uint64
-	simulation timing.Simulation
+	simulation modeling.Simulation
 }
 
 // MakeStorageBuilder returns a StorageBuilder with a default 4 KB unit size.
@@ -31,7 +33,7 @@ func (b StorageBuilder) WithUnitSize(unitSize uint64) StorageBuilder {
 
 // WithSimulation wires the builder to a simulation so the built storage
 // registers itself as a resource.
-func (b StorageBuilder) WithSimulation(sim timing.Simulation) StorageBuilder {
+func (b StorageBuilder) WithSimulation(sim modeling.Simulation) StorageBuilder {
 	b.simulation = sim
 	return b
 }

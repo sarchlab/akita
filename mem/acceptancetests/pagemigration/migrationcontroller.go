@@ -593,10 +593,10 @@ func buildDataMover(
 		WithSimulation(s).
 		Build("DataMover")
 
-	mover.BindPort("Top", newPort("DataMover.Top"))
-	mover.BindPort("Inside", newPort("DataMover.Inside"))
-	mover.BindPort("Outside", newPort("DataMover.Outside"))
-	mover.BindPort("Control", newPort("DataMover.Control"))
+	mover.BindPort("Top", newPort(s, "DataMover.Top"))
+	mover.BindPort("Inside", newPort(s, "DataMover.Inside"))
+	mover.BindPort("Outside", newPort(s, "DataMover.Outside"))
+	mover.BindPort("Control", newPort(s, "DataMover.Control"))
 
 	return mover
 }
@@ -623,8 +623,8 @@ func buildMigrationController(
 		WithResources(res).
 		Build("MigrationController")
 
-	builtComponent.BindPort("Ctrl", newPort("MigrationController.Ctrl"))
-	builtComponent.BindPort("Mover", newPort("MigrationController.Mover"))
+	builtComponent.BindPort("Ctrl", newPort(s, "MigrationController.Ctrl"))
+	builtComponent.BindPort("Mover", newPort(s, "MigrationController.Mover"))
 	return builtComponent
 }
 

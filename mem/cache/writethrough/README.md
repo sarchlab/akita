@@ -84,9 +84,18 @@ cache := modeling.MakeBuilder[*writethrough.Comp](spec).
         Storage:       mem.NewStorage(spec.TotalByteSize),
     }).
     Build("L2Cache")
-cache.BindPort("Top", twowaybuffered.NewPort(16, 16))
-cache.BindPort("Bottom", twowaybuffered.NewPort(16, 16))
-cache.BindPort("Control", twowaybuffered.NewPort(16, 16))
+cache.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+cache.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+cache.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
 
 topPort := cache.Ports.Top
 ```
@@ -102,7 +111,7 @@ topPort := cache.Ports.Top
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

@@ -6,11 +6,10 @@ import (
 	"reflect"
 	"testing"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
@@ -77,9 +76,12 @@ func (payloadOwner) NotifyPortFree(messaging.Port) {}
 
 func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 	s := akitasim.MakeBuilder().WithTaskTracking().Build()
-	device := twowaybuffered.NewPort(1, 1)
+	device := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	device.BindOwner(payloadOwner{"Receiver"}, "Receiver.Port")
-	network := twowaybuffered.NewPort(8, 8)
+	network := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build()
 	spec := DefaultSpec()
 
 	ep := MakeBuilder().WithSimulation(s).WithSpec(spec).

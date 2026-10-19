@@ -32,7 +32,7 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 func TestGMMU(t *testing.T) {
 	var (
 		engine     timing.Engine
-		sim        timing.Simulation
+		sim        *testsim.Simulation
 		pageTable  *vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
@@ -57,7 +57,7 @@ func TestGMMU(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			Build("MMU")
-		gmmuCompPorts := defaultPorts("MMU")
+		gmmuCompPorts := defaultPorts(sim, "MMU")
 		gmmuComp.BindPort("Top", gmmuCompPorts.Top)
 		gmmuComp.BindPort("Bottom", gmmuCompPorts.Bottom)
 		gmmuComp.BindPort("Control", gmmuCompPorts.Control)

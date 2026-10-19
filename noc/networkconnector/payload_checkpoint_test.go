@@ -33,8 +33,14 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	t.Cleanup(func() {
 		s.Terminate()
 	})
-	src := twowaybuffered.NewPort(1, 4)
-	dst := twowaybuffered.NewPort(1, 4)
+	src := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 1, OutgoingCapacity: 4}).
+		Build()
+	dst := twowaybuffered.MakeBuilder().
+		WithSimulation(s).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 1, OutgoingCapacity: 4}).
+		Build()
 	for _, item := range []struct {
 		name string
 		port messaging.Port

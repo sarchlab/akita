@@ -110,8 +110,14 @@ models. To run with perfect memory, you build an `idealmemcontroller` where you
 would have built `dram`.
 
 ```go
-top := twowaybuffered.NewPort(1024, 1024)
-control := twowaybuffered.NewPort(4, 4)
+top := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 1024, OutgoingCapacity: 1024}).
+    Build()
+control := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build()
 
 // Real run:
 ctrl := modeling.MakeBuilder[*dram.Comp](dram.DefaultSpec()).

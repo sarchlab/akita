@@ -16,11 +16,20 @@ func TestValidateState(t *testing.T) {
 
 // defaultPorts creates the ports of the GMMU named name, with the historical
 // default buffer sizes.
-func defaultPorts(name string) Ports {
+func defaultPorts(simulation modeling.Simulation, name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(16, 16),
-		Bottom:  twowaybuffered.NewPort(16, 16),
-		Control: twowaybuffered.NewPort(4, 4),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
 	}
 }
 

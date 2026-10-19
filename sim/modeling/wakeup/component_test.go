@@ -55,24 +55,27 @@ func DefaultSpec() Spec {
 	return Spec{Work: 2}
 }
 
-func build(sim timing.Simulation, spec Spec) *Comp {
+func build(sim *akitasim.Simulation, spec Spec) *Comp {
 	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		WithSpec(spec).
 		Build("C")
 
-	builtComponent.BindPort("In", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("In", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
 	return builtComponent
 }
 
-func newSim() timing.Simulation {
+func newSim() *akitasim.Simulation {
 	return akitasim.MakeBuilder().Build()
 }
 
-func run(t *testing.T, sim timing.Simulation) {
+func run(t *testing.T, sim *akitasim.Simulation) {
 	t.Helper()
 
 	if err := sim.Engine().Run(); err != nil {

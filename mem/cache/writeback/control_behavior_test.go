@@ -24,7 +24,7 @@ import (
 func TestWriteBackCacheControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
-		sim      timing.Simulation
+		sim      *testsim.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -50,7 +50,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("L1Cache")
-		compPorts := makePorts("L1Cache", 16)
+		compPorts := makePorts(sim, "L1Cache", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

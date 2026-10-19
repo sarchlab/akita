@@ -39,7 +39,6 @@ var expectedErrors = []struct {
 	{"defaultvar", "fixtures/defaultvar", "must be a package-level function"},
 	{"defaultstatements", "fixtures/defaultstatements", "must contain only return Spec{...}"},
 	{"defaultgeneric", "fixtures/defaultgeneric", "must have signature func DefaultSpec() Spec"},
-	{"missingcomp", "fixtures/missingcomp", "requires a Comp component type alias"},
 	{"genericcomp", "fixtures/genericcomp", "must have five concrete element types"},
 	{"custom IsZero", "fixtures/customzero", "spec.Value with custom IsZero"},
 	{"dash scalar", "fixtures/dashscalar", "spec.Hidden must not be tagged"},
@@ -187,6 +186,12 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 	t.Run("omitted initializers", func(t *testing.T) {
 		if _, ok := byPkg[fixturePath("nomiddlewares")]; !ok {
 			t.Fatal("zero-value elements must not require initializers")
+		}
+	})
+
+	t.Run("non-component DefaultSpec is ignored", func(t *testing.T) {
+		if _, found := byPkg[fixturePath("missingcomp")]; found {
+			t.Fatal("DefaultSpec without Comp must not declare a component")
 		}
 	})
 

@@ -85,8 +85,14 @@ ctrl := modeling.MakeBuilder[*idealmemcontroller.Comp](spec).
     WithSimulation(sim).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("IdealMem")
-ctrl.BindPort("Top", twowaybuffered.NewPort(16, 16))
-ctrl.BindPort("Control", twowaybuffered.NewPort(16, 16))
+ctrl.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+ctrl.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
 
 topPort := ctrl.Ports.Top
 ```
@@ -109,7 +115,7 @@ topPort := ctrl.Ports.Top
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

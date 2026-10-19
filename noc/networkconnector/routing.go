@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/noc/routing"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
 
 // Remote records the link between two nodes.
@@ -61,8 +61,11 @@ func (sn *switchNode) Table() *routing.Table {
 
 // addPort binds immediately, so every address comes from a bound port.
 func (sn *switchNode) addPort(param LinkEndSwitchParameter) messaging.Port {
-	sn.network.simulation.RequireSetup()
-	port := twowaybuffered.NewPort(param.IncomingBufSize, param.OutgoingBufSize)
+	assembly.RequireSetup(sn.network.simulation)
+	port := twowaybuffered.MakeBuilder().
+		WithSimulation(sn.network.simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: param.IncomingBufSize, OutgoingCapacity: param.OutgoingBufSize}).
+		Build()
 	sn.sw.BindPort(fmt.Sprintf("Links[%d]", len(sn.ports)), port)
 	sn.ports = append(sn.ports, port)
 	sn.ends = append(sn.ends, param)

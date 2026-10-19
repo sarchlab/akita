@@ -3,11 +3,11 @@ package mmu
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestValidateState(t *testing.T) {
@@ -16,7 +16,7 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(sim timing.Simulation, name string) *Comp {
+func buildTestMMU(sim *testsim.Simulation, name string) *Comp {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
@@ -24,7 +24,7 @@ func buildTestMMU(sim timing.Simulation, name string) *Comp {
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
 		Build(name)
-	compPorts := makePorts(name, 4096)
+	compPorts := makePorts(sim, name, 4096)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Control", compPorts.Control)
 

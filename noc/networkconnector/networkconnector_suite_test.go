@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -21,7 +20,7 @@ func TestConnector(t *testing.T) {
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := twowaybuffered.NewPort(1, 1)
+			port := twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(0, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
@@ -58,7 +57,7 @@ func TestConnector(t *testing.T) {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := twowaybuffered.NewPort(1, 1)
+			port := twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(1+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
@@ -122,7 +121,7 @@ func TestConnector(t *testing.T) {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := twowaybuffered.NewPort(1, 1)
+			port := twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(8+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{

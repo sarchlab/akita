@@ -85,7 +85,7 @@ func (s *Simulation) loadCheckpoint(path string) error {
 }
 
 func (s *Simulation) checkpointPreflight() error {
-	if err := s.setup.Ready(); err != nil {
+	if err := s.setup().Ready(); err != nil {
 		return err
 	}
 	if _, ok := s.engine.(*timing.SerialEngine); !ok {

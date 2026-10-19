@@ -100,8 +100,14 @@ memCtrl := modeling.MakeBuilder[*simplebankedmemory.Comp](spec).
     WithSimulation(sim).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     Build("MyMemCtrl")
-memCtrl.BindPort("Top", twowaybuffered.NewPort(16, 16))
-memCtrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
+memCtrl.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build())
+memCtrl.BindPort("Control", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
 
 topPort := memCtrl.Ports.Top
 ```
@@ -170,7 +176,7 @@ memory is one of several interleaved controllers; a standalone memory leaves
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

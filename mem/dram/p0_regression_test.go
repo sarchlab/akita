@@ -34,7 +34,7 @@ func newP0Harness(t *testing.T, spec Spec, tracers ...tasks.Observer) *p0Harness
 	}
 
 	top := dramComp.Ports.Top
-	src := newDriverPort("P0Src.Top", 1024)
+	src := newDriverPort(sim, "P0Src.Top", 1024)
 
 	conn := direct.NewConnection("P0Conn", sim, timing.GHz)
 	conn.BindPort(top)

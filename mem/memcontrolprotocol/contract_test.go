@@ -3,11 +3,10 @@ package memcontrolprotocol_test
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
-	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -21,7 +20,7 @@ import (
 // verbs respond with Success=false, Error=ErrUnsupported. The test
 // suite uses it to verify the harness's own logic.
 type fakeComp struct {
-	sim timing.Simulation
+	sim *testsim.Simulation
 	hooking.HookableBase
 
 	name       string
@@ -51,7 +50,10 @@ func newFakeComp(name string, matrix memcontroltest.VerbSupport, asyncDelay int)
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
 	}
-	c.control = twowaybuffered.NewPort(4, 4)
+	c.control = twowaybuffered.MakeBuilder().
+		WithSimulation(c.sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
 	c.control.BindOwner(c, name+".Control")
 	conn := &noopConn{}
 	conn.BindPort(c.control)

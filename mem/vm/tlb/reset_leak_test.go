@@ -29,7 +29,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	tlbComp := modeling.MakeBuilder[*Comp](routingSpec1).
 		WithSimulation(sim).
 		Build("TLB")
-	tlbCompPorts := defaultPorts("TLB")
+	tlbCompPorts := defaultPorts(sim, "TLB")
 	tlbComp.BindPort("Top", tlbCompPorts.Top)
 	tlbComp.BindPort("Bottom", tlbCompPorts.Bottom)
 	tlbComp.BindPort("Control", tlbCompPorts.Control)

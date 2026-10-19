@@ -2,7 +2,6 @@ package switches
 
 import (
 	"fmt"
-
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -10,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -19,7 +17,7 @@ func TestSwitch(t *testing.T) {
 	var (
 		mockCtrl     *gomock.Controller
 		engine       *MockEngine
-		sim          timing.Simulation
+		sim          *testsim.Simulation
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockRoutingTable

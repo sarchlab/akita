@@ -7,10 +7,9 @@ import (
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/pcie"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -53,7 +52,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, numPortPerDevice)
 		for j := 0; j < numPortPerDevice; j++ {
-			ports[j] = twowaybuffered.NewPort(1, 1)
+			ports[j] = twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()

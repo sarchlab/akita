@@ -8,6 +8,6 @@
 // WithSimulation, the required shared storage is supplied through WithResources,
 // and routing is configured by Spec.Bottom.
 // and the Top, Bottom, and Control port instances, created with
-// twowaybuffered.NewPort so the caller chooses the buffer sizes, are passed with
+// twowaybuffered.MakeBuilder so the caller chooses the buffer sizes, are passed with
 // BindPort after construction.
 package writethrough

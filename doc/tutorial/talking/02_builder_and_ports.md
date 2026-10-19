@@ -54,11 +54,16 @@ Things to notice:
 - The `modeling.MakeBuilder[*Comp](DefaultSpec())` → `WithX` → `Build(name)` shape is universal
   across Akita components.
 
-The system builder creates the port with `twowaybuffered.NewPort` and passes it
-with `component.BindPort` after Build:
+The system builder creates the port with `twowaybuffered.MakeBuilder` and passes it
+with `component.BindPort` after Build. `MakeBuilder()` starts from
+`DefaultSpec()` with capacity 1 in each direction; `WithSimulation(sim)` is
+required and `WithSpec` overrides both positive capacities:
 
 ```go
-outA := twowaybuffered.NewPort(16, 16)
+outA := twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+    Build()
 
 agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
     WithSimulation(sim).
@@ -67,7 +72,7 @@ agentA := modeling.MakeBuilder[*Comp](DefaultSpec()).
 agentA.BindPort("Out", outA)
 ```
 
-`NewPort(16, 16)` creates an unnamed port with room for 16 messages in each
+This port builder creates an unnamed port with room for 16 messages in each
 direction. `agentA.BindPort("Out", outA)` assigns its owner, names it
 `AgentA.Out`, fills `agentA.Ports.Out`, and registers it. A second binding is
 rejected. After all wiring, `Initialize` checks the declared slots and creates

@@ -34,7 +34,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		Build("MemCtrl")
-	compPorts := makePorts("MemCtrl", 16)
+	compPorts := makePorts(sim, "MemCtrl", 16)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Control", compPorts.Control)
 

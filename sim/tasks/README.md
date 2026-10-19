@@ -90,12 +90,11 @@ followed by observer locks. Querying Owner/Name on a port is safe.
 
 ## Buffer identity
 
-`twowaybuffered.Port` is a task owner with its own name and a private tracker
-reference. `Simulation.RegisterPort` binds that reference to the simulation's
-tracker once during assembly; component models register ports through `BindPort`.
-The owning component needs no `TaskTracker()` method. Standalone ports can call
-`BindTaskTracker(tracker)` explicitly before buffering messages; a nil or unbound
-tracker disables tracing. The tracker supplies all timestamps and IDs.
+`twowaybuffered.Port` is a task owner with its own name. Its builder requires
+`WithSimulation`; the port retains that simulation and obtains its tracker and
+clock directly. Component models register ports through `BindPort`; custom
+owners register their named ports explicitly. The owning component needs no
+`TaskTracker()` method. A nil simulation tracker disables tracing.
 Send/Deliver start a task and store its ID beside the message;
 RetrieveIncoming/Outgoing end that task. Generic message hooks remain independent
 and carry Msg in Item.
@@ -155,9 +154,8 @@ structures are unexported. `Owner` provides identity only.
 Frameworks construct `NewTracker(clock, newID, owns)` using the simulation's
 clock, existing ID allocator, and a scope predicate that checks registered object
 identity. This preserves scope isolation even if two simulations reuse names.
-Components obtain the tracker from their simulation. Ports retain a private
-tracker reference bound once by `Simulation.RegisterPort`, or explicitly through
-`BindTaskTracker` for standalone ports. They expose no clock or ID methods and
+Components and ports obtain the tracker from their simulation. Ports receive
+the simulation through their builder. They expose no clock or ID methods and
 require no tracker getter on their owner.
 `Tracker.SaveCheckpoint` and `Tracker.LoadCheckpoint` operate while execution is
 stopped. These are supported exported framework APIs. Ordinary applications use

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -31,7 +30,7 @@ func TestControlContract(t *testing.T) {
 		comp := modeling.MakeBuilder[*Comp](routingSpec1).
 			WithSimulation(sim).
 			Build("TLB")
-		compPorts := defaultPorts("TLB")
+		compPorts := defaultPorts(sim, "TLB")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

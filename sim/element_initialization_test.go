@@ -95,9 +95,9 @@ func TestElementInitializationOrderAndRestore(t *testing.T) {
 	require.Empty(t, p.Calls)
 	require.ErrorContains(t, s.Initialize(), "Top")
 	require.Empty(t, p.Calls)
-	e.BindPort("Top", twowaybuffered.NewPort(1, 1))
-	tc.BindPort("Top", twowaybuffered.NewPort(1, 1))
-	w.BindPort("Top", twowaybuffered.NewPort(1, 1))
+	e.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
+	tc.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
+	w.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
 	require.NoError(t, s.Initialize())
 	want := []string{
 		"Event.State", "Event.Middlewares", "Ticking.State", "Ticking.Middlewares",
@@ -123,9 +123,9 @@ func TestElementInitializationFailureRequiresRebuild(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	p := &elementProbe{FailAt: "Ticking"}
 	e, tc, w := buildElements(s, p)
-	e.BindPort("Top", twowaybuffered.NewPort(1, 1))
-	tc.BindPort("Top", twowaybuffered.NewPort(1, 1))
-	w.BindPort("Top", twowaybuffered.NewPort(1, 1))
+	e.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
+	tc.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
+	w.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build())
 	require.PanicsWithValue(t, "invalid component configuration", func() { _ = s.Initialize() })
 	require.Equal(t, []string{"Event.State", "Event.Middlewares", "Ticking.State"}, p.Calls)
 	require.Zero(t, tc.State.Value)
@@ -133,7 +133,7 @@ func TestElementInitializationFailureRequiresRebuild(t *testing.T) {
 	require.Zero(t, w.State.Value)
 	require.Error(t, s.Initialize())
 	require.Error(t, s.Run())
-	require.Panics(t, func() { e.BindPort("Top", twowaybuffered.NewPort(1, 1)) })
+	require.Panics(t, func() { e.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).Build()) })
 	t.Log("A component-specific panic stopped later initialization and rejected retry, execution, and further binding")
 }
 

@@ -6,12 +6,11 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
-
-	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -19,7 +18,7 @@ func TestEndPoint(t *testing.T) {
 	var (
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
-		sim               timing.Simulation
+		sim               *testsim.Simulation
 		devicePort        *twowaybuffered.Port
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
@@ -34,7 +33,7 @@ func TestEndPoint(t *testing.T) {
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
 		sim = testsim.New(engine, false)
-		devicePort = twowaybuffered.NewPort(1, 1)
+		devicePort = twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 		devicePort.BindOwner(payloadOwner{"Device"}, "DevicePort")
 		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
 		networkPort = NewMockPort(mockCtrl)

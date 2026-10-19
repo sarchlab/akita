@@ -120,7 +120,7 @@ func TestMMUCacheMilestones(t *testing.T) {
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
 			Build("MMUCache")
-		compPorts := defaultPorts("MMUCache")
+		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

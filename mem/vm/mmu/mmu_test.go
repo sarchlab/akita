@@ -32,17 +32,23 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // makePorts creates the ports of the MMU named name, with the given Top
 // buffer size and a Control buffer size of 4.
-func makePorts(name string, topBufSize int) Ports {
+func makePorts(simulation modeling.Simulation, name string, topBufSize int) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(topBufSize, topBufSize),
-		Control: twowaybuffered.NewPort(4, 4),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: topBufSize, OutgoingCapacity: topBufSize}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build(),
 	}
 }
 
 func TestMMU(t *testing.T) {
 	var (
 		engine           timing.Engine
-		sim              timing.Simulation
+		sim              *testsim.Simulation
 		pageTable        *vm.PageTable
 		mmuComp          *Comp
 		topPort          messaging.Port
@@ -59,7 +65,7 @@ func TestMMU(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			Build("MMU")
-		mmuCompPorts := makePorts("MMU", topBufSize)
+		mmuCompPorts := makePorts(sim, "MMU", topBufSize)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
 
@@ -226,7 +232,7 @@ func TestMMU(t *testing.T) {
 func TestMMUIntegration(t *testing.T) {
 	var (
 		engine    timing.Engine
-		sim       timing.Simulation
+		sim       *testsim.Simulation
 		mmuComp   *Comp
 		pageTable *vm.PageTable
 		topPort   messaging.Port
@@ -245,14 +251,17 @@ func TestMMUIntegration(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			Build("MMU")
-		mmuCompPorts := makePorts("MMU", 4096)
+		mmuCompPorts := makePorts(sim, "MMU", 4096)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
 
 		topPort = mmuComp.Ports.Top
 		(&noopConn{}).BindPort(topPort)
 
-		agentPort = twowaybuffered.NewPort(4, 4)
+		agentPort = twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build()
 		agentPort.BindOwner(testDriver{}, "Agent")
 		(&noopConn{}).BindPort(agentPort)
 		if err := sim.Initialize(); err != nil {

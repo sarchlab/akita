@@ -8,6 +8,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -19,16 +22,20 @@ import (
 )
 
 type testSimulation struct {
+	*akitasim.Simulation
 	*tasks.Tracker
 	ids    *atomic.Uint64
 	now    timing.VTimeInPicoSec
 	owners map[naming.Named]bool
 }
 
+func (s *testSimulation) TaskTracker() *tasks.Tracker        { return s.Tracker }
 func (s *testSimulation) CurrentTime() timing.VTimeInPicoSec { return s.now }
 func (s *testSimulation) NewID() uint64                      { return s.ids.Add(1) }
 func newTestSimulation() *testSimulation {
-	s := &testSimulation{ids: &atomic.Uint64{}, owners: make(map[naming.Named]bool)}
+	s := &testSimulation{
+		Simulation: akitasim.MakeBuilder().Build(), ids: &atomic.Uint64{}, owners: make(map[naming.Named]bool),
+	}
 	s.Tracker = tasks.NewTracker(s, s.NewID, func(n naming.Named) bool {
 		if p, ok := n.(messaging.Port); ok {
 			n = p.Owner()
@@ -104,9 +111,15 @@ func newOwner(name string, simulation *testSimulation) *owner {
 	return o
 }
 func port(o *owner) *twowaybuffered.Port {
-	p := twowaybuffered.NewPort(8, 8)
+	var sim modeling.Simulation = o.simulation
+	if o.simulation == nil {
+		sim = akitasim.MakeBuilder().Build()
+	}
+	p := twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build()
 	p.BindOwner(o, o.name+".Port")
-	p.BindTaskTracker(o.tracker)
 	(&connection{}).BindPort(p)
 	return p
 }
@@ -216,9 +229,11 @@ func TestSubscriptionScopes(t *testing.T) {
 	other := newTestSimulation()
 	o := newOwner("Owner", tr)
 	p := port(o)
-	sibling := twowaybuffered.NewPort(8, 8)
+	sibling := twowaybuffered.MakeBuilder().
+		WithSimulation(tr).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 8, OutgoingCapacity: 8}).
+		Build()
 	sibling.BindOwner(o, "UnrelatedName") // Actual ownership, not a name prefix.
-	sibling.BindTaskTracker(o.tracker)
 	(&connection{}).BindPort(sibling)
 	foreign := newOwner("Owner.Port.PrefixOnly", tr)
 	all, component, justPort := &recorder{}, &recorder{}, &recorder{}
@@ -447,7 +462,7 @@ func saveBufferWait(t *testing.T, incoming bool) bufferSnapshot {
 	tr.now = 18
 	milestone(tasks.Reason(tasks.MilestoneKindData, "data"))
 	var trackerState, portState bytes.Buffer
-	require.NoError(t, tr.SaveCheckpoint(&trackerState))
+	require.NoError(t, tr.Tracker.SaveCheckpoint(&trackerState))
 	require.NotContains(t, trackerState.String(), `"buffers"`)
 	require.NoError(t, p.SaveCheckpoint(&portState))
 	require.Contains(t, portState.String(), `"task_id":`)
@@ -463,7 +478,7 @@ func TestBufferMilestonesAndCheckpoint(t *testing.T) {
 			o := newOwner("Owner", tr)
 			tr.now = 18
 			p := port(o)
-			require.NoError(t, tr.LoadCheckpoint(bytes.NewReader(saved.tracker)))
+			require.NoError(t, tr.Tracker.LoadCheckpoint(bytes.NewReader(saved.tracker)))
 			require.NoError(t, p.LoadCheckpoint(bytes.NewReader(saved.port)))
 			scoped, portScoped := &recorder{order: map[uint64]string{}}, &recorder{order: map[uint64]string{}}
 			tr.Subscribe(scoped, o)

@@ -3,15 +3,12 @@ package direct
 import (
 	"fmt"
 	"math/rand"
+	"testing"
 	"time"
 
-	"github.com/sarchlab/akita/v5/internal/tickscheduler"
-
 	"github.com/sarchlab/akita/v5/internal/testsim"
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
-	"testing"
-
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -24,7 +21,7 @@ import (
 type testMsg struct {
 }
 
-func newTestMsg(sim timing.Simulation) messaging.Msg {
+func newTestMsg(sim *testsim.Simulation) messaging.Msg {
 	return messaging.Msg{ID: sim.NewID(), Payload: testMsg{}}
 }
 
@@ -34,7 +31,7 @@ func TestDirectConnection(t *testing.T) {
 		port1      *MockPort
 		port2      *MockPort
 		engine     *MockEngine
-		sim        timing.Simulation
+		sim        *testsim.Simulation
 		connection *Connection
 	)
 
@@ -132,7 +129,7 @@ type agent struct {
 	OutPort messaging.Port
 }
 
-func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort messaging.Port) *agent {
+func newAgent(sim *testsim.Simulation, freq timing.Freq, name string, outPort messaging.Port) *agent {
 	a := &agent{
 		Scheduler: tickscheduler.NewScheduler(name, sim, freq),
 		name:      name,
@@ -171,7 +168,7 @@ func (a *agent) Handle(timing.Event) {
 func TestDirectConnectionIntegration(t *testing.T) {
 	var (
 		engine          timing.Engine
-		sim             timing.Simulation
+		sim             *testsim.Simulation
 		connection      *Connection
 		agents          []*agent
 		numAgents       = 10
@@ -187,7 +184,10 @@ func TestDirectConnectionIntegration(t *testing.T) {
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
-				twowaybuffered.NewPort(4, 4))
+				twowaybuffered.MakeBuilder().
+					WithSimulation(sim).
+					WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+					Build())
 			agents = append(agents, a)
 			connection.BindPort(a.OutPort)
 		}
@@ -246,7 +246,10 @@ func directConnectionTest(t *testing.T, seed int64) timing.VTimeInPicoSec {
 
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent%d", i),
-			twowaybuffered.NewPort(4, 4))
+			twowaybuffered.MakeBuilder().
+				WithSimulation(sim).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+				Build())
 		agents = append(agents, a)
 		connection.BindPort(a.OutPort)
 	}

@@ -1,16 +1,17 @@
 package writethrough
 
 import (
+	"testing"
+
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-
-	"testing"
-
-	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -61,10 +62,11 @@ func TestDirectory(t *testing.T) {
 		// bottomPort is a real, single-slot port owned by the component.
 		// Success cases read the sent request back via RetrieveOutgoing;
 		// failure cases pre-fill the slot.
-		ports := makePorts("Cache", 4)
-		ports.Bottom = twowaybuffered.NewPort(1, 1)
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		ports := makePorts(sim, "Cache", 4)
+		ports.Bottom = twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 
-		c = buildStageTestCache(
+		c = buildStageTestCache(sim,
 			Spec{
 				Freq:             1 * timing.GHz,
 				Log2BlockSize:    6,

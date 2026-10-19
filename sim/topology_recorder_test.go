@@ -54,7 +54,7 @@ func (c *namedConnection) Name() string { return c.name }
 // newOwnedPort creates a real port owned by owner and, unless conn is nil,
 // plugged into conn.
 func newOwnedPort(name string, owner *portOwner, conn messaging.Connection) messaging.Port {
-	p := twowaybuffered.NewPort(1, 1)
+	p := twowaybuffered.MakeBuilder().WithSimulation(MakeBuilder().Build()).Build()
 	p.BindOwner(owner, name)
 	if conn != nil {
 		p.BindConnection(conn)
@@ -111,7 +111,7 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 
 	connA := &namedConnection{name: "ConnA"}
 	l1, l2 := &portOwner{name: "L1"}, &portOwner{name: "L2"}
-	ports := []Port{
+	ports := []messaging.Port{
 		newOwnedPort("L1.Top", l1, connA),
 		newOwnedPort("L2.Bottom", l2, connA),
 		newOwnedPort("L1.Ctrl", l1, nil),

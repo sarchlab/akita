@@ -24,7 +24,7 @@ func TestAddressOperations(t *testing.T) {
 }
 
 func TestTransactionSplitting(t *testing.T) {
-	var ids timing.Simulation
+	var ids *testsim.Simulation
 	setup1 := func(t *testing.T) {
 		t.Helper()
 		ids = akitasim.MakeBuilder().Build()
@@ -207,7 +207,7 @@ func TestQueueOperations(t *testing.T) {
 func TestDRAMIntegration(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		memCtrl *Comp
 	)
 
@@ -223,7 +223,7 @@ func TestDRAMIntegration(t *testing.T) {
 	t.Run("should read and write via direct connection", func(t *testing.T) {
 		setup2(t)
 
-		srcPort := newDriverPort("Src.Top", 1024)
+		srcPort := newDriverPort(sim, "Src.Top", 1024)
 		conn := direct.NewConnection("Conn", sim, timing.GHz)
 		topPort := memCtrl.Ports.Top
 		conn.BindPort(topPort)
@@ -454,7 +454,7 @@ func TestProtocolEnums(t *testing.T) {
 
 func TestOpenPagePolicy(t *testing.T) {
 	var (
-		ids  timing.Simulation
+		ids  *testsim.Simulation
 		spec *Spec
 		st   *state
 	)
@@ -842,7 +842,7 @@ func TestFRFCFSScheduling(t *testing.T) {
 
 func TestReadWriteQueueSeparation(t *testing.T) {
 	var (
-		ids  timing.Simulation
+		ids  *testsim.Simulation
 		spec *Spec
 		st   *state
 	)
@@ -1171,7 +1171,7 @@ func TestBuilderConfiguration(t *testing.T) {
 			builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 				WithSimulation(sim).
 				Build("NoStorage")
-			builtComponentPorts := defaultPorts("NoStorage", 16)
+			builtComponentPorts := defaultPorts(sim, "NoStorage", 16)
 			builtComponent.BindPort("Top", builtComponentPorts.Top)
 			builtComponent.BindPort("Control", builtComponentPorts.Control)
 			if err := sim.Initialize(); err != nil {

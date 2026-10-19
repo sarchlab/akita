@@ -19,7 +19,7 @@ func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
 	builtComponent := modeling.MakeBuilder[*Comp](routingSpec1).
 		WithSimulation(setupSim1).
 		Build("DataMover")
-	builtComponentPorts := makePorts("DataMover", 1, 1, 1, 1)
+	builtComponentPorts := makePorts(setupSim1, "DataMover", 1, 1, 1, 1)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
 	builtComponent.BindPort("Inside", builtComponentPorts.Inside)
 	builtComponent.BindPort("Outside", builtComponentPorts.Outside)

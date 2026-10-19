@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -19,7 +18,10 @@ func TestControlContract(t *testing.T) {
 		spec.Bottom = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
-			p := twowaybuffered.NewPort(16, 16)
+			p := twowaybuffered.MakeBuilder().
+				WithSimulation(sim).
+				WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+				Build()
 			return p
 		}
 

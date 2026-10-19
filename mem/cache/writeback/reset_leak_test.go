@@ -40,7 +40,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		Build("L1Cache")
-	compPorts := makePorts("L1Cache", 16)
+	compPorts := makePorts(sim, "L1Cache", 16)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Bottom", compPorts.Bottom)
 	comp.BindPort("Control", compPorts.Control)
@@ -130,9 +130,10 @@ func (r *resetEndCounter) TaskEnded(task tasks.Task) { r.ends[task.ID]++ }
 func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 	spec := stageTestSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Lower"}
-	comp := buildStageTestComp(spec, Resources{
+	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	comp := buildStageTestComp(sim, spec, Resources{
 		Storage: mem.NewStorage(1 * mem.MB),
-	}, makePorts("Cache", 8))
+	}, makePorts(sim, "Cache", 8))
 	rec := &resetEndCounter{ends: make(map[uint64]int)}
 	comp.TaskTracker().Subscribe(rec, comp)
 	completed := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})

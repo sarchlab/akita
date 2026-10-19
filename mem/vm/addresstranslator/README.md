@@ -61,10 +61,19 @@ spec.Bottom.Destinations = []messaging.RemotePort{"Cache.Top"}
 at := modeling.MakeBuilder[*addresstranslator.Comp](spec).
     WithSimulation(sim).
     Build("AddressTranslator")
-at.BindPort("Top", twowaybuffered.NewPort(4, 4))
-at.BindPort("Bottom", twowaybuffered.NewPort(4, 4))
-at.BindPort("Translation", twowaybuffered.NewPort(4, 4))
-at.BindPort("Control", twowaybuffered.NewPort(1, 1))
+at.BindPort("Top", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+at.BindPort("Bottom", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+at.BindPort("Translation", twowaybuffered.MakeBuilder().
+    WithSimulation(sim).
+    WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+    Build())
+at.BindPort("Control", twowaybuffered.MakeBuilder().WithSimulation(sim).Build())
 ```
 
 | Method | Description |
@@ -76,7 +85,7 @@ at.BindPort("Control", twowaybuffered.NewPort(1, 1))
 
 ## Ports
 
-The system builder creates each port with `twowaybuffered.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.MakeBuilder`, choosing its
 buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.

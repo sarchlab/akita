@@ -5,8 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
 	"testing"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -76,6 +77,10 @@ func (c *testConnection) Name() string {
 	return c.name
 }
 
+func (c *testConnection) BindPort(p messaging.Port)    { p.BindConnection(c) }
+func (*testConnection) NotifySend(messaging.Port)      {}
+func (*testConnection) NotifyAvailable(messaging.Port) {}
+
 type testPort struct {
 	*twowaybuffered.Port
 	name string
@@ -91,6 +96,10 @@ func (c testComponent) Name() string {
 	return c.name
 }
 
+func (c testComponent) BindPort(slot string, p messaging.Port) { p.BindOwner(c, c.name+"."+slot) }
+func (testComponent) NotifyRecv(messaging.Port)                {}
+func (testComponent) NotifyPortFree(messaging.Port)            {}
+
 func TestSimulation(t *testing.T) {
 	var (
 		simulation *Simulation
@@ -102,7 +111,7 @@ func TestSimulation(t *testing.T) {
 		t.Helper()
 
 		simulation = MakeBuilder().Build()
-		port = testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
+		port = testPort{Port: twowaybuffered.MakeBuilder().WithSimulation(simulation).Build(), name: "port"}
 		comp = testComponent{name: "comp"}
 	}
 
@@ -122,7 +131,7 @@ func TestSimulation(t *testing.T) {
 		simulation.RegisterPort(port)
 
 		require.Equal(t, []Component{comp}, simulation.components)
-		require.Equal(t, []Port{port}, simulation.ports)
+		require.Equal(t, []messaging.Port{port}, simulation.ports)
 	})
 
 	t.Run("should reject duplicate component names", func(t *testing.T) {
@@ -144,7 +153,7 @@ func TestSimulation(t *testing.T) {
 
 		simulation.RegisterPort(port)
 
-		dupPort := testPort{Port: twowaybuffered.NewPort(1, 1), name: "port"}
+		dupPort := testPort{Port: twowaybuffered.MakeBuilder().WithSimulation(simulation).Build(), name: "port"}
 
 		requirePanicContains(t, "already registered", func() {
 			simulation.RegisterPort(dupPort)

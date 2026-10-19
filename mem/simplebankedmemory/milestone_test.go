@@ -3,7 +3,6 @@ package simplebankedmemory
 import (
 	"fmt"
 	"slices"
-
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -97,7 +96,7 @@ func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		memComp *Comp
 		topPort messaging.Port
 		rec     *milestoneRecorder
@@ -118,7 +117,7 @@ func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
-		memCompPorts := makePorts("Mem", 4, 16)
+		memCompPorts := makePorts(sim, "Mem", 4, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
 		memComp.BindPort("Control", memCompPorts.Control)
 		if err := sim.Initialize(); err != nil {
@@ -177,7 +176,7 @@ func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		storage *mem.Storage
 		memComp *Comp
 		topPort messaging.Port
@@ -201,12 +200,12 @@ func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
-		memCompPorts := makePorts("Mem", 4, 16)
+		memCompPorts := makePorts(sim, "Mem", 4, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
 		memComp.BindPort("Control", memCompPorts.Control)
 
 		topPort = memComp.Ports.Top
-		agent = newTestAgent("Agent")
+		agent = newTestAgent(sim, "Agent")
 		conn = newLoopbackConnection("Conn")
 		conn.BindPort(topPort)
 		conn.BindPort(agent.port)

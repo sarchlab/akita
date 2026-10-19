@@ -23,7 +23,7 @@ func TestBuildRequiresPageTable(t *testing.T) {
 		builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 			WithSimulation(setupSim1).
 			Build("GMMU")
-		builtComponentPorts := defaultPorts("GMMU")
+		builtComponentPorts := defaultPorts(setupSim1, "GMMU")
 		builtComponent.BindPort("Top", builtComponentPorts.Top)
 		builtComponent.BindPort("Bottom", builtComponentPorts.Bottom)
 		builtComponent.BindPort("Control", builtComponentPorts.Control)

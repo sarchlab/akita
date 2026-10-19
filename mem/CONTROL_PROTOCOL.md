@@ -372,7 +372,7 @@ func RunContract(
 
 type Harness struct {
     Comp        Controllable      // timing.Handler + Name(); driven by ticking.Events
-    Sim         timing.Simulation // the component's simulation; IDs come from it
+    Sim         modeling.Simulation // the component's simulation; IDs come from it
     Ctrl        messaging.Port    // the component's Control port
     IsQuiescent func() bool       // optional, checked after Drain and Reset
     Teardown    func()            // optional, called after each subtest

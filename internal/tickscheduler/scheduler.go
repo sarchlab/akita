@@ -3,6 +3,7 @@ package tickscheduler
 import (
 	"sync"
 
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -29,7 +30,7 @@ type Scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
 	freq       timing.Freq
-	simulation timing.Simulation
+	simulation modeling.Simulation
 	engine     timing.EventScheduler
 	secondary  bool
 
@@ -41,7 +42,7 @@ type Scheduler struct {
 // the given ID.
 func NewScheduler(
 	handlerID string,
-	sim timing.Simulation,
+	sim modeling.Simulation,
 	freq timing.Freq,
 ) *Scheduler {
 	ticker := new(Scheduler)
@@ -59,7 +60,7 @@ func NewScheduler(
 // tick events, which run after the primary events of the same time.
 func NewSecondaryScheduler(
 	handlerID string,
-	sim timing.Simulation,
+	sim modeling.Simulation,
 	freq timing.Freq,
 ) *Scheduler {
 	ticker := new(Scheduler)

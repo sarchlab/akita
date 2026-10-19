@@ -46,7 +46,10 @@ func buildAgent() *Comp {
 		WithSimulation(setupSim1).
 		Build("Agent")
 
-	builtComponent.BindPort("Mem", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("Mem", twowaybuffered.MakeBuilder().
+		WithSimulation(setupSim1).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	if err := setupSim1.Initialize(); err != nil {
 		panic(err)
 	}

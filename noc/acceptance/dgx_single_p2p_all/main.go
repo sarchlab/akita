@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/nvlink"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -76,7 +74,7 @@ func createAgents(
 	for i := 0; i < 9; i++ {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
-			twowaybuffered.NewPort(1, 1),
+			twowaybuffered.MakeBuilder().WithSimulation(s).Build(),
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()

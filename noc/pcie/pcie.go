@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v5/noc/networkconnector"
-
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	// Connector can connect devices into a PCIe network.
@@ -22,7 +22,7 @@ type Connector struct {
 
 // Builder configures an independent connector; With methods do not assemble a network.
 type Builder struct {
-	simulation    timing.Simulation
+	simulation    modeling.Simulation
 	freq          timing.Freq
 	bandwidth     uint64
 	switchLatency int
@@ -30,7 +30,7 @@ type Builder struct {
 
 func MakeBuilder() Builder { return Builder{freq: timing.GHz, switchLatency: 140}.WithVersion(4, 16) }
 
-func (b Builder) WithSimulation(sim timing.Simulation) Builder { b.simulation = sim; return b }
+func (b Builder) WithSimulation(sim modeling.Simulation) Builder { b.simulation = sim; return b }
 
 func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq

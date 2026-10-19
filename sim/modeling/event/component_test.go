@@ -88,20 +88,23 @@ func DefaultSpec() Spec {
 type req struct {
 }
 
-func build(sim timing.Simulation, spec Spec) *Comp {
+func build(sim *akitasim.Simulation, spec Spec) *Comp {
 	builtComponent := modeling.MakeBuilder[*Comp](DefaultSpec()).
 		WithSimulation(sim).
 		WithSpec(spec).
 		Build("C")
 
-	builtComponent.BindPort("In", twowaybuffered.NewPort(4, 4))
+	builtComponent.BindPort("In", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
 	return builtComponent
 }
 
-func newSim() timing.Simulation {
+func newSim() *akitasim.Simulation {
 	return akitasim.MakeBuilder().Build()
 }
 

@@ -4,13 +4,12 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-	"github.com/stretchr/testify/require"
-
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // milestoneRecorder captures the task starts and milestones the DRAM emits, in
@@ -65,7 +64,7 @@ func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 func TestDRAMAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
-		sim     timing.Simulation
+		sim     *testsim.Simulation
 		memCtrl *Comp
 		topPort messaging.Port
 		rec     *milestoneRecorder

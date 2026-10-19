@@ -3,6 +3,8 @@ package writethrough
 import (
 	"testing"
 
+	akitasim "github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -22,12 +24,13 @@ func TestRespondStage(t *testing.T) {
 
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
-		ports := makePorts("Cache", 4)
-		ports.Top = twowaybuffered.NewPort(1, 1)
+		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+		ports := makePorts(sim, "Cache", 4)
+		ports.Top = twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 
 		spec := DefaultSpec()
 		spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
-		mw = buildStageTestCache(
+		mw = buildStageTestCache(sim,
 			spec,
 			Resources{Storage: mem.NewStorage(4 * mem.KB)},
 			ports,

@@ -3,9 +3,8 @@ package twowaybuffered
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/messaging"
-
 	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +40,7 @@ func (h *portPresenceHook) Func(ctx hooking.HookCtx) {
 func TestPortReadPresenceAndNotifications(t *testing.T) {
 	comp := &portPresenceOwner{}
 	conn := &portPresenceConnection{}
-	p := NewPort(2, 2)
+	p := newTestPort(2, 2)
 	p.BindOwner(comp, "P")
 	p.BindConnection(conn)
 	hook := &portPresenceHook{}
@@ -85,7 +84,7 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 }
 
 func TestPortWithoutOwnerPanics(t *testing.T) {
-	p := NewPort(1, 1)
+	p := newTestPort(1, 1)
 	require.Panics(t, func() { p.AsRemote() })
 	require.Panics(t, func() { p.BindConnection(&portPresenceConnection{}) })
 	require.Panics(t, func() { p.Deliver(messaging.Msg{}) })

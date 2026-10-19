@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -91,10 +92,12 @@ func (c *Connector) validatePath(
 }
 
 // Validation computes routes before any component initializes its runtime state.
-type networkCheckpoint struct{ c *Connector }
+type networkCheckpoint struct {
+	assembly.Member
+	c *Connector
+}
 
-func (n *networkCheckpoint) Name() string         { return n.c.name + ".Topology" }
-func (n *networkCheckpoint) ValidateSetup() error { return n.c.initializeRoutes() }
+func (n *networkCheckpoint) Name() string { return n.c.name + ".Topology" }
 
 type switchRecord struct {
 	Name   string

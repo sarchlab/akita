@@ -25,7 +25,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	spec.Bottom = messaging.RemotePort("BottomUnit")
 
 	port := func(name string) messaging.Port {
-		p := twowaybuffered.NewPort(4, 4)
+		p := twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+			Build()
 		return p
 	}
 

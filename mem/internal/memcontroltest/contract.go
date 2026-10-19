@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -28,7 +28,7 @@ type Harness struct {
 
 	// Sim is the simulation the component belongs to. RunContract allocates
 	// the IDs of the requests and ticks it makes from it.
-	Sim timing.Simulation
+	Sim modeling.Simulation
 
 	// Ctrl is the component's Control port. RunContract delivers
 	// ControlReq into it via Deliver and reads ControlRsp out of it via

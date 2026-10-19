@@ -31,7 +31,7 @@ import (
 func TestMMUCacheControlBehavior(t *testing.T) {
 	var (
 		engine      timing.Engine
-		sim         timing.Simulation
+		sim         *testsim.Simulation
 		comp        *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -54,7 +54,7 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
 			Build("MMUCache")
-		compPorts := defaultPorts("MMUCache")
+		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Bottom", compPorts.Bottom)
 		comp.BindPort("Control", compPorts.Control)

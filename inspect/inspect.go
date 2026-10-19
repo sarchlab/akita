@@ -6,8 +6,9 @@
 // ticking.Component, wakeup.Component, or event.Component. It also declares
 // func DefaultSpec() Spec, whose only statement returns a keyed Spec literal
 // with constant leaves. The inspector reads both declarations without executing
-// the function. The Comp alias supplies the model and five element types; the
-// returned literal supplies defaults. Resources, port roles/groups, middleware
+// the function. DefaultSpec alone does not declare a component; other elements
+// such as buffered ports also use it. The Comp alias supplies the model and
+// five element types; the returned literal supplies defaults. Resources, port roles/groups, middleware
 // order, field metadata, and Spec shape rules retain the same schema.
 //
 // Optional State and Middlewares Initialize methods must have pointer receivers,

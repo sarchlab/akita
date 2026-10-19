@@ -15,11 +15,6 @@ const (
 	ready
 )
 
-type initializer interface {
-	ValidateSetup() error
-	InitializeComponent()
-}
-
 // Setup tracks initialization of a simulation. Assembly is single-threaded.
 type Setup struct {
 	entities []naming.Named
@@ -65,8 +60,8 @@ func (s *Setup) Initialize() error {
 	}
 	var failures []error
 	for _, e := range s.entities {
-		if v, ok := e.(interface{ ValidateSetup() error }); ok {
-			if err := v.ValidateSetup(); err != nil {
+		if m := memberOf(e); m != nil && m.validate != nil {
+			if err := m.validate(); err != nil {
 				failures = append(failures, fmt.Errorf("%s: %w", e.Name(), err))
 			}
 		}
@@ -79,8 +74,8 @@ func (s *Setup) Initialize() error {
 		return errors.New("simulation: initialization already attempted")
 	}
 	for _, e := range s.entities {
-		if c, ok := e.(initializer); ok {
-			c.InitializeComponent()
+		if m := memberOf(e); m != nil && m.initialize != nil {
+			m.initialize()
 		}
 	}
 	s.phase.Store(ready)

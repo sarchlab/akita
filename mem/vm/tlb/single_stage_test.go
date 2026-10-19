@@ -21,7 +21,7 @@ func newSingleStageTLB(t *testing.T) *Comp {
 
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
-	ports := defaultPorts("TLB")
+	ports := defaultPorts(sim, "TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)
 	comp.BindPort("Control", ports.Control)
@@ -96,7 +96,7 @@ func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
 
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
-	ports := defaultPorts("TLB")
+	ports := defaultPorts(sim, "TLB")
 	comp.BindPort("Top", ports.Top)
 	comp.BindPort("Bottom", ports.Bottom)
 	comp.BindPort("Control", ports.Control)

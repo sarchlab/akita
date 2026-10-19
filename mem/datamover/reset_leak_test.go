@@ -31,7 +31,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	dataMover := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
 		Build("DataMover")
-	dataMoverPorts := makePorts("DataMover", 16, 64, 64, 1024)
+	dataMoverPorts := makePorts(sim, "DataMover", 16, 64, 64, 1024)
 	dataMover.BindPort("Top", dataMoverPorts.Top)
 	dataMover.BindPort("Inside", dataMoverPorts.Inside)
 	dataMover.BindPort("Outside", dataMoverPorts.Outside)

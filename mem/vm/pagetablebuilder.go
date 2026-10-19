@@ -1,11 +1,13 @@
 package vm
 
-import "github.com/sarchlab/akita/v5/sim/timing"
+import (
+	"github.com/sarchlab/akita/v5/sim/modeling"
+)
 
 // PageTableBuilder builds PageTable resources. WithSimulation is required; Build registers the resource.
 type PageTableBuilder struct {
 	log2PageSize uint64
-	simulation   timing.Simulation
+	simulation   modeling.Simulation
 }
 
 // MakePageTableBuilder returns a PageTableBuilder with a default 12-bit (4 KB)
@@ -24,7 +26,7 @@ func (b PageTableBuilder) WithLog2PageSize(log2PageSize uint64) PageTableBuilder
 
 // WithSimulation wires the builder to a simulation so the built page table
 // registers itself as a resource.
-func (b PageTableBuilder) WithSimulation(sim timing.Simulation) PageTableBuilder {
+func (b PageTableBuilder) WithSimulation(sim modeling.Simulation) PageTableBuilder {
 	b.simulation = sim
 	return b
 }

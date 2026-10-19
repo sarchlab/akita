@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
@@ -17,8 +18,8 @@ func (*testLink) Name() string                   { return "TestLink" }
 func (*testLink) NotifySend(_ messaging.Port)    {}
 func (*testLink) NotifyAvailable(messaging.Port) {}
 func (l *testLink) BindPort(p messaging.Port)    { p.BindConnection(l); l.ports = append(l.ports, p) }
-func connectPeer(s timing.Simulation, port messaging.Port) messaging.Port {
-	peer := twowaybuffered.NewPort(1, 1)
+func connectPeer(s *testsim.Simulation, port messaging.Port) messaging.Port {
+	peer := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	peer.BindOwner(payloadOwner{"Peer"}, "Peer.Port")
 	s.RegisterPort(peer)
 	conn := direct.NewConnection("PeerConnection", s, timing.GHz)

@@ -21,7 +21,10 @@ func Example() {
 		WithSpec(Spec{Latency: 10}).
 		Build("Delay")
 
-	delay.BindPort("In", twowaybuffered.NewPort(4, 4))
+	delay.BindPort("In", twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build())
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}

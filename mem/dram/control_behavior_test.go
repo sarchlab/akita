@@ -21,7 +21,7 @@ import (
 func TestDRAMControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
-		sim      timing.Simulation
+		sim      *testsim.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -33,7 +33,7 @@ func TestDRAMControlBehavior(t *testing.T) {
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
-		compPorts := defaultPorts("DRAM", 16)
+		compPorts := defaultPorts(sim, "DRAM", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Control", compPorts.Control)
 

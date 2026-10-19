@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -23,10 +24,19 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // defaultPorts creates the three ports (Top, Bottom, Control) of the mmuCache
 // named name, each with a buffer of 16 (the historical default).
-func defaultPorts(name string) Ports {
+func defaultPorts(simulation modeling.Simulation, name string) Ports {
 	return Ports{
-		Top:     twowaybuffered.NewPort(16, 16),
-		Bottom:  twowaybuffered.NewPort(16, 16),
-		Control: twowaybuffered.NewPort(16, 16),
+		Top: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Bottom: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
+		Control: twowaybuffered.MakeBuilder().
+			WithSimulation(simulation).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build(),
 	}
 }

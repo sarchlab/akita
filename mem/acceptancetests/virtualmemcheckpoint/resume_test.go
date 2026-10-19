@@ -49,10 +49,10 @@ func buildSim() (*sim.Simulation, *driver) {
 		WithSimulation(s).
 		Build("AT")
 
-	at.BindPort("Top", newPort("AT.Top"))
-	at.BindPort("Bottom", newPort("AT.Bottom"))
-	at.BindPort("Translation", newPort("AT.Translation"))
-	at.BindPort("Control", newPort("AT.Control"))
+	at.BindPort("Top", newPort(s, "AT.Top"))
+	at.BindPort("Bottom", newPort(s, "AT.Bottom"))
+	at.BindPort("Translation", newPort(s, "AT.Translation"))
+	at.BindPort("Control", newPort(s, "AT.Control"))
 
 	d := buildDriver(s, at.Ports.Top)
 
@@ -80,8 +80,8 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		}).
 		Build("MemCtrl")
 
-	memCtrl.BindPort("Top", newPort("MemCtrl.Top"))
-	memCtrl.BindPort("Control", newPort("MemCtrl.Control"))
+	memCtrl.BindPort("Top", newPort(s, "MemCtrl.Top"))
+	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
 
 	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
@@ -95,9 +95,9 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
 		Build("L2Cache")
 
-	l2Cache.BindPort("Top", newPort("L2Cache.Top"))
-	l2Cache.BindPort("Bottom", newPort("L2Cache.Bottom"))
-	l2Cache.BindPort("Control", newPort("L2Cache.Control"))
+	l2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
+	l2Cache.BindPort("Bottom", newPort(s, "L2Cache.Bottom"))
+	l2Cache.BindPort("Control", newPort(s, "L2Cache.Control"))
 
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
@@ -111,9 +111,9 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage")}).
 		Build("L1Cache")
 
-	l1Cache.BindPort("Top", newPort("L1Cache.Top"))
-	l1Cache.BindPort("Bottom", newPort("L1Cache.Bottom"))
-	l1Cache.BindPort("Control", newPort("L1Cache.Control"))
+	l1Cache.BindPort("Top", newPort(s, "L1Cache.Top"))
+	l1Cache.BindPort("Bottom", newPort(s, "L1Cache.Bottom"))
+	l1Cache.BindPort("Control", newPort(s, "L1Cache.Control"))
 
 	return l1Cache, l2Cache, memCtrl
 }
@@ -130,8 +130,8 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
-	ioMMU.BindPort("Top", newPort("IoMMU.Top"))
-	ioMMU.BindPort("Control", newPort("IoMMU.Control"))
+	ioMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
+	ioMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
 
 	l2TLBSpec := tlb.DefaultSpec()
 	l2TLBSpec.NumWays = 64
@@ -144,9 +144,9 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 		WithSimulation(s).
 		Build("L2TLB")
 
-	l2TLB.BindPort("Top", newPort("L2TLB.Top"))
-	l2TLB.BindPort("Bottom", newPort("L2TLB.Bottom"))
-	l2TLB.BindPort("Control", newPort("L2TLB.Control"))
+	l2TLB.BindPort("Top", newPort(s, "L2TLB.Top"))
+	l2TLB.BindPort("Bottom", newPort(s, "L2TLB.Bottom"))
+	l2TLB.BindPort("Control", newPort(s, "L2TLB.Control"))
 
 	tlbSpec := tlb.DefaultSpec()
 	tlbSpec.NumWays = 8
@@ -159,9 +159,9 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 		WithSimulation(s).
 		Build("TLB")
 
-	itlb.BindPort("Top", newPort("TLB.Top"))
-	itlb.BindPort("Bottom", newPort("TLB.Bottom"))
-	itlb.BindPort("Control", newPort("TLB.Control"))
+	itlb.BindPort("Top", newPort(s, "TLB.Top"))
+	itlb.BindPort("Bottom", newPort(s, "TLB.Bottom"))
+	itlb.BindPort("Control", newPort(s, "TLB.Control"))
 
 	return ioMMU, itlb, l2TLB
 }
@@ -196,8 +196,11 @@ func setupPageTable(s *sim.Simulation) *vm.PageTable {
 
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports during wiring. BindPort names, binds, and registers it.
-func newPort(fullName string) messaging.Port {
-	return twowaybuffered.NewPort(16, 16)
+func newPort(simulation modeling.Simulation, fullName string) messaging.Port {
+	return twowaybuffered.MakeBuilder().
+		WithSimulation(simulation).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+		Build()
 }
 
 // newStorage builds a storage of the given capacity that registers with the
