@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -56,14 +55,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tasks.EndReqIn(m.comp, recvTaskID)
+			m.comp.TaskTracker().EndReqIn(recvTaskID)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tasks.EndReqIn(m.comp, recvTaskID)
+		m.comp.TaskTracker().EndReqIn(recvTaskID)
 	}
 	return done
 }

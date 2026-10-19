@@ -198,7 +198,11 @@ monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().WithMonitor(monitor).Build()
 // Assemble components and bind ports before initialization.
 if err := s.Initialize(); err != nil { panic(err) }
-defer s.Terminate()
+defer func() {
+    if err := s.Terminate(); err != nil {
+        panic(err)
+    }
+}()
 bar := monitor.CreateProgressBar("kernels", 100)
 ```
 

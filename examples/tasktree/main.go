@@ -4,7 +4,7 @@
 // A Client sends one request down a memory hierarchy: Client -> L1 -> L2 ->
 // Memory. Each cache "misses" and forwards the request one level down. The
 // trick is the parent task id: when a cache initiates its downstream request,
-// it passes the ID returned by tasks.StartReqIn as the parent — the ID
+// it passes the ID returned by Tracker.StartReqIn as the parent — the ID
 // of the req_in task it is currently handling. That makes every downstream
 // task a child of the task that caused it, so the whole hierarchy forms one
 // task tree. A custom tracer attached to every component prints that tree.
@@ -130,7 +130,7 @@ func main() {
 
 	tracer := &treeTracer{nodes: map[uint64]taskNode{}}
 	for _, c := range []tasks.Owner{cli, l1, l2, mem} {
-		c.TaskTracker().Subscribe(tracer, c)
+		sim.TaskTracker().Subscribe(tracer, c)
 	}
 
 	cli.TickLater()

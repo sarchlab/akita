@@ -125,7 +125,7 @@ cd customhook && go run main.go
 ### tracing — Measuring Work with Tracing Tasks
 
 A single worker component wraps each job in a tracing task
-(`tasks.StartTask` / `tasks.EndTask`). A `BusyTimeTracer` and an
+(`tracker.StartTask` / `tracker.EndTask`). A `BusyTimeTracer` and an
 `AverageTimeTracer`, attached with `Tracker.Subscribe`, report how long
 the worker was busy and how long an average job took.
 
@@ -171,7 +171,7 @@ cd reqtracing && go run main.go
 
 A request travels a memory hierarchy (`Client → L1 → L2 → Memory`); each cache
 misses and forwards downward, parenting the downstream task to the one it is
-handling using the stored ID returned by `tasks.StartReqIn`. A custom tracer attached to every
+handling using the stored ID returned by `tracker.StartReqIn`. A custom tracer attached to every
 component prints the resulting task tree. Each component type is in its own
 package (`client`, `cache`, `memory`); `main.go` builds the hierarchy bottom-up
 so each level's `Spec` can name the port of the level below.

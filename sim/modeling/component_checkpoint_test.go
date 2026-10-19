@@ -63,9 +63,9 @@ func TestCheckpointSpecMismatch(t *testing.T) {
 // round-trips: after restoring a pending tick, asking for the same tick again
 // schedules nothing, since the engine's restored queue already holds it.
 func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
-	newScheduler := func() (*ticking.Scheduler, *timing.SerialEngine) {
+	newScheduler := func(handler timing.Handler) (*ticking.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
-		engine.RegisterHandler("C", handlerFunc(func(timing.Event) {}))
+		engine.RegisterHandler("C", handler)
 		sim := testsim.New(engine, false)
 		if err := sim.Initialize(); err != nil {
 			t.Fatal(err)
@@ -74,7 +74,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 		return ticking.NewScheduler("C", sim, 1*timing.GHz), engine
 	}
 
-	src, _ := newScheduler()
+	src, _ := newScheduler(handlerFunc(func(timing.Event) {}))
 	src.TickLater()
 
 	var buf bytes.Buffer
@@ -85,7 +85,8 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 		t.Fatalf("checkpoint is missing the pending-event guard: %s", buf.String())
 	}
 
-	dst, engine := newScheduler()
+	handled := 0
+	dst, engine := newScheduler(handlerFunc(func(timing.Event) { handled++ }))
 	var state ckptState
 	if err := modeling.ReadCheckpoint(&buf, ckptSpec{}, &state, dst); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
@@ -93,8 +94,6 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 
 	dst.TickLater()
 
-	handled := 0
-	engine.RegisterHandler("C", handlerFunc(func(timing.Event) { handled++ }))
 	if err := engine.Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

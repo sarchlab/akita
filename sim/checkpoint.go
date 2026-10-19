@@ -8,10 +8,14 @@ import (
 )
 
 // SaveCheckpoint writes a checkpoint archive for the simulation. The simulation
-// must use a SerialEngine and be stopped outside an event handler. The build
-// identity is derived automatically from the running binary's build information.
+// must use a SerialEngine with no active Run or RunUntil call, including paused
+// execution. Execution cannot start until the checkpoint finishes.
 // It returns an error for the first registered entity that cannot be saved.
 func (s *Simulation) SaveCheckpoint(path string) error {
+	return s.whileIdle(func() error { return s.saveCheckpoint(path) })
+}
+
+func (s *Simulation) saveCheckpoint(path string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
 	}
@@ -33,25 +37,26 @@ func (s *Simulation) SaveCheckpoint(path string) error {
 			archiveEntry{name: entity.Name(), data: buf.Bytes()})
 	}
 
-	return writeArchive(path, s.buildID, payloads)
+	return writeArchive(path, payloads)
 }
 
 // LoadCheckpoint loads a checkpoint archive into this rebuilt simulation. It
-// checks the build identity and that the saved entity set matches the rebuilt
-// one, then hands each entity its payload. Only the task tracker is optional:
-// off->on starts it empty; on->off ignores its payload. Rebuild fresh observers.
+// checks that the saved entity set matches the rebuilt one, then hands each
+// entity its payload. Only the task tracker is optional: off->on starts it
+// empty; on->off ignores its payload. Rebuild fresh observers. Code and serialized
+// state must be compatible; decoding does not guarantee semantic compatibility.
 func (s *Simulation) LoadCheckpoint(path string) error {
+	return s.whileIdle(func() error { return s.loadCheckpoint(path) })
+}
+
+func (s *Simulation) loadCheckpoint(path string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
 	}
 
-	savedBuildID, payloads, err := readArchive(path)
+	payloads, err := readArchive(path)
 	if err != nil {
 		return err
-	}
-	if savedBuildID != s.buildID {
-		return fmt.Errorf("checkpoint: build ID mismatch: checkpoint %q, current %q",
-			savedBuildID, s.buildID)
 	}
 	if err := s.checkpointCoverage(payloads); err != nil {
 		return err

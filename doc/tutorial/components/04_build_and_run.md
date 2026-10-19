@@ -101,7 +101,9 @@ if err := s.Run(); err != nil {
     panic(err)
 }
 
-s.Terminate()
+if err := s.Terminate(); err != nil {
+    panic(err)
+}
 ```
 
 `TickLater` schedules the first tick at the next cycle. Nothing wakes a
@@ -144,7 +146,9 @@ if err := engine.Continue(); err != nil {
 if err := <-runDone; err != nil {
     panic(err)
 }
-s.Terminate()
+if err := s.Terminate(); err != nil {
+    panic(err)
+}
 ```
 
 The pause is acknowledged after the current event and hooks finish, or after all

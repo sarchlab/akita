@@ -3,9 +3,8 @@ package tracing_test
 import (
 	"fmt"
 
-	akitasim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/naming"
 
-	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/tasks/tracing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -20,26 +19,17 @@ func (t *SampleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 }
 
 type SampleDomain struct {
-	sim timing.Simulation
-	*hooking.HookableBase
+	tracker *tasks.Tracker
 
-	timeTeller timing.TimeTeller
-	taskIDs    []uint64
-	nextID     uint64
+	taskIDs []uint64
 }
 
 func (d *SampleDomain) Name() string {
 	return "sample domain"
 }
 
-func (d *SampleDomain) CurrentTime() timing.VTimeInPicoSec {
-	return d.timeTeller.CurrentTime()
-}
-
 func (d *SampleDomain) Start() {
-	d.nextID++
-
-	id := tasks.StartTask(d, tasks.StartInfo{
+	id := d.TaskTracker().StartTask(d, tasks.StartInfo{
 		Kind: "sampleTaskKind",
 		What: "something",
 	})
@@ -48,9 +38,9 @@ func (d *SampleDomain) Start() {
 }
 
 func (d *SampleDomain) End() {
-	tasks.EndTask(d, tasks.EndInfo{
-		ID: d.taskIDs[0],
-	})
+	d.TaskTracker().EndTask(
+		d.taskIDs[0],
+	)
 
 	d.taskIDs = d.taskIDs[1:]
 }
@@ -58,11 +48,10 @@ func (d *SampleDomain) End() {
 // Example for how to use standard tracers
 func ExampleNewTotalTimeTracer() {
 	timeTeller := &SampleTimeTeller{}
-	domain := &SampleDomain{sim: akitasim.MakeBuilder().WithTaskTracking().Build(),
-		HookableBase: &hooking.HookableBase{},
-		timeTeller:   timeTeller,
-	}
+	domain := &SampleDomain{}
 
+	ids := &timing.IDGenerator{}
+	domain.tracker = tasks.NewTracker(timeTeller, ids.NewID, func(n naming.Named) bool { return n == domain })
 	filter := func(t tasks.Task) bool {
 		return t.Kind == "sampleTaskKind"
 	}
@@ -100,8 +89,6 @@ func ExampleNewTotalTimeTracer() {
 	// 12
 }
 
-func (d *SampleDomain) NewID() uint64 { return d.sim.NewID() }
-
 func (d *SampleDomain) TaskTracker() *tasks.Tracker {
-	return d.sim.(interface{ TaskTracker() *tasks.Tracker }).TaskTracker()
+	return d.tracker
 }

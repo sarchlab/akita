@@ -85,7 +85,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tasks.StartReqIn(m.comp, req)
+	recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, req)
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -102,7 +102,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 	// req_in, so the ".walk" work milestone has a corresponding bar. It is closed
 	// on the local-hit (doPageWalkHit) and remote-fetch (processRemoteMemReq)
 	// exits.
-	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
+	ts.WalkTaskID = m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",
@@ -196,7 +196,7 @@ func (m *walkMW) processRemoteMemReq(
 	// remote walk shows up as a proper subtask; it is finalized in
 	// handleTranslationRsp when the remote response returns.
 
-	walking.SendTaskID = tasks.StartReqOut(m.comp, req, walking.RecvTaskID)
+	walking.SendTaskID = m.comp.TaskTracker().StartReqOut(m.comp, req, walking.RecvTaskID)
 	state.RemoteMemReqs[req.ID] = walking
 
 	m.bottomPort().Send(req)
@@ -204,12 +204,12 @@ func (m *walkMW) processRemoteMemReq(
 	// The local walk countdown finished and the page is remote: attribute the
 	// countdown as work on the req_in and close the walk subtask that spanned
 	// it. The downstream req_out (opened above) then covers the remote fetch.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: walking.RecvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	m.comp.TaskTracker().EndTask(walking.WalkTaskID)
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
@@ -256,14 +256,14 @@ func (m *walkMW) doPageWalkHit(
 	// The local page walk counted down CycleLeft before reaching here; record
 	// that processing latency as work on the original req_in and close the walk
 	// subtask that spanned it, so the work milestone has a corresponding bar.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: walking.RecvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	m.comp.TaskTracker().EndTask(walking.WalkTaskID)
 
-	tasks.EndReqIn(m.comp, walking.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(walking.RecvTaskID)
 
 	return true
 }

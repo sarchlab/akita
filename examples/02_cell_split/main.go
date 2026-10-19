@@ -87,7 +87,9 @@ func main() {
 		panic(err)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 
 	fmt.Printf("Cell count at time %d ps: %d\n", endTime, h.count)
 }

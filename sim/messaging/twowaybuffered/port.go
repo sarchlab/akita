@@ -22,6 +22,9 @@ type Port struct {
 	owner messaging.PortOwner
 	conn  messaging.Connection
 
+	taskTracker      *tasks.Tracker
+	taskTrackerBound bool
+
 	incomingBuf queueing.Buffer[bufferEntry]
 	outgoingBuf queueing.Buffer[bufferEntry]
 }
@@ -104,6 +107,9 @@ func (p *Port) CanSend() bool {
 // the port has capacity with CanSend before calling Send; sending into a full
 // outgoing buffer is a programming error and will panic.
 func (p *Port) Send(msg messaging.Msg) {
+	if p.conn == nil {
+		panic(fmt.Sprintf("twowaybuffered: port %q has no connection", p.name))
+	}
 	p.msgMustBeValid(msg)
 
 	p.lock.Lock()
@@ -312,6 +318,12 @@ func (p *Port) mustHaveOwner() messaging.PortOwner {
 // the component, and an owner written without a component model calls
 // BindOwner.
 func NewPort(incomingBufCap, outgoingBufCap int) *Port {
+	if incomingBufCap <= 0 {
+		panic(fmt.Sprintf("twowaybuffered: incomingBufCap must be greater than 0, got %d", incomingBufCap))
+	}
+	if outgoingBufCap <= 0 {
+		panic(fmt.Sprintf("twowaybuffered: outgoingBufCap must be greater than 0, got %d", outgoingBufCap))
+	}
 	p := new(Port)
 	p.incomingBuf = queueing.MakeBuffer[bufferEntry](incomingBufCap)
 	p.outgoingBuf = queueing.MakeBuffer[bufferEntry](outgoingBufCap)
@@ -319,6 +331,9 @@ func NewPort(incomingBufCap, outgoingBufCap int) *Port {
 }
 
 func (p *Port) msgMustBeValid(msg messaging.Msg) {
+	if msg.ID == 0 {
+		panic(fmt.Sprintf("twowaybuffered: port %q cannot send message with zero ID", p.name))
+	}
 	if !messaging.PayloadRegistered(msg.Payload) {
 		panic(fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", msg.Payload))
 	}

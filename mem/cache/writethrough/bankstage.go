@@ -60,7 +60,7 @@ func (s *bankStage) extractFromBuf() bool {
 	// pipeline, so its bank read/write gets its own child bar under the req_in,
 	// mirroring the directory pipeline subtask. The bank latency then shows as
 	// real work rather than an unexplained gap before completion.
-	trans.BankTaskID = tasks.StartTask(s.cache.comp, tasks.StartInfo{
+	trans.BankTaskID = s.cache.comp.TaskTracker().StartTask(s.cache.comp, tasks.StartInfo{
 		ParentID: trans.RecvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     s.cache.comp.Name() + ".bank",
@@ -214,7 +214,7 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 		// itself; its merged data reached storage via the fetcher's bank
 		// write. That is a dependency it was blocked on — not its own work —
 		// so it gets a dependency milestone, not the bank subtask.
-		tasks.AddMilestone(s.cache.comp, tasks.Milestone{
+		s.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: waiter.RecvTaskID,
 			Kind:   tasks.MilestoneKindDependency,
 			What:   s.cache.comp.Name() + ".fill",
@@ -234,10 +234,10 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 // also pairs a subtask with a work milestone, so every "work" interval on the
 // req_in has a corresponding child bar.
 func (s *bankStage) finishBank(trans *transactionState) {
-	tasks.AddMilestone(s.cache.comp, tasks.Milestone{
+	s.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})
-	tasks.EndTask(s.cache.comp, tasks.EndInfo{ID: trans.BankTaskID})
+	s.cache.comp.TaskTracker().EndTask(trans.BankTaskID)
 }

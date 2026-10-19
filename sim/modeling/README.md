@@ -71,10 +71,12 @@ Other values that seem to belong in the Spec usually belong elsewhere:
 
 ## Component Models
 
-In every model a middleware is an event handler, `Middleware.Handle(e
-timing.Event) bool`: the component passes each event it receives to its
-middlewares in field order, and a middleware ignores the events it does not
-handle. The models differ only in which events arrive:
+Each model exports its own `Middleware` interface. `event.Middleware` has
+`Handle(timing.Event)` with no return value. `ticking.Middleware` and
+`wakeup.Middleware` each have `Handle(timing.Event) bool`; progress schedules the
+next tick or another wakeup at the current time, respectively. Components pass
+events to middlewares in field order and serialize their handlers, including
+under the parallel engine. Middlewares ignore events they do not handle.
 
 | Model | Events that arrive | Example |
 |---|---|---|
@@ -102,7 +104,6 @@ Each package doc shows how to declare and build a component of its model.
 - `Component` — the interface every model's `Component` implements: named,
   hookable, the handler of its events, and the owner of its ports
   (`messaging.PortOwner`).
-- `Middleware` — one piece of a component's behavior, `Handle(e) bool`.
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
   Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
   what they save the guard through. The ticking and wakeup models each keep
@@ -154,7 +155,7 @@ The Comp alias identifies the five element types. DefaultSpec() supplies default
 State and Middlewares may define
 pointer-receiver `Initialize(c *Comp)` methods; neither returns a value. Omit an
 initializer when the zero value works. All middleware fields must still implement
-modeling.Middleware and be non-nil after initialization; the framework does not
+their model's Middleware interface and be non-nil after initialization; the framework does not
 automatically allocate pointer fields or inject component references.
 
 Simulation.Initialize first checks generic port bindings. Errors here leave setup
@@ -170,3 +171,10 @@ and no promise to collect all component-specific errors before initialization.
 Checkpoint restore overwrites State after normal initialization; it does not rerun
 initializers. Runtime shape checks and static inspection recognize the same element
 method signatures.
+
+Middleware fields must be exported because initialization uses reflection to
+extract their values into an ordered pipeline. The containing struct may be
+private. Ordinary dispatch uses that cached pipeline and does not repeat the
+reflection. Resource builders follow `WithSimulation(s).Build(name)`: Build
+registers the resource with the simulation. This is an authoring convention,
+not a framework check of every user-defined builder.

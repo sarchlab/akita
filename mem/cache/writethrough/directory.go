@@ -41,7 +41,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 
 		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		trans.DirPipelineTaskID = tasks.StartTask(d.cache.comp, tasks.StartInfo{
+		trans.DirPipelineTaskID = d.cache.comp.TaskTracker().StartTask(d.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     d.cache.comp.Name() + ".dir_pipeline",
@@ -73,7 +73,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 		transIdx, _ := dirPostBuf.Peek()
 		trans := &next.Transactions[transIdx]
 
-		tasks.AddMilestone(d.cache.comp, tasks.Milestone{
+		d.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: trans.RecvTaskID,
 			Kind:   tasks.MilestoneKindWork,
 			What:   d.cache.comp.Name() + ".dir_pipeline",
@@ -90,7 +90,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 			break
 		}
 
-		tasks.EndTask(d.cache.comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
+		d.cache.comp.TaskTracker().EndTask(trans.DirPipelineTaskID)
 		madeProgress = true
 	}
 
@@ -133,12 +133,12 @@ func (d *directory) processMSHRHit(
 			transIdx)
 
 	if trans.HasRead {
-		tasks.AddTag(d.cache.comp, tasks.Tag{
+		d.cache.comp.TaskTracker().AddTag(tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "read-mshr-hit",
 		})
 	} else {
-		tasks.AddTag(d.cache.comp, tasks.Tag{
+		d.cache.comp.TaskTracker().AddTag(tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-mshr-hit",
 		})
@@ -179,7 +179,7 @@ func (d *directory) processReadHit(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tasks.AddTag(d.cache.comp, tasks.Tag{
+	d.cache.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-hit",
 	})
@@ -211,7 +211,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tasks.AddTag(d.cache.comp, tasks.Tag{
+	d.cache.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-miss",
 	})
@@ -283,7 +283,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 		return false
 	}
 
-	trans.WriteTaskID = tasks.StartReqOut(d.cache.comp, writeToBottom, trans.RecvTaskID)
+	trans.WriteTaskID = d.cache.comp.TaskTracker().StartReqOut(d.cache.comp, writeToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
@@ -323,7 +323,7 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
-	trans.ReadTaskID = tasks.StartReqOut(d.cache.comp, readToBottom, trans.RecvTaskID)
+	trans.ReadTaskID = d.cache.comp.TaskTracker().StartReqOut(d.cache.comp, readToBottom, trans.RecvTaskID)
 	d.cache.bottomPort().Send(readToBottom)
 
 	trans.HasReadToBottom = true

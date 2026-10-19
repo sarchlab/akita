@@ -35,7 +35,7 @@ type Component[S, T, R, P, M any] struct {
 	base.ComponentBase[S, T, R, P, M]
 
 	engine   timing.EventScheduler
-	pipeline []modeling.Middleware
+	pipeline []Middleware
 
 	// handling makes the instance handle one event at a time: the parallel
 	// engine runs the events of one time concurrently, and an event component
@@ -44,15 +44,16 @@ type Component[S, T, R, P, M any] struct {
 }
 
 // Handle passes the event to every middleware, in the declaration order of
-// Middlewares. The event model does not use the middlewares' progress: an
-// event component runs only when an event arrives. The instance handles one
+// Middlewares. An event component runs only when an event arrives. The instance handles one
 // event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	c.RequireInitialized()
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
-	base.Dispatch(c.pipeline, e)
+	for _, mw := range c.pipeline {
+		mw.Handle(e)
+	}
 }
 
 // NotifyRecv schedules a Recv event for the port at the current time.

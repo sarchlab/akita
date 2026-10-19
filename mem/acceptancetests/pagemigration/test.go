@@ -603,5 +603,7 @@ func main() {
 			"Completed %d page migrations.\n", migCtrl.State.NumMigrations)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

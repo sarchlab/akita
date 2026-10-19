@@ -121,7 +121,7 @@ func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		trans.BankPID = tasks.StartTask(s.cache.comp, tasks.StartInfo{
+		trans.BankPID = s.cache.comp.TaskTracker().StartTask(s.cache.comp, tasks.StartInfo{
 			ParentID: trans.RecvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     s.cache.comp.Name() + ".bank",
@@ -144,13 +144,13 @@ func (s *bankStage) finishBank(trans *transactionState) {
 		return
 	}
 
-	tasks.AddMilestone(s.cache.comp, tasks.Milestone{
+	s.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   s.cache.comp.Name() + ".bank",
 	})
 	if trans.BankPID != 0 {
-		tasks.EndTask(s.cache.comp, tasks.EndInfo{ID: trans.BankPID})
+		s.cache.comp.TaskTracker().EndTask(trans.BankPID)
 		trans.BankPID = 0
 	}
 }
@@ -221,7 +221,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	s.cache.topPort().Send(dataReady)
 
 	s.finishBank(trans)
-	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
+	s.cache.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
 	return true
 }
@@ -260,7 +260,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	s.cache.topPort().Send(done)
 
 	s.finishBank(trans)
-	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
+	s.cache.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
 	return true
 }

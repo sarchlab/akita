@@ -70,7 +70,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	base.SetInitializer(&c.ComponentBase, func() {
 		base.InitializeElement(&c.State, c)
 		base.InitializeElement(&c.Middlewares, c)
-		c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
+		c.pipeline = base.OrderedMiddlewares[Middleware](&c.Middlewares)
 	})
 
 	base.Register(&c.ComponentBase)

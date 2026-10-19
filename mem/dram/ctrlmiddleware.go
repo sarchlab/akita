@@ -3,7 +3,6 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -186,11 +185,11 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	for i := range m.comp.State.Transactions {
 		t := &m.comp.State.Transactions[i]
 
-		tasks.EndReqIn(m.comp, t.RecvTaskID)
+		m.comp.TaskTracker().EndReqIn(t.RecvTaskID)
 
 		for _, sub := range t.SubTransactions {
 			if !sub.Completed {
-				tasks.EndTask(m.comp, tasks.EndInfo{ID: sub.TaskID})
+				m.comp.TaskTracker().EndTask(sub.TaskID)
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type subscription struct {
@@ -24,17 +25,24 @@ type entry struct {
 // must still support the concurrency contract so storage can be sharded later.
 // Construct a Tracker with NewTracker; its zero value is not ready for use.
 type Tracker struct {
+	clock         timing.TimeTeller
+	newID         func() uint64
+	owns          func(naming.Named) bool
 	mu            sync.Mutex
 	subscriptions []subscription
 	open          map[uint64]*entry
 	parents       requestParents
 }
 
-// NewTracker creates a service for one simulation. Framework assembly passes
-// the same tracker to every owner and its ports.
-// Applications normally enable it with sim.Builder.WithTaskTracking.
-func NewTracker() *Tracker {
-	return &Tracker{open: make(map[uint64]*entry)}
+// NewTracker creates a service using the simulation's clock, ID allocator, and
+// scope membership check. owns must identify objects in that simulation's
+// inventory, not merely match names. Applications normally use
+// sim.Builder.WithTaskTracking instead of constructing this service themselves.
+func NewTracker(clock timing.TimeTeller, newID func() uint64, owns func(naming.Named) bool) *Tracker {
+	if clock == nil || newID == nil || owns == nil {
+		panic("tasks: simulation services are required")
+	}
+	return &Tracker{clock: clock, newID: newID, owns: owns, open: make(map[uint64]*entry)}
 }
 
 // Subscribe registers an observer for future events, including the complete end
@@ -49,11 +57,10 @@ func (t *Tracker) Subscribe(o Observer, scopes ...naming.Named) {
 	}
 	scope := make(map[string]bool, len(scopes))
 	for _, named := range scopes {
-		owner, ok := named.(Owner)
-		if !ok || owner.TaskTracker() != t {
+		if named == nil || !t.owns(named) {
 			panic("tasks: subscription scope belongs to another simulation or is not a task owner")
 		}
-		scope[owner.Name()] = true
+		scope[named.Name()] = true
 	}
 	t.subscriptions = append(t.subscriptions, subscription{observer: o, owners: scope})
 }
@@ -65,10 +72,10 @@ func (t *Tracker) start(o Owner, info StartInfo) uint64 {
 	if info.Location == "" {
 		info.Location = singleKindLocation(o.Name(), info.Kind, info.What)
 	}
-	task := Task{ID: o.NewID(), MsgID: info.MsgID, ParentID: info.ParentID,
-		Kind: info.Kind, What: info.What, Location: info.Location, Detail: info.Detail, StartTime: o.CurrentTime()}
+	task := Task{ID: t.newID(), MsgID: info.MsgID, ParentID: info.ParentID,
+		Kind: info.Kind, What: info.What, Location: info.Location, Detail: info.Detail, StartTime: t.clock.CurrentTime()}
 	if task.ID == 0 {
-		panic("tasks: owner allocated zero ID")
+		panic("tasks: simulation allocated zero ID")
 	}
 	task = t.parents.resolveStart(task)
 	e := &entry{task: task, owner: o.Name()}
@@ -82,27 +89,27 @@ func (t *Tracker) start(o Owner, info StartInfo) uint64 {
 	return task.ID
 }
 
-func (t *Tracker) end(o Owner, id uint64) {
+func (t *Tracker) end(id uint64) {
 	e := t.open[id]
 	if e == nil {
 		return
 	}
 	task := e.task
-	task.EndTime = o.CurrentTime()
+	task.EndTime = t.clock.CurrentTime()
 	delete(t.open, id)
 	t.parents.end(id)
 	t.notify(e, func(observer Observer) { observer.TaskEnded(task) })
 }
 
-func (t *Tracker) milestone(o Owner, m Milestone) {
+func (t *Tracker) milestone(m Milestone) {
 	e := t.open[m.TaskID]
 	if e == nil {
 		return
 	}
 	if m.ID == 0 {
-		m.ID = o.NewID()
+		m.ID = t.newID()
 	}
-	m.Time = o.CurrentTime()
+	m.Time = t.clock.CurrentTime()
 	t.notify(e, func(observer Observer) { observer.MilestoneAdded(m) })
 }
 
@@ -114,3 +121,7 @@ func (t *Tracker) notify(e *entry, callback func(Observer)) {
 		}
 	}
 }
+
+// CurrentTime returns the simulation clock used for all task notifications.
+// Port buffer bookkeeping uses the same clock for its checkpointed wait boundary.
+func (t *Tracker) CurrentTime() timing.VTimeInPicoSec { return t.clock.CurrentTime() }

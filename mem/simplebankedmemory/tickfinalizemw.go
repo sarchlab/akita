@@ -96,7 +96,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tasks.EndReqIn(m.comp, item.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -148,7 +148,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tasks.EndReqIn(m.comp, item.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
 	bufferPop(b)
 
@@ -163,14 +163,14 @@ func (m *tickFinalizeMW) finalizeWrite(
 // work milestone via the dedup. Both task IDs are retained in the pipeline
 // entry from dispatch through completion.
 func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: recvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".pipeline",
 	})
 
 	if pipelineTaskID != 0 {
-		tasks.EndTask(m.comp, tasks.EndInfo{ID: pipelineTaskID})
+		m.comp.TaskTracker().EndTask(pipelineTaskID)
 	}
 }
 

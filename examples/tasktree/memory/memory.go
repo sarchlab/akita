@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -77,9 +76,9 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	_ = msg.Payload.(ReadReq)
 	req := msg
 
-	taskID := tasks.StartReqIn(m.comp, req) // req_in @ Memory — a leaf task
+	taskID := m.comp.TaskTracker().StartReqIn(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
-	tasks.EndReqIn(m.comp, taskID)
+	m.comp.TaskTracker().EndReqIn(taskID)
 	port.RetrieveIncoming()
 	return true
 }

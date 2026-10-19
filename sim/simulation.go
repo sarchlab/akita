@@ -1,7 +1,11 @@
 package sim
 
 import (
+	"errors"
+	"fmt"
+	"reflect"
 	"slices"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
@@ -12,7 +16,13 @@ import (
 )
 
 type Simulation struct {
-	buildID          string
+	// lifecycle serializes snapshots and cleanup. activeOperation spans callbacks
+	// made by Initialize and Run, without holding the mutex during those callbacks.
+	// Engine.WithIdle also excludes calls made directly through Engine().
+	lifecycle        sync.Mutex
+	activeOperation  string
+	terminated       bool
+	terminateErr     error
 	setup            assembly.Setup
 	id               string
 	outputPath       string
@@ -112,7 +122,8 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. A component model's BindPort registers each port it binds;
+// name and monitored. It also supplies task tracking to ports that support it.
+// A component model's BindPort registers each port it binds;
 // an owner written without a component model registers its own ports.
 func (s *Simulation) RegisterPort(p naming.Named) {
 	port, ok := p.(Port)
@@ -121,6 +132,12 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 			p.Name())
 	}
 
+	// Check setup and name collisions before binding. Binding also prevents
+	// a port from moving between simulations.
+	s.RequireNameAvailable(port.Name())
+	if tracked, ok := port.(interface{ BindTaskTracker(*tasks.Tracker) }); ok {
+		tracked.BindTaskTracker(s.taskTracker)
+	}
 	s.registerEntity(port)
 	s.ports = append(s.ports, port)
 }
@@ -145,8 +162,36 @@ func (s *Simulation) RegisterResource(r naming.Named) {
 	s.registerEntity(r)
 }
 
-// Terminate terminates the simulation.
-func (s *Simulation) Terminate() {
+// Terminate releases simulation services exactly once. Active execution,
+// including a paused Run, must return first. Termination is final even if
+// cleanup fails; repeated calls return the original result.
+func (s *Simulation) Terminate() error {
+	s.lifecycle.Lock()
+	defer s.lifecycle.Unlock()
+	if s.terminated {
+		return s.terminateErr
+	}
+	if s.activeOperation != "" {
+		return fmt.Errorf("simulation: %s is active", s.activeOperation)
+	}
+	return s.engine.WithIdle(func() error {
+		s.terminated = true
+		s.terminateErr = s.cleanup()
+		return s.terminateErr
+	})
+}
+
+func (s *Simulation) cleanup() (err error) {
+	// Legacy cleanup operations may panic; retain the failure as the terminal
+	// result and still attempt to close the owned recorder.
+	defer func() {
+		if cause := recover(); cause != nil {
+			err = errors.Join(err, fmt.Errorf("simulation: cleanup panic: %v", cause))
+		}
+	}()
+	if s.dataRecorder != nil {
+		defer func() { err = errors.Join(err, s.dataRecorder.Close()) }()
+	}
 	if s.monitorStarted {
 		s.monitor.Stop()
 		s.monitorStarted = false
@@ -164,9 +209,7 @@ func (s *Simulation) Terminate() {
 		s.topologyRecorder.Record(s.components, s.ports)
 	}
 
-	if s.dataRecorder != nil {
-		s.dataRecorder.Close()
-	}
+	return nil
 }
 
 // NewID allocates an ID unique within this simulation.
@@ -175,6 +218,14 @@ func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
 // Initialize validates the completed wiring, freezes topology, and creates state
 // and middleware. Call it once before seeding work or loading a checkpoint.
 func (s *Simulation) Initialize() error {
+	s.lifecycle.Lock()
+	if err := s.requireIdle(); err != nil {
+		s.lifecycle.Unlock()
+		return err
+	}
+	s.activeOperation = "initialization"
+	s.lifecycle.Unlock()
+	defer s.finishOperation()
 	if err := s.setup.Initialize(); err != nil {
 		return err
 	}
@@ -187,10 +238,44 @@ func (s *Simulation) Initialize() error {
 
 // Run executes queued events after successful initialization.
 func (s *Simulation) Run() error {
-	if err := s.setup.Ready(); err != nil {
+	s.lifecycle.Lock()
+	if err := s.requireIdle(); err != nil {
+		s.lifecycle.Unlock()
 		return err
 	}
+	if err := s.setup.Ready(); err != nil {
+		s.lifecycle.Unlock()
+		return err
+	}
+	s.activeOperation = "execution"
+	s.lifecycle.Unlock()
+	defer s.finishOperation()
 	return s.engine.Run()
+}
+
+func (s *Simulation) requireIdle() error {
+	if s.terminated {
+		return fmt.Errorf("simulation: terminated")
+	}
+	if s.activeOperation != "" {
+		return fmt.Errorf("simulation: %s is active", s.activeOperation)
+	}
+	return nil
+}
+
+func (s *Simulation) finishOperation() {
+	s.lifecycle.Lock()
+	s.activeOperation = ""
+	s.lifecycle.Unlock()
+}
+
+func (s *Simulation) whileIdle(fn func() error) error {
+	s.lifecycle.Lock()
+	defer s.lifecycle.Unlock()
+	if err := s.requireIdle(); err != nil {
+		return err
+	}
+	return s.engine.WithIdle(fn)
 }
 
 // RequireSetup rejects structural changes after initialization begins.
@@ -201,3 +286,9 @@ func (s *Simulation) RequireNameAvailable(name string) { s.setup.RequireNameAvai
 
 // TaskTracker returns the simulation task service, or nil when tracking is disabled.
 func (s *Simulation) TaskTracker() *tasks.Tracker { return s.taskTracker }
+
+// ownsEntity checks object identity as well as the globally unique name.
+func (s *Simulation) ownsEntity(named naming.Named) bool {
+	i, ok := s.entityByName[named.Name()]
+	return ok && reflect.TypeOf(named).Comparable() && s.entities[i] == named
+}

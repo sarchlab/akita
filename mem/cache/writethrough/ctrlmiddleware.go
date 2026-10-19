@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -190,23 +189,23 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tasks.EndReqIn(comp, trans.RecvTaskID)
+			comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 		}
 
 		if trans.HasReadToBottom {
-			tasks.EndReqOut(comp, trans.ReadTaskID)
+			comp.TaskTracker().EndReqOut(trans.ReadTaskID)
 		}
 
 		if trans.HasWriteToBottom {
-			tasks.EndReqOut(comp, trans.WriteTaskID)
+			comp.TaskTracker().EndReqOut(trans.WriteTaskID)
 		}
 
 		if trans.DirPipelineTaskID != 0 {
-			tasks.EndTask(comp, tasks.EndInfo{ID: trans.DirPipelineTaskID})
+			comp.TaskTracker().EndTask(trans.DirPipelineTaskID)
 		}
 
 		if trans.BankTaskID != 0 {
-			tasks.EndTask(comp, tasks.EndInfo{ID: trans.BankTaskID})
+			comp.TaskTracker().EndTask(trans.BankTaskID)
 		}
 	}
 }

@@ -2,8 +2,7 @@ package mem
 
 import "github.com/sarchlab/akita/v5/sim/timing"
 
-// StorageBuilder builds Storage resources. When wired to a simulation through
-// WithSimulation, the built storage registers itself as a simulation resource.
+// StorageBuilder builds Storage resources. WithSimulation is required; Build registers the resource.
 type StorageBuilder struct {
 	capacity   uint64
 	unitSize   uint64
@@ -37,19 +36,15 @@ func (b StorageBuilder) WithSimulation(sim timing.Simulation) StorageBuilder {
 	return b
 }
 
-// Build creates the Storage with the given name. If the builder was wired to a
-// simulation, the storage registers itself as a resource under that name.
+// Build creates and registers the resource. WithSimulation is required.
 func (b StorageBuilder) Build(name string) *Storage {
-	storage := &Storage{
-		name:     name,
-		capacity: b.capacity,
-		unitSize: b.unitSize,
-		data:     make(map[uint64]*storageUnit),
+	if b.simulation == nil {
+		panic("Storage: WithSimulation is required")
 	}
+	storage := NewStorageWithUnitSize(b.capacity, b.unitSize)
+	storage.name = name
 
-	if b.simulation != nil {
-		b.simulation.RegisterResource(storage)
-	}
+	b.simulation.RegisterResource(storage)
 
 	return storage
 }

@@ -10,7 +10,11 @@ Monitoring is opt-in. Construct a monitor and pass it to the simulation builder:
 ```go
 monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 s := sim.MakeBuilder().WithMonitor(monitor).Build()
-defer s.Terminate()
+defer func() {
+    if err := s.Terminate(); err != nil {
+        panic(err)
+    }
+}()
 // Build components and bind their ports here.
 if err := s.Initialize(); err != nil { panic(err) }
 

@@ -101,7 +101,7 @@ ambiguous — therefore the location string is qualified to separate them:
 
 The rule of thumb: a **component** disambiguates by *stage* (the request side it
 is on, or the named pipeline stage); a **port** disambiguates by *direction*
-(incoming vs outgoing buffer). This holds for every task: `tasks.StartTask` derives the
+(incoming vs outgoing buffer). This holds for every task: `tracker.StartTask` derives the
 location from the Kind (see `singleKindLocation`) when a caller leaves `Location`
 empty, ports append the buffer direction, and all of these strings are
 interned into the trace's `location` table.
@@ -127,7 +127,7 @@ that phase (or open a subtask for it, per P2).
 **P2 — Work is a subtask (`work`/`subtask` ⇒ child subtask).** A `work` or
 `subtask` milestone asserts the task spent that interval doing internal work
 rather than blocked. Such an interval must be backed by a **child subtask** — a
-`tasks.StartTask` parented to the `req_in`, normally `tasks.KindPipeline` — that spans
+`tracker.StartTask` parented to the `req_in`, normally `tasks.KindPipeline` — that spans
 it, so the trace shows *what* the work was, not merely that time elapsed. A bare
 `work`/`subtask` milestone with no corresponding child subtask is a violation:
 either open the subtask, or — if the interval was really a wait — reclassify the

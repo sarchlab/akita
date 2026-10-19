@@ -62,7 +62,7 @@ func (s *intake) Tick() bool {
 	next.AdmissionMsgID = 0
 	next.WaitingForDir = false
 
-	next.Transactions[transIdx].RecvTaskID = tasks.StartReqIn(s.cache.comp, msg)
+	next.Transactions[transIdx].RecvTaskID = s.cache.comp.TaskTracker().StartReqIn(s.cache.comp, msg)
 
 	return true
 }

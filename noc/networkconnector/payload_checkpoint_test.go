@@ -30,7 +30,9 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	t.Helper()
 	s := sim.MakeBuilder().
 		WithOutputPath(filepath.Join(t.TempDir(), "trace.sqlite3") + ".sqlite3").Build()
-	t.Cleanup(s.Terminate)
+	t.Cleanup(func() {
+		s.Terminate()
+	})
 	src := twowaybuffered.NewPort(1, 4)
 	dst := twowaybuffered.NewPort(1, 4)
 	for _, item := range []struct {

@@ -33,7 +33,7 @@ type Component[S, T, R, P, M any] struct {
 	base.ComponentBase[S, T, R, P, M]
 
 	ticks    *Scheduler
-	pipeline []modeling.Middleware
+	pipeline []Middleware
 
 	// handling makes the instance handle one event at a time: the parallel
 	// engine runs the events of one time concurrently.

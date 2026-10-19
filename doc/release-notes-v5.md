@@ -62,7 +62,7 @@ and constructors are removed.
 
 NoC builders now explicitly support buffered ports and ideal direct connections.
 The port factory is removed; endpoint device wiring rejects unsupported device
-ports. Port checkpoints store messages without tracing IDs.
+ports. Port checkpoints retain messages, buffer task IDs, and wait boundaries.
 
 ## Explicit component assembly
 
@@ -91,13 +91,31 @@ Before: zero `Spec.Freq` failed at the first tick; after: Build rejects it.
 Ticking Specs must declare `Freq timing.Freq` in runtime, inspector, and
 `modelingtest.CheckTicking`; supply a nonzero value before Build.
 
-## Simulation checkpoint build identity
+## Checkpoint and termination lifecycle
 
-Before: `s.SaveCheckpoint(path, id)` / `s.LoadCheckpoint(path, id)`; after:
-`s.SaveCheckpoint(path)` / `s.LoadCheckpoint(path)`. Build identity is derived
-automatically from the running binary's build information, stored in the
-checkpoint, and checked on load. There is no public override.
-Per-entity checkpoint methods are unchanged.
+Use `s.SaveCheckpoint(path)` and `s.LoadCheckpoint(path)`. Checkpoints contain
+entity payloads without a build ID. Inventory, Spec hashes, and entity-specific
+validation remain; callers ensure code/state compatibility. Unregistered event
+types now fail during save, before archive writing, rather than during restore.
+
+Active runs, including paused runs and direct engine calls, reject saving,
+loading, and termination. A complete checkpoint excludes engine startup.
+`Terminate() error` cleans up once, retains its result, and permanently rejects
+subsequent execution and checkpoint operations. There is no recorder exit hook;
+callers close independently constructed recorders themselves.
+
+## Middleware and construction guards
+
+Use `event.Middleware.Handle(timing.Event)` for event components and
+`Handle(timing.Event) bool` for `ticking.Middleware` and `wakeup.Middleware`.
+The shared `modeling.Middleware` interface is removed. Middleware fields are
+exported for reflection at initialization; the pipeline is cached for dispatch.
+
+Resource builders require `WithSimulation(s)` and register in `Build(name)`.
+Handlers reject duplicate registration names. Port capacities must be positive;
+`Send` checks a nonzero message ID and a bound connection before any effects.
+Unused ports may remain unconnected. Direct connections reject zero frequency
+before registration. IDs already start at 1; `RspTo == 0` remains valid.
 
 ## Simulation-scoped task tracking
 
@@ -107,10 +125,16 @@ and subscribe observers through `s.TaskTracker().Subscribe(observer, scopes...)`
 Subscribe before seeding work to see starts,
 or join mid-run for future events. Scopes accept `naming.Named`; components include
 their ports, while port scopes select only that port. All must share the tracker.
-With tracking disabled, `s.VisTracer()` is nil and no tracing
-tables are created. `WithTaskTracking` alone creates and subscribes the tracer;
-call `s.VisTracer().StartTracing()` to begin recording. Components receive the
-service through `TaskTracker()`; tracking is nil when disabled. Built-in observers
+With tracking disabled, `s.VisTracer()` is nil and no tracing tables are created.
+`WithTaskTracking` alone creates only the in-memory tracker; also use
+`WithOutputPath` to create a recorder and visualization tracer for manual
+`StartTracing`. Obtain `tracker := s.TaskTracker()`; component models expose the
+same service through `TaskTracker()`. `tasks.Owner` embeds only `naming.Named`.
+Ports keep their own private tracker reference, bound once by `RegisterPort`;
+they no longer obtain it through an owning component getter. Standalone ports
+can bind the service explicitly through `BindTaskTracker` during setup.
+The tracker owns task operations and stamps time and IDs using simulation
+services. Nil tracker methods do nothing and allocate no IDs. Built-in observers
 move from `sim/tracing` to
 `sim/tasks/tracing` (the package name remains `tracing`); update those imports.
 The shared `LeakRecorder` test helper lives in module-root `internal/tracingtest`;
@@ -121,11 +145,11 @@ state and helpers. Framework assembly uses the exported `NewTracker`,
 and `Tracker.LoadCheckpoint` APIs. Ordinary applications use the simulation
 builder; checkpoint entity names and optional archive membership stay in `sim`.
 
-- Replace `tracing.StartTask` with `id := tasks.StartTask(owner, tasks.StartInfo{...})`.
+- Replace `tracing.StartTask` with `id := tracker.StartTask(owner, tasks.StartInfo{...})`.
   It allocates an independent task ID; do not pass a caller-generated ID.
 - Use `StartReqOut` before `port.Send`, and `StartReqIn` on admission. Store each
   returned handle in State. End with `EndReqOut`, `EndReqIn`, or
-  `EndTask(owner, EndInfo{ID: id})`. Reset paths use the same end commands;
+  `tracker.EndTask(id)`. Reset paths use the same end commands;
   `EndOnReset` is removed because it had no distinct behavior.
 - Use `tasks.Tag`, `tasks.Milestone`, `AddTag`, and `AddMilestone`. Replace buffer
   task lookups with `port.AddIncomingMilestone(tasks.Reason(kind, what))` at
@@ -148,8 +172,8 @@ Task helper migration (end commands take the stored task ID):
 
 | Previous helper | New helper |
 |---|---|
-| `tracing.StartTask` / `tasks.Start` | `tasks.StartTask` |
-| `tracing.EndTask` / `tasks.End` | `tasks.EndTask` |
+| `tracing.StartTask` / `tasks.Start` | `tracker.StartTask` |
+| `tracing.EndTask` / `tasks.End` | `tracker.EndTask` |
 | `TraceReqReceive` | `StartReqIn` |
 | `TraceReqComplete` / `CompleteReq` | `EndReqIn` |
 | `TraceReqInitiate` | `StartReqOut` |

@@ -3,7 +3,6 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -162,10 +161,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 }
 
 func (m *ctrlMiddleware) endItemTasks(item bankPipelineItemState) {
-	tasks.EndReqIn(m.comp, item.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tasks.EndTask(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
+		m.comp.TaskTracker().EndTask(item.PipelineTaskID)
 	}
 }
 

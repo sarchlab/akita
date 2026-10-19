@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -89,7 +88,7 @@ func (m *serveMW) receive() bool {
 
 	_ = msg.Payload.(ReadReq)
 	req := msg
-	recvTaskID := tasks.StartReqIn(m.comp, req)
+	recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, req)
 	m.comp.State.Pending = append(m.comp.State.Pending,
 		txn{Req: req, RecvTaskID: recvTaskID, Left: m.comp.Spec.Latency})
 	port.RetrieveIncoming()
@@ -130,7 +129,7 @@ func (m *serveMW) respond() bool {
 			Seq: req.Payload.(ReadReq).Seq,
 		}})
 
-	tasks.EndReqIn(m.comp, s.Pending[0].RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(s.Pending[0].RecvTaskID)
 	s.Pending = s.Pending[1:]
 
 	return true

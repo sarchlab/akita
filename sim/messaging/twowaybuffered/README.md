@@ -18,6 +18,11 @@ and register the port themselves. Binding is one-time; an unowned port has no
 remote address. Attach it with `connection.BindPort(port)` during setup.
 After all wiring, call `simulation.Initialize()` before sending work or running.
 
+Registration also binds the simulation's task tracker to a private reference on
+the port. The owner needs no task-tracker getter. Standalone ports may call
+`BindTaskTracker(tracker)` once during setup; nil disables tracking. The tracker
+reference is supplied again during assembly when rebuilding from a checkpoint.
+
 A component calls `CanSend` before `Send`, and reads `PeekIncoming` or
 `RetrieveIncoming`. A connection reads `PeekOutgoing` or `RetrieveOutgoing` and
 calls `CanDeliver` before `Deliver`. Reads return `(messaging.Msg{}, false)` when

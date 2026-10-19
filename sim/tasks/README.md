@@ -16,25 +16,24 @@ simulation IDs, so simulation decisions must not depend on numeric ID values.
 
 ## Component commands
 
-Every component model supplies `tasks.Owner` through ComponentBase. Custom
-owners provide `Name`, `CurrentTime`, `NewID`, and `TaskTracker`; no Hookable is
-needed. The returned Tracker must belong to the same simulation as the clock
-and ID allocator.
+`tasks.Owner` embeds only `naming.Named`: an owner supplies `Name() string`.
+The simulation owns the tracker, clock, and ID allocator. Obtain the service with
+`tracker := s.TaskTracker()`; component models also expose that same service
+through `comp.TaskTracker()`. Owners need no service methods.
 
 ```go
-id := tasks.StartTask(comp, tasks.StartInfo{
+id := tracker.StartTask(comp, tasks.StartInfo{
     ParentID: parent, Kind: tasks.KindPipeline, What: comp.Name() + ".bank",
 })
-tasks.AddTag(comp, tasks.Tag{TaskID: id, What: "read-hit"})
-tasks.AddMilestone(comp, tasks.Milestone{
+tracker.AddTag(tasks.Tag{TaskID: id, What: "read-hit"})
+tracker.AddMilestone(tasks.Milestone{
     TaskID: id, Kind: tasks.MilestoneKindWork, What: "bank",
 })
-tasks.EndTask(comp, tasks.EndInfo{ID: id})
+tracker.EndTask(id)
 ```
 
 `StartTask` allocates the ID and returns it; callers store it in component State.
-`EndInfo` currently contains only `ID`, leaving room for optional fields.
-Times are always stamped from the owner. Zero means untracked. Zero or unknown
+Times are always stamped from the simulation clock held by the tracker. Zero means untracked. Zero or unknown
 IDs on end/tag/milestone are ignored, including after checkpoint restoration.
 `Kind`, `What`, and the owner name must be nonempty when tracking is enabled.
 Tags and milestones allocate their own event ID if left zero.
@@ -42,15 +41,15 @@ Tags and milestones allocate their own event ID if left zero.
 Request helpers preserve separate sender and receiver identities:
 
 ```go
-sendID := tasks.StartReqOut(comp, msg, parent) // before port.Send(msg)
-recvID := tasks.StartReqIn(comp, msg)
-tasks.EndReqIn(comp, recvID)
-tasks.EndReqOut(comp, sendID)
+sendID := tracker.StartReqOut(comp, msg, parent) // before port.Send(msg)
+recvID := tracker.StartReqIn(comp, msg)
+tracker.EndReqIn(recvID)
+tracker.EndReqOut(sendID)
 ```
 
 Retain each returned handle for milestones, children, and completion. On reset,
 close request tasks with `EndReqIn` / `EndReqOut` and other work with
-`EndTask(owner, EndInfo{ID: id})`; zero and unknown handles are harmless.
+`tracker.EndTask(id)`; zero and unknown handles are harmless.
 Messages are unchanged. The tracker resolves request, response
 buffer, and NoC transport parents once, before any observer filtering. Unknown
 parents are zero; they are not filled in retroactively. A task can start at one
@@ -91,11 +90,15 @@ followed by observer locks. Querying Owner/Name on a port is safe.
 
 ## Buffer identity
 
-`twowaybuffered.Port` is a task owner with its own name and the owning
-component's tracker, clock, and ID allocator. Owners without `tasks.Owner` have
-untracked ports. Send/Deliver start a task and store its ID beside the message;
-RetrieveIncoming/Outgoing end that task. No hook or port registration is needed
-for tracking. Generic message hooks remain independent and carry Msg in Item.
+`twowaybuffered.Port` is a task owner with its own name and a private tracker
+reference. `Simulation.RegisterPort` binds that reference to the simulation's
+tracker once during assembly; component models register ports through `BindPort`.
+The owning component needs no `TaskTracker()` method. Standalone ports can call
+`BindTaskTracker(tracker)` explicitly before buffering messages; a nil or unbound
+tracker disables tracing. The tracker supplies all timestamps and IDs.
+Send/Deliver start a task and store its ID beside the message;
+RetrieveIncoming/Outgoing end that task. Generic message hooks remain independent
+and carry Msg in Item.
 
 ```go
 msg, ok := port.PeekIncoming()
@@ -147,11 +150,15 @@ process-global task registry is used.
 
 Task types, `Owner`, observers, and lifecycle implementations live directly in
 this package. Tracker state, parent maps, and checkpoint data
-structures are unexported. `Owner` is the small interface consumed by the task
-commands; its clock, ID allocator, and tracker must share one simulation.
+structures are unexported. `Owner` provides identity only.
 
-Frameworks construct a tracker with `NewTracker` and supply it through each
-owner's `TaskTracker()`. Ports need no separate tracker registration.
+Frameworks construct `NewTracker(clock, newID, owns)` using the simulation's
+clock, existing ID allocator, and a scope predicate that checks registered object
+identity. This preserves scope isolation even if two simulations reuse names.
+Components obtain the tracker from their simulation. Ports retain a private
+tracker reference bound once by `Simulation.RegisterPort`, or explicitly through
+`BindTaskTracker` for standalone ports. They expose no clock or ID methods and
+require no tracker getter on their owner.
 `Tracker.SaveCheckpoint` and `Tracker.LoadCheckpoint` operate while execution is
 stopped. These are supported exported framework APIs. Ordinary applications use
 the simulation builder, which owns checkpoint entity registration.

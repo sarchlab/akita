@@ -22,8 +22,8 @@
 //   - the events the component schedules for itself with Schedule.
 //
 // A middleware checks the event's type and ignores the events it does not
-// handle. The component runs only when an event arrives; the progress a
-// middleware reports is not used.
+// handle. event.Middleware.Handle returns no value; the component runs only
+// when an event arrives.
 //
 //	type doneEvent struct {
 //	    timing.EventBase
@@ -32,7 +32,7 @@
 //
 //	func init() { timing.RegisterEvent(doneEvent{}) }
 //
-//	func (m *memMW) Handle(e timing.Event) bool {
+//	func (m *memMW) Handle(e timing.Event) {
 //	    switch e := e.(type) {
 //	    case event.Recv:
 //	        ... // take each request, then
@@ -43,14 +43,13 @@
 //	    case doneEvent:
 //	        ... // respond to e.ReqID
 //	    default:
-//	        return false
+//	        return
 //	    }
-//	    return true
 //	}
 //
 // Register each event type the component schedules with timing.RegisterEvent,
 // so a checkpoint can hold it while it is pending; a forgotten registration
-// fails when the checkpoint is loaded. A Recv is not repeated until the port's
+// fails when the checkpoint is saved. A Recv is not repeated until the port's
 // incoming buffer empties, so a middleware takes every message it can and
 // schedules a retry for the rest; likewise it keeps a response it cannot send
 // in the State and sends it on PortFree.

@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -275,29 +274,29 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // owns that task and ends it once, independently of how many blocks it evicts.
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
-	tasks.EndReqIn(comp, comp.State.ProcessingFlush.RecvTaskID)
+	comp.TaskTracker().EndReqIn(comp.State.ProcessingFlush.RecvTaskID)
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
 
 		if !trans.Removed && (trans.HasRead || trans.HasWrite) {
-			tasks.EndReqIn(comp, trans.RecvTaskID)
+			comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 		}
 
 		if trans.HasFetchReadReq {
-			tasks.EndReqOut(comp, trans.FetchTaskID)
+			comp.TaskTracker().EndReqOut(trans.FetchTaskID)
 		}
 
 		if trans.HasEvictionWriteReq {
-			tasks.EndReqOut(comp, trans.EvictionTaskID)
+			comp.TaskTracker().EndReqOut(trans.EvictionTaskID)
 		}
 
 		if trans.DirPipelinePID != 0 {
-			tasks.EndTask(comp, tasks.EndInfo{ID: trans.DirPipelinePID})
+			comp.TaskTracker().EndTask(trans.DirPipelinePID)
 		}
 
 		if trans.BankPID != 0 {
-			tasks.EndTask(comp, tasks.EndInfo{ID: trans.BankPID})
+			comp.TaskTracker().EndTask(trans.BankPID)
 		}
 	}
 }

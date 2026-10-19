@@ -20,7 +20,7 @@ func (p *bottomParser) chargeFillDataMilestone(entryTransIdxs []int) {
 	next := &p.cache.comp.State
 	for _, idx := range entryTransIdxs {
 		waiter := &next.Transactions[idx]
-		tasks.AddMilestone(p.cache.comp, tasks.Milestone{
+		p.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: waiter.RecvTaskID,
 			Kind:   tasks.MilestoneKindData,
 			What:   p.cache.comp.Name() + ".Bottom",
@@ -58,7 +58,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	// The lower memory acknowledged the write-through this req_in dispatched.
 	// Charge the dependency at response-arrival, keyed to the req_in (not the
 	// WriteDoneRsp).
-	tasks.AddMilestone(p.cache.comp, tasks.Milestone{
+	p.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tasks.MilestoneKindDependency,
 		What:   p.cache.comp.Name() + ".Bottom",
@@ -71,7 +71,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tasks.EndReqOut(p.cache.comp, trans.WriteTaskID)
+	p.cache.comp.TaskTracker().EndReqOut(trans.WriteTaskID)
 	trans.WriteTaskID = 0
 
 	return true
@@ -133,7 +133,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Trace the original request to lower memory.
-	tasks.EndReqOut(p.cache.comp, trans.ReadTaskID)
+	p.cache.comp.TaskTracker().EndReqOut(trans.ReadTaskID)
 	trans.ReadTaskID = 0
 
 	return true

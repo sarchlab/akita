@@ -70,7 +70,11 @@ s := sim.MakeBuilder().
     WithMonitor(monitor).       // optional: enable live monitoring
     WithVisTracingOnStart().    // optional: start tracing immediately
     Build()
-defer s.Terminate()
+defer func() {
+    if err := s.Terminate(); err != nil {
+        panic(err)
+    }
+}()
 ```
 
 | Method | Description |
@@ -151,12 +155,16 @@ engine.Run()                                   // continue to completion
 Setup rebuilds the *shape* (components, ports, connections, resources, wiring);
 the checkpoint restores only the *runtime* (each entity's `State`, port buffers,
 shared resources, the event queue, the engine time, and the ID-generator
-counter). The archive holds a `build_id` entry plus one payload per entity; the
-payload files are the inventory (there is no manifest). Loading validates the
-build ID and that the saved and rebuilt entity sets match, except for the
-optional task-tracker payload described below.
-Build identity is derived automatically from the running binary's build
-information; callers do not supply or configure it.
+counter). The archive holds one payload per entity; these files are the
+inventory (there is no manifest). Loading validates the saved and rebuilt entity
+sets, except for the optional task-tracker payload described below, and each
+entity validates its payload, including component Spec hashes. No build identity
+is stored or compared. Callers must ensure simulator code and saved state remain
+compatible; successful decoding does not guarantee unchanged semantics.
+
+Saving and loading reject active `Run` or `SerialEngine.RunUntil` calls, including
+paused execution and calls through `s.Engine()`. The whole checkpoint operation
+excludes execution startup. Checkpointing after `RunUntil` returns is supported.
 
 ### The golden rule: all mutable runtime state lives in `State`
 
@@ -202,3 +210,13 @@ worked example, and the gotchas.
 
 See `examples/checkpointdemo` for a runnable save/load demo and
 `mem/acceptancetests/checkpointresume` for a mid-transaction resume oracle.
+
+### Termination
+
+`Terminate() error` rejects active execution, including paused runs, before
+cleanup starts. Once execution returns, it stops monitoring, finishes trace and
+metadata recording, records topology, and closes the owned recorder exactly once.
+Repeated calls return the original cleanup result. Termination is final even on
+failure; initialization, execution, and checkpoint operations then return errors.
+Independently created data recorders must be closed by their callers; no exit
+hook flushes them.

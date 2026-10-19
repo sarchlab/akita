@@ -1,6 +1,6 @@
 // Package badmiddleware has a Middlewares field that is not a middleware. The
 // inspector must reject it: every Middlewares field implements
-// modeling.Middleware.
+// ticking.Middleware.
 package badmiddleware
 
 import (

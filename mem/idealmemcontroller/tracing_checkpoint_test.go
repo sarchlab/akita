@@ -38,7 +38,9 @@ func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*
 		b = b.WithTaskTracking()
 	}
 	s := b.Build()
-	t.Cleanup(s.Terminate)
+	t.Cleanup(func() {
+		s.Terminate()
+	})
 	spec := DefaultSpec()
 	spec.Latency, spec.Width = 5, 1
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(s).WithResources(Resources{
@@ -80,10 +82,10 @@ func saveTaskCheckpoint(t *testing.T, savedOn bool) taskCheckpointScenario {
 	src.Engine().Schedule(timing.MakeEventBase(src.NewID(), 10, "Clock"))
 	require.NoError(t, src.Engine().Run())
 	// Detail cannot be encoded as JSON and must never be checkpointed.
-	root := tasks.StartTask(c, tasks.StartInfo{Kind: "work", What: "root", Detail: func() {}})
+	root := c.TaskTracker().StartTask(c, tasks.StartInfo{Kind: "work", What: "root", Detail: func() {}})
 	req := messaging.Msg{ID: src.NewID(), Src: "Agent", Dst: c.Ports.Top.AsRemote(),
 		Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4}}
-	senderID := tasks.StartReqOut(c, req, root)
+	senderID := c.TaskTracker().StartReqOut(c, req, root)
 	c.Ports.Top.Deliver(req)
 	modelingtest.Tick(c)
 	require.Len(t, c.State.InflightTransactions, 1)
@@ -122,11 +124,11 @@ func checkTaskCheckpoint(t *testing.T, savedOn, restoredOn bool) {
 	for range 100 {
 		dst.NewID()
 	}
-	discardedID := tasks.StartTask(restored, tasks.StartInfo{Kind: "work", What: "discard-on-load"})
+	discardedID := restored.TaskTracker().StartTask(restored, tasks.StartInfo{Kind: "work", What: "discard-on-load"})
 	require.NoError(t, dst.LoadCheckpoint(saved.checkpoint))
 	require.Equal(t, saved.recvID, restored.State.InflightTransactions[0].RecvTaskID)
 	fresh.starts, fresh.ends, fresh.milestones = nil, nil, nil
-	tasks.EndTask(restored, tasks.EndInfo{ID: discardedID})
+	restored.TaskTracker().EndTask(discardedID)
 	require.Empty(t, fresh.ends)
 
 	restored.Ports.Top.AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, "admission"))
@@ -152,8 +154,8 @@ func checkTaskCheckpoint(t *testing.T, savedOn, restoredOn bool) {
 		}
 		require.Equal(t, expectedParent, fresh.starts[0].ParentID, "response must resolve the saved sender")
 	}
-	tasks.EndReqOut(restored, saved.senderID)
-	tasks.EndTask(restored, tasks.EndInfo{ID: saved.root})
+	restored.TaskTracker().EndReqOut(saved.senderID)
+	restored.TaskTracker().EndTask(saved.root)
 	assertCheckpointEnds(t, saved, fresh, dst.Engine().CurrentTime(), savedOn, restoredOn)
 }
 

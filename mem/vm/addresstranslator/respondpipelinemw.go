@@ -115,7 +115,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 ) uint64 {
 	topTaskID := reqState.RecvTaskID
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: topTaskID,
 		Kind:   tasks.MilestoneKindTranslation,
 		What:   "translation",
@@ -125,14 +125,14 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	// network-busy wait belongs to the top req_in, not to the downstream
 	// req_out (which this component sends, so its receiver-side ID would
 	// be a phantom task).
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: topTaskID,
 		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
 
-	tasks.EndReqOut(m.comp, trans.TranslationTaskID)
-	return tasks.StartReqOut(m.comp, translatedReq, topTaskID)
+	m.comp.TaskTracker().EndReqOut(trans.TranslationTaskID)
+	return m.comp.TaskTracker().StartReqOut(m.comp, translatedReq, topTaskID)
 }
 
 //nolint:funlen,gocyclo
@@ -166,7 +166,7 @@ func (m *respondPipelineMW) respond() bool {
 				TrafficClass: "memprotocol.DataReadyRsp", Payload: memprotocol.DataReadyRsp{
 					Data: content.Data,
 				}}
-			tasks.AddMilestone(m.comp, tasks.Milestone{
+			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tasks.MilestoneKindData,
 				What:   "data",
@@ -184,7 +184,7 @@ func (m *respondPipelineMW) respond() bool {
 				RspTo:        reqFromTopState.ReqFromTopID,
 				TrafficBytes: 4,
 				TrafficClass: "memprotocol.WriteDoneRsp", Payload: memprotocol.WriteDoneRsp{}}
-			tasks.AddMilestone(m.comp, tasks.Milestone{
+			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tasks.MilestoneKindSubTask,
 				What:   "subtask",
@@ -201,7 +201,7 @@ func (m *respondPipelineMW) respond() bool {
 
 		m.topPort().Send(rspToTop)
 
-		tasks.AddMilestone(m.comp, tasks.Milestone{
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: reqFromTopState.RecvTaskID,
 			Kind:   tasks.MilestoneKindNetworkBusy,
 			What:   m.topPort().Name(),
@@ -210,8 +210,8 @@ func (m *respondPipelineMW) respond() bool {
 		rspMeta := rspI
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
-		tasks.EndReqOut(m.comp, reqFromTopState.SendTaskID)
-		tasks.EndReqIn(m.comp, reqFromTopState.RecvTaskID)
+		m.comp.TaskTracker().EndReqOut(reqFromTopState.SendTaskID)
+		m.comp.TaskTracker().EndReqIn(reqFromTopState.RecvTaskID)
 	}
 
 	m.bottomPort().RetrieveIncoming()

@@ -6,7 +6,11 @@
 //
 //	monitor := monitoring.MakeBuilder().WithPortNumber(8080).Build()
 //	s := sim.MakeBuilder().WithMonitor(monitor).Build()
-//	defer s.Terminate()
+//	defer func() {
+//	    if err := s.Terminate(); err != nil {
+//	        panic(err)
+//	    }
+//	}()
 //	// Assemble components and bind ports, then start monitoring:
 //	if err := s.Initialize(); err != nil { panic(err) }
 package monitoring

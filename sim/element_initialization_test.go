@@ -28,7 +28,11 @@ type elementPorts struct{ Top messaging.Port }
 type eventState struct{ Value int }
 type tickState struct{ Value int }
 type wakeState struct{ Value int }
-type eventMiddlewares struct{ Work *elementMiddleware }
+type eventMiddleware struct{ Initial int }
+
+func (*eventMiddleware) Handle(timing.Event) {}
+
+type eventMiddlewares struct{ Work *eventMiddleware }
 type tickMiddlewares struct{ Work *elementMiddleware }
 type wakeMiddlewares struct{ Work *elementMiddleware }
 type elementMiddleware struct{ Initial int }
@@ -63,7 +67,8 @@ func (s *wakeState) Initialize(c *wakeComp) {
 	s.Value = c.Resources.Probe.state(c.Name(), c.Ports.Top != nil, c.Spec.Initial)
 }
 func (m *eventMiddlewares) Initialize(c *eventComp) {
-	m.Work = c.Resources.Probe.middleware(c.Name(), c.State.Value)
+	c.Resources.Probe.Calls = append(c.Resources.Probe.Calls, c.Name()+".Middlewares")
+	m.Work = &eventMiddleware{Initial: c.State.Value}
 }
 func (m *tickMiddlewares) Initialize(c *tickComp) {
 	m.Work = c.Resources.Probe.middleware(c.Name(), c.State.Value)
@@ -99,8 +104,8 @@ func TestElementInitializationOrderAndRestore(t *testing.T) {
 		"Wakeup.State", "Wakeup.Middlewares",
 	}
 	require.Equal(t, want, p.Calls)
-	for _, mw := range []*elementMiddleware{e.Middlewares.Work, tc.Middlewares.Work, w.Middlewares.Work} {
-		require.Equal(t, 7, mw.Initial)
+	for _, initial := range []int{e.Middlewares.Work.Initial, tc.Middlewares.Work.Initial, w.Middlewares.Work.Initial} {
+		require.Equal(t, 7, initial)
 	}
 	var checkpoint bytes.Buffer
 	require.NoError(t, e.SaveCheckpoint(&checkpoint))

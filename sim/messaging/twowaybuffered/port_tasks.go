@@ -18,33 +18,20 @@ type bufferEntry struct {
 
 var _ tasks.Owner = (*Port)(nil)
 
-// TaskTracker returns the owning component's tracker, or nil for an untracked owner.
-func (p *Port) TaskTracker() *tasks.Tracker {
-	if owner, ok := p.owner.(tasks.Owner); ok {
-		return owner.TaskTracker()
+// BindTaskTracker supplies the port's simulation task service once during setup.
+// Simulation.RegisterPort calls it automatically. Standalone ports may bind
+// explicitly before buffering messages. A nil tracker disables task tracking.
+func (p *Port) BindTaskTracker(tracker *tasks.Tracker) {
+	if p.taskTrackerBound {
+		panic("twowaybuffered: task tracker already bound")
 	}
-	return nil
-}
-
-// CurrentTime uses the owning component's simulation clock.
-func (p *Port) CurrentTime() timing.VTimeInPicoSec {
-	if owner, ok := p.owner.(tasks.Owner); ok {
-		return owner.CurrentTime()
-	}
-	return 0
-}
-
-// NewID uses the owning component's simulation ID allocator.
-func (p *Port) NewID() uint64 {
-	if owner, ok := p.owner.(tasks.Owner); ok {
-		return owner.NewID()
-	}
-	return 0
+	p.taskTracker = tracker
+	p.taskTrackerBound = true
 }
 
 // AddIncomingMilestone records a resolved wait on the current incoming head.
 func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
-	if p.TaskTracker() == nil {
+	if p.taskTracker == nil {
 		return
 	}
 	p.lock.Lock()
@@ -54,7 +41,7 @@ func (p *Port) AddIncomingMilestone(reason messaging.WaitReason) {
 
 // AddOutgoingMilestone records a resolved wait on the current outgoing head.
 func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
-	if p.TaskTracker() == nil {
+	if p.taskTracker == nil {
 		return
 	}
 	p.lock.Lock()
@@ -64,7 +51,8 @@ func (p *Port) AddOutgoingMilestone(reason messaging.WaitReason) {
 
 func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 	entry := bufferEntry{Message: msg}
-	if p.TaskTracker() == nil {
+	tracker := p.taskTracker
+	if tracker == nil {
 		return entry
 	}
 	kind, direction := tasks.KindOutgoingBuffer, ".outgoing"
@@ -78,9 +66,9 @@ func (p *Port) startBufferTask(msg messaging.Msg, incoming bool) bufferEntry {
 			what = typ.String()
 		}
 	}
-	entry.TaskID = tasks.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
+	entry.TaskID = tracker.StartTask(p, tasks.StartInfo{MsgID: msg.ID, Kind: kind,
 		What: what, Location: p.name + direction, Detail: msg})
-	entry.LastMilestoneTime = p.CurrentTime()
+	entry.LastMilestoneTime = tracker.CurrentTime()
 	return entry
 }
 
@@ -112,22 +100,30 @@ func (p *Port) headMilestone(buf *queueing.Buffer[bufferEntry], reason messaging
 }
 
 func (p *Port) bufferMilestone(entry *bufferEntry, reason messaging.WaitReason) {
-	if entry.TaskID == 0 || p.TaskTracker() == nil {
+	if entry.TaskID == 0 {
 		return
 	}
-	now := p.CurrentTime()
+	tracker := p.taskTracker
+	if tracker == nil {
+		return
+	}
+	now := tracker.CurrentTime()
 	if now <= entry.LastMilestoneTime {
 		return
 	}
-	tasks.AddMilestone(p, tasks.Milestone{TaskID: entry.TaskID,
+	tracker.AddMilestone(tasks.Milestone{TaskID: entry.TaskID,
 		Kind: tasks.MilestoneKind(reason.Kind), What: reason.What})
 	entry.LastMilestoneTime = now
 }
 
 func (p *Port) endBufferTask(entry *bufferEntry, incoming bool) {
-	if entry.TaskID == 0 || p.TaskTracker() == nil {
+	if entry.TaskID == 0 {
+		return
+	}
+	tracker := p.taskTracker
+	if tracker == nil {
 		return
 	}
 	p.bufferMilestone(entry, p.waitReason(messaging.WaitReason{}, incoming))
-	tasks.EndTask(p, tasks.EndInfo{ID: entry.TaskID})
+	tracker.EndTask(entry.TaskID)
 }

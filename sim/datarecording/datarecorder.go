@@ -14,7 +14,6 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/internal/sqlitepath"
-	"github.com/tebeka/atexit"
 )
 
 // DataRecorder is a backend that can record and store data.
@@ -47,10 +46,6 @@ func NewDataRecorder(path string) DataRecorder {
 	}
 
 	w.Init()
-
-	atexit.Register(func() {
-		w.Flush()
-	})
 
 	return w
 }

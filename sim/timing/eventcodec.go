@@ -20,8 +20,8 @@ func init() {
 // pointers; the tag is derived from the Go type either way. Registering the same
 // type twice is harmless.
 //
-// A forgotten registration fails loudly at load time: decoding a checkpoint that
-// holds an unregistered event reports an unknown-event-type error.
+// A forgotten registration fails when saving a checkpoint containing that type,
+// before the archive is written. Ordinary scheduling does not check registration.
 func RegisterEvent(evt Event) {
 	eventCodec.Register(evt)
 }

@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 // blockRef is a set+way pair referencing a block in the directory.
@@ -205,7 +204,7 @@ func (f *flusher) startProcessingFlush(msg messaging.Msg) bool {
 	next.CacheState = int(cacheStatePreFlushing)
 	f.ctrlPort().RetrieveIncoming()
 
-	next.ProcessingFlush.RecvTaskID = tasks.StartReqIn(f.pipeline.comp, msg)
+	next.ProcessingFlush.RecvTaskID = f.pipeline.comp.TaskTracker().StartReqIn(f.pipeline.comp, msg)
 
 	return true
 }
@@ -247,7 +246,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tasks.EndReqIn(f.pipeline.comp, next.ProcessingFlush.RecvTaskID)
+	f.pipeline.comp.TaskTracker().EndReqIn(next.ProcessingFlush.RecvTaskID)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

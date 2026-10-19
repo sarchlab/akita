@@ -3,7 +3,6 @@ package writethrough
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 type respondStage struct {
@@ -52,7 +51,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original read request.
-	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
+	s.cache.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
 	return true
 }
@@ -75,7 +74,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Trace the original write request.
-	tasks.EndReqIn(s.cache.comp, trans.RecvTaskID)
+	s.cache.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
 	return true
 }

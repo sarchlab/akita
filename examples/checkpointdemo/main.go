@@ -112,7 +112,9 @@ func main() {
 
 	s := sim.MakeBuilder().Build()
 	defer func() {
-		s.Terminate()
+		if err := s.Terminate(); err != nil {
+			panic(err)
+		}
 		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 

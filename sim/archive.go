@@ -3,24 +3,19 @@ package sim
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
 )
 
-// A checkpoint archive is a tar.gz holding a build-identity entry and one
-// payload per registered entity; the payload files are the inventory, so there
-// is no manifest. Each entity owns the bytes of its own payload.
+// A checkpoint archive is a tar.gz holding one payload per registered entity.
+// The payload files are the inventory, so there is no manifest. Each entity owns the bytes of its own payload.
 const (
-	buildIDPath  = "build_id"
 	entityPrefix = "entities/"
 )
 
@@ -58,55 +53,8 @@ func entityName(archivePath string) (string, bool) {
 	return name, true
 }
 
-// defaultBuildID returns a deterministic fingerprint for the current executable.
-// It is intentionally process-local: checkpoints are expected to be restored by
-// the same binary that produced them.
-func defaultBuildID() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return hashStrings("unknown-build-info")
-	}
-
-	parts := []string{
-		"path=" + info.Path,
-		"main=" + info.Main.Path + "@" + info.Main.Version,
-	}
-
-	for _, dep := range info.Deps {
-		parts = append(parts, "dep="+dep.Path+"@"+dep.Version)
-		if dep.Replace != nil {
-			parts = append(parts,
-				"replace="+dep.Replace.Path+"@"+dep.Replace.Version)
-		}
-	}
-
-	for _, setting := range info.Settings {
-		switch setting.Key {
-		case "vcs", "vcs.revision", "vcs.modified", "vcs.time":
-			parts = append(parts, setting.Key+"="+setting.Value)
-		}
-	}
-
-	sort.Strings(parts)
-	return hashStrings(parts...)
-}
-
-func hashStrings(parts ...string) string {
-	h := sha256.New()
-	for _, part := range parts {
-		_, _ = io.WriteString(h, part)
-		_, _ = io.WriteString(h, "\n")
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// writeArchive atomically writes a checkpoint archive: the build identity
-// followed by entity payloads sorted by name.
-func writeArchive(path, buildID string, entries []archiveEntry) error {
-	if buildID == "" {
-		return errors.New("checkpoint: build ID is required")
-	}
-
+// writeArchive atomically writes entity payloads sorted by name.
+func writeArchive(path string, entries []archiveEntry) error {
 	tmpPath := path + ".tmp"
 	file, err := os.Create(tmpPath)
 	if err != nil {
@@ -120,7 +68,7 @@ func writeArchive(path, buildID string, entries []archiveEntry) error {
 		}
 	}()
 
-	err = writeArchiveStream(file, buildID, entries)
+	err = writeArchiveStream(file, entries)
 	closeErr := file.Close()
 	if err != nil {
 		return err
@@ -137,15 +85,11 @@ func writeArchive(path, buildID string, entries []archiveEntry) error {
 	return nil
 }
 
-func writeArchiveStream(w io.Writer, buildID string, entries []archiveEntry) error {
+func writeArchiveStream(w io.Writer, entries []archiveEntry) error {
 	gz := gzip.NewWriter(w)
 	gz.ModTime = time.Unix(0, 0)
 
 	tw := tar.NewWriter(gz)
-
-	if err := writeTarEntry(tw, buildIDPath, []byte(buildID)); err != nil {
-		return err
-	}
 
 	sorted := append([]archiveEntry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -185,29 +129,26 @@ func writeTarEntry(tw *tar.Writer, path string, data []byte) error {
 	return err
 }
 
-// readArchive reads a checkpoint archive, returning the build identity and the
-// entity payloads keyed by entity name. Unknown archive entries are rejected.
-func readArchive(path string) (string, map[string][]byte, error) {
+// readArchive returns entity payloads keyed by entity name. Unknown archive entries are rejected.
+func readArchive(path string) (map[string][]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	defer file.Close()
 
 	return readArchiveStream(file)
 }
 
-func readArchiveStream(r io.Reader) (string, map[string][]byte, error) {
+func readArchiveStream(r io.Reader) (map[string][]byte, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	defer gz.Close()
 
 	tr := tar.NewReader(gz)
 	payloads := make(map[string][]byte)
-	buildID := ""
-	foundBuildID := false
 
 	for {
 		header, err := tr.Next()
@@ -215,44 +156,28 @@ func readArchiveStream(r io.Reader) (string, map[string][]byte, error) {
 			break
 		}
 		if err != nil {
-			return "", nil, err
+			return nil, err
 		}
 		if header.Typeflag != tar.TypeReg && header.Typeflag != 0 {
-			return "", nil,
+			return nil,
 				fmt.Errorf("checkpoint: unsupported archive entry %q", header.Name)
 		}
 
 		data, err := io.ReadAll(tr)
 		if err != nil {
-			return "", nil, err
-		}
-
-		if header.Name == buildIDPath {
-			if foundBuildID {
-				return "", nil, fmt.Errorf("checkpoint: duplicate %s", buildIDPath)
-			}
-			buildID = string(data)
-			foundBuildID = true
-			continue
+			return nil, err
 		}
 
 		name, ok := entityName(header.Name)
 		if !ok {
-			return "", nil,
+			return nil,
 				fmt.Errorf("checkpoint: unexpected archive entry %q", header.Name)
 		}
 		if _, dup := payloads[name]; dup {
-			return "", nil, fmt.Errorf("checkpoint: duplicate entity %q", name)
+			return nil, fmt.Errorf("checkpoint: duplicate entity %q", name)
 		}
 		payloads[name] = data
 	}
 
-	if !foundBuildID {
-		return "", nil, fmt.Errorf("checkpoint: missing %s", buildIDPath)
-	}
-	if buildID == "" {
-		return "", nil, errors.New("checkpoint: build ID is empty")
-	}
-
-	return buildID, payloads, nil
+	return payloads, nil
 }

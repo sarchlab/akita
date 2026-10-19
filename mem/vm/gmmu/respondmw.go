@@ -96,14 +96,14 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 	// req_in, the dependency wait spent while that remote response was in
 	// flight. RecvTaskID is the original req_in id; do not key this to the
 	// response message.
-	tasks.EndReqOut(m.comp, reqTransaction.SendTaskID)
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().EndReqOut(reqTransaction.SendTaskID)
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: reqTransaction.RecvTaskID,
 		Kind:   tasks.MilestoneKindTranslation,
 		What:   "translation",
 	})
 
-	tasks.EndReqIn(m.comp, reqTransaction.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(reqTransaction.RecvTaskID)
 	delete(state.RemoteMemReqs, rsp.RspTo)
 
 	return true

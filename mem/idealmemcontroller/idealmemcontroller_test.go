@@ -53,6 +53,7 @@ func TestIdealMemoryController(t *testing.T) {
 	// build constructs a controller with the given Top-port buffer size, injects
 	// the shared storage, and plugs a noopConn so its ports can be driven.
 	build := func(topBufSize int) {
+		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		spec := DefaultSpec()
 		spec.Width = 1
@@ -207,7 +208,7 @@ func TestIdealMemoryController(t *testing.T) {
 		build(1)
 
 		// Pre-fill the outgoing buffer so the controller's response Send fails.
-		dummy := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		dummy := messaging.Msg{ID: sim.NewID(), Payload: memprotocol.WriteDoneRsp{},
 			Src:          topPort.AsRemote(),
 			Dst:          messaging.RemotePort("Agent"),
 			TrafficClass: "memprotocol.WriteDoneRsp"}

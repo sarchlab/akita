@@ -80,9 +80,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// subtask as a child of req_in so the pipeline latency is attributed
 		// rather than left as a gap between the buffer task and the post-lookup
 		// milestones.
-		recvTaskID := tasks.StartReqIn(m.comp, msg)
+		recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, msg)
 
-		pid := tasks.StartTask(m.comp, tasks.StartInfo{
+		pid := m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",
@@ -117,7 +117,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		// it is not absorbed by a same-tick MSHR/hit milestone emitted inside
 		// lookup. Re-emitted on lookup retries; the (Kind, What) dedup keeps the
 		// first.
-		tasks.AddMilestone(m.comp, tasks.Milestone{
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: item.RecvTaskID,
 			Kind:   tasks.MilestoneKindWork,
 			What:   m.comp.Name() + ".pipeline",
@@ -128,7 +128,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			next.BufferItems.Pop()
 			// The request has left the pipeline (it is now being looked up):
 			// close the pipeline subtask opened at admission.
-			tasks.EndTask(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
+			m.comp.TaskTracker().EndTask(item.PipelineTaskID)
 			madeProgress = true
 		} else {
 			break
@@ -214,7 +214,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 
 	m.topPort().Send(rspToTop)
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: req.RecvTaskID,
 		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
@@ -225,7 +225,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 	}
 
-	tasks.EndReqIn(m.comp, req.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(req.RecvTaskID)
 
 	return true
 }
@@ -264,17 +264,17 @@ func (m *tlbMiddleware) handleTranslationHit(
 	next := &m.comp.State
 	setVisit(&next.Sets[setID], wayID)
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: item.RecvTaskID,
 		Kind:   tasks.MilestoneKindData,
 		What:   m.comp.Name() + ".Sets",
 	})
 
-	tasks.AddTag(m.comp, tasks.Tag{
+	m.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: item.RecvTaskID,
 		What:   "hit",
 	})
-	tasks.EndReqIn(m.comp, item.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
 	return true
 }
@@ -287,7 +287,7 @@ func (m *tlbMiddleware) handleTranslationMiss(item pipelineTLBReqState) bool {
 		return false
 	}
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: item.RecvTaskID,
 		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".MSHR",
@@ -295,7 +295,7 @@ func (m *tlbMiddleware) handleTranslationMiss(item pipelineTLBReqState) bool {
 
 	fetched := m.fetchBottom(item)
 	if fetched {
-		tasks.AddTag(m.comp, tasks.Tag{
+		m.comp.TaskTracker().AddTag(tasks.Tag{
 			TaskID: item.RecvTaskID,
 			What:   "miss",
 		})
@@ -328,7 +328,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	}
 
 	m.topPort().Send(rsp)
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: item.RecvTaskID,
 		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
@@ -349,7 +349,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	}
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, item)
 
-	tasks.AddTag(m.comp, tasks.Tag{
+	m.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: item.RecvTaskID,
 		What:   "mshr-hit",
 	})
@@ -377,10 +377,10 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 		return false
 	}
 
-	sendTaskID := tasks.StartReqOut(m.comp, fetchBottom, item.RecvTaskID)
+	sendTaskID := m.comp.TaskTracker().StartReqOut(m.comp, fetchBottom, item.RecvTaskID)
 	m.bottomPort().Send(fetchBottom)
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: item.RecvTaskID,
 		Kind:   tasks.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
@@ -427,7 +427,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	// flight) is over for each req_in. network_busy is charged only later, when
 	// the response is actually sent upstream in respondMSHREntry.
 	for _, req := range next.MSHREntries[mshrIdx].Requests {
-		tasks.AddMilestone(m.comp, tasks.Milestone{
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: req.RecvTaskID,
 			Kind:   tasks.MilestoneKindTranslation,
 			What:   "translation",
@@ -455,7 +455,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tasks.EndReqOut(m.comp, sendTaskID)
+		m.comp.TaskTracker().EndReqOut(sendTaskID)
 	}
 
 	return true

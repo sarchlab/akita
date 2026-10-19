@@ -14,7 +14,7 @@
 //
 // # Middlewares handle events
 //
-// A middleware implements modeling.Middleware: Handle(e timing.Event) bool.
+// A middleware implements ticking.Middleware: Handle(e timing.Event) bool.
 // The component passes every event it receives to all of its middlewares in
 // field order. Every event a ticking component receives is an Event, so
 // most middlewares do their cycle of work without looking at the event.
