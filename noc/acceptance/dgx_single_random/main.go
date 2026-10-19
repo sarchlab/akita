@@ -4,12 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"net"
-	"net/http"
 
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
-	// Enable profiling
-	_ "net/http/pprof"
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/nvlink"
@@ -19,22 +15,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-func startProfilingServer() {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("Profiling server running on:",
-		listener.Addr().(*net.TCPAddr).Port)
-
-	panic(http.Serve(listener, nil))
-}
-
 func main() {
 	flag.Parse()
-
-	go startProfilingServer()
 
 	rand.Seed(1)
 

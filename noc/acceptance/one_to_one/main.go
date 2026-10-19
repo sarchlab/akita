@@ -64,10 +64,6 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		twowaybuffered.NewPort(4, 4),
 	}
 
-	s.RegisterResource(&networkTopology{
-		devices: [][]messaging.Port{agents[0].AgentPorts, agents[1].AgentPorts}, peers: netPorts,
-	})
-
 	for i, name := range []string{"EP1", "EP2"} {
 		epSpec := endpoint.DefaultSpec()
 		epSpec.Freq = freq

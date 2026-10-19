@@ -107,7 +107,9 @@ One topology resource per network fingerprints wiring, port/device binding order
 link-end settings, link parameters and computed routes for checkpoint compatibility.
 Type names are not part of this record. These fingerprints replace routing fields
 in internal NoC Specs; rebuild old checkpoints. Networks assembled directly without
-a connector must register their own topology record. Switch arbitration follows
+a connector must register their own topology record if they support checkpointing.
+The `one_to_one` acceptance program only exercises message delivery and does not
+support checkpointing, so it has no topology resource. Switch arbitration follows
 binding order. Runtime route changes require a future checkpointed-state design.
 Non-ideal transport and bandwidth-unit unification
 remain #502/#542 follow-ups; physical transport latency is distinct from switch

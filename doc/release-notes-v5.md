@@ -36,6 +36,9 @@ configuration fields. Progress-bar fields and mutex become private; use
 The JSON shape is preserved, start time is populated, reads are synchronized,
 and completing an already-removed bar is safe. Monitoring no longer registers
 HTTP pprof handlers on the default mux merely by being imported.
+The standalone DGX acceptance programs no longer start profiling HTTP servers.
+The `one_to_one` acceptance program drops its unused checkpoint topology helper;
+its message-delivery scenario remains unchanged.
 
 Custom setup routers, public cache/MSHR/LRU helpers, `mmuCache`/`TransLatency`,
 and link timing/bandwidth settings remain. MMU-cache correctness fixes and DRAM
