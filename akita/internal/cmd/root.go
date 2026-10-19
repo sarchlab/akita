@@ -54,7 +54,7 @@ func newRootCommand() *cobra.Command {
 		},
 	})
 
-	root.AddCommand(expCmd)
+	root.AddCommand(herdCmd)
 
 	return root
 }
