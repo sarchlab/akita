@@ -1,4 +1,4 @@
-package ticking
+package tickscheduler
 
 import (
 	"sync"
@@ -77,7 +77,7 @@ func NewSecondaryScheduler(
 // TickNow schedule a Tick event at the current time.
 func (t *Scheduler) TickNow() {
 	t.lock.Lock()
-	time := t.CurrentTime()
+	time := t.engine.CurrentTime()
 
 	if t.hasScheduledTick && t.nextTickTime >= time {
 		t.lock.Unlock()
@@ -99,7 +99,7 @@ func (t *Scheduler) TickNow() {
 // TickLater will schedule a tick event at the cycle after the now time.
 func (t *Scheduler) TickLater() {
 	t.lock.Lock()
-	time := t.freq.NextTick(t.CurrentTime())
+	time := t.freq.NextTick(t.engine.CurrentTime())
 
 	if t.hasScheduledTick && t.nextTickTime >= time {
 		t.lock.Unlock()
@@ -117,14 +117,6 @@ func (t *Scheduler) TickLater() {
 	t.engine.Schedule(tick)
 	t.lock.Unlock()
 }
-
-// CurrentTime returns the simulation's current time.
-func (t *Scheduler) CurrentTime() timing.VTimeInPicoSec {
-	return t.engine.CurrentTime()
-}
-
-// NewID allocates an ID, unique within the scheduler's simulation.
-func (t *Scheduler) NewID() uint64 { return t.simulation.NewID() }
 
 // Snapshot returns the scheduler's dedup guard: whether a tick is pending and
 // at what time. A component checkpoint saves it so the guard can be restored

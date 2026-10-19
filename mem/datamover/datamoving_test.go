@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDataMover(t *testing.T) {
 	var (
 		engine         timing.Engine
@@ -39,7 +38,6 @@ func TestDataMover(t *testing.T) {
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
 		memSpec.Width = 1
-		memSpec.CacheLineSize = 64
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
@@ -93,8 +91,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -128,8 +125,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -159,8 +155,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -190,8 +185,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -221,8 +215,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -247,8 +240,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		require.NotPanics(t, func() {
 			dataMover.Ports.Top.Deliver(req)
@@ -273,8 +265,7 @@ func TestDataMover(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: dataMover.Ports.Top.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		dataMover.Ports.Top.Deliver(req)
 

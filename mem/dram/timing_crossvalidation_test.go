@@ -197,8 +197,6 @@ func computeExpectedTimings(spec Spec) expectedTimings {
 // =====================================================================
 // Tier 1: Timing Formula Cross-Validation
 // =====================================================================
-//
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTimingCrossValidation(t *testing.T) {
 	// -----------------------------------------------------------------
 	// Tier 1 tests: verify generateTiming() matches independent formulas

@@ -72,10 +72,6 @@ type Middlewares struct {
 // write requests and checking the data read back.
 type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
-// A MemAccessAgent is a Component that can help testing the cache and the
-// memory controllers by generating a large number of read and write requests.
-type MemAccessAgent = Comp
-
 // ProgressTracker is the progress reporting contract used by the agent.
 // Implementations observe the run and are not checkpointed.
 type ProgressTracker interface {

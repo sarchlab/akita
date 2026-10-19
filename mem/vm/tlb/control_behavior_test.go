@@ -23,8 +23,6 @@ import (
 // forwards a request out the "Bottom" port; the request does not complete
 // until a matching vmprotocol.TranslationRsp is fed back on "Bottom". The Drain test
 // below drives real completion through that handshake.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTLBControlBehavior(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -67,18 +65,17 @@ func TestTLBControlBehavior(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          controlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: controlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -96,11 +93,11 @@ func TestTLBControlBehavior(t *testing.T) {
 			Valid: true,
 		}
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
-			ID:           sim.NewID(),
-			Src:          remotePort,
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        req.ID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   remotePort,
+			Dst:   bottomPort.AsRemote(),
+			RspTo: req.ID,
+		}
 
 		return rsp
 	}

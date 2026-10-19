@@ -17,12 +17,9 @@ type concurrentRecord struct {
 func TestConcurrentRecording(t *testing.T) {
 	for _, manualFlush := range []bool{false, true} {
 		t.Run(fmt.Sprintf("manual_flush=%t", manualFlush), func(t *testing.T) {
-			db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "records.sqlite3"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			recorder := NewDataRecorder(filepath.Join(t.TempDir(), "records.sqlite3")).(*sqliteWriter)
+			db := recorder.DB
 			t.Cleanup(func() { _ = db.Close() })
-			recorder := NewDataRecorderWithDB(db).(*sqliteWriter)
 			recorder.batchSize = 32
 			recorder.CreateTable("first", concurrentRecord{})
 			recorder.CreateTable("second", concurrentRecord{})
@@ -110,15 +107,12 @@ func assertConcurrentRecords(t *testing.T, db *sql.DB, expected int) {
 }
 
 func TestFlushRollsBackAndRetainsBatch(t *testing.T) {
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "rollback.sqlite3"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	recorder := NewDataRecorder(filepath.Join(t.TempDir(), "rollback.sqlite3")).(*sqliteWriter)
+	db := recorder.DB
 	t.Cleanup(func() { _ = db.Close() })
-	recorder := NewDataRecorderWithDB(db)
 	recorder.CreateTable("first", concurrentRecord{})
 	recorder.CreateTable("second", concurrentRecord{})
-	_, err = db.Exec(`CREATE TRIGGER reject_row BEFORE INSERT ON first
+	_, err := db.Exec(`CREATE TRIGGER reject_row BEFORE INSERT ON first
 		WHEN NEW.ID = 1 BEGIN SELECT RAISE(ABORT, 'test insert failure'); END`)
 	if err != nil {
 		t.Fatal(err)

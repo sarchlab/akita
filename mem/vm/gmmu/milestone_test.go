@@ -90,7 +90,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestGMMUMilestones(t *testing.T) {
 	const (
 		agentPort     = messaging.RemotePort("Agent")
@@ -160,8 +159,7 @@ func TestGMMUMilestones(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agentPort,
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
@@ -232,11 +230,11 @@ func TestGMMUMilestones(t *testing.T) {
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000},
 		},
-			ID:           sim.NewID(),
-			Src:          lowModulePort,
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        remoteReqID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   lowModulePort,
+			Dst:   bottomPort.AsRemote(),
+			RspTo: remoteReqID,
+		}
 
 		bottomPort.Deliver(rsp)
 
@@ -331,11 +329,11 @@ func TestGMMUMilestones(t *testing.T) {
 
 		// Deliver the remote response.
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
-			ID:           sim.NewID(),
-			Src:          lowModulePort,
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        downstream.ID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   lowModulePort,
+			Dst:   bottomPort.AsRemote(),
+			RspTo: downstream.ID,
+		}
 
 		bottomPort.Deliver(rsp)
 

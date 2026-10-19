@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTLB(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -77,8 +76,7 @@ func TestTLB(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		topPort.Deliver(req)
 
@@ -112,8 +110,7 @@ func TestTLB(t *testing.T) {
 				DeviceID: 1},
 				ID:  sim.NewID(),
 				Src: messaging.RemotePort("Agent"),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 		}
 
 		t.Run("should respond to top", func(t *testing.T) {
@@ -153,8 +150,7 @@ func TestTLB(t *testing.T) {
 				DeviceID: 1},
 				ID:  sim.NewID(),
 				Src: messaging.RemotePort("Agent"),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 		}
 
 		t.Run("should fetch from bottom and add entry to MSHR", func(t *testing.T) {
@@ -194,16 +190,14 @@ func TestTLB(t *testing.T) {
 				DeviceID: 1},
 				ID:  sim.NewID(),
 				Src: messaging.RemotePort("Agent"),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 
 			fetchBottom = messaging.Msg{Payload: vmprotocol.TranslationReq{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
 				ID: sim.NewID(),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 
 			page = vm.Page{
 				PID:   1,
@@ -214,11 +208,11 @@ func TestTLB(t *testing.T) {
 			rsp = messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: page,
 			},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          bottomPort.AsRemote(),
-				RspTo:        fetchBottom.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				Src:   messaging.RemotePort("Agent"),
+				Dst:   bottomPort.AsRemote(),
+				RspTo: fetchBottom.ID,
+			}
 		}
 
 		t.Run("should do nothing if no return", func(t *testing.T) {
@@ -323,10 +317,10 @@ func TestTLB(t *testing.T) {
 				Addresses: []uint64{0x1000},
 				PID:       1,
 			},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          controlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
 
 			controlPort.Deliver(invReq)
 
@@ -350,10 +344,10 @@ func TestTLB(t *testing.T) {
 			next.TLBState = tlbStateEnable
 
 			invReq := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          controlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
 
 			controlPort.Deliver(invReq)
 			require.True(t, tlbCtrlMW.handleIncomingCommands())
@@ -378,10 +372,10 @@ func TestTLB(t *testing.T) {
 			setVisit(&next.Sets[0], 1)
 
 			invReq := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 1},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          controlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
 
 			controlPort.Deliver(invReq)
 
@@ -407,10 +401,10 @@ func TestTLB(t *testing.T) {
 			setVisit(&next.Sets[0], 0)
 
 			resetReq := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          controlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
 
 			controlPort.Deliver(resetReq)
 
@@ -431,10 +425,10 @@ func TestTLB(t *testing.T) {
 			setup1(t)
 
 			restartReq := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-				ID:           sim.NewID(),
-				Src:          messaging.RemotePort("Agent"),
-				Dst:          controlPort.AsRemote(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
 
 			controlPort.Deliver(restartReq)
 
@@ -458,7 +452,7 @@ func TestTLB(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          controlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			controlPort.Deliver(pauseMsg)
 
@@ -479,7 +473,7 @@ func TestTLB(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          controlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			controlPort.Deliver(pause)
 
@@ -502,7 +496,7 @@ func TestTLB(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          controlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			controlPort.Deliver(enable)
 
@@ -522,7 +516,7 @@ func TestTLB(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          controlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			controlPort.Deliver(drainMsg)
 
@@ -540,7 +534,6 @@ func TestTLB(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTLBIntegration(t *testing.T) {
 	var (
 		engine     timing.Engine
@@ -594,11 +587,11 @@ func TestTLBIntegration(t *testing.T) {
 		lowModule.onDeliver = func(msg messaging.Msg) {
 			translationReq := msg
 			rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
-				ID:           sim.NewID(),
-				Src:          lowModule.port.AsRemote(),
-				Dst:          translationReq.Src,
-				RspTo:        translationReq.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				Src:   lowModule.port.AsRemote(),
+				Dst:   translationReq.Src,
+				RspTo: translationReq.ID,
+			}
 
 			lowModule.port.Send(rsp)
 		}
@@ -614,8 +607,7 @@ func TestTLBIntegration(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agent.port.AsRemote(),
 			Dst: tlbComp.Ports.Top.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		agent.port.Send(req)
 
@@ -636,8 +628,7 @@ func TestTLBIntegration(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agent.port.AsRemote(),
 			Dst: tlbComp.Ports.Top.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		agent.port.Send(req)
 
@@ -655,8 +646,7 @@ func TestTLBIntegration(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agent.port.AsRemote(),
 			Dst: tlbComp.Ports.Top.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		agent.port.Send(req2)
 

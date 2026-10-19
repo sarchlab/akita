@@ -1,9 +1,11 @@
 package sim
 
 import (
-	"context"
+	"database/sql"
 	"os"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -51,27 +53,33 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 	}
 }
 
+func openRecordingDB(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", sqlitepath.URI(path, "ro"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
 func readExecInfo(t *testing.T, dbFile string) map[string]string {
 	t.Helper()
-
-	reader := datarecording.NewReader(dbFile)
-	defer reader.Close()
-	reader.MapTable("exec_info", simulationInfo{})
-
-	results, _, err := reader.Query(
-		context.Background(), "exec_info", datarecording.QueryParams{})
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Property, Value FROM exec_info")
 	if err != nil {
-		t.Fatalf("query exec_info: %v", err)
+		t.Fatal(err)
 	}
-
+	defer rows.Close()
 	values := make(map[string]string)
-	for _, result := range results {
-		info, ok := result.(*simulationInfo)
-		if !ok {
-			t.Fatalf("unexpected result type %T", result)
+	for rows.Next() {
+		var property, value string
+		if err := rows.Scan(&property, &value); err != nil {
+			t.Fatal(err)
 		}
-		values[info.Property] = info.Value
+		values[property] = value
 	}
-
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return values
 }

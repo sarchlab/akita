@@ -32,7 +32,7 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
 	// Control port and is handled once the component settles.
-	if m.comp.State.ControlState != memcontrolprotocol.StateDraining {
+	if m.comp.State.ControlState != controlStateDraining {
 		madeProgress = m.handleIncoming() || madeProgress
 	}
 	return madeProgress
@@ -42,7 +42,7 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 // currently active.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
-	if state.ControlState != memcontrolprotocol.StateDraining {
+	if state.ControlState != controlStateDraining {
 		return false
 	}
 	if state.CurrentTransaction.Active {
@@ -55,7 +55,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
-	state.ControlState = memcontrolprotocol.StatePaused
+	state.ControlState = controlStatePaused
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	return true
@@ -91,7 +91,7 @@ func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = memcontrolprotocol.StatePaused
+	m.comp.State.ControlState = controlStatePaused
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
@@ -102,7 +102,7 @@ func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = memcontrolprotocol.StateEnabled
+	m.comp.State.ControlState = controlStateEnabled
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
@@ -111,7 +111,7 @@ func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 
 func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
-	state.ControlState = memcontrolprotocol.StateDraining
+	state.ControlState = controlStateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
 	m.ctrlPort().RetrieveIncoming()
@@ -134,7 +134,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	state.Buffer = bufferState{}
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
-	state.ControlState = memcontrolprotocol.StateEnabled
+	state.ControlState = controlStateEnabled
 
 	for {
 		if _, ok := m.topPort().RetrieveIncoming(); !ok {
@@ -202,11 +202,11 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	},
-		ID:           c.NewID(),
-		Src:          c.Ports.Control.AsRemote(),
-		Dst:          dst,
-		RspTo:        rspTo,
-		TrafficClass: "memcontrolprotocol.Rsp"}
+		ID:    c.NewID(),
+		Src:   c.Ports.Control.AsRemote(),
+		Dst:   dst,
+		RspTo: rspTo,
+	}
 
 	return rsp
 }

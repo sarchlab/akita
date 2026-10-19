@@ -73,11 +73,11 @@ separately defines the Daisen frontend job and NOC/MEM acceptance jobs.
 - **Node.js Version**: 18.20.7
 - **npm Version**: >=10.0.0
 - **Configuration**:
-  - `daisen/static/.nvmrc`: `18.20.7`
-  - `daisen/static/package.json`: `engines.node` is `18.20.7` and
+  - `daisen/internal/static/.nvmrc`: `18.20.7`
+  - `daisen/internal/static/package.json`: `engines.node` is `18.20.7` and
     `engines.npm` is `>=10.0.0`
   - `.github/workflows/akita_test.yml`: `node-version: 18.20.7` for the
-    `daisen/static` build job
+    `daisen/internal/static` build job
 
 ## Python Toolchain
 
@@ -103,9 +103,9 @@ grep -nE 'go-version|node-version' .github/workflows/akita_test.yml
 # Should show: go-version: 1.27.0 and the configured Node version
 
 # Node.js version lock and package engine requirements
-cat daisen/static/.nvmrc
-grep -nE '"engines"|"node"|"npm"' daisen/static/package.json
-# daisen/static/.nvmrc should contain 18.20.7; package.json should define
+cat daisen/internal/static/.nvmrc
+grep -nE '"engines"|"node"|"npm"' daisen/internal/static/package.json
+# daisen/internal/static/.nvmrc should contain 18.20.7; package.json should define
 # Node/npm engines.
 
 # Python workflow behavior
@@ -125,8 +125,8 @@ When updating to new versions, follow these steps:
 1. Update `go.mod` with the new Go language version and toolchain when applicable.
 2. Update all Go and Node version pins in `.github/workflows/akita_test.yml`.
 3. Update `run_before_merge.sh` if Go tool installation versions change.
-4. Update `daisen/static/.nvmrc` if the Node version changes.
-5. Update the `engines` fields in `daisen/static/package.json`.
+4. Update `daisen/internal/static/.nvmrc` if the Node version changes.
+5. Update the `engines` fields in `daisen/internal/static/package.json`.
 6. Add or update Python version pins only if the repository or workflow starts
    enforcing one.
 7. Run the relevant validation scope to verify compatibility: `./run_before_merge.sh` for the local Akita Go gate, plus separate frontend, acceptance, dependency-security, or downstream MGPUSim checks when those scopes are required.

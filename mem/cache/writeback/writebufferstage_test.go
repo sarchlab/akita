@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestWriteBufferStage(t *testing.T) {
 	var (
 		m          *pipelineMW
@@ -76,8 +75,8 @@ func TestWriteBufferStage(t *testing.T) {
 			setup1(t)
 
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memprotocol.ReadReq"}
+				ID: m.comp.NewID(),
+			}
 
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -113,8 +112,8 @@ func TestWriteBufferStage(t *testing.T) {
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memprotocol.ReadReq"}
+				ID: m.comp.NewID(),
+			}
 
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -140,8 +139,8 @@ func TestWriteBufferStage(t *testing.T) {
 			setup1(t)
 
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memprotocol.ReadReq"}
+				ID: m.comp.NewID(),
+			}
 
 			trans := transactionState{
 				EvictingAddr: 0x200,
@@ -188,12 +187,12 @@ func TestWriteBufferStage(t *testing.T) {
 			setup1(t)
 
 			evictWrite := messaging.Msg{Payload: memprotocol.WriteReq{},
-				ID:           9001,
-				TrafficClass: "memprotocol.WriteReq"}
+				ID: 9001,
+			}
 
 			read := messaging.Msg{Payload: memprotocol.ReadReq{},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memprotocol.ReadReq"}
+				ID: m.comp.NewID(),
+			}
 
 			trans := transactionState{
 				HasEvictionWriteReq:  true,
@@ -208,8 +207,8 @@ func TestWriteBufferStage(t *testing.T) {
 			next.InflightEvictionIndices = []int{0}
 
 			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-				RspTo:        9001,
-				TrafficClass: "memprotocol.WriteDoneRsp"}
+				RspTo: 9001,
+			}
 
 			bottomPort.Deliver(rsp)
 

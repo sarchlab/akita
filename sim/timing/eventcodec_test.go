@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/internal/idgen"
 )
 
 // valueEvent is a value-type event (like ticking.Event).
@@ -53,7 +55,7 @@ func TestEventRegistryUnknownType(t *testing.T) {
 // MakeEventBase round-trips without the caller registering EventBase: the timing
 // package registers its own built-in event type.
 func TestEventBaseRegisteredByDefault(t *testing.T) {
-	e := MakeEventBase((&IDGenerator{}).NewID(), 42, "h")
+	e := MakeEventBase((&idgen.IDGenerator{}).NewID(), 42, "h")
 	e.ID = 7
 
 	if err := eventCodec.CheckRoundTrip(e); err != nil {

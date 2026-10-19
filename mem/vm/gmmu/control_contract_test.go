@@ -3,7 +3,8 @@ package gmmu
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -14,7 +15,7 @@ import (
 // Invalidate and Flush respond as unsupported — the GMMU does not hold
 // a private cache of memory.
 func TestControlContract(t *testing.T) {
-	build := func() *memcontrolprotocol.Harness {
+	build := func() *memcontroltest.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -40,7 +41,7 @@ func TestControlContract(t *testing.T) {
 			panic(err)
 		}
 
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp: comp,
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
@@ -51,7 +52,7 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	memcontrolprotocol.RunContract(t, "gmmu", build, memcontrolprotocol.Universal())
+	memcontroltest.RunContract(t, "gmmu", build, memcontroltest.Universal())
 }
 
-var _ memcontrolprotocol.Controllable = (*Comp)(nil)
+var _ memcontroltest.Controllable = (*Comp)(nil)

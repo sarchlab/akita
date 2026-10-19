@@ -155,8 +155,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
 		Dst: res.LowModulePort,
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
 
@@ -223,11 +222,11 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          res.UpModulePort,
-		RspTo:        rsp.RspTo,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   res.UpModulePort,
+		RspTo: rsp.RspTo,
+	}
 
 	m.topPort().Send(rspToTop)
 

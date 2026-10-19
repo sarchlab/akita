@@ -1,8 +1,10 @@
-package memcontrolprotocol
+package memcontroltest
 
 import (
 	"fmt"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -68,17 +70,17 @@ const (
 //     port,
 //   - drives Tick until a ControlRsp comes back (or a tick budget is
 //     exhausted),
-//   - asserts the Rsp matches the expected protocol response for
+//   - asserts the memcontrolprotocol.Rsp matches the expected protocol response for
 //     (verb, support-state).
 //
 // The expected response per verb is:
 //
-//   - Verb supported and synchronous: Rsp arrives within maxTicks with
-//     Success=true and matching Command.
-//   - Verb supported and asynchronous: Rsp arrives within asyncMaxTicks
-//     with Success=true and matching Command.
-//   - Verb unsupported: Rsp arrives within maxTicks with Success=false
-//     and Error=ErrUnsupported.
+//   - Verb supported and synchronous: memcontrolprotocol.Rsp arrives within maxTicks with
+//     Success=true and matching memcontrolprotocol.Command.
+//   - Verb supported and asynchronous: memcontrolprotocol.Rsp arrives within asyncMaxTicks
+//     with Success=true and matching memcontrolprotocol.Command.
+//   - Verb unsupported: memcontrolprotocol.Rsp arrives within maxTicks with Success=false
+//     and Error=memcontrolprotocol.ErrUnsupported.
 //
 // State-side assertions (e.g. directory cleared after Reset, transactions
 // drained after Drain) live in per-component behavior tests, not here.
@@ -92,15 +94,16 @@ func RunContract(
 	t.Helper()
 
 	verbs := []struct {
-		cmd   Command
+		cmd   memcontrolprotocol.Command
 		label string
 	}{
-		{CmdPause, "Pause"},
-		{CmdDrain, "Drain"},
-		{CmdEnable, "Enable"},
-		{CmdReset, "Reset"},
-		{CmdInvalidate, "Invalidate"},
-		{CmdFlush, "Flush"},
+		{0, "InvalidZero"},
+		{memcontrolprotocol.CmdPause, "Pause"},
+		{memcontrolprotocol.CmdDrain, "Drain"},
+		{memcontrolprotocol.CmdEnable, "Enable"},
+		{memcontrolprotocol.CmdReset, "Reset"},
+		{memcontrolprotocol.CmdInvalidate, "Invalidate"},
+		{memcontrolprotocol.CmdFlush, "Flush"},
 	}
 
 	for _, v := range verbs {
@@ -119,7 +122,7 @@ func RunContract(
 	// Conditional verbs (Invalidate, Flush) are only legal once the
 	// component is paused or drained. When supported, issuing them from
 	// the freshly-built (Enabled) state must be rejected with
-	// ErrMustBePausedOrDrained rather than silently acted on.
+	// memcontrolprotocol.ErrMustBePausedOrDrained rather than silently acted on.
 	for _, v := range verbs {
 		if !matrix.Supports(v.cmd) || !isConditionalVerb(v.cmd) {
 			continue
@@ -156,8 +159,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/idempotent-pause", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, CmdPause)
-			driveExpectSuccess(t, h, CmdPause)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdPause)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdPause)
 		})
 	}
 
@@ -165,8 +168,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/idempotent-enable", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, CmdEnable)
-			driveExpectSuccess(t, h, CmdEnable)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdEnable)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdEnable)
 		})
 	}
 
@@ -174,8 +177,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/reset-from-paused", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, CmdPause)
-			driveExpectSuccess(t, h, CmdReset)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdPause)
+			driveExpectSuccess(t, h, memcontrolprotocol.CmdReset)
 			if h.IsQuiescent != nil && !h.IsQuiescent() {
 				t.Errorf("component not quiescent after Reset from Paused")
 			}
@@ -191,7 +194,7 @@ func teardown(h *Harness) {
 
 // driveExpectSuccess delivers one verb and asserts a Success ack returns
 // within the verb's tick budget.
-func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
+func driveExpectSuccess(t *testing.T, h *Harness, cmd memcontrolprotocol.Command) {
 	t.Helper()
 
 	req := newControlReq(h, cmd)
@@ -206,15 +209,15 @@ func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
 	if !ok {
 		t.Fatalf("no ack for %v", cmd)
 	}
-	if rsp.Payload.(Rsp).Command != cmd || !rsp.Payload.(Rsp).Success {
+	if rsp.Payload.(memcontrolprotocol.Rsp).Command != cmd || !rsp.Payload.(memcontrolprotocol.Rsp).Success {
 		t.Errorf("%v: got %+v, want Success ack", cmd, rsp)
 	}
 }
 
 // isConditionalVerb reports whether the verb requires the component to be
 // paused or drained before it is legal.
-func isConditionalVerb(cmd Command) bool {
-	return cmd == CmdInvalidate || cmd == CmdFlush
+func isConditionalVerb(cmd memcontrolprotocol.Command) bool {
+	return cmd == memcontrolprotocol.CmdInvalidate || cmd == memcontrolprotocol.CmdFlush
 }
 
 // pauseForConditionalVerb drives the component to a paused state so a
@@ -222,11 +225,15 @@ func isConditionalVerb(cmd Command) bool {
 func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	t.Helper()
 
-	req := newControlReq(h, CmdPause)
+	req := newControlReq(h, memcontrolprotocol.CmdPause)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
-	if !ok || rsp.Payload.(Rsp).Command != CmdPause || !rsp.Payload.(Rsp).Success {
+	if !ok {
+		t.Fatal("no response while pausing before conditional verb")
+	}
+	payload := rsp.Payload.(memcontrolprotocol.Rsp)
+	if payload.Command != memcontrolprotocol.CmdPause || !payload.Success {
 		t.Fatalf("could not pause before conditional verb; got %+v", rsp)
 	}
 }
@@ -236,7 +243,7 @@ func pauseForConditionalVerb(t *testing.T, h *Harness) {
 func checkConditionalIllegalState(
 	t *testing.T,
 	h *Harness,
-	cmd Command,
+	cmd memcontrolprotocol.Command,
 ) {
 	t.Helper()
 
@@ -248,16 +255,17 @@ func checkConditionalIllegalState(
 		t.Fatalf("no ControlRsp received for %v issued while Enabled", cmd)
 	}
 
-	if rsp.Payload.(Rsp).Command != cmd {
-		t.Errorf("Rsp.Command = %v, want %v", rsp.Payload.(Rsp).Command, cmd)
+	if rsp.Payload.(memcontrolprotocol.Rsp).Command != cmd {
+		t.Errorf("memcontrolprotocol.Rsp.Command = %v, want %v", rsp.Payload.(memcontrolprotocol.Rsp).Command, cmd)
 	}
 
-	if rsp.Payload.(Rsp).Success {
-		t.Errorf("Rsp.Success = true, want false for %v while Enabled", cmd)
+	if rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Errorf("memcontrolprotocol.Rsp.Success = true, want false for %v while Enabled", cmd)
 	}
 
-	if rsp.Payload.(Rsp).Error != ErrMustBePausedOrDrained {
-		t.Errorf("Rsp.Error = %q, want %q", rsp.Payload.(Rsp).Error, ErrMustBePausedOrDrained)
+	if rsp.Payload.(memcontrolprotocol.Rsp).Error != memcontrolprotocol.ErrMustBePausedOrDrained {
+		t.Errorf("memcontrolprotocol.Rsp.Error = %q, want %q",
+			rsp.Payload.(memcontrolprotocol.Rsp).Error, memcontrolprotocol.ErrMustBePausedOrDrained)
 	}
 }
 
@@ -265,7 +273,7 @@ func checkConditionalIllegalState(
 func checkVerb(
 	t *testing.T,
 	h *Harness,
-	cmd Command,
+	cmd memcontrolprotocol.Command,
 	supported bool,
 ) {
 	t.Helper()
@@ -290,49 +298,49 @@ func checkVerb(
 			"(supported=%v)", budget, cmd, supported)
 	}
 
-	if rsp.Payload.(Rsp).Command != cmd {
-		t.Errorf("Rsp.Command = %v, want %v", rsp.Payload.(Rsp).Command, cmd)
+	if rsp.Payload.(memcontrolprotocol.Rsp).Command != cmd {
+		t.Errorf("memcontrolprotocol.Rsp.Command = %v, want %v", rsp.Payload.(memcontrolprotocol.Rsp).Command, cmd)
 	}
 
 	if rsp.RspTo != req.ID {
-		t.Errorf("Rsp.RspTo = %d, want %d", rsp.RspTo, req.ID)
+		t.Errorf("memcontrolprotocol.Rsp.RspTo = %d, want %d", rsp.RspTo, req.ID)
 	}
 
 	if supported {
-		if !rsp.Payload.(Rsp).Success {
-			t.Errorf("Rsp.Success = false (Error=%q), want true",
-				rsp.Payload.(Rsp).Error)
+		if !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+			t.Errorf("memcontrolprotocol.Rsp.Success = false (Error=%q), want true",
+				rsp.Payload.(memcontrolprotocol.Rsp).Error)
 			return
 		}
 		// Drain promises quiescence on ack; Reset returns to a freshly-
 		// built (quiescent) state. Enforce it when the component supplies
 		// a probe.
 		if h.IsQuiescent != nil &&
-			(cmd == CmdDrain || cmd == CmdReset) &&
+			(cmd == memcontrolprotocol.CmdDrain || cmd == memcontrolprotocol.CmdReset) &&
 			!h.IsQuiescent() {
 			t.Errorf("%v acked but component is not quiescent", cmd)
 		}
 		return
 	}
 
-	if rsp.Payload.(Rsp).Success {
-		t.Errorf("Rsp.Success = true, want false for unsupported verb")
+	if rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Errorf("memcontrolprotocol.Rsp.Success = true, want false for unsupported verb")
 	}
 
-	if rsp.Payload.(Rsp).Error != ErrUnsupported {
-		t.Errorf("Rsp.Error = %q, want %q",
-			rsp.Payload.(Rsp).Error, ErrUnsupported)
+	if rsp.Payload.(memcontrolprotocol.Rsp).Error != memcontrolprotocol.ErrUnsupported {
+		t.Errorf("memcontrolprotocol.Rsp.Error = %q, want %q",
+			rsp.Payload.(memcontrolprotocol.Rsp).Error, memcontrolprotocol.ErrUnsupported)
 	}
 }
 
 // newControlReq builds a ControlReq addressed to the component's
 // Control port from a fixed pseudo-source "ContractAgent".
-func newControlReq(h *Harness, cmd Command) messaging.Msg {
-	req := messaging.Msg{Payload: Req{Command: cmd},
-		ID:           h.Sim.NewID(),
-		Src:          messaging.RemotePort("ContractAgent"),
-		Dst:          h.Ctrl.AsRemote(),
-		TrafficClass: "Req"}
+func newControlReq(h *Harness, cmd memcontrolprotocol.Command) messaging.Msg {
+	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+		ID:  h.Sim.NewID(),
+		Src: messaging.RemotePort("ContractAgent"),
+		Dst: h.Ctrl.AsRemote(),
+	}
 
 	return req
 }
@@ -346,23 +354,23 @@ func (h *Harness) tick() {
 
 // drainForRsp ticks the component up to budget times waiting for a
 // ControlRsp to appear on the Control port's outgoing queue. It returns
-// the first such Rsp and true, or a zero Rsp and false if the budget is
+// the first such memcontrolprotocol.Rsp and true, or a zero memcontrolprotocol.Rsp and false if the budget is
 // exhausted.
 func drainForRsp(h *Harness, budget int) (messaging.Msg, bool) {
 	for range budget {
 		if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
-			if _, ok := msg.Payload.(Rsp); ok {
+			if _, ok := msg.Payload.(memcontrolprotocol.Rsp); ok {
 				return msg, true
 			}
 		}
 		h.tick()
 	}
 
-	// One last sweep in case the final tick produced the Rsp.
+	// One last sweep in case the final tick produced the memcontrolprotocol.Rsp.
 	if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
-		if _, ok := msg.Payload.(Rsp); ok {
+		if _, ok := msg.Payload.(memcontrolprotocol.Rsp); ok {
 			return msg, true
 		}
 	}
-	return messaging.Msg{Payload: Rsp{}}, false
+	return messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, false
 }

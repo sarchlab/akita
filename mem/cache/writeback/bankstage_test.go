@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBankStage(t *testing.T) {
 	var (
 		m       *pipelineMW
@@ -27,9 +26,9 @@ func TestBankStage(t *testing.T) {
 		t.Helper()
 
 		dummy := messaging.Msg{ID: 1, Payload: memprotocol.DataReadyRsp{},
-			Src:          topPort.AsRemote(),
-			Dst:          messaging.RemotePort("SomeSrc"),
-			TrafficClass: "rsp"}
+			Src: topPort.AsRemote(),
+			Dst: messaging.RemotePort("SomeSrc"),
+		}
 
 		require.True(t, topPort.CanSend())
 		topPort.Send(dummy)
@@ -128,7 +127,7 @@ func TestBankStage(t *testing.T) {
 				Src: messaging.RemotePort("Agent"),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			trans := transactionState{
 				HasRead:            true,
@@ -197,7 +196,7 @@ func TestBankStage(t *testing.T) {
 				Src: messaging.RemotePort("Agent"),
 
 				TrafficBytes: len([]byte{5, 6, 7, 8}) + 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			trans := transactionState{
 				HasWrite:     true,

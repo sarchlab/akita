@@ -1,13 +1,14 @@
 package sim_test
 
 import (
-	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/sqlitepath"
+
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -52,13 +53,14 @@ func TestRecordingUsesExactPathAndPreservesExistingFile(t *testing.T) {
 	s.DataRecorder().CreateTable("literal_path", entry{})
 	s.DataRecorder().InsertData("literal_path", entry{Value: "round trip"})
 	s.Terminate()
-	reader := datarecording.NewReader(path)
-	reader.MapTable("literal_path", entry{})
-	rows, count, err := reader.Query(context.Background(), "literal_path", datarecording.QueryParams{})
+	db, err := sql.Open("sqlite", sqlitepath.URI(path, "ro"))
 	require.NoError(t, err)
+	var count int
+	var value string
+	require.NoError(t, db.QueryRow("SELECT COUNT(*), Value FROM literal_path").Scan(&count, &value))
 	require.Equal(t, 1, count)
-	require.Equal(t, "round trip", rows[0].(*entry).Value)
-	require.NoError(t, reader.Close())
+	require.Equal(t, "round trip", value)
+	require.NoError(t, db.Close())
 	require.FileExists(t, path)
 	files, err := os.ReadDir(filepath.Dir(path))
 	require.NoError(t, err)

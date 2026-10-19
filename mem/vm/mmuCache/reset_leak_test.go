@@ -18,7 +18,7 @@ import (
 // req_out tracing tasks open. The Bottom response is never delivered, so the
 // walk is genuinely in flight at Reset. It then issues a Reset and asserts both
 // tasks are ended — i.e. a mid-flight Reset leaves no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
@@ -64,8 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		ID:  sim.NewID(),
 		Src: messaging.RemotePort("Requester"),
 		Dst: topPort.AsRemote(),
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	topPort.Deliver(req)
 
@@ -96,10 +95,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the walk is in flight (bottom response deliberately withheld).
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          controlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: controlPort.AsRemote(),
+	}
 
 	controlPort.Deliver(reset)
 

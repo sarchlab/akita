@@ -3,6 +3,8 @@ package memcontrolprotocol_test
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	akitasim "github.com/sarchlab/akita/v5/sim"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -23,7 +25,7 @@ type fakeComp struct {
 	hooking.HookableBase
 
 	name       string
-	matrix     memcontrolprotocol.VerbSupport
+	matrix     memcontroltest.VerbSupport
 	asyncDelay int
 	control    messaging.Port
 
@@ -43,7 +45,7 @@ type pendingReq struct {
 	ticksLeft int
 }
 
-func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay int) *fakeComp {
+func newFakeComp(name string, matrix memcontroltest.VerbSupport, asyncDelay int) *fakeComp {
 	c := &fakeComp{sim: akitasim.MakeBuilder().Build(),
 		name:       name,
 		matrix:     matrix,
@@ -107,7 +109,7 @@ func (c *fakeComp) handleReq(port messaging.Port, req messaging.Msg) {
 		c.paused = false
 	}
 
-	if memcontrolprotocol.IsSyncVerb(request.Command) {
+	if memcontroltest.IsSyncVerb(request.Command) {
 		c.respond(port, req, true, "")
 		return
 	}
@@ -144,11 +146,11 @@ func (c *fakeComp) makeRsp(
 		Success: success,
 		Error:   errStr,
 	},
-		ID:           c.sim.NewID(),
-		Src:          port.AsRemote(),
-		Dst:          dst,
-		RspTo:        rspTo,
-		TrafficClass: "memcontrolprotocol.Rsp"}
+		ID:    c.sim.NewID(),
+		Src:   port.AsRemote(),
+		Dst:   dst,
+		RspTo: rspTo,
+	}
 
 	return rsp
 }
@@ -169,10 +171,10 @@ func (c *noopConn) NotifySend(_ messaging.Port)      {}
 
 // buildFake produces a BuildFunc that constructs a fresh fakeComp for
 // each verb subtest.
-func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrolprotocol.BuildFunc {
-	return func() *memcontrolprotocol.Harness {
+func buildFake(matrix memcontroltest.VerbSupport, asyncDelay int) memcontroltest.BuildFunc {
+	return func() *memcontroltest.Harness {
 		c := newFakeComp("Fake", matrix, asyncDelay)
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp:        c,
 			Sim:         c.sim,
 			Ctrl:        c.control,
@@ -182,31 +184,31 @@ func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrol
 }
 
 func TestRunContract_AllSupported(t *testing.T) {
-	matrix := memcontrolprotocol.CacheLike()
-	memcontrolprotocol.RunContract(t, "all-supported", buildFake(matrix, 1), matrix)
+	matrix := memcontroltest.CacheLike()
+	memcontroltest.RunContract(t, "all-supported", buildFake(matrix, 1), matrix)
 }
 
 func TestRunContract_OnlyUniversal(t *testing.T) {
-	matrix := memcontrolprotocol.Universal()
-	memcontrolprotocol.RunContract(t, "universal-only", buildFake(matrix, 1), matrix)
+	matrix := memcontroltest.Universal()
+	memcontroltest.RunContract(t, "universal-only", buildFake(matrix, 1), matrix)
 }
 
 func TestRunContract_AsyncBudget(t *testing.T) {
 	// Async verbs should be allowed many ticks, but the budget is
 	// finite. A delay just under asyncMaxTicks must still pass.
-	matrix := memcontrolprotocol.CacheLike()
+	matrix := memcontroltest.CacheLike()
 	// 100 < asyncMaxTicks (4096). Comfortably within budget but well
 	// past the sync budget of 64.
-	memcontrolprotocol.RunContract(t, "slow-async", buildFake(matrix, 100), matrix)
+	memcontroltest.RunContract(t, "slow-async", buildFake(matrix, 100), matrix)
 }
 
 func TestRunContract_NothingSupported(t *testing.T) {
-	matrix := memcontrolprotocol.VerbSupport{}
-	memcontrolprotocol.RunContract(t, "nothing-supported", buildFake(matrix, 1), matrix)
+	matrix := memcontroltest.VerbSupport{}
+	memcontroltest.RunContract(t, "nothing-supported", buildFake(matrix, 1), matrix)
 }
 
 func TestVerbSupport_Supports(t *testing.T) {
-	v := memcontrolprotocol.VerbSupport{Pause: true, Drain: true, Enable: true, Reset: true}
+	v := memcontroltest.VerbSupport{Pause: true, Drain: true, Enable: true, Reset: true}
 	cases := []struct {
 		cmd  memcontrolprotocol.Command
 		want bool
@@ -238,26 +240,8 @@ func TestIsSyncVerb(t *testing.T) {
 		{memcontrolprotocol.CmdFlush, false},
 	}
 	for _, tc := range cases {
-		if got := memcontrolprotocol.IsSyncVerb(tc.cmd); got != tc.sync {
+		if got := memcontroltest.IsSyncVerb(tc.cmd); got != tc.sync {
 			t.Errorf("IsSyncVerb(%v) = %v, want %v", tc.cmd, got, tc.sync)
-		}
-	}
-}
-
-func TestState_String(t *testing.T) {
-	cases := []struct {
-		s    memcontrolprotocol.State
-		want string
-	}{
-		{memcontrolprotocol.StateEnabled, "enabled"},
-		{memcontrolprotocol.StatePausing, "pausing"},
-		{memcontrolprotocol.StatePaused, "paused"},
-		{memcontrolprotocol.StateDraining, "draining"},
-		{memcontrolprotocol.StateFlushing, "flushing"},
-	}
-	for _, tc := range cases {
-		if got := tc.s.String(); got != tc.want {
-			t.Errorf("State(%d).String() = %q, want %q", tc.s, got, tc.want)
 		}
 	}
 }

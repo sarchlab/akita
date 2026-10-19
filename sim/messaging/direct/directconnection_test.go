@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 
@@ -26,7 +28,6 @@ func newTestMsg(sim timing.Simulation) messaging.Msg {
 	return messaging.Msg{ID: sim.NewID(), Payload: testMsg{}}
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDirectConnection(t *testing.T) {
 	var (
 		mockCtrl   *gomock.Controller
@@ -121,7 +122,7 @@ func TestDirectConnection(t *testing.T) {
 // agent is a test double that sends its messages out of OutPort and records
 // what it receives, ticking while it makes progress.
 type agent struct {
-	*ticking.Scheduler
+	*tickscheduler.Scheduler
 	hooking.HookableBase
 
 	name    string
@@ -133,7 +134,7 @@ type agent struct {
 
 func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort messaging.Port) *agent {
 	a := &agent{
-		Scheduler: ticking.NewScheduler(name, sim, freq),
+		Scheduler: tickscheduler.NewScheduler(name, sim, freq),
 		name:      name,
 		OutPort:   outPort,
 	}
@@ -167,7 +168,6 @@ func (a *agent) Handle(timing.Event) {
 	}
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDirectConnectionIntegration(t *testing.T) {
 	var (
 		engine          timing.Engine

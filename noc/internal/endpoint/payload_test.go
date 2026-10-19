@@ -17,8 +17,8 @@ import (
 
 func payloadMessage() messaging.Msg {
 	return messaging.Msg{ID: 17, Src: "Sender.Port", Dst: "Receiver.Port", RspTo: 9,
-		TrafficClass: "write", TrafficBytes: 96,
-		Payload: memprotocol.WriteReq{Address: 128, Data: []byte("unique application payload")}}
+		TrafficBytes: 96,
+		Payload:      memprotocol.WriteReq{Address: 128, Data: []byte("unique application payload")}}
 }
 
 func payloadFlits(msg messaging.Msg) []messaging.Msg {

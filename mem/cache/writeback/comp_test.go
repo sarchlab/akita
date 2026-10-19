@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestStateAllocTransaction(t *testing.T) {
 	var st *state
 

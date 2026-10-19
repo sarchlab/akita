@@ -4,9 +4,9 @@ import (
 	"flag"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/datamover"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
@@ -113,7 +113,7 @@ type migResources struct {
 	Pages *vm.PageTable
 	// Agents is used only to detect when the workload is finished so the
 	// controller can stop ticking and let the simulation terminate.
-	Agents []*memaccessagent.MemAccessAgent
+	Agents []*memaccessagent.Comp
 	// MoverDst is the data mover's Top port.
 	MoverDst messaging.RemotePort
 
@@ -370,10 +370,10 @@ func (m *migMW) runControlPhase(
 		}
 
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           m.ctrl.NewID(),
-			Src:          m.ctrlPort().AsRemote(),
-			Dst:          targets[state.SendCursor],
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  m.ctrl.NewID(),
+			Src: m.ctrlPort().AsRemote(),
+			Dst: targets[state.SendCursor],
+		}
 
 		// Open a req_out task under the current phase so the receiver's req_in
 		// task can be linked by the observer; closed in processAcks.
@@ -445,10 +445,10 @@ func (m *migMW) tickCopying() bool {
 		SrcSide:    "inside",
 		DstSide:    "outside",
 	},
-		ID:           m.ctrl.NewID(),
-		Src:          m.moverPort().AsRemote(),
-		Dst:          m.res.MoverDst,
-		TrafficClass: "datamoverprotocol.DataMoveReq"}
+		ID:  m.ctrl.NewID(),
+		Src: m.moverPort().AsRemote(),
+		Dst: m.res.MoverDst,
+	}
 
 	// Open a req_out task under the copy phase so the data mover's req_in task
 	// has a parent; closed in processMoveRsp.

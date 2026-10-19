@@ -2,6 +2,10 @@ version: "2"
 
 linters:
   default: all
+  exclusions:
+    rules:
+      - path: _test\.go$
+        linters: [funlen, gocognit, gocyclo]
   settings:
     staticcheck:
       checks:

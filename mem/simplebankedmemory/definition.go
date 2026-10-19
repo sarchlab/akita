@@ -1,7 +1,6 @@
 package simplebankedmemory
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -15,8 +14,6 @@ func DefaultSpec() Spec {
 		BankPipelineDepth:              1,
 		StageLatency:                   10,
 		PostPipelineBufSize:            1,
-		Capacity:                       4 * mem.GB,
-		BankSelectorKind:               "interleaved",
 		BankSelectorLog2InterleaveSize: 6,
 	}
 }

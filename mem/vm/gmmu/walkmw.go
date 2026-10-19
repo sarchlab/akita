@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -33,14 +32,14 @@ func (m *walkMW) bottomPort() messaging.Port {
 // Handle runs the walk stages. Paused GMMUs make no progress; draining
 // GMMUs continue page-table walks but accept no new requests.
 func (m *walkMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
-	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
+	if m.comp.State.ControlState == controlStateEnabled {
 		madeProgress = m.parseFromTop() || madeProgress
 	}
 
@@ -189,8 +188,7 @@ func (m *walkMW) processRemoteMemReq(
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
 		Dst: spec.Bottom,
-
-		TrafficClass: "vmprotocol.TranslationReq"}
+	}
 
 	// Open the downstream req_out as a child task of the original req_in so the
 	// remote walk shows up as a proper subtask; it is finalized in
@@ -243,11 +241,11 @@ func (m *walkMW) doPageWalkHit(
 	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	},
-		ID:           m.comp.NewID(),
-		Src:          m.topPort().AsRemote(),
-		Dst:          walking.ReqSrc,
-		RspTo:        walking.ReqID,
-		TrafficClass: "vmprotocol.TranslationRsp"}
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   walking.ReqSrc,
+		RspTo: walking.ReqID,
+	}
 
 	m.topPort().Send(rsp)
 

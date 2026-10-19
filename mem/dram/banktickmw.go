@@ -1,7 +1,6 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -22,7 +21,7 @@ type bankTickMW struct {
 // draining DRAM continues so the drain can converge.
 func (m *bankTickMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
-	if next.ControlState == memcontrolprotocol.StatePaused {
+	if next.ControlState == controlStatePaused {
 		return false
 	}
 	spec := m.comp.Spec

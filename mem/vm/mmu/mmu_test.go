@@ -39,7 +39,6 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMU(t *testing.T) {
 	var (
 		engine           timing.Engine
@@ -95,8 +94,7 @@ func TestMMU(t *testing.T) {
 				ID:  sim.NewID(),
 				Src: messaging.RemotePort("Agent.Top"),
 				Dst: topPort.AsRemote(),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 
 			topPort.Deliver(translationReq)
 
@@ -198,9 +196,9 @@ func TestMMU(t *testing.T) {
 			pageTable.Insert(page)
 
 			dummy := messaging.Msg{ID: sim.NewID(), Payload: vmprotocol.TranslationRsp{},
-				Src:          topPort.AsRemote(),
-				Dst:          messaging.RemotePort("Agent.Top"),
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				Src: topPort.AsRemote(),
+				Dst: messaging.RemotePort("Agent.Top"),
+			}
 
 			topPort.Send(dummy)
 
@@ -225,7 +223,6 @@ func TestMMU(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUIntegration(t *testing.T) {
 	var (
 		engine    timing.Engine
@@ -283,8 +280,7 @@ func TestMMUIntegration(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agentPort.AsRemote(),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		topPort.Deliver(req)
 

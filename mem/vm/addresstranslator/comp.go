@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -108,11 +107,11 @@ type reqToBottomState struct {
 
 // state contains mutable runtime data for the AddressTranslator.
 type state struct {
-	ControlState        memcontrolprotocol.State `json:"control_state"`
-	CurrentCmdID        uint64                   `json:"current_cmd_id"`
-	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
-	Transactions        []transactionState       `json:"transactions"`
-	InflightReqToBottom []reqToBottomState       `json:"inflight_req_to_bottom"`
+	ControlState        controlState         `json:"control_state"`
+	CurrentCmdID        uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc       messaging.RemotePort `json:"current_cmd_src"`
+	Transactions        []transactionState   `json:"transactions"`
+	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
 }
 
 // Helper functions
@@ -174,7 +173,7 @@ func createTranslatedReq(
 			Dst: memProviderMapper.Find(addr),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return clone
 	case "memprotocol.WriteReq":
@@ -190,7 +189,7 @@ func createTranslatedReq(
 			Dst: memProviderMapper.Find(addr),
 
 			TrafficBytes: len(reqState.Data) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		return clone
 	default:

@@ -1,5 +1,49 @@
 # V5 release notes
 
+## CLI shell and retired legacy implementations
+
+The `akita` executable, installation path, and help remain available.
+`akita component --create NAME` and `akita check PATH` now report that their
+features are unavailable and exit with status 1, without creating or modifying
+files or validating components. Their obsolete implementations and templates
+are removed, and `akita/cmd` moves to `akita/internal/cmd`.
+
+These deprecated command spellings preserve recognition only. A replacement
+CLI and its command migration policy are planned for [V5.1 (#523)](https://github.com/sarchlab/akita/issues/523).
+Use the component tutorials, `modelingtest` checks, and the `inspect` Go package
+in the meantime.
+
+## Public-surface cleanup
+
+`Msg.TrafficClass`, `simplebankedmemory.Spec.Capacity`/`BankSelectorKind`,
+`idealmemcontroller.Spec.CacheLineSize`, and
+`networkconnector.LinkEndSwitchParameter.PortName` are removed. Size the backing
+`Storage` explicitly. The generic `DataReader` API, `NewDataRecorderWithDB`, and
+the writer's `ListTables` are removed; use SQLite directly for custom analysis.
+The unused `mem.AddressConverter` interface is removed; the concrete
+`mem.InterleavingConverter` and `mem.ConvertAddress` helper remain available.
+
+The standalone ticking scheduler, ID generator, source archive helpers, Daisen
+server library/assets, monitoring assets, and acceptance/test helpers are now
+internal. The Daisen command and component-level scheduling remain supported.
+Tick event implementation paths change; rebuild checkpoints from older builds.
+
+`memcontrolprotocol.State` and its constants are removed: components define
+private execution states. Zero is now an invalid `Command`, rejected as
+unsupported. DRAM's control-state migration preserves its behavior and all its
+configuration fields. Progress-bar fields and mutex become private; use
+`Snapshot()` for read access and the existing update methods for counters.
+The JSON shape is preserved, start time is populated, reads are synchronized,
+and completing an already-removed bar is safe. Monitoring no longer registers
+HTTP pprof handlers on the default mux merely by being imported.
+The standalone DGX acceptance programs no longer start profiling HTTP servers.
+The `one_to_one` acceptance program drops its unused checkpoint topology helper;
+its message-delivery scenario remains unchanged.
+
+Custom setup routers, public cache/MSHR/LRU helpers, `mmuCache`/`TransLatency`,
+and link timing/bandwidth settings remain. MMU-cache correctness fixes and DRAM
+configuration work are deferred; non-ideal links remain #502/#542 work.
+
 ## Engine pause API
 
 `timing.Engine`, `SerialEngine`, and `ParallelEngine` remove `Pause` and
@@ -225,15 +269,15 @@ implementations; the old names are removed.
 - Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
 - Concrete `*vm.PageTable` exposes `Log2PageSize()` instead of
   `GetLog2PageSize()`; both MMU and GMMU validate it.
-- `monitoring/static.GetAssets()` and `daisen/static.GetAssets()` → `Assets()`.
+- `monitoring/internal/static.GetAssets()` and `daisen/internal/static.GetAssets()` → `Assets()`.
 - `mshr.Entry.GetPID()` / `GetAddress()` →
   `Matches(pid vm.PID, addr uint64) bool`; cache and TLB entries compare both.
 - `memprotocol.AccessReq` and its accessor methods are removed. Switch on
   `ReadReq`/`WriteReq` and use their unchanged `Address` and `PID` fields.
 
 Simulation behavior and the event field keys `time` and `handler_id` are
-unchanged. Tick checkpoint type tags now use `ticking.Event`, derived from the
-Go type. The component checkpoint guard is named `pending_event_guard` instead
+unchanged. Tick checkpoint type tags now use `tickscheduler.Event`, derived from the
+internal Go type; `ticking.Event` remains a public alias. The component checkpoint guard is named `pending_event_guard` instead
 of `scheduler`, with `scheduled` and `at` fields. Saved checkpoints from before
 this cleanup are not supported; no legacy type-tag alias or schema migration
 is provided.

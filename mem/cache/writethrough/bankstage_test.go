@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestBankstage(t *testing.T) {
 	var (
 		storage *mem.Storage
@@ -123,7 +122,6 @@ func TestBankstage(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			// Transaction (index 0)
@@ -181,7 +179,6 @@ func TestBankstage(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
-				TrafficClass: "req",
 			}
 
 			writeData := []byte{
@@ -320,7 +317,6 @@ func TestBankstage(t *testing.T) {
 				coalescedWriteMeta = messaging.Msg{
 					ID:           c.comp.NewID(),
 					TrafficBytes: 4 + 12,
-					TrafficClass: "req",
 				}
 				next.Transactions = append(next.Transactions,
 					transactionState{

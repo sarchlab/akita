@@ -194,7 +194,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 
 	memComp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(sim).
-		WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+		WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 		Build("Mem")
 	memCompPorts := makePorts("Mem", 32, 16)
 	memComp.BindPort("Top", memCompPorts.Top)
@@ -222,7 +222,7 @@ func makeReadReq(ids interface{ NewID() uint64 }, src, dst messaging.RemotePort,
 		Dst: dst,
 
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	return r
 }
@@ -245,7 +245,6 @@ func collectLatency(
 	return latency
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSimpleBankedMemory(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -307,7 +306,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		agent.send(t, read)
 
@@ -341,7 +340,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: len(newData) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        addr,
@@ -351,7 +350,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		agent.send(t, write)
 		agent.send(t, read)
@@ -385,7 +384,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 
 		memComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+			WithResources(Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			Build("MemGlobal")
 		memCompPorts := makePorts("MemGlobal", 4, 16)
 		memComp.BindPort("Top", memCompPorts.Top)
@@ -410,7 +409,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: len(writeData) + 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		// Read the same global address back.
 		read := messaging.Msg{Payload: memprotocol.ReadReq{
@@ -421,7 +420,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		agent.send(t, write)
 		agent.send(t, read)

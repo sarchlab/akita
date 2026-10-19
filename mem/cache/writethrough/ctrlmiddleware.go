@@ -330,11 +330,11 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	},
-		ID:           c.NewID(),
-		Src:          c.Ports.Control.AsRemote(),
-		Dst:          dst,
-		RspTo:        rspTo,
-		TrafficClass: "memcontrolprotocol.Rsp"}
+		ID:    c.NewID(),
+		Src:   c.Ports.Control.AsRemote(),
+		Dst:   dst,
+		RspTo: rspTo,
+	}
 
 	return rsp
 }

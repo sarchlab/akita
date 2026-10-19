@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -113,7 +112,7 @@ type dataMoverTransactionState struct {
 
 // state contains mutable runtime data for the data mover.
 type state struct {
-	ControlState       memcontrolprotocol.State  `json:"control_state"`
+	ControlState       controlState              `json:"control_state"`
 	CurrentCmdID       uint64                    `json:"current_cmd_id"`
 	CurrentCmdSrc      messaging.RemotePort      `json:"current_cmd_src"`
 	CurrentTransaction dataMoverTransactionState `json:"current_transaction"`

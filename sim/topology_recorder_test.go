@@ -1,7 +1,6 @@
 package sim
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -150,60 +149,46 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 	}
 }
 
-func readComponentSpecs(
-	t *testing.T,
-	dbFile string,
-) map[string]componentSpecEntry {
+func readComponentSpecs(t *testing.T, dbFile string) map[string]componentSpecEntry {
 	t.Helper()
-
-	reader := datarecording.NewReader(dbFile)
-	defer reader.Close()
-	reader.MapTable(componentSpecTableName, componentSpecEntry{})
-
-	results, _, err := reader.Query(
-		context.Background(), componentSpecTableName, datarecording.QueryParams{})
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Name, Type, Spec FROM component_spec")
 	if err != nil {
-		t.Fatalf("query component_spec: %v", err)
+		t.Fatal(err)
 	}
-
+	defer rows.Close()
 	specs := make(map[string]componentSpecEntry)
-	for _, result := range results {
-		entry, ok := result.(*componentSpecEntry)
-		if !ok {
-			t.Fatalf("unexpected result type %T", result)
+	for rows.Next() {
+		var entry componentSpecEntry
+		if err := rows.Scan(&entry.Name, &entry.Type, &entry.Spec); err != nil {
+			t.Fatal(err)
 		}
-		specs[entry.Name] = *entry
+		specs[entry.Name] = entry
 	}
-
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return specs
 }
 
-func readPorts(
-	t *testing.T,
-	dbFile string,
-) []portEntry {
+func readPorts(t *testing.T, dbFile string) []portEntry {
 	t.Helper()
-
-	reader := datarecording.NewReader(dbFile)
-	defer reader.Close()
-	reader.MapTable(portTableName, portEntry{})
-
-	results, _, err := reader.Query(
-		context.Background(), portTableName, datarecording.QueryParams{})
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Port, Component, Connection FROM port")
 	if err != nil {
-		t.Fatalf("query port: %v", err)
+		t.Fatal(err)
 	}
-
-	rows := make([]portEntry, 0, len(results))
-	for _, result := range results {
-		entry, ok := result.(*portEntry)
-		if !ok {
-			t.Fatalf("unexpected result type %T", result)
+	defer rows.Close()
+	var entries []portEntry
+	for rows.Next() {
+		var entry portEntry
+		if err := rows.Scan(&entry.Port, &entry.Component, &entry.Connection); err != nil {
+			t.Fatal(err)
 		}
-		rows = append(rows, *entry)
+		entries = append(entries, entry)
 	}
-
-	return rows
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return entries
 }
 
 func (o *portOwner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }

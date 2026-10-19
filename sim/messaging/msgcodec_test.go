@@ -19,7 +19,6 @@ func TestMsgRegistryRoundTrip(t *testing.T) {
 	msg.ID = 7
 	msg.Src = "A"
 	msg.Dst = "B"
-	msg.TrafficClass = "test"
 
 	if err := roundTripMsg(msg); err != nil {
 		t.Fatalf("CheckRoundTrip: %v", err)

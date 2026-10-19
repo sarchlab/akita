@@ -11,7 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestConnector(t *testing.T) {
 	t.Run("should establish route in a simple network", func(t *testing.T) {
 		sim := akitasim.MakeBuilder().Build()

@@ -56,7 +56,6 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestAddressTranslator(t *testing.T) {
 	var (
 		engine          timing.Engine
@@ -133,7 +132,7 @@ func TestAddressTranslator(t *testing.T) {
 				Dst: topPort.AsRemote(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 		}
 
 		t.Run("should do nothing if there is no request", func(t *testing.T) {
@@ -194,16 +193,14 @@ func TestAddressTranslator(t *testing.T) {
 				VAddr:    0x100,
 				DeviceID: 1},
 				ID: sim.NewID(),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 
 			transReq2 = messaging.Msg{Payload: vmprotocol.TranslationReq{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
 				ID: sim.NewID(),
-
-				TrafficClass: "vmprotocol.TranslationReq"}
+			}
 
 			translator.State = state{
 				Transactions: []transactionState{
@@ -231,7 +228,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
@@ -240,9 +237,9 @@ func TestAddressTranslator(t *testing.T) {
 					PAddr: 0x20000,
 				},
 			},
-				ID:           sim.NewID(),
-				RspTo:        transReq1.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				RspTo: transReq1.ID,
+			}
 
 			translator.State = state{
 				Transactions: []transactionState{
@@ -276,7 +273,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
@@ -285,9 +282,9 @@ func TestAddressTranslator(t *testing.T) {
 					PAddr: 0x20000,
 				},
 			},
-				ID:           sim.NewID(),
-				RspTo:        transReq1.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				RspTo: transReq1.ID,
+			}
 
 			translator.State = state{
 				Transactions: []transactionState{
@@ -335,7 +332,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID: sim.NewID(),
 
 				TrafficBytes: len(data) + 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
@@ -344,9 +341,9 @@ func TestAddressTranslator(t *testing.T) {
 					PAddr: 0x20000,
 				},
 			},
-				ID:           sim.NewID(),
-				RspTo:        transReq1.ID,
-				TrafficClass: "vmprotocol.TranslationRsp"}
+				ID:    sim.NewID(),
+				RspTo: transReq1.ID,
+			}
 
 			translator.State = state{
 				Transactions: []transactionState{
@@ -399,7 +396,7 @@ func TestAddressTranslator(t *testing.T) {
 				Dst: topPort.AsRemote(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			readToBottom = messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x20040,
@@ -409,7 +406,7 @@ func TestAddressTranslator(t *testing.T) {
 				Dst: messaging.RemotePort("MemPort"),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			writeFromTop = messaging.Msg{Payload: memprotocol.WriteReq{
 				Address: 0x10040},
@@ -418,7 +415,7 @@ func TestAddressTranslator(t *testing.T) {
 				Dst: topPort.AsRemote(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			writeToBottom = messaging.Msg{Payload: memprotocol.WriteReq{
 				Address: 0x10040},
@@ -427,7 +424,7 @@ func TestAddressTranslator(t *testing.T) {
 				Dst: messaging.RemotePort("MemPort"),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			translator.State = state{
 				InflightReqToBottom: []reqToBottomState{
@@ -471,7 +468,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID:           sim.NewID(),
 				RspTo:        readToBottom.ID,
 				TrafficBytes: 4,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+			}
 
 			bottomPort.Deliver(dataReady)
 
@@ -496,7 +493,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID:           sim.NewID(),
 				RspTo:        writeToBottom.ID,
 				TrafficBytes: 4,
-				TrafficClass: "memprotocol.WriteDoneRsp"}
+			}
 
 			bottomPort.Deliver(done)
 
@@ -520,7 +517,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID:           sim.NewID(),
 				RspTo:        readToBottom.ID,
 				TrafficBytes: 4,
-				TrafficClass: "memprotocol.DataReadyRsp"}
+			}
 
 			// Fill the top port's outgoing buffer so Send fails.
 			fillOutgoing(t, topPort, topBufSize)
@@ -562,7 +559,7 @@ func TestAddressTranslator(t *testing.T) {
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			readToBottom = messaging.Msg{Payload: memprotocol.ReadReq{
 				Address:        0x20040,
@@ -570,21 +567,21 @@ func TestAddressTranslator(t *testing.T) {
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			writeFromTop = messaging.Msg{Payload: memprotocol.WriteReq{
 				Address: 0x10040},
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			writeToBottom = messaging.Msg{Payload: memprotocol.WriteReq{
 				Address: 0x10040},
 				ID: sim.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			flushReq = messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdFlush,
@@ -593,7 +590,7 @@ func TestAddressTranslator(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          ctrlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			restartReq = messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
@@ -602,7 +599,7 @@ func TestAddressTranslator(t *testing.T) {
 				Src:          messaging.RemotePort("Agent"),
 				Dst:          ctrlPort.AsRemote(),
 				TrafficBytes: 4,
-				TrafficClass: "memcontrolprotocol.Req"}
+			}
 
 			nextState := &translator.State
 			nextState.InflightReqToBottom = []reqToBottomState{
@@ -659,7 +656,7 @@ func TestAddressTranslator(t *testing.T) {
 			rsp := rspMsg
 			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 			updatedState := &translator.State
-			require.Equal(t, memcontrolprotocol.StateEnabled, updatedState.ControlState)
+			require.Equal(t, controlStateEnabled, updatedState.ControlState)
 			require.Empty(t, updatedState.InflightReqToBottom)
 		})
 	})
@@ -673,10 +670,10 @@ func fillOutgoing(t *testing.T, p messaging.Port, n int) {
 
 	for i := 0; i < n; i++ {
 		dummy := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-			ID:           p.Owner().(interface{ NewID() uint64 }).NewID(),
-			Src:          p.AsRemote(),
-			Dst:          messaging.RemotePort("Dummy"),
-			TrafficClass: "memprotocol.WriteDoneRsp"}
+			ID:  p.Owner().(interface{ NewID() uint64 }).NewID(),
+			Src: p.AsRemote(),
+			Dst: messaging.RemotePort("Dummy"),
+		}
 
 		require.True(t, p.CanSend())
 		p.Send(dummy)

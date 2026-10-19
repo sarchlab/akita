@@ -225,11 +225,11 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true},
-		ID:           f.pipeline.comp.NewID(),
-		Src:          f.ctrlPort().AsRemote(),
-		Dst:          next.ProcessingFlush.Msg.Src,
-		RspTo:        next.ProcessingFlush.Msg.ID,
-		TrafficClass: "memcontrolprotocol.Rsp"}
+		ID:    f.pipeline.comp.NewID(),
+		Src:   f.ctrlPort().AsRemote(),
+		Dst:   next.ProcessingFlush.Msg.Src,
+		RspTo: next.ProcessingFlush.Msg.ID,
+	}
 
 	f.ctrlPort().Send(rsp)
 

@@ -23,8 +23,6 @@ import (
 // in-flight slice; work lives spread across per-bank pipelines and
 // post-pipeline buffers. Quiescence is therefore checked per bank via
 // bankIsQuiescent.
-//
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 	var (
 		engine   timing.Engine
@@ -60,10 +58,10 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -136,13 +134,13 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 		// moment proves Drain did not ack early.
 		require.Equal(t, n, completed)
 		require.True(t, allBanksQuiescent())
-		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
+		require.Equal(t, controlStatePaused, comp.State.ControlState)
 	})
 
 	t.Run("freezes incoming traffic while paused", func(t *testing.T) {
 		setup1(t)
 
-		comp.State.ControlState = memcontrolprotocol.StatePaused
+		comp.State.ControlState = controlStatePaused
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
@@ -159,7 +157,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -193,7 +191,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 			require.Equal(t, reset.ID, rsp.RspTo)
 			// Reset rebuilds the banks, so all in-flight work is gone.
 			require.True(t, allBanksQuiescent())
-			require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+			require.Equal(t, controlStateEnabled, comp.State.ControlState)
 
 			// No leftover completion is produced from the wiped-out read.
 			completion := false
@@ -211,8 +209,8 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 			}
 			require.False(t, completion)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 
 	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -222,7 +220,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 		// acks the Drain. Control commands are serialized with no preemption,
 		// so a Reset queued behind the drain is serviced only after the Drain
 		// acks.
-		comp.State.ControlState = memcontrolprotocol.StateDraining
+		comp.State.ControlState = controlStateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
@@ -248,6 +246,6 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+		require.Equal(t, controlStateEnabled, comp.State.ControlState)
 	})
 }

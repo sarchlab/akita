@@ -84,7 +84,6 @@ func (r *milestoneRecorder) tagsWith(what string) []tasks.Tag {
 	return ts
 }
 
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestCacheMilestones(t *testing.T) {
 	var (
 		engine      timing.Engine
@@ -164,7 +163,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read)
 
@@ -211,7 +210,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(read)
 
@@ -260,7 +259,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 64 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(warm)
 		require.NoError(t, engine.Run())
@@ -279,7 +278,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 4 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(hit)
 		require.NoError(t, engine.Run())
@@ -334,7 +333,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 64 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(miss)
 		require.NoError(t, engine.Run())
@@ -373,7 +372,7 @@ func TestCacheMilestones(t *testing.T) {
 			Src:          cuPort.AsRemote(),
 			Dst:          c.Ports.Top.AsRemote(),
 			TrafficBytes: 64 + 12,
-			TrafficClass: "req"}
+		}
 
 		c.Ports.Top.Deliver(w)
 		require.NoError(t, engine.Run())

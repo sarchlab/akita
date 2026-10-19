@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDirectory(t *testing.T) {
 	var (
 		bottomPort messaging.Port
@@ -29,10 +28,10 @@ func TestDirectory(t *testing.T) {
 		t.Helper()
 
 		dummy := messaging.Msg{Payload: memprotocol.ReadReq{},
-			ID:           c.comp.NewID(),
-			Src:          bottomPort.AsRemote(),
-			Dst:          messaging.RemotePort("DRAM"),
-			TrafficClass: "req"}
+			ID:  c.comp.NewID(),
+			Src: bottomPort.AsRemote(),
+			Dst: messaging.RemotePort("DRAM"),
+		}
 
 		require.True(t, bottomPort.CanSend())
 		bottomPort.Send(dummy)
@@ -108,7 +107,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			// Transaction (idx 0)
@@ -145,7 +143,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 
 			// Transaction (idx 0)
@@ -189,7 +186,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -225,7 +221,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -260,7 +255,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -311,7 +305,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -342,7 +335,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -373,7 +365,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -409,7 +400,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -440,7 +430,6 @@ func TestDirectory(t *testing.T) {
 			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -473,7 +462,6 @@ func TestDirectory(t *testing.T) {
 			fetcherReadMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -489,7 +477,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -537,7 +524,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -583,7 +569,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -617,7 +602,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -651,7 +635,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -686,7 +669,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{
@@ -723,7 +705,6 @@ func TestDirectory(t *testing.T) {
 			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
-				TrafficClass: "req",
 			}
 			next.Transactions = append(next.Transactions,
 				transactionState{

@@ -24,8 +24,6 @@ import (
 // and emits a *vmprotocol.TranslationRsp on Top without ever sending a remote memory
 // request out Bottom. That keeps RemoteMemReqs empty and lets Drain reach
 // quiescence purely on the local walk path.
-//
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestGMMUControlBehavior(t *testing.T) {
 	var (
 		engine    timing.Engine
@@ -89,18 +87,17 @@ func TestGMMUControlBehavior(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: agentPort,
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -167,13 +164,13 @@ func TestGMMUControlBehavior(t *testing.T) {
 		require.Equal(t, n, completed)
 		require.Empty(t, comp.State.WalkingTranslations)
 		require.Len(t, comp.State.RemoteMemReqs, 0)
-		require.Equal(t, memcontrolprotocol.StatePaused, comp.State.ControlState)
+		require.Equal(t, controlStatePaused, comp.State.ControlState)
 	})
 
 	t.Run("freezes incoming translations while paused", func(t *testing.T) {
 		setup1(t)
 
-		comp.State.ControlState = memcontrolprotocol.StatePaused
+		comp.State.ControlState = controlStatePaused
 
 		insertLocalPage(0x0)
 		topPort.Deliver(makeTranslationReq(0x0))
@@ -192,7 +189,7 @@ func TestGMMUControlBehavior(t *testing.T) {
 	})
 
 	t.Run("Reset wipes in-flight state from any control state", func(t *testing.T) {
-		runCase := func(t *testing.T, startState memcontrolprotocol.State) {
+		runCase := func(t *testing.T, startState controlState) {
 			t.Helper()
 
 			setup1(t)
@@ -232,10 +229,10 @@ func TestGMMUControlBehavior(t *testing.T) {
 			// walkMW writes to it directly, so a nil map would panic on the
 			// next remote walk.
 			require.NotNil(t, comp.State.RemoteMemReqs)
-			require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+			require.Equal(t, controlStateEnabled, comp.State.ControlState)
 		}
-		t.Run("from Enabled", func(t *testing.T) { runCase(t, memcontrolprotocol.StateEnabled) })
-		t.Run("from Paused", func(t *testing.T) { runCase(t, memcontrolprotocol.StatePaused) })
+		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
+		t.Run("from Paused", func(t *testing.T) { runCase(t, controlStatePaused) })
 	})
 
 	t.Run("completes a pending Drain before servicing a queued Reset", func(t *testing.T) {
@@ -245,7 +242,7 @@ func TestGMMUControlBehavior(t *testing.T) {
 		// acks the Drain. Control commands are serialized with no preemption,
 		// so a Reset queued behind the drain is serviced only after the Drain
 		// acks.
-		comp.State.ControlState = memcontrolprotocol.StateDraining
+		comp.State.ControlState = controlStateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.WalkingTranslations = nil
@@ -273,6 +270,6 @@ func TestGMMUControlBehavior(t *testing.T) {
 		require.Equal(t, uint64(999), rsps[0].RspTo)
 		require.Equal(t, memcontrolprotocol.CmdReset, rsps[1].Payload.(memcontrolprotocol.Rsp).Command)
 		require.Equal(t, reset.ID, rsps[1].RspTo)
-		require.Equal(t, memcontrolprotocol.StateEnabled, comp.State.ControlState)
+		require.Equal(t, controlStateEnabled, comp.State.ControlState)
 	})
 }

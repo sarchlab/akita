@@ -20,7 +20,7 @@ import (
 // open — then issues a Reset without answering the fetch and asserts every
 // task the transaction opened is ended. A mid-flight Reset that drops the
 // transaction table must leave no started-never-ended task.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	storage := mem.NewStorage(1 * mem.MB)
@@ -66,7 +66,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		Dst: topPort.AsRemote(),
 
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	topPort.Deliver(read)
 
@@ -93,10 +93,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the fetch is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

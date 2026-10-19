@@ -4,6 +4,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
@@ -32,7 +34,7 @@ import (
 type Component[S, T, R, P, M any] struct {
 	base.ComponentBase[S, T, R, P, M]
 
-	ticks    *Scheduler
+	ticks    *tickscheduler.Scheduler
 	pipeline []Middleware
 
 	// handling makes the instance handle one event at a time: the parallel

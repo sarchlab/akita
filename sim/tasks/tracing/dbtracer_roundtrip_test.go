@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/idgen"
+
 	"database/sql"
 	"path/filepath"
 
@@ -18,7 +20,7 @@ import (
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
 // a real emit -> persist cycle.
 type roundTripDomain struct {
-	ids     timing.IDGenerator
+	ids     idgen.IDGenerator
 	tracker *tasks.Tracker
 	*hooking.HookableBase
 	name string

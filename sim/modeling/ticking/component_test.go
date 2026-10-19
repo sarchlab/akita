@@ -127,7 +127,7 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 
 	c.Handle(ticking.MakeEvent(1, 0, "C"))
 
-	want := []string{"first ticking.Event", "second ticking.Event"}
+	want := []string{fmt.Sprintf("first %T", ticking.Event{}), fmt.Sprintf("second %T", ticking.Event{})}
 	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
 	}

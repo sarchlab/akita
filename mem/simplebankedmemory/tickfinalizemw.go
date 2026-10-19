@@ -1,7 +1,6 @@
 package simplebankedmemory
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -17,7 +16,7 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 }
 
 func (m *tickFinalizeMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
+	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
 	madeProgress := m.finalizeBanks()
@@ -92,7 +91,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		RspTo: readReq.ID,
 
 		TrafficBytes: len(item.ReadData) + 4,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+	}
 
 	m.topPort().Send(rsp)
 
@@ -144,7 +143,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		Dst:          writeReq.Src,
 		RspTo:        writeReq.ID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	m.topPort().Send(rsp)
 

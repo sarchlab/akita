@@ -1,6 +1,6 @@
 # datarecording
 
-Package `datarecording` provides a structured data recording and reading
+Package `datarecording` provides a structured data recording
 infrastructure backed by SQLite. It is used by the tracing, monitoring, and
 simulation packages to persist simulation results.
 
@@ -12,7 +12,6 @@ The `DataRecorder` interface writes structured data into SQLite tables:
 type DataRecorder interface {
     CreateTable(tableName string, sampleEntry any)
     InsertData(tableName string, entry any)
-    ListTables() []string
     Flush()
     Close() error
 }
@@ -27,7 +26,6 @@ defer recorder.Close()
 
 The argument is the exact path: no extension is appended. Existing files are
 rejected without modification. An empty path chooses a unique SQLite filename.
-Readers also treat their path literally and open existing files read-only.
 Simulation-level metadata
 such as `exec_info` is recorded by the `sim` package, not by the generic
 data recorder.
@@ -75,34 +73,11 @@ recorder.InsertData("my_results", MyEntry{
 Data is batched internally (default 100,000 entries) and flushed automatically
 or via `Flush()`.
 
-## DataReader
+## Reading recordings
 
-The `DataReader` interface reads from SQLite databases:
+Use SQLite directly for custom analysis. The generic reader and existing-DB
+writer constructor have been removed. Daisen retains its specialized trace
+reader as an internal implementation detail.
 
-```go
-reader := datarecording.NewReader("my_simulation.sqlite3")
-defer reader.Close()
-
-reader.MapTable("my_results", MyEntry{})
-
-results, totalCount, err := reader.Query(ctx, "my_results", datarecording.QueryParams{
-    Where:   "Category = ?",
-    Args:    []any{"latency"},
-    OrderBy: "Value DESC",
-    Limit:   100,
-    Offset:  0,
-})
-```
-
-### QueryParams
-
-| Field | Description |
-|-------|-------------|
-| `Where` | SQL WHERE clause (without `WHERE` keyword) |
-| `Args` | Placeholder arguments for the WHERE clause |
-| `Limit` | Max rows to return (0 = unlimited) |
-| `Offset` | Number of rows to skip |
-| `OrderBy` | SQL ORDER BY clause (without `ORDER BY` keyword) |
-
-Results are returned as `[]any` where each element is a pointer to the
-mapped struct type.
+Fields tagged `akita_data:"location"` store IDs into the `location` table;
+join the recorded column to `location.ID` to retrieve `location.Locale`.

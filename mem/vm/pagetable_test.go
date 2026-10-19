@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestPageTable(t *testing.T) {
 	var (
 		pageTable *PageTable

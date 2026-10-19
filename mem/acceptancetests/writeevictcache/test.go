@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -30,7 +30,7 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 //nolint:funlen // wires the whole simulation in one place
 func buildEnvironment(
 	seed int64,
-) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+) (*sim.Simulation, timing.Engine, *memaccessagent.Comp) {
 	monitor := monitoring.MakeBuilder().Build()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 

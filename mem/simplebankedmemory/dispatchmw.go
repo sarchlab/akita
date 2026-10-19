@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -20,7 +19,7 @@ func (m *dispatchMW) topPort() messaging.Port {
 }
 
 func (m *dispatchMW) Handle(_ timing.Event) bool {
-	if m.comp.State.ControlState != memcontrolprotocol.StateEnabled {
+	if m.comp.State.ControlState != controlStateEnabled {
 		return false
 	}
 	return m.dispatchFromTopPort()

@@ -216,7 +216,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 		RspTo: trans.ReadMeta.ID,
 
 		TrafficBytes: len(data) + 4,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+	}
 
 	s.cache.topPort().Send(dataReady)
 
@@ -255,7 +255,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 		Dst:          trans.WriteMeta.Src,
 		RspTo:        trans.WriteMeta.ID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	s.cache.topPort().Send(done)
 

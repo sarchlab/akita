@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -40,7 +39,6 @@ func makePorts(name string, topBufSize int) Ports {
 	}
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestIdealMemoryController(t *testing.T) {
 	var (
 		engine        timing.Engine
@@ -58,7 +56,6 @@ func TestIdealMemoryController(t *testing.T) {
 		spec := DefaultSpec()
 		spec.Width = 1
 		spec.Latency = 10
-		spec.CacheLineSize = 64
 
 		memController = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
@@ -85,7 +82,7 @@ func TestIdealMemoryController(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
@@ -126,7 +123,6 @@ func TestIdealMemoryController(t *testing.T) {
 			Dst: topPort.AsRemote()}
 
 		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
-		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		madeProgress := modelingtest.Tick(memController)
@@ -175,7 +171,6 @@ func TestIdealMemoryController(t *testing.T) {
 			Dst: topPort.AsRemote()}
 
 		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
-		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request, CycleLeft: 10 → 9
@@ -209,9 +204,9 @@ func TestIdealMemoryController(t *testing.T) {
 
 		// Pre-fill the outgoing buffer so the controller's response Send fails.
 		dummy := messaging.Msg{ID: sim.NewID(), Payload: memprotocol.WriteDoneRsp{},
-			Src:          topPort.AsRemote(),
-			Dst:          messaging.RemotePort("Agent"),
-			TrafficClass: "memprotocol.WriteDoneRsp"}
+			Src: topPort.AsRemote(),
+			Dst: messaging.RemotePort("Agent"),
+		}
 
 		topPort.Send(dummy)
 
@@ -261,7 +256,6 @@ func TestIdealMemoryController(t *testing.T) {
 			Dst: topPort.AsRemote()}
 
 		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
-		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request
@@ -292,6 +286,6 @@ func TestIdealMemoryController(t *testing.T) {
 		setup1(t)
 
 		state := memController.State
-		require.Equal(t, memcontrolprotocol.StateEnabled, state.ControlState)
+		require.Equal(t, controlStateEnabled, state.ControlState)
 	})
 }

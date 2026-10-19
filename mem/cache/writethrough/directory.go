@@ -277,7 +277,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 		Dst: d.cache.findPort(cacheLineID),
 
 		TrafficBytes: len(trans.WriteData) + 12,
-		TrafficClass: "req"}
+	}
 
 	if !d.cache.bottomPort().CanSend() {
 		return false
@@ -317,7 +317,7 @@ func (d *directory) fetchFromBottom(
 		Src: d.cache.bottomPort().AsRemote(),
 		Dst: bottomModule}
 
-	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
+	readToBottom.TrafficBytes = 12
 
 	if !d.cache.bottomPort().CanSend() {
 		return false

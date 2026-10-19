@@ -2,11 +2,6 @@ package mem
 
 import "log"
 
-// AddressConverter can translate the address between two domains
-type AddressConverter interface {
-	ConvertExternalToInternal(external uint64) uint64
-}
-
 // InterleavingConverter is an address converter that can converts the address
 // from an continuous address space to interleaved addresses.
 //

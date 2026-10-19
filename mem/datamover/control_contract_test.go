@@ -3,7 +3,8 @@ package datamover
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
+
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -21,7 +22,7 @@ func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *ccNoopConn) NotifySend(_ messaging.Port)      {}
 
 func TestControlContract(t *testing.T) {
-	build := func() *memcontrolprotocol.Harness {
+	build := func() *memcontroltest.Harness {
 		sim := akitasim.MakeBuilder().Build()
 
 		spec := DefaultSpec()
@@ -48,7 +49,7 @@ func TestControlContract(t *testing.T) {
 			panic(err)
 		}
 
-		return &memcontrolprotocol.Harness{
+		return &memcontroltest.Harness{
 			Comp: comp,
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
@@ -58,7 +59,7 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	memcontrolprotocol.RunContract(t, "datamover", build, memcontrolprotocol.Universal())
+	memcontroltest.RunContract(t, "datamover", build, memcontroltest.Universal())
 }
 
-var _ memcontrolprotocol.Controllable = (*Comp)(nil)
+var _ memcontroltest.Controllable = (*Comp)(nil)

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTopParser(t *testing.T) {
 	var (
 		m       *pipelineMW
@@ -83,7 +82,7 @@ func TestTopParser(t *testing.T) {
 			ID: m.comp.NewID(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		topPort.Deliver(read)
 
@@ -106,7 +105,7 @@ func TestTopParser(t *testing.T) {
 			ID: m.comp.NewID(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.WriteReq"}
+		}
 
 		topPort.Deliver(write)
 

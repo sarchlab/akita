@@ -20,7 +20,7 @@ import (
 // a Reset and asserts every task is ended. A mid-flight Reset drops the
 // transaction table, so each started task must be ended by endInflightTasks or
 // it leaks.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	storage := mem.NewStorage(4 * mem.GB)
@@ -68,7 +68,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		Src:          messaging.RemotePort("Agent"),
 		Dst:          topPort.AsRemote(),
 		TrafficBytes: 12,
-		TrafficClass: "memprotocol.ReadReq"}
+	}
 
 	topPort.Deliver(read)
 
@@ -111,10 +111,10 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           sim.NewID(),
-		Src:          messaging.RemotePort("Cmd"),
-		Dst:          ctrlPort.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Cmd"),
+		Dst: ctrlPort.AsRemote(),
+	}
 
 	ctrlPort.Deliver(reset)
 

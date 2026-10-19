@@ -62,7 +62,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestMMUMilestones(t *testing.T) {
 	var (
 		engine    timing.Engine
@@ -115,8 +114,7 @@ func TestMMUMilestones(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent.Top"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}

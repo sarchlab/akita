@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDirectoryStage(t *testing.T) {
 	var (
 		ds *directoryStage
@@ -72,7 +71,7 @@ func TestDirectoryStage(t *testing.T) {
 				ID: m.comp.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.ReadReq"}
+			}
 
 			trans := transactionState{
 				HasRead:            true,
@@ -190,7 +189,7 @@ func TestDirectoryStage(t *testing.T) {
 				ID: m.comp.NewID(),
 
 				TrafficBytes: 12,
-				TrafficClass: "memprotocol.WriteReq"}
+			}
 
 			trans := transactionState{
 				HasWrite:     true,

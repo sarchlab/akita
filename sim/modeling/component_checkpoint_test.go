@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/internal/testsim"
 
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -63,7 +64,7 @@ func TestCheckpointSpecMismatch(t *testing.T) {
 // round-trips: after restoring a pending tick, asking for the same tick again
 // schedules nothing, since the engine's restored queue already holds it.
 func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
-	newScheduler := func(handler timing.Handler) (*ticking.Scheduler, *timing.SerialEngine) {
+	newScheduler := func(handler timing.Handler) (*tickscheduler.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
 		engine.RegisterHandler("C", handler)
 		sim := testsim.New(engine, false)
@@ -71,7 +72,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		return ticking.NewScheduler("C", sim, 1*timing.GHz), engine
+		return tickscheduler.NewScheduler("C", sim, 1*timing.GHz), engine
 	}
 
 	src, _ := newScheduler(handlerFunc(func(timing.Event) {}))

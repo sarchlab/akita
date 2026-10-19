@@ -62,7 +62,7 @@ Capacity constants: `KB`, `MB`, `GB`, `TB`.
 
 ## Address Mapping
 
-### AddressConverter
+### InterleavingConverter
 
 Converts between external (global) and internal (per-element) addresses for
 interleaved address spaces:

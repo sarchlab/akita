@@ -23,14 +23,14 @@ var (
 )
 
 // Command enumerates the verbs of the uniform control protocol for memory
-// agents. Every memory agent component implements its supported subset of
+// agents. Zero is invalid. Every memory agent component implements its supported subset of
 // these verbs over its "Control" port.
 type Command int
 
 const (
 	// CmdPause stops new traffic and freezes in-flight state in place.
 	// Universal verb. Ack is synchronous.
-	CmdPause Command = iota
+	CmdPause Command = iota + 1
 
 	// CmdDrain stops new traffic and lets in-flight finish; ends paused.
 	// Universal verb. Ack is asynchronous (on completion).

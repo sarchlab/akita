@@ -83,7 +83,7 @@ var Protocol = messaging.DefineProtocol(
 )
 ```
 
-Build a `messaging.Msg` with routing fields (`ID`, `Src`, `Dst`, `TrafficClass`,
+Build a `messaging.Msg` with routing fields (`ID`, `Src`, `Dst`,
 `TrafficBytes`, and `RspTo`) and put `pingReq{SeqID: seq}` in its `Payload` field.
 Ports send and return the envelope by value. Type switches inspect
 `msg.Payload`; the routing fields remain on `msg`. Slice and map storage inside

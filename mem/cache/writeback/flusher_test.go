@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestFlusher(t *testing.T) {
 	var (
 		controlPort messaging.Port
@@ -76,8 +75,8 @@ func TestFlusher(t *testing.T) {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID: m.comp.NewID(),
+			}
 
 			controlPort.Deliver(req)
 
@@ -170,8 +169,8 @@ func TestFlusher(t *testing.T) {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
-				ID:           m.comp.NewID(),
-				TrafficClass: "memcontrolprotocol.Req"}
+				ID: m.comp.NewID(),
+			}
 
 			controlPort.Deliver(req)
 

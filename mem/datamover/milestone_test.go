@@ -69,7 +69,6 @@ func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tasks.Milestone {
 	return ms
 }
 
-//nolint:funlen,gocognit // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestDataMoverMilestones(t *testing.T) {
 	var (
 		engine         timing.Engine
@@ -96,7 +95,6 @@ func TestDataMoverMilestones(t *testing.T) {
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
 		memSpec.Width = 1
-		memSpec.CacheLineSize = 64
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
@@ -161,8 +159,7 @@ func TestDataMoverMilestones(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		topPort.Deliver(req)
 
@@ -216,8 +213,7 @@ func TestDataMoverMilestones(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: srcPort.AsRemote(),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		topPort.Deliver(req)
 
@@ -271,8 +267,7 @@ func TestDataMoverMilestones(t *testing.T) {
 				ID:  sim.NewID(),
 				Src: srcPort.AsRemote(),
 				Dst: topPort.AsRemote(),
-
-				TrafficClass: "datamoverprotocol.DataMoveReq"}
+			}
 
 			return req
 		}

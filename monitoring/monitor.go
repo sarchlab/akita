@@ -22,14 +22,11 @@ import (
 	"time"
 	"unsafe"
 
-	// Enable profiling.
-	_ "net/http/pprof"
-
 	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/internal/sqlitepath"
-	"github.com/sarchlab/akita/v5/monitoring/static"
+	"github.com/sarchlab/akita/v5/monitoring/internal/static"
 
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -120,9 +117,7 @@ func (m *Monitor) CreateProgressBar(name string, total uint64) *ProgressBar {
 	}
 
 	bar := &ProgressBar{
-		ID:    m.simulation.NewID(),
-		Name:  name,
-		Total: total,
+		data: ProgressBarSnapshot{ID: m.simulation.NewID(), Name: name, Total: total, StartTime: time.Now()},
 	}
 
 	m.progressBarsLock.Lock()
@@ -138,7 +133,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBarsLock.Lock()
 	defer m.progressBarsLock.Unlock()
 
-	newBars := make([]*ProgressBar, 0, len(m.progressBars)-1)
+	newBars := make([]*ProgressBar, 0, len(m.progressBars))
 
 	for _, b := range m.progressBars {
 		if b != pb {
@@ -1001,10 +996,7 @@ func (m *Monitor) listProgressBars(
 	_ *http.Request,
 ) {
 	m.progressBarsLock.Lock()
-	progressBars := m.progressBars
-	if progressBars == nil {
-		progressBars = []*ProgressBar{}
-	}
+	progressBars := append([]*ProgressBar{}, m.progressBars...)
 	m.progressBarsLock.Unlock()
 
 	b, err := json.Marshal(progressBars)

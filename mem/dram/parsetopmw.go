@@ -3,7 +3,6 @@ package dram
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -23,7 +22,7 @@ func (m *parseTopMW) topPort() messaging.Port {
 // transactions.
 func (m *parseTopMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
-	if next.ControlState != memcontrolprotocol.StateEnabled {
+	if next.ControlState != controlStateEnabled {
 		return false
 	}
 	spec := m.comp.Spec

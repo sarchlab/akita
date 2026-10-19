@@ -35,13 +35,13 @@ jobs:
         with:
           node-version: 22.12.0
       - name: npm install
-        working-directory: ./daisen/static
+        working-directory: ./daisen/internal/static
         run: npm install
       - name: npm run build
-        working-directory: ./daisen/static
+        working-directory: ./daisen/internal/static
         run: npm run build
       - name: npm test
-        working-directory: ./daisen/static
+        working-directory: ./daisen/internal/static
         run: npm test
 
   monitoring2_compile:
@@ -54,13 +54,13 @@ jobs:
         with:
           node-version: 22.12.0
       - name: npm install
-        working-directory: ./monitoring/static
+        working-directory: ./monitoring/internal/static
         run: npm install
       - name: npm run build
-        working-directory: ./monitoring/static
+        working-directory: ./monitoring/internal/static
         run: npm run build
       - name: npm test
-        working-directory: ./monitoring/static
+        working-directory: ./monitoring/internal/static
         run: npm test
 
   akita_build_lint_test:

@@ -68,7 +68,6 @@ func (r *milestoneRecorder) kindsOn(taskID uint64) []tasks.MilestoneKind {
 	return ks
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestReorderBufferMilestones(t *testing.T) {
 	const (
 		topRemote        = messaging.RemotePort("Agent")
@@ -124,20 +123,20 @@ func TestReorderBufferMilestones(t *testing.T) {
 
 	makeRead := func(addr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
-			ID:           rob.NewID(),
-			Src:          topRemote,
-			Dst:          topPort.AsRemote(),
-			TrafficClass: "memprotocol.ReadReq"}
+			ID:  rob.NewID(),
+			Src: topRemote,
+			Dst: topPort.AsRemote(),
+		}
 
 		return req
 	}
 
 	makeWrite := func(addr uint64, data []byte) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
-			ID:           rob.NewID(),
-			Src:          topRemote,
-			Dst:          topPort.AsRemote(),
-			TrafficClass: "memprotocol.WriteReq"}
+			ID:  rob.NewID(),
+			Src: topRemote,
+			Dst: topPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -175,10 +174,10 @@ func TestReorderBufferMilestones(t *testing.T) {
 		setup1(t)
 
 		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
-			ID:           rob.NewID(),
-			Src:          bottomUnitRemote,
-			Dst:          bottomPort.AsRemote(),
-			TrafficClass: "memprotocol.DataReadyRsp"}
+			ID:  rob.NewID(),
+			Src: bottomUnitRemote,
+			Dst: bottomPort.AsRemote(),
+		}
 
 		driveRoundTrip(makeRead(0), rsp)
 
@@ -212,10 +211,10 @@ func TestReorderBufferMilestones(t *testing.T) {
 		setup1(t)
 
 		rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
-			ID:           rob.NewID(),
-			Src:          bottomUnitRemote,
-			Dst:          bottomPort.AsRemote(),
-			TrafficClass: "memprotocol.WriteDoneRsp"}
+			ID:  rob.NewID(),
+			Src: bottomUnitRemote,
+			Dst: bottomPort.AsRemote(),
+		}
 
 		driveRoundTrip(makeWrite(64, []byte{1, 2, 3, 4}), rsp)
 
@@ -235,10 +234,10 @@ func TestReorderBufferMilestones(t *testing.T) {
 		setup1(t)
 
 		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xAB}},
-			ID:           rob.NewID(),
-			Src:          bottomUnitRemote,
-			Dst:          bottomPort.AsRemote(),
-			TrafficClass: "memprotocol.DataReadyRsp"}
+			ID:  rob.NewID(),
+			Src: bottomUnitRemote,
+			Dst: bottomPort.AsRemote(),
+		}
 
 		driveRoundTrip(makeRead(0), rsp)
 

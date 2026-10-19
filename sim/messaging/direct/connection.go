@@ -3,9 +3,10 @@ package direct
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -31,7 +32,7 @@ func NewConnection(name string, s timing.Simulation, freq timing.Freq) *Connecti
 		simulation: s,
 		spec:       spec,
 		// Secondary ticks run after components in the same cycle.
-		ticks: ticking.NewSecondaryScheduler(name, s, freq),
+		ticks: tickscheduler.NewSecondaryScheduler(name, s, freq),
 		ports: ports{portMap: make(map[messaging.RemotePort]int)},
 	}
 	s.Engine().RegisterHandler(name, conn)

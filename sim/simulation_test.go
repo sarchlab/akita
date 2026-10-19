@@ -91,7 +91,6 @@ func (c testComponent) Name() string {
 	return c.name
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestSimulation(t *testing.T) {
 	var (
 		simulation *Simulation
@@ -364,7 +363,6 @@ func TestSimulation(t *testing.T) {
 	})
 }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestGlobalStateManager(t *testing.T) {
 	var sim *Simulation
 

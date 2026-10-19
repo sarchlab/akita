@@ -17,7 +17,7 @@ import (
 // outstanding Outside-read req_out open), then issues a control Reset and asserts
 // the Reset cleanup (ctrlMiddleware.endInflightTasks) ends every started task,
 // leaving no started-never-ended tracing leak.
-func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
+func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
@@ -63,18 +63,17 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "datamoverprotocol.DataMoveReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Cmd"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Cmd"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}

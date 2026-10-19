@@ -117,7 +117,6 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
-//nolint:funlen // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestTLBMilestones(t *testing.T) {
 	const remotePort = messaging.RemotePort("RemotePort")
 
@@ -169,8 +168,7 @@ func TestTLBMilestones(t *testing.T) {
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),
-
-			TrafficClass: "vmprotocol.TranslationReq"}
+		}
 
 		return req
 	}
@@ -295,11 +293,11 @@ func TestTLBMilestones(t *testing.T) {
 		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
 		},
-			ID:           sim.NewID(),
-			Src:          remotePort,
-			Dst:          bottomPort.AsRemote(),
-			RspTo:        fetch.ID,
-			TrafficClass: "vmprotocol.TranslationRsp"}
+			ID:    sim.NewID(),
+			Src:   remotePort,
+			Dst:   bottomPort.AsRemote(),
+			RspTo: fetch.ID,
+		}
 
 		bottomPort.Deliver(rsp)
 

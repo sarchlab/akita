@@ -22,7 +22,6 @@ type LinkEndSwitchParameter struct {
 	NumInputChannel  int
 	NumOutputChannel int
 	Latency          int
-	PortName         string
 }
 
 // LinkEndDeviceParameter defines the parameter that associated with an end of a

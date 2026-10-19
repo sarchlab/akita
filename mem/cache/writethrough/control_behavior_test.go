@@ -26,8 +26,6 @@ import (
 // memprotocol.DataReadyRsp (RspTo == the outgoing bottom read ID) is fed back in.
 // The Drain test exploits exactly that: it proves the cache holds the Drain
 // ack until those bottom responses arrive and every transaction completes.
-//
-//nolint:funlen,gocognit,gocyclo // Keep the existing scenarios and shared fixture lifecycle in one test group.
 func TestWritethroughCacheControlBehavior(t *testing.T) {
 	const blockSize = uint64(64) // Log2BlockSize == 6
 
@@ -83,17 +81,17 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			Dst: topPort.AsRemote(),
 
 			TrafficBytes: 12,
-			TrafficClass: "memprotocol.ReadReq"}
+		}
 
 		return req
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
 		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-			ID:           sim.NewID(),
-			Src:          messaging.RemotePort("Ctrl"),
-			Dst:          ctrlPort.AsRemote(),
-			TrafficClass: "memcontrolprotocol.Req"}
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Ctrl"),
+			Dst: ctrlPort.AsRemote(),
+		}
 
 		return req
 	}
@@ -109,7 +107,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			Dst:          bottomPort.AsRemote(),
 			RspTo:        bottomRead.ID,
 			TrafficBytes: int(blockSize) + 4,
-			TrafficClass: "memprotocol.DataReadyRsp"}
+		}
 
 		return rsp
 	}

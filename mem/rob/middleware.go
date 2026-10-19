@@ -23,7 +23,7 @@ func (m *middleware) Handle(_ timing.Event) bool {
 	madeProgress = m.processControlMsg() || madeProgress
 
 	switch m.comp.State.ControlState {
-	case memcontrolprotocol.StateEnabled, memcontrolprotocol.StateDraining:
+	case controlStateEnabled, controlStateDraining:
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
@@ -66,7 +66,7 @@ func (m *middleware) runPipeline() bool {
 // only once both a transaction slot and the downstream port are available.
 func (m *middleware) topDown() bool {
 	state := &m.comp.State
-	if state.ControlState != memcontrolprotocol.StateEnabled {
+	if state.ControlState != controlStateEnabled {
 		return false
 	}
 
@@ -264,7 +264,7 @@ func (m *middleware) buildShadowReq(
 			Src:          src,
 			Dst:          dst,
 			TrafficBytes: r.TrafficBytes,
-			TrafficClass: r.TrafficClass}
+		}
 
 		return shadow, true
 	case memprotocol.WriteReq:
@@ -280,7 +280,7 @@ func (m *middleware) buildShadowReq(
 			Src:          src,
 			Dst:          dst,
 			TrafficBytes: r.TrafficBytes,
-			TrafficClass: r.TrafficClass}
+		}
 
 		return shadow, false
 	default:
@@ -298,7 +298,7 @@ func (m *middleware) buildTopRsp(
 			Dst:          trans.ReqFromTopSrc,
 			RspTo:        trans.ReqFromTopID,
 			TrafficBytes: len(trans.RspData) + 4,
-			TrafficClass: "memprotocol.DataReadyRsp"}
+		}
 
 		return rsp
 	}
@@ -309,7 +309,7 @@ func (m *middleware) buildTopRsp(
 		Dst:          trans.ReqFromTopSrc,
 		RspTo:        trans.ReqFromTopID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	return rsp
 }
@@ -339,7 +339,7 @@ func (m *middleware) processControlMsg() bool {
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not dequeued — it stays queued on the
 	// Control port and is handled once the component settles.
-	if m.comp.State.ControlState == memcontrolprotocol.StateDraining {
+	if m.comp.State.ControlState == controlStateDraining {
 		return false
 	}
 
@@ -373,7 +373,7 @@ func (m *middleware) processControlMsg() bool {
 // Paused.
 func (m *middleware) completePendingDrain() bool {
 	state := &m.comp.State
-	if state.ControlState != memcontrolprotocol.StateDraining {
+	if state.ControlState != controlStateDraining {
 		return false
 	}
 	if len(state.Transactions) != 0 {
@@ -385,7 +385,7 @@ func (m *middleware) completePendingDrain() bool {
 
 	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
-	state.ControlState = memcontrolprotocol.StatePaused
+	state.ControlState = controlStatePaused
 	return true
 }
 
@@ -393,7 +393,7 @@ func (m *middleware) handlePause(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = memcontrolprotocol.StatePaused
+	m.comp.State.ControlState = controlStatePaused
 	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.comp.Ports.Control.RetrieveIncoming()
@@ -402,7 +402,7 @@ func (m *middleware) handlePause(req messaging.Msg) bool {
 
 func (m *middleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
-	state.ControlState = memcontrolprotocol.StateDraining
+	state.ControlState = controlStateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
 	m.comp.Ports.Control.RetrieveIncoming()
@@ -418,7 +418,7 @@ func (m *middleware) handleEnable(req messaging.Msg) bool {
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
-	state.ControlState = memcontrolprotocol.StateEnabled
+	state.ControlState = controlStateEnabled
 
 	// Enable resumes from Paused; it must not discard traffic queued while
 	// paused (e.g. bottom responses that retire frozen in-flight
@@ -446,7 +446,7 @@ func (m *middleware) handleReset(req messaging.Msg) bool {
 	state.WaitingForBottom = false
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
-	state.ControlState = memcontrolprotocol.StateEnabled
+	state.ControlState = controlStateEnabled
 
 	// Buffer tasks for messages still queued on the Top/Bottom ports are closed
 	// by the drains below: each RetrieveIncoming ends the buffer task. No pre-admission req_in exists to clean up — req_in
@@ -481,11 +481,11 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	},
-		ID:           c.NewID(),
-		Src:          c.Ports.Control.AsRemote(),
-		Dst:          dst,
-		RspTo:        rspTo,
-		TrafficClass: "memcontrolprotocol.Rsp"}
+		ID:    c.NewID(),
+		Src:   c.Ports.Control.AsRemote(),
+		Dst:   dst,
+		RspTo: rspTo,
+	}
 
 	return rsp
 }

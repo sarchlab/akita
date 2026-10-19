@@ -4,6 +4,8 @@ import (
 	"io/fs"
 	"maps"
 
+	"github.com/sarchlab/akita/v5/internal/idgen"
+
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/internal/simconfig"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
@@ -182,7 +184,7 @@ func (b Builder) createEngine(s *Simulation) {
 // createIDGenerator registers this simulation's ID generator as an entity so its
 // counter is captured in the state snapshot.
 func (b Builder) createIDGenerator(s *Simulation) {
-	s.idGenerator = &timing.IDGenerator{}
+	s.idGenerator = &idgen.IDGenerator{}
 	s.registerEntity(s.idGenerator)
 }
 

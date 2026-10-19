@@ -1,7 +1,6 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -20,7 +19,7 @@ func (m *respondMW) topPort() messaging.Port {
 // in-flight transactions can finish and the drain can converge.
 func (m *respondMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
-	if next.ControlState == memcontrolprotocol.StatePaused {
+	if next.ControlState == controlStatePaused {
 		return false
 	}
 	spec := m.comp.Spec
@@ -81,7 +80,7 @@ func (m *respondMW) finalizeWriteTrans(
 		Dst:          t.WriteMsg.Src,
 		RspTo:        t.WriteMsg.ID,
 		TrafficBytes: 4,
-		TrafficClass: "memprotocol.WriteDoneRsp"}
+	}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -111,7 +110,7 @@ func (m *respondMW) finalizeReadTrans(
 
 		RspTo:        t.ReadMsg.ID,
 		TrafficBytes: len(data) + 4,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+	}
 
 	if !m.topPort().CanSend() {
 		return false

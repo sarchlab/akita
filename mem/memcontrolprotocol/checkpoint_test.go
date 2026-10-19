@@ -133,10 +133,10 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
 	req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
-		ID:           h.cache.NewID(),
-		Src:          h.agent,
-		Dst:          h.top.AsRemote(),
-		TrafficClass: "memprotocol.WriteReq"}
+		ID:  h.cache.NewID(),
+		Src: h.agent,
+		Dst: h.top.AsRemote(),
+	}
 
 	h.top.Deliver(req)
 
@@ -157,10 +157,10 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
 	req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: size},
-		ID:           h.cache.NewID(),
-		Src:          h.agent,
-		Dst:          h.top.AsRemote(),
-		TrafficClass: "memprotocol.ReadReq"}
+		ID:  h.cache.NewID(),
+		Src: h.agent,
+		Dst: h.top.AsRemote(),
+	}
 
 	h.top.Deliver(req)
 
@@ -181,10 +181,10 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 	t.Helper()
 
 	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
-		ID:           h.cache.NewID(),
-		Src:          h.agent,
-		Dst:          h.ctrl.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  h.cache.NewID(),
+		Src: h.agent,
+		Dst: h.ctrl.AsRemote(),
+	}
 
 	h.ctrl.Deliver(req)
 
@@ -305,10 +305,10 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
 	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4},
-		ID:           h.cache.NewID(),
-		Src:          h.agent,
-		Dst:          h.top.AsRemote(),
-		TrafficClass: "memprotocol.ReadReq"}
+		ID:  h.cache.NewID(),
+		Src: h.agent,
+		Dst: h.top.AsRemote(),
+	}
 
 	h.top.Deliver(read)
 
@@ -326,10 +326,10 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
 	rst := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
-		ID:           h.cache.NewID(),
-		Src:          h.agent,
-		Dst:          h.ctrl.AsRemote(),
-		TrafficClass: "memcontrolprotocol.Req"}
+		ID:  h.cache.NewID(),
+		Src: h.agent,
+		Dst: h.ctrl.AsRemote(),
+	}
 
 	h.ctrl.Deliver(rst)
 	acked := false
@@ -348,11 +348,11 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// The lower memory's now-orphaned response arrives after the reset.
 	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)},
-		ID:           h.cache.NewID(),
-		Src:          h.dramTop.AsRemote(),
-		Dst:          h.bottom.AsRemote(),
-		RspTo:        fetch.ID,
-		TrafficClass: "memprotocol.DataReadyRsp"}
+		ID:    h.cache.NewID(),
+		Src:   h.dramTop.AsRemote(),
+		Dst:   h.bottom.AsRemote(),
+		RspTo: fetch.ID,
+	}
 
 	h.bottom.Deliver(rsp)
 
