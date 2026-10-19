@@ -16,14 +16,15 @@ Start the sender task before sending the message, and keep its returned handle
 in component State. At the receiver, keep a separate receive handle:
 
 ```go
-state.SendTaskID = tasks.StartReqOut(comp, msg, parentID)
+tracker := comp.TaskTracker()
+state.SendTaskID = tracker.StartReqOut(comp, msg, parentID)
 port.Send(msg)
 // Receiver admission:
-state.RecvTaskID = tasks.StartReqIn(comp, msg)
+state.RecvTaskID = tracker.StartReqIn(comp, msg)
 // Receiver completion:
-tasks.EndReqIn(comp, state.RecvTaskID)
+tracker.EndReqIn(state.RecvTaskID)
 // Sender receives the response:
-tasks.EndReqOut(comp, state.SendTaskID)
+tracker.EndReqOut(state.SendTaskID)
 ```
 
 When forwarding, pass the upstream receive handle as the new sender task's

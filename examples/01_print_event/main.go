@@ -32,5 +32,7 @@ func main() {
 		panic(err)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

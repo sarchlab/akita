@@ -288,21 +288,6 @@ func TestSimulation(t *testing.T) {
 			require.ErrorContains(t, err, "only timing.SerialEngine is supported")
 		})
 
-		t.Run("should reject a checkpoint from a different build", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
-			setup1(t)
-
-			path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
-
-			err := writeArchive(path, "other-build", dummyPayloads(simulation))
-			require.NoError(t, err)
-
-			require.NoError(t, simulation.Initialize())
-			err = simulation.LoadCheckpoint(path)
-
-			require.ErrorContains(t, err, "build ID mismatch")
-		})
-
 		t.Run("should reject when a rebuilt entity is missing from the checkpoint", func(t *testing.T) {
 			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
@@ -318,7 +303,7 @@ func TestSimulation(t *testing.T) {
 					archiveEntry{name: entity.Name(), data: []byte("{}")})
 			}
 
-			err := writeArchive(path, simulation.buildID, entries)
+			err := writeArchive(path, entries)
 			require.NoError(t, err)
 
 			require.NoError(t, simulation.Initialize())
@@ -336,7 +321,7 @@ func TestSimulation(t *testing.T) {
 			entries := append(dummyPayloads(simulation),
 				archiveEntry{name: "GhostEntity", data: []byte("{}")})
 
-			err := writeArchive(path, simulation.buildID, entries)
+			err := writeArchive(path, entries)
 			require.NoError(t, err)
 
 			require.NoError(t, simulation.Initialize())
@@ -364,7 +349,7 @@ func TestSimulation(t *testing.T) {
 
 			path := filepath.Join(t.TempDir(), "truncated.tar.gz")
 			require.NoError(t, writeArchive(
-				path, simulation.buildID, dummyPayloads(simulation)))
+				path, dummyPayloads(simulation)))
 
 			full, err := os.ReadFile(path)
 			require.NoError(t, err)

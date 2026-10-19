@@ -74,7 +74,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 
 		// Start a new job and open a tracing task for it.
 		s.NextID++
-		s.CurTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
+		s.CurTaskID = m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 			Kind: "job",
 			What: fmt.Sprintf("job-%d", s.NextID),
 		})
@@ -89,7 +89,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 	// Working: count down, and close the task when the job finishes.
 	s.CountDown--
 	if s.CountDown == 0 {
-		tasks.EndTask(m.comp, tasks.EndInfo{ID: s.CurTaskID})
+		m.comp.TaskTracker().EndTask(s.CurTaskID)
 		s.Working = false
 	}
 

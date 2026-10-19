@@ -184,6 +184,18 @@ func inspectAtBoundary(ctx context.Context, inspect func() error) (err error) {
 	return inspect()
 }
 
+// WithIdle runs fn only when no Run or RunUntil call is active, including a
+// paused call. It excludes execution startup and other control operations until
+// fn returns. fn must not call engine control methods recursively.
+func (c *engineControl) WithIdle(fn func() error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.running {
+		return fmt.Errorf("timing: execution is active")
+	}
+	return fn()
+}
+
 func (c *engineControl) begin() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

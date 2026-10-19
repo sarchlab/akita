@@ -1,6 +1,8 @@
 package direct
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -16,6 +18,9 @@ func NewConnection(name string, s timing.Simulation, freq timing.Freq) *Connecti
 		panic("direct: simulation is required")
 	}
 
+	if freq == 0 {
+		panic(fmt.Sprintf("direct: connection %q requires a nonzero frequency", name))
+	}
 	s.RequireNameAvailable(name)
 	naming.MustBeValid(name)
 	spec := configuration{Freq: freq}

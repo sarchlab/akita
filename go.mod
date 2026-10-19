@@ -10,7 +10,6 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/syifan/goseth v0.1.2
-	github.com/tebeka/atexit v0.3.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/tools v0.49.0
 	modernc.org/sqlite v1.57.0
@@ -45,8 +44,3 @@ require (
 // replace github.com/syifan/goseth => ../goseth
 
 go 1.27.0
-
-// Retained dependency-security guard: tebeka/atexit still reaches testify
-// v1.5.1's stale yaml.v2 requirement through its dependency graph. Remove this
-// guard once `go list -m all` no longer selects yaml.v2 v2.2.2 without it.
-exclude gopkg.in/yaml.v2 v2.2.2

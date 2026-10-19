@@ -48,7 +48,7 @@ func (ds *directoryStage) processTransaction() bool {
 		// early-break path so a transaction parked behind an in-flight eviction
 		// still gets its pipeline interval marked work. Re-emitted on retries; the
 		// (Kind, What) dedup keeps the first.
-		tasks.AddMilestone(ds.cache.comp, tasks.Milestone{
+		ds.cache.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: trans.RecvTaskID,
 			Kind:   tasks.MilestoneKindWork,
 			What:   ds.cache.comp.Name() + ".dir_pipeline",
@@ -151,7 +151,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 
 	ds.popDirPostBuf()
 
-	tasks.AddTag(ds.cache.comp, tasks.Tag{
+	ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-mshr-hit",
 	})
@@ -170,7 +170,7 @@ func (ds *directoryStage) handleReadHit(
 		return false
 	}
 
-	tasks.AddTag(ds.cache.comp, tasks.Tag{
+	ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What:   "read-hit",
 	})
@@ -201,7 +201,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 	if ds.needEviction(victim) {
 		ok := ds.evict(transIdx, trans, victimSetID, victimWayID)
 		if ok {
-			tasks.AddTag(ds.cache.comp, tasks.Tag{
+			ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 				TaskID: trans.RecvTaskID,
 				What:   "read-miss",
 			})
@@ -212,7 +212,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 
 	ok := ds.fetch(transIdx, trans, victimSetID, victimWayID)
 	if ok {
-		tasks.AddTag(ds.cache.comp, tasks.Tag{
+		ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "read-miss",
 		})
@@ -231,7 +231,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 	if found {
 		ok := ds.doWriteMSHRHit(transIdx, trans, mshrIdx)
 		if ok {
-			tasks.AddTag(ds.cache.comp, tasks.Tag{
+			ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 				TaskID: trans.RecvTaskID,
 				What:   "write-mshr-hit",
 			})
@@ -247,7 +247,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 	if blockFound {
 		ok := ds.doWriteHit(transIdx, trans, setID, wayID)
 		if ok {
-			tasks.AddTag(ds.cache.comp, tasks.Tag{
+			ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 				TaskID: trans.RecvTaskID,
 				What:   "write-hit",
 			})
@@ -258,7 +258,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 
 	ok := ds.doWriteMiss(transIdx, trans)
 	if ok {
-		tasks.AddTag(ds.cache.comp, tasks.Tag{
+		ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 			TaskID: trans.RecvTaskID,
 			What:   "write-miss",
 		})
@@ -570,7 +570,7 @@ func (ds *directoryStage) fetch(
 
 	ds.updateBlockForFetch(next, setID, wayID, cacheLineID, pid)
 
-	tasks.AddTag(ds.cache.comp, tasks.Tag{
+	ds.cache.comp.TaskTracker().AddTag(tasks.Tag{
 		TaskID: trans.RecvTaskID,
 		What: fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
 			next.MSHRState.Entries[mshrIdx].Address,
@@ -651,7 +651,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 func (ds *directoryStage) startDirPipeline(transIdx int) {
 	trans := &ds.cache.comp.State.Transactions[transIdx]
 
-	trans.DirPipelinePID = tasks.StartTask(ds.cache.comp, tasks.StartInfo{
+	trans.DirPipelinePID = ds.cache.comp.TaskTracker().StartTask(ds.cache.comp, tasks.StartInfo{
 		ParentID: trans.RecvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     ds.cache.comp.Name() + ".dir_pipeline",
@@ -669,7 +669,7 @@ func (ds *directoryStage) popDirPostBuf() {
 	idx, _ := next.DirPostPipelineBuf.Peek()
 	trans := &next.Transactions[idx]
 	if trans.DirPipelinePID != 0 {
-		tasks.EndTask(ds.cache.comp, tasks.EndInfo{ID: trans.DirPipelinePID})
+		ds.cache.comp.TaskTracker().EndTask(trans.DirPipelinePID)
 		trans.DirPipelinePID = 0
 	}
 

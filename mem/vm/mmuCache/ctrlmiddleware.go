@@ -7,7 +7,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -303,8 +302,8 @@ func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 // close. Mirrors the completion path in handleRsp.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		tasks.EndReqOut(m.comp, inflight.SendTaskID)
-		tasks.EndReqIn(m.comp, inflight.RecvTaskID)
+		m.comp.TaskTracker().EndReqOut(inflight.SendTaskID)
+		m.comp.TaskTracker().EndReqIn(inflight.RecvTaskID)
 	}
 }
 

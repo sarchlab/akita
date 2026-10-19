@@ -58,7 +58,9 @@ Build with `modeling.MakeBuilder[*Comp](DefaultSpec())`. The caller supplies the
 Spec explicitly; a package-level function is never discovered at runtime.
 State and Middlewares may each define a pointer-receiver Initialize(*Comp)
 method with no return value. Omission preserves the zero value; middleware
-fields must still be valid, non-nil modeling.Middleware values after initialization.
+fields must implement the selected model's Middleware interface and be non-nil
+after initialization. Exported fields permit reflection to build the cached
+pipeline once; dispatch does not repeat the reflection.
 There are no validator or creator registration callbacks. Spec and Resources are
 supplied through the builder; Ports are bound by the system builder. Initializers
 must not change Spec, Resources, Ports, or another component's State.

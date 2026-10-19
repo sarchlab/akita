@@ -293,8 +293,8 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 		// to the surviving transaction shifted into the freed slot.
 		transReq1ID := sim.NewID()
 		transReq2ID := sim.NewID()
-		transTask1ID := tasks.StartReqOut(at, messaging.Msg{ID: transReq1ID}, 0)
-		transTask2ID := tasks.StartReqOut(at, messaging.Msg{ID: transReq2ID}, 0)
+		transTask1ID := at.TaskTracker().StartReqOut(at, messaging.Msg{ID: transReq1ID}, 0)
+		transTask2ID := at.TaskTracker().StartReqOut(at, messaging.Msg{ID: transReq2ID}, 0)
 
 		req := makeRead(0x10040)
 

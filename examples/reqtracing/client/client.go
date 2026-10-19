@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -89,7 +88,7 @@ func (m *requestMW) send() bool {
 		}}
 
 	// Store the returned task ID, separately from the request ID.
-	taskID := tasks.StartReqOut(m.comp, req, 0)
+	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, 0)
 	port.Send(req)
 
 	s.InFlight[req.ID] = taskID
@@ -110,7 +109,7 @@ func (m *requestMW) receive() bool {
 	_ = msg.Payload.(server.ReadRsp)
 	rsp := msg
 	if taskID, ok := s.InFlight[rsp.RspTo]; ok {
-		tasks.EndReqOut(m.comp, taskID)
+		m.comp.TaskTracker().EndReqOut(taskID)
 		delete(s.InFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()

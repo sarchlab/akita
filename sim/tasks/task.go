@@ -13,9 +13,6 @@ type StartInfo struct {
 	Detail   any
 }
 
-// EndInfo identifies work to complete. EndTask stamps the time from the owner.
-type EndInfo struct{ ID uint64 }
-
 // Task is the complete basic record delivered at start and end. EndTime is
 // populated at end. Tags and milestones are separate events, not replayed history.
 // Detail is borrowed read-only data; observers must not mutate it. It is not

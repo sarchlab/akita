@@ -12,7 +12,9 @@ import (
 
 func TestBuilderSuppliesExternalResources(t *testing.T) {
 	simulation := sim.MakeBuilder().Build()
-	t.Cleanup(simulation.Terminate)
+	t.Cleanup(func() {
+		simulation.Terminate()
+	})
 	storage := mem.NewStorage(64)
 	spec := idealmemcontroller.DefaultSpec()
 	spec.Latency = 7

@@ -154,10 +154,10 @@ func TestResetDoesNotEndCompletedReceiveAgain(t *testing.T) {
 	comp := pipeline.comp
 	rec := &resetEndCounter{ends: make(map[uint64]int)}
 	comp.TaskTracker().Subscribe(rec, comp)
-	completed := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
-	active := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
-	write := tasks.StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
-	tasks.EndReqIn(comp, completed)
+	completed := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	active := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	write := comp.TaskTracker().StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	comp.TaskTracker().EndReqIn(completed)
 	comp.State.Transactions = []transactionState{
 		{HasRead: true, RecvTaskID: completed, Removed: true, HasWriteToBottom: true, WriteTaskID: write},
 		{HasWrite: true, RecvTaskID: active},

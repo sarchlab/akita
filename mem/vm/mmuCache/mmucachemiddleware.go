@@ -171,8 +171,8 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	// Open req_in for the original Top request at retrieve, and initiate the
 	// forwarded Bottom request as a req_out parented to it. The Top request's
 	// task IDs are retained by the Bottom request ID until its response arrives.
-	recvTaskID := tasks.StartReqIn(m.comp, req)
-	sendTaskID := tasks.StartReqOut(m.comp, reqToBottom, recvTaskID)
+	recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, req)
+	sendTaskID := m.comp.TaskTracker().StartReqOut(m.comp, reqToBottom, recvTaskID)
 	m.bottomPort().Send(reqToBottom)
 
 	m.comp.State.InflightReqs[reqToBottom.ID] = inflightReqState{
@@ -243,18 +243,18 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	// The upstream response is on its way: finalize the forwarded req_out and
 	// complete the original req_in, using the IDs saved in the transaction.
 	if inflight, ok := next.InflightReqs[rsp.RspTo]; ok {
-		tasks.EndReqOut(m.comp, inflight.SendTaskID)
+		m.comp.TaskTracker().EndReqOut(inflight.SendTaskID)
 
 		// The downstream walk-fetch the original Top request waited on has
 		// returned: charge that in-flight wait to the original req_in (this is
 		// the req_in opened at retrieve in sendReqToBottom).
-		tasks.AddMilestone(m.comp, tasks.Milestone{
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: inflight.RecvTaskID,
 			Kind:   tasks.MilestoneKindTranslation,
 			What:   "translation",
 		})
 
-		tasks.EndReqIn(m.comp, inflight.RecvTaskID)
+		m.comp.TaskTracker().EndReqIn(inflight.RecvTaskID)
 		delete(next.InflightReqs, rsp.RspTo)
 	}
 

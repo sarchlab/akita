@@ -103,7 +103,7 @@ func (m *bankTickMW) traceRefreshStall(next *state, cmd *commandState) {
 	if sub == nil {
 		return
 	}
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: sub.TaskID,
 		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".refresh",
@@ -122,7 +122,7 @@ func (m *bankTickMW) traceCmdIssue(next *state, cmd *commandState) {
 	if sub == nil {
 		return
 	}
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: sub.TaskID,
 		Kind:   tasks.MilestoneKindHardwareResource,
 		What:   commandKind(cmd.Kind).String(),
@@ -136,6 +136,6 @@ func (m *bankTickMW) endSubTransTasks(ids []uint64) {
 		return
 	}
 	for _, id := range ids {
-		tasks.EndTask(m.comp, tasks.EndInfo{ID: id})
+		m.comp.TaskTracker().EndTask(id)
 	}
 }

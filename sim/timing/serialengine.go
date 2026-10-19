@@ -45,6 +45,9 @@ func (e *SerialEngine) Name() string {
 
 // RegisterHandler registers a handler with the given name.
 func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
+	if _, exists := e.registry[name]; exists {
+		panic(fmt.Sprintf("timing: duplicate handler name %q", name))
+	}
 	e.registry[name] = handler
 }
 
@@ -69,7 +72,8 @@ func (e *SerialEngine) Schedule(evt Event) {
 }
 
 // Run processes all the events scheduled in the SerialEngine.
-// The owning simulation must have been initialized successfully.
+// The owning simulation must have been initialized successfully and not
+// terminated; these preconditions are not checked by the engine.
 func (e *SerialEngine) Run() (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
@@ -101,7 +105,8 @@ func (e *SerialEngine) Run() (err error) {
 // last processed event and all later events still queued. This is a
 // deterministic mid-run boundary — unlike RequestPause, which stops at a
 // non-reproducible point — used to take a mid-transaction checkpoint.
-// The owning simulation must have been initialized successfully.
+// The owning simulation must have been initialized successfully and not
+// terminated; these preconditions are not checked by the engine.
 func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()

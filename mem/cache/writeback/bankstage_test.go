@@ -26,7 +26,7 @@ func TestBankStage(t *testing.T) {
 	fillTop := func(t *testing.T) {
 		t.Helper()
 
-		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+		dummy := messaging.Msg{ID: 1, Payload: memprotocol.DataReadyRsp{},
 			Src:          topPort.AsRemote(),
 			Dst:          messaging.RemotePort("SomeSrc"),
 			TrafficClass: "rsp"}

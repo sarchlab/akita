@@ -2,8 +2,7 @@ package vm
 
 import "github.com/sarchlab/akita/v5/sim/timing"
 
-// PageTableBuilder builds PageTable resources. When wired to a simulation
-// through WithSimulation, the built page table registers itself as a resource.
+// PageTableBuilder builds PageTable resources. WithSimulation is required; Build registers the resource.
 type PageTableBuilder struct {
 	log2PageSize uint64
 	simulation   timing.Simulation
@@ -30,18 +29,15 @@ func (b PageTableBuilder) WithSimulation(sim timing.Simulation) PageTableBuilder
 	return b
 }
 
-// Build creates the PageTable with the given name. If the builder was wired to
-// a simulation, the page table registers itself as a resource under that name.
+// Build creates and registers the resource. WithSimulation is required.
 func (b PageTableBuilder) Build(name string) *PageTable {
-	pt := &PageTable{
-		name:         name,
-		log2PageSize: b.log2PageSize,
-		tables:       make(map[PID]*processTable),
+	if b.simulation == nil {
+		panic("PageTable: WithSimulation is required")
 	}
+	pt := NewPageTable(b.log2PageSize)
+	pt.name = name
 
-	if b.simulation != nil {
-		b.simulation.RegisterResource(pt)
-	}
+	b.simulation.RegisterResource(pt)
 
 	return pt
 }

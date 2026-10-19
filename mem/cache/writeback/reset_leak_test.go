@@ -135,11 +135,11 @@ func TestResetEndsOnlyOwnedLiveTasks(t *testing.T) {
 	}, makePorts("Cache", 8))
 	rec := &resetEndCounter{ends: make(map[uint64]int)}
 	comp.TaskTracker().Subscribe(rec, comp)
-	completed := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
-	active := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
-	flush := tasks.StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
-	eviction := tasks.StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
-	tasks.EndReqIn(comp, completed)
+	completed := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	active := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	flush := comp.TaskTracker().StartReqIn(comp, messaging.Msg{ID: comp.NewID()})
+	eviction := comp.TaskTracker().StartReqOut(comp, messaging.Msg{ID: comp.NewID()}, completed)
+	comp.TaskTracker().EndReqIn(completed)
 	comp.State.HasProcessingFlush = true
 	comp.State.ProcessingFlush = flushReqState{RecvTaskID: flush}
 	comp.State.Transactions = []transactionState{

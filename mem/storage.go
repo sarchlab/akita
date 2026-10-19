@@ -54,7 +54,7 @@ func newStorageUnit(uintSize uint64) *storageUnit {
 // capacity. Prefer StorageBuilder for storage that should be a named simulation
 // resource.
 func NewStorage(capacity uint64) *Storage {
-	return MakeStorageBuilder().WithCapacity(capacity).Build("")
+	return NewStorageWithUnitSize(capacity, 4*KB)
 }
 
 // NewStorageWithUnitSize creates an unnamed, unregistered storage with the
@@ -62,10 +62,7 @@ func NewStorage(capacity uint64) *Storage {
 // reduces the memory consumption of storage. Prefer StorageBuilder for storage
 // that should be a named simulation resource.
 func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
-	return MakeStorageBuilder().
-		WithCapacity(capacity).
-		WithUnitSize(unitSize).
-		Build("")
+	return &Storage{capacity: capacity, unitSize: unitSize, data: make(map[uint64]*storageUnit)}
 }
 
 // createOrGetStorageUnit retrieves a storage unit if the unit has been created

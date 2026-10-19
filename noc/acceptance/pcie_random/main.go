@@ -12,7 +12,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
-	"github.com/tebeka/atexit"
 )
 
 var numDevicePerSwitch = 8
@@ -40,8 +39,9 @@ func main() {
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
-	s.Terminate()
-	atexit.Exit(0)
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }
 
 func createNetwork(s *sim.Simulation, test *acceptance.Test) {

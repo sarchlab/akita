@@ -69,7 +69,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 	// the processing that follows.
 	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindQueue, m.comp.Name()+".SubTransQueue"))
 
-	ts.RecvTaskID = tasks.StartReqIn(m.comp, msgI)
+	ts.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, msgI)
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)
@@ -77,7 +77,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 
 	for i := range ts.SubTransactions {
 		st := &ts.SubTransactions[i]
-		st.TaskID = tasks.StartTask(m.comp, tasks.StartInfo{
+		st.TaskID = m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 			ParentID: ts.RecvTaskID,
 			Kind:     "sub-trans",
 			What:     "sub-trans",

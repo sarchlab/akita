@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +16,7 @@ func TestConcretePageTablePreservesCheckpointPayload(t *testing.T) {
 	legacy := `{"log2_page_size":12,"tables":[{"pid":1,"pages":[{"pid":1,
 		"p_addr":16384,"v_addr":4096,"page_size":4096,"valid":true,
 		"device_id":0,"unified":false,"is_migrating":false,"is_pinned":false}]}]}`
-	pt := vm.MakePageTableBuilder().WithLog2PageSize(12).Build("Pages")
+	pt := vm.MakePageTableBuilder().WithSimulation(sim.MakeBuilder().Build()).WithLog2PageSize(12).Build("Pages")
 	require.Equal(t, "Pages", pt.Name())
 	require.Equal(t, uint64(12), pt.Log2PageSize())
 	require.NoError(t, pt.LoadCheckpoint(strings.NewReader(legacy)))

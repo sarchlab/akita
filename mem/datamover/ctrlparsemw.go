@@ -102,7 +102,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	state.CurrentTransaction.RecvTaskID = tasks.StartReqIn(m.comp, req)
+	state.CurrentTransaction.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, req)
 
 	return true
 }
@@ -139,7 +139,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.topPort().Send(rsp)
 
-	tasks.EndReqIn(m.comp, trans.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{

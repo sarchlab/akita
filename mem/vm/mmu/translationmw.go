@@ -123,14 +123,14 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	// walk subtask that spanned it, so the work milestone has a corresponding
 	// child bar instead of an unattributed gap. walking.RecvTaskID is the
 	// req_in id.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: walking.RecvTaskID,
 		Kind:   tasks.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
-	tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+	m.comp.TaskTracker().EndTask(walking.WalkTaskID)
 
-	tasks.EndReqIn(m.comp, walking.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(walking.RecvTaskID)
 
 	return true
 }
@@ -173,7 +173,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
-	recvTaskID := tasks.StartReqIn(m.comp, req)
+	recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, req)
 
 	ts := transactionState{
 		ReqID:        req.ID,
@@ -190,7 +190,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 	// Open the walk subtask spanning the page-table-walk latency, a child of the
 	// req_in, so the ".walk" work milestone emitted at walk completion has a
 	// corresponding bar (no bare work interval).
-	ts.WalkTaskID = tasks.StartTask(m.comp, tasks.StartInfo{
+	ts.WalkTaskID = m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 		ParentID: recvTaskID,
 		Kind:     tasks.KindPipeline,
 		What:     m.comp.Name() + ".walk",

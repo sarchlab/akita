@@ -11,7 +11,7 @@ import (
 // can step the component one cycle at a time.
 func Tick[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M]) bool {
 	return base.Dispatch(
-		base.OrderedMiddlewares(&c.Middlewares), TickEvent(c))
+		base.OrderedMiddlewares[ticking.Middleware](&c.Middlewares), TickEvent(c))
 }
 
 // TickEvent returns a ticking.Event for c at the current time, for a test that

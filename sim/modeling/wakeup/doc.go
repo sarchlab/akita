@@ -21,7 +21,7 @@
 // so it keeps running until no middleware has work ready. A middleware whose
 // work becomes ready later calls WakeAt for that time.
 //
-// A middleware implements modeling.Middleware:
+// A middleware implements wakeup.Middleware:
 //
 //	func (m *sendMW) Handle(_ timing.Event) bool {
 //	    now := m.comp.CurrentTime()

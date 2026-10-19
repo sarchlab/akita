@@ -172,12 +172,12 @@ func (m *incomingMW) logFlitE2EEnd(flit messaging.Msg) {
 	taskID := flit.Payload.(packetization.Flit).FlitTaskID
 	// Charge the interval since send to network transfer, refined by the
 	// per-switch subtasks. Finish the ID started by the source endpoint.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: taskID,
 		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tasks.EndTask(m.comp, tasks.EndInfo{ID: taskID})
+	m.comp.TaskTracker().EndTask(taskID)
 }
 
 // logMsgE2EEnd closes the per-message msg_e2e task once the message is
@@ -189,10 +189,10 @@ func (m *incomingMW) logMsgE2EEnd(msgTaskID uint64) {
 		return
 	}
 
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: msgTaskID,
 		Kind:   tasks.MilestoneKindNetworkTransfer,
 		What:   m.comp.Name() + ".NetworkPort",
 	})
-	tasks.EndTask(m.comp, tasks.EndInfo{ID: msgTaskID})
+	m.comp.TaskTracker().EndTask(msgTaskID)
 }

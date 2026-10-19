@@ -31,6 +31,9 @@ var expectedErrors = []struct {
 	pkgSubstr string
 	msgSubstr string
 }{
+	{"event progress return", "fixtures/badeventmiddleware", "implement event.Middleware"},
+	{"wakeup missing progress", "fixtures/badwakeupmiddleware", "implement wakeup.Middleware"},
+	{"ticking missing progress", "fixtures/badtickingmiddleware", "implement ticking.Middleware"},
 	{"defaultargs", "fixtures/defaultargs", "must have signature func DefaultSpec() Spec"},
 	{"defaultresult", "fixtures/defaultresult", "must have signature func DefaultSpec() Spec"},
 	{"defaultvar", "fixtures/defaultvar", "must be a package-level function"},
@@ -73,7 +76,7 @@ var expectedErrors = []struct {
 	{"invalid State initializer", "fixtures/badstateinitializer", "State.Initialize must have signature"},
 	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer", "Middlewares.Initialize must have signature"},
 	{"middleware without Handle", "fixtures/badmiddleware",
-		"implement modeling.Middleware"},
+		"implement ticking.Middleware"},
 }
 
 // TestInspect loads all test subjects in one Inspect call (loading carries
@@ -122,6 +125,7 @@ func TestInspect(t *testing.T) {
 		checkLocalProto(t, byPkg)
 	})
 
+	checkEventMiddleware(t, byPkg)
 	checkDeclarationForms(t, byPkg)
 
 	t.Run("package without definition is skipped", func(t *testing.T) {
@@ -511,5 +515,15 @@ func checkNoExecution(t *testing.T, byPkg map[string]schema.Definition) {
 			t.Fatalf("expected defaults from the package whose init panics; got %+v", def)
 		}
 		t.Log("Read DefaultSpec's N=17 without executing the package's panic in init")
+	})
+}
+
+func checkEventMiddleware(t *testing.T, byPkg map[string]schema.Definition) {
+	t.Helper()
+	t.Run("event middleware has no return value", func(t *testing.T) {
+		def := byPkg[fixturePath("eventmiddleware")]
+		if def.Model != schema.ModelEvent || len(def.Middlewares) != 1 || def.Middlewares[0].Name != "Work" {
+			t.Fatalf("event middleware: %+v", def)
+		}
 	})
 }

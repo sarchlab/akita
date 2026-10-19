@@ -10,6 +10,7 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -56,25 +57,29 @@ func writeRoundTripTrace(t *testing.T) string {
 	t.Cleanup(func() { os.Remove(dbFile) })
 
 	recorder := datarecording.NewDataRecorder(dbName + ".sqlite3")
-	domain := &roundTripDomain{tracker: tasks.NewTracker(),
+	domain := &roundTripDomain{
 		HookableBase: &hooking.HookableBase{},
 		name:         "GPU[0].L1Cache",
 	}
 
+	domain.tracker = tasks.NewTracker(domain, domain.NewID, func(n naming.Named) bool { return n == domain })
 	tracer := NewDBTracer(domain, recorder)
 	domain.TaskTracker().Subscribe(tracer, domain)
 	tracer.StartTracing()
 
 	domain.now = 10
-	tasks.StartTask(domain, tasks.StartInfo{Kind: "req_in", What: "ReadReq"})
+	domain.TaskTracker().StartTask(domain, tasks.StartInfo{Kind: "req_in", What: "ReadReq"})
 	domain.now = 12
-	tasks.AddTag(domain, tasks.Tag{TaskID: 1, What: "read-hit"})
-	tasks.AddMilestone(domain, tasks.Milestone{TaskID: 1, Kind: tasks.MilestoneKindQueue, What: "queued"})
+	domain.TaskTracker().AddTag(tasks.Tag{TaskID: 1, What: "read-hit"})
+	domain.TaskTracker().AddMilestone(tasks.Milestone{TaskID: 1, Kind: tasks.MilestoneKindQueue, What: "queued"})
 	domain.now = 20
-	tasks.EndTask(domain, tasks.EndInfo{ID: 1})
+	domain.TaskTracker().EndTask(1)
 
 	tracer.StopTracing()
 	tracer.Terminate()
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	return dbFile
 }

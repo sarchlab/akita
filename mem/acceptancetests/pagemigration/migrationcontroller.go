@@ -298,7 +298,7 @@ func (m *migMW) beginMigration() {
 
 	// Open a parent task spanning the whole migration so the control phases nest
 	// under it in the trace.
-	state.MigTaskID = tasks.StartTask(m.ctrl, tasks.StartInfo{
+	state.MigTaskID = m.ctrl.TaskTracker().StartTask(m.ctrl, tasks.StartInfo{
 		Kind:     "migration",
 		What:     "migration",
 		Location: m.ctrl.Name(),
@@ -314,11 +314,11 @@ func (m *migMW) startPhaseTask(phase migPhase) {
 	state := &m.ctrl.State
 
 	if state.PhaseTaskID != 0 {
-		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
+		m.ctrl.TaskTracker().EndTask(state.PhaseTaskID)
 	}
 
 	name := phaseName(phase)
-	state.PhaseTaskID = tasks.StartTask(m.ctrl, tasks.StartInfo{
+	state.PhaseTaskID = m.ctrl.TaskTracker().StartTask(m.ctrl, tasks.StartInfo{
 		ParentID: state.MigTaskID,
 		Kind:     "migration_step",
 		What:     name,
@@ -377,7 +377,7 @@ func (m *migMW) runControlPhase(
 
 		// Open a req_out task under the current phase so the receiver's req_in
 		// task can be linked by the observer; closed in processAcks.
-		state.CommandTasks[req.ID] = tasks.StartReqOut(m.ctrl, req, state.PhaseTaskID)
+		state.CommandTasks[req.ID] = m.ctrl.TaskTracker().StartReqOut(m.ctrl, req, state.PhaseTaskID)
 		m.ctrlPort().Send(req)
 
 		state.SendCursor++
@@ -415,7 +415,7 @@ func (m *migMW) processAcks() bool {
 		}
 
 		// Close the req_out task opened for this command (keyed by request ID).
-		tasks.EndReqOut(m.ctrl, m.ctrl.State.CommandTasks[rsp.RspTo])
+		m.ctrl.TaskTracker().EndReqOut(m.ctrl.State.CommandTasks[rsp.RspTo])
 		delete(m.ctrl.State.CommandTasks, rsp.RspTo)
 
 		m.ctrl.State.PendingAcks--
@@ -452,7 +452,7 @@ func (m *migMW) tickCopying() bool {
 
 	// Open a req_out task under the copy phase so the data mover's req_in task
 	// has a parent; closed in processMoveRsp.
-	state.MoveTaskID = tasks.StartReqOut(m.ctrl, req, state.PhaseTaskID)
+	state.MoveTaskID = m.ctrl.TaskTracker().StartReqOut(m.ctrl, req, state.PhaseTaskID)
 	m.moverPort().Send(req)
 
 	state.MoveSent = true
@@ -484,7 +484,7 @@ func (m *migMW) processMoveRsp() bool {
 	}
 
 	// Close the req_out task opened for the data-move request.
-	tasks.EndReqOut(m.ctrl, state.MoveTaskID)
+	m.ctrl.TaskTracker().EndReqOut(state.MoveTaskID)
 	state.MoveTaskID = 0
 
 	vAddr := state.CurPage * pageSize
@@ -508,11 +508,11 @@ func (m *migMW) finishMigration() {
 
 	// Close the final phase task and the parent migration task.
 	if state.PhaseTaskID != 0 {
-		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.PhaseTaskID})
+		m.ctrl.TaskTracker().EndTask(state.PhaseTaskID)
 		state.PhaseTaskID = 0
 	}
 	if state.MigTaskID != 0 {
-		tasks.EndTask(m.ctrl, tasks.EndInfo{ID: state.MigTaskID})
+		m.ctrl.TaskTracker().EndTask(state.MigTaskID)
 		state.MigTaskID = 0
 	}
 

@@ -137,7 +137,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		return false
 	}
 
-	taskID := tasks.StartReqOut(m.comp, req, trans.RecvTaskID)
+	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	srcP.Send(req)
 
 	trans.NextReadAddr += state.SrcByteGranularity
@@ -188,13 +188,13 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 
 	// Charge the in-flight src-read wait to the req_in opened for this move
 	// transaction (the stored receive ID also parents the read req_out), so the dominant latency of a move is attributed.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tasks.MilestoneKindData,
 		What:   m.srcPort().Name(),
 	})
 
-	tasks.EndReqOut(m.comp, originalReq.TaskID)
+	m.comp.TaskTracker().EndReqOut(originalReq.TaskID)
 
 	return true
 }
@@ -233,7 +233,7 @@ func (m *dataTransferMW) writeToDst() bool {
 		return false
 	}
 
-	taskID := tasks.StartReqOut(m.comp, req, trans.RecvTaskID)
+	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	dstP.Send(req)
 
 	trans.NextWriteAddr += state.DstByteGranularity
@@ -282,13 +282,13 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 
 	// Charge the in-flight dst-write wait to the req_in opened for this move
 	// transaction (the stored receive ID also parents the write req_out), so the dominant latency of a move is attributed.
-	tasks.AddMilestone(m.comp, tasks.Milestone{
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: trans.RecvTaskID,
 		Kind:   tasks.MilestoneKindSubTask,
 		What:   m.dstPort().Name(),
 	})
 
-	tasks.EndReqOut(m.comp, originalReq.TaskID)
+	m.comp.TaskTracker().EndReqOut(originalReq.TaskID)
 
 	// Processing a write ack is real progress: the component must tick again
 	// so the remaining acks drain and the transaction can finish (which now

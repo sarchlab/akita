@@ -46,8 +46,8 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	p.BindConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)
-	first := messaging.Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
-	second := messaging.Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 1}}
+	first := messaging.Msg{ID: 1, Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
+	second := messaging.Msg{ID: 1, Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 1}}
 	assertEmptyPortReads(t, p)
 	require.Zero(t, conn.available)
 	require.Zero(t, comp.freed)

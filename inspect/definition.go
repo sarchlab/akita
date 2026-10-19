@@ -54,7 +54,7 @@ func extractModelDefinition(
 	if def.Ports, err = portsOfType(pkg, lit, portsType, index); err != nil {
 		return nil, err
 	}
-	if def.Middlewares, err = middlewaresOfType(pkg, lit, mwType, index); err != nil {
+	if def.Middlewares, err = middlewaresOfType(pkg, lit, mwType, index, model); err != nil {
 		return nil, err
 	}
 	if model == schema.ModelTicking {
@@ -138,16 +138,16 @@ func portFieldKind(typ types.Type) (group, ok bool) {
 
 // middlewaresOfType lists the fields of a Middlewares struct in declaration
 // order, which is the order the component runs them on every tick. Each field
-// must be exported and implement modeling.Middleware.
+// must be exported and implement that model's Middleware interface.
 func middlewaresOfType(
-	pkg *packages.Package, lit *ast.CompositeLit, typ types.Type, index pkgIndex,
+	pkg *packages.Package, lit *ast.CompositeLit, typ types.Type, index pkgIndex, model string,
 ) ([]schema.Middleware, error) {
 	st, ok := typ.Underlying().(*types.Struct)
 	if !ok {
 		return nil, posErrorf(pkg, lit.Pos(), "Middlewares type %s must be a struct", typ)
 	}
 
-	iface := middlewareInterface(index)
+	iface := middlewareInterface(index, model)
 	named, _ := types.Unalias(typ).(*types.Named)
 	docs := fieldDocs(named, index)
 
@@ -156,7 +156,7 @@ func middlewaresOfType(
 		if !f.Exported() || (iface != nil && !types.Implements(f.Type(), iface)) {
 			return nil, posErrorf(pkg, f.Pos(),
 				"Middlewares field %s must be exported and implement "+
-					"modeling.Middleware", f.Name())
+					"%s.Middleware", f.Name(), model)
 		}
 
 		out = append(out, schema.Middleware{
@@ -169,10 +169,9 @@ func middlewaresOfType(
 	return out, nil
 }
 
-// middlewareInterface returns the modeling.Middleware interface, or nil when
-// the modeling package is not loaded.
-func middlewareInterface(index pkgIndex) *types.Interface {
-	modeling, ok := index[modelingPath]
+// middlewareInterface returns the selected model's Middleware interface.
+func middlewareInterface(index pkgIndex, model string) *types.Interface {
+	modeling, ok := index[modelingPath+"/"+model]
 	if !ok {
 		return nil
 	}

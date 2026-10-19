@@ -1,6 +1,7 @@
 package timing
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"reflect"
@@ -77,6 +78,9 @@ func NewParallelEngine() *ParallelEngine {
 
 // RegisterHandler registers a handler with the given name.
 func (e *ParallelEngine) RegisterHandler(name string, handler Handler) {
+	if _, exists := e.registry[name]; exists {
+		panic(fmt.Sprintf("timing: duplicate handler name %q", name))
+	}
 	e.registry[name] = handler
 }
 

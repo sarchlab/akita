@@ -42,6 +42,8 @@ type fakeEngine struct {
 	runReady      chan struct{}
 }
 
+func (e *fakeEngine) WithIdle(fn func() error) error { return e.controls().WithIdle(fn) }
+
 func (e *fakeEngine) Schedule(timing.Event) {}
 
 func (e *fakeEngine) RegisterHandler(string, timing.Handler) {}

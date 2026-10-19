@@ -14,7 +14,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/portwalk"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -107,11 +106,9 @@ func (c *ComponentBase[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
 	return c.simulation.Engine().CurrentTime()
 }
 
-var middlewareType = reflect.TypeFor[modeling.Middleware]()
-
 // Dispatch passes an event to each middleware in order and reports whether
-// any of them made progress. Each model's Component calls it from Handle.
-func Dispatch(middlewares []modeling.Middleware, e timing.Event) bool {
+// any of them made progress. Ticking and wakeup components call it from Handle.
+func Dispatch[MW interface{ Handle(timing.Event) bool }](middlewares []MW, e timing.Event) bool {
 	progress := false
 
 	for _, mw := range middlewares {
@@ -126,8 +123,10 @@ func Dispatch(middlewares []modeling.Middleware, e timing.Event) bool {
 // OrderedMiddlewares returns the fields of a Middlewares struct in declaration
 // order, the order a component runs them. middlewares is the struct or a
 // pointer to it. It panics unless every field is exported, implements
-// modeling.Middleware, and is set.
-func OrderedMiddlewares(middlewares any) []modeling.Middleware {
+// the model's Middleware interface, and is set. Exported fields allow reflection
+// to extract values once at initialization; dispatch uses the cached slice.
+func OrderedMiddlewares[MW any](middlewares any) []MW {
+	middlewareType := reflect.TypeFor[MW]()
 	v := reflect.Indirect(reflect.ValueOf(middlewares))
 
 	t := v.Type()
@@ -135,13 +134,13 @@ func OrderedMiddlewares(middlewares any) []modeling.Middleware {
 		panic(fmt.Sprintf("modeling: Middlewares type %s must be a struct", t))
 	}
 
-	out := make([]modeling.Middleware, 0, t.NumField())
+	out := make([]MW, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		if !f.IsExported() || !f.Type.Implements(middlewareType) {
 			panic(fmt.Sprintf(
 				"modeling: Middlewares field %s.%s must be exported and "+
-					"implement modeling.Middleware", t, f.Name))
+					"implement %s", t, f.Name, middlewareType))
 		}
 
 		fv := v.Field(i)
@@ -151,7 +150,7 @@ func OrderedMiddlewares(middlewares any) []modeling.Middleware {
 				t, f.Name))
 		}
 
-		out = append(out, fv.Interface().(modeling.Middleware))
+		out = append(out, fv.Interface().(MW))
 	}
 
 	return out

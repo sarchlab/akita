@@ -3,7 +3,6 @@ package mmu
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -146,9 +145,9 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // req_out to finalize. Mirrors the completion in translationMW.doPageWalkHit.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
-		tasks.EndReqIn(m.comp, walking.RecvTaskID)
+		m.comp.TaskTracker().EndReqIn(walking.RecvTaskID)
 		if walking.WalkTaskID != 0 {
-			tasks.EndTask(m.comp, tasks.EndInfo{ID: walking.WalkTaskID})
+			m.comp.TaskTracker().EndTask(walking.WalkTaskID)
 		}
 	}
 }

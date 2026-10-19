@@ -1,16 +1,7 @@
 package tasks
 
-import (
-	"github.com/sarchlab/akita/v5/sim/naming"
-	"github.com/sarchlab/akita/v5/sim/timing"
-)
+import "github.com/sarchlab/akita/v5/sim/naming"
 
-// Owner supplies the task service and clock of one simulation. ComponentBase
-// implements Owner without requiring any task hooks. The clock, ID allocator,
-// and tracker must belong to the same simulation.
-type Owner interface {
-	naming.Named
-	timing.TimeTeller
-	NewID() uint64
-	TaskTracker() *Tracker
-}
+// Owner identifies the object that started a task. Runtime services belong to
+// the simulation's Tracker, not to the owner.
+type Owner interface{ naming.Named }

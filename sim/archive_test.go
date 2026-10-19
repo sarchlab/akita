@@ -35,19 +35,16 @@ func TestWriteReadArchive(t *testing.T) {
 		{name: "Engine", data: []byte("binary-bytes")},
 	}
 
-	if err := writeArchive(path, "build-1", entries); err != nil {
+	if err := writeArchive(path, entries); err != nil {
 		t.Fatalf("writeArchive: %v", err)
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
 		t.Fatalf("temporary archive was not removed")
 	}
 
-	buildID, payloads, err := readArchive(path)
+	payloads, err := readArchive(path)
 	if err != nil {
 		t.Fatalf("readArchive: %v", err)
-	}
-	if buildID != "build-1" {
-		t.Fatalf("build ID = %q, want build-1", buildID)
 	}
 
 	want := map[string][]byte{
@@ -59,7 +56,7 @@ func TestWriteReadArchive(t *testing.T) {
 	}
 }
 
-func TestWriteArchiveSortsEntriesBuildIDFirst(t *testing.T) {
+func TestWriteArchiveContainsOnlySortedEntities(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.tar.gz")
 
@@ -68,21 +65,14 @@ func TestWriteArchiveSortsEntriesBuildIDFirst(t *testing.T) {
 		{name: "a", data: []byte("a")},
 	}
 
-	if err := writeArchive(path, "build-1", entries); err != nil {
+	if err := writeArchive(path, entries); err != nil {
 		t.Fatalf("writeArchive: %v", err)
 	}
 
 	names := archiveEntryNames(t, path)
-	want := []string{buildIDPath, entityPath("a"), entityPath("b")}
+	want := []string{entityPath("a"), entityPath("b")}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("archive names = %v, want %v", names, want)
-	}
-}
-
-func TestWriteArchiveRejectsEmptyBuildID(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "checkpoint.tar.gz")
-	if err := writeArchive(path, "", nil); err == nil {
-		t.Fatalf("expected error for empty build ID")
 	}
 }
 
@@ -92,7 +82,7 @@ func TestWriteArchiveRejectsDuplicateEntity(t *testing.T) {
 		{name: "dup", data: []byte("1")},
 		{name: "dup", data: []byte("2")},
 	}
-	if err := writeArchive(path, "build-1", entries); err == nil ||
+	if err := writeArchive(path, entries); err == nil ||
 		!strings.Contains(err.Error(), "duplicate entity") {
 		t.Fatalf("expected duplicate-entity error, got %v", err)
 	}

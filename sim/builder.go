@@ -143,7 +143,6 @@ func (b Builder) createTopologyRecorder(s *Simulation) {
 func (b Builder) createSimulation() *Simulation {
 	return &Simulation{
 		id:           xid.New().String(),
-		buildID:      defaultBuildID(),
 		entityByName: make(map[string]int),
 	}
 }
@@ -213,7 +212,7 @@ func (b Builder) WithTaskTracking() Builder { b.taskTracking = true; return b }
 
 func (b Builder) createTaskTracker(s *Simulation) {
 	if b.taskTracking || b.visTracingOnStart || b.monitor != nil {
-		s.taskTracker = tasks.NewTracker()
+		s.taskTracker = tasks.NewTracker(s.engine, s.NewID, s.ownsEntity)
 		s.registerEntity(&taskTrackerCheckpoint{Tracker: s.taskTracker})
 	}
 }

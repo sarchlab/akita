@@ -63,11 +63,12 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 	require.NoError(t, s.Initialize())
 
 	s.VisTracer().StartTracing()
-	owner := &taskRecordingOwner{Simulation: s, now: 10}
-	id := tasks.StartTask(owner, tasks.StartInfo{Kind: tasks.KindReqIn, What: "manual"})
+	owner := &taskRecordingOwner{Simulation: s}
+	advanceTaskClock(t, s, 10)
+	id := owner.TaskTracker().StartTask(owner, tasks.StartInfo{Kind: tasks.KindReqIn, What: "manual"})
 	require.NotZero(t, id)
-	owner.now = 20
-	tasks.EndTask(owner, tasks.EndInfo{ID: id})
+	advanceTaskClock(t, s, 20)
+	owner.TaskTracker().EndTask(id)
 	s.VisTracer().StopTracing()
 	s.DataRecorder().Flush()
 
@@ -88,8 +89,53 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 
 type taskRecordingOwner struct {
 	*sim.Simulation
-	now timing.VTimeInPicoSec
 }
 
-func (*taskRecordingOwner) Name() string                         { return "Agent" }
-func (o *taskRecordingOwner) CurrentTime() timing.VTimeInPicoSec { return o.now }
+func (*taskRecordingOwner) Name() string { return "Agent" }
+
+type taskClockHandler struct{}
+
+func (taskClockHandler) Handle(timing.Event) {}
+func advanceTaskClock(t *testing.T, s *sim.Simulation, at timing.VTimeInPicoSec) {
+	t.Helper()
+	if at == 10 {
+		s.Engine().RegisterHandler("Clock", taskClockHandler{})
+	}
+	s.Engine().Schedule(timing.MakeEventBase(s.NewID(), at, "Clock"))
+	require.NoError(t, s.Run())
+}
+
+type namedTaskOwner struct{ name string }
+
+func (o *namedTaskOwner) Name() string { return o.name }
+
+type taskTimes struct {
+	tasks.NopObserver
+	ended tasks.Task
+}
+
+func (r *taskTimes) TaskEnded(task tasks.Task) { r.ended = task }
+
+func TestNamedOwnerUsesSimulationServicesAndScopeIdentity(t *testing.T) {
+	s := sim.MakeBuilder().WithTaskTracking().Build()
+	foreign := sim.MakeBuilder().WithTaskTracking().Build()
+	localOwner, foreignOwner := &namedTaskOwner{"Worker"}, &namedTaskOwner{"Worker"}
+	s.RegisterResource(localOwner)
+	foreign.RegisterResource(foreignOwner)
+	observer := &taskTimes{}
+	tracker := s.TaskTracker()
+	tracker.Subscribe(observer, localOwner)
+	require.Panics(t, func() { tracker.Subscribe(observer, foreignOwner) })
+	require.Panics(t, func() { tracker.Subscribe(observer, &namedTaskOwner{"Worker"}) })
+	require.NoError(t, s.Initialize())
+	advanceTaskClock(t, s, 10)
+	prior := s.NewID()
+	id := tracker.StartTask(localOwner, tasks.StartInfo{Kind: "work", What: "named-only"})
+	require.Equal(t, prior+1, id)
+	advanceTaskClock(t, s, 20)
+	tracker.EndTask(id)
+	require.Equal(t, timing.VTimeInPicoSec(10), observer.ended.StartTime)
+	require.Equal(t, timing.VTimeInPicoSec(20), observer.ended.EndTime)
+	require.NoError(t, s.Terminate())
+	require.NoError(t, foreign.Terminate())
+}

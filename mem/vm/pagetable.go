@@ -25,7 +25,7 @@ type Page struct {
 // NewPageTable creates an unnamed, unregistered PageTable. Prefer
 // PageTableBuilder for a page table that should be a named simulation resource.
 func NewPageTable(log2PageSize uint64) *PageTable {
-	return MakePageTableBuilder().WithLog2PageSize(log2PageSize).Build("")
+	return &PageTable{log2PageSize: log2PageSize, tables: make(map[PID]*processTable)}
 }
 
 // PageTable stores per-process virtual-to-physical page mappings.

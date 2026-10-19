@@ -12,7 +12,7 @@
 // named X": to decode a heterogeneous container of an interface type (a port
 // buffer of Msg, the engine's queue of Event) each element must be tagged with
 // its concrete type name and that name resolved back to a reflect.Type that was
-// registered earlier. Single-value encoding and all decoding require registration.
+// registered earlier. Encoding and decoding both require registration.
 package codec
 
 import (
@@ -123,11 +123,13 @@ func (r *Registry[T]) Tags() []string {
 }
 
 // EncodeSlice encodes a slice of T into a JSON array of typed payloads. Encoding
-// needs no prior registration: each element is tagged with its concrete type and
-// marshalled with the default JSON encoding.
+// requires prior registration of every concrete type, so the result can be decoded.
 func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
 	payloads := make([]typedPayload, len(vs))
 	for i, v := range vs {
+		if !r.Contains(v) {
+			return nil, fmt.Errorf("codec: unregistered %s type %T (register it before checkpointing)", r.label, v)
+		}
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)

@@ -53,6 +53,7 @@ func TestMMU(t *testing.T) {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
+		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 
 		mmuComp = modeling.MakeBuilder[*Comp](DefaultSpec()).
@@ -196,7 +197,7 @@ func TestMMU(t *testing.T) {
 			}
 			pageTable.Insert(page)
 
-			dummy := messaging.Msg{Payload: vmprotocol.TranslationRsp{},
+			dummy := messaging.Msg{ID: sim.NewID(), Payload: vmprotocol.TranslationRsp{},
 				Src:          topPort.AsRemote(),
 				Dst:          messaging.RemotePort("Agent.Top"),
 				TrafficClass: "vmprotocol.TranslationRsp"}

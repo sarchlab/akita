@@ -20,7 +20,9 @@ func buildIDTestSimulation(t *testing.T, parallel bool) *Simulation {
 		b = b.WithParallelEngine()
 	}
 	s := b.Build()
-	t.Cleanup(s.Terminate)
+	t.Cleanup(func() {
+		s.Terminate()
+	})
 	return s
 }
 

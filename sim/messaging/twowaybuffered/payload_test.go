@@ -23,7 +23,7 @@ func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 	for _, v := range []any{&registryTestMsg{}, (*registryTestMsg)(nil), struct{ Unregistered int }{}} {
 		require.PanicsWithValue(t,
 			fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", v),
-			func() { p.Send(messaging.Msg{Src: "Src", Dst: "dst", Payload: v}) })
+			func() { p.Send(messaging.Msg{ID: 1, Src: "Src", Dst: "dst", Payload: v}) })
 		if p.OutgoingBuf().Size() != 0 {
 			t.Fatal("invalid payload was buffered")
 		}
@@ -32,7 +32,7 @@ func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
 		p := NewPort(1, 1)
 		p.BindOwner(&portPresenceOwner{}, "Src")
 		p.BindConnection(&benchmarkConnection{})
-		p.Send(messaging.Msg{Src: "Src", Dst: "dst", Payload: payload})
+		p.Send(messaging.Msg{ID: 1, Src: "Src", Dst: "dst", Payload: payload})
 		if msg, ok := p.PeekOutgoing(); !ok || msg.Payload != payload {
 			t.Fatalf("valid payload was not accepted: %#v, %v", msg, ok)
 		}

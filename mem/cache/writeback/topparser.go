@@ -56,7 +56,7 @@ func (p *topParser) Tick() bool {
 	p.cache.topPort().AddIncomingMilestone(
 		tasks.Reason(tasks.MilestoneKindHardwareResource, p.cache.comp.Name()+".dir_stage_buf"))
 
-	next.Transactions[idx].RecvTaskID = tasks.StartReqIn(p.cache.comp, msg)
+	next.Transactions[idx].RecvTaskID = p.cache.comp.TaskTracker().StartReqIn(p.cache.comp, msg)
 
 	p.cache.topPort().RetrieveIncoming()
 

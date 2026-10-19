@@ -74,9 +74,9 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// rather than left as a gap between the buffer task (which ends at
 		// retrieve) and the post-pipeline finalize milestones on req_in. The task
 		// ID rides on the item through the pipeline and is closed at finalize.
-		recvTaskID := tasks.StartReqIn(m.comp, msg)
+		recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, msg)
 
-		pipelineTaskID := tasks.StartTask(m.comp, tasks.StartInfo{
+		pipelineTaskID := m.comp.TaskTracker().StartTask(m.comp, tasks.StartInfo{
 			ParentID: recvTaskID,
 			Kind:     tasks.KindPipeline,
 			What:     m.comp.Name() + ".pipeline",

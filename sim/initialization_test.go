@@ -30,7 +30,9 @@ func TestExplicitBindingThenInitialization(t *testing.T) {
 				builder = builder.WithParallelEngine()
 			}
 			s := builder.Build()
-			t.Cleanup(s.Terminate)
+			t.Cleanup(func() {
+				s.Terminate()
+			})
 			calls := 0
 			def := modeling.MakeBuilder[*initializationComp](tickCountSpec{Freq: timing.GHz})
 			c := def.WithSimulation(s).WithResources(initializationResources{Calls: &calls}).Build("GPU.SA.CU")

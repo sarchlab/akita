@@ -31,8 +31,13 @@ type Engine interface {
 	RegisterHandler(name string, handler Handler)
 
 	// Run processes events until the simulation finishes. The owning simulation
-	// must have been initialized successfully; this is not checked by the engine.
+	// must have been initialized successfully and not terminated; these
+	// preconditions are not checked by the engine.
 	Run() error
+
+	// WithIdle excludes execution for the duration of fn, or returns an error if
+	// Run (including a paused Run) is active. fn must not call control methods.
+	WithIdle(fn func() error) error
 
 	// RequestPause requests a pause without waiting for the current event or
 	// parallel batch and its hooks to finish. Handlers and hooks may request a

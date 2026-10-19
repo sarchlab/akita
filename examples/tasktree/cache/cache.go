@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -95,12 +94,13 @@ func (m *forwardMW) forwardDown() bool {
 	upReq := msg
 
 	// Open the handling task for the request we received.
-	recvTaskID := tasks.StartReqIn(m.comp, upReq) // req_in @ this cache
+	recvTaskID := m.comp.TaskTracker( // req_in @ this cache
+	).StartReqIn(m.comp, upReq)
 
 	// Miss: send a request one level down, parented to the task above.
 	downReq := memory.NewReq(m.comp.NewID(),
 		bottom.AsRemote(), m.comp.Spec.Downstream)
-	sendTaskID := tasks.StartReqOut(m.comp, downReq, recvTaskID)
+	sendTaskID := m.comp.TaskTracker().StartReqOut(m.comp, downReq, recvTaskID)
 	bottom.Send(downReq)
 
 	m.comp.State.Txns[downReq.ID] = txn{UpReq: upReq, DownReq: downReq, RecvTaskID: recvTaskID, SendTaskID: sendTaskID}
@@ -123,11 +123,11 @@ func (m *forwardMW) respondUp() bool {
 	downRsp := msg
 	t := m.comp.State.Txns[downRsp.RspTo]
 
-	tasks.EndReqOut(m.comp, t.SendTaskID) // close the downstream task
+	m.comp.TaskTracker().EndReqOut(t.SendTaskID) // close the downstream task
 
 	top.Send(memory.NewRsp(m.comp.NewID(),
 		top.AsRemote(), t.UpReq.Src, t.UpReq.ID))
-	tasks.EndReqIn(m.comp, t.RecvTaskID) // close the handling task
+	m.comp.TaskTracker().EndReqIn(t.RecvTaskID) // close the handling task
 
 	delete(m.comp.State.Txns, downRsp.RspTo)
 	bottom.RetrieveIncoming()

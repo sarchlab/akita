@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -80,7 +79,8 @@ func (m *requestMW) send() bool {
 	}
 
 	req := memory.NewReq(m.comp.NewID(), port.AsRemote(), spec.Dst)
-	taskID := tasks.StartReqOut(m.comp, req, 0) // root task, no parent
+	taskID := m.comp.TaskTracker( // root task, no parent
+	).StartReqOut(m.comp, req, 0)
 	port.Send(req)
 	s.InFlight[req.ID] = taskID
 	s.Sent++
@@ -97,7 +97,7 @@ func (m *requestMW) receive() bool {
 	_ = msg.Payload.(memory.ReadRsp)
 	rsp := msg
 	if taskID, ok := s.InFlight[rsp.RspTo]; ok {
-		tasks.EndReqOut(m.comp, taskID)
+		m.comp.TaskTracker().EndReqOut(taskID)
 		delete(s.InFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()

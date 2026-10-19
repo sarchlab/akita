@@ -3,7 +3,6 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -165,14 +164,14 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
 		for _, inc := range trans.IncomingReqs {
-			tasks.EndReqIn(m.comp, inc.RecvTaskID)
+			m.comp.TaskTracker().EndReqIn(inc.RecvTaskID)
 		}
-		tasks.EndReqOut(m.comp, trans.TranslationTaskID)
+		m.comp.TaskTracker().EndReqOut(trans.TranslationTaskID)
 	}
 
 	for _, r := range m.comp.State.InflightReqToBottom {
-		tasks.EndReqIn(m.comp, r.RecvTaskID)
-		tasks.EndReqOut(m.comp, r.SendTaskID)
+		m.comp.TaskTracker().EndReqIn(r.RecvTaskID)
+		m.comp.TaskTracker().EndReqOut(r.SendTaskID)
 	}
 }
 

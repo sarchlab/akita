@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -275,19 +274,19 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 func (m *ctrlMiddleware) endMSHREntryTasks(entry *mshrEntryState) {
 	for i := range entry.Requests {
-		tasks.EndReqIn(m.comp, entry.Requests[i].RecvTaskID)
+		m.comp.TaskTracker().EndReqIn(entry.Requests[i].RecvTaskID)
 	}
 
 	if entry.HasReqToBottom {
-		tasks.EndReqOut(m.comp, entry.SendTaskID)
+		m.comp.TaskTracker().EndReqOut(entry.SendTaskID)
 	}
 }
 
 func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
-	tasks.EndReqIn(m.comp, item.RecvTaskID)
+	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
 	if item.PipelineTaskID != 0 {
-		tasks.EndTask(m.comp, tasks.EndInfo{ID: item.PipelineTaskID})
+		m.comp.TaskTracker().EndTask(item.PipelineTaskID)
 	}
 }
 

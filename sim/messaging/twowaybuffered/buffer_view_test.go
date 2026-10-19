@@ -58,7 +58,7 @@ func TestBufferViewsSynchronizeWithTraffic(t *testing.T) {
 		}
 	}()
 	for range 1000 {
-		p.Send(messaging.Msg{Src: p.AsRemote(), Dst: "Other"})
+		p.Send(messaging.Msg{ID: 1, Src: p.AsRemote(), Dst: "Other"})
 		p.RetrieveOutgoing()
 		p.Deliver(messaging.Msg{})
 		p.RetrieveIncoming()

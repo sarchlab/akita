@@ -54,11 +54,11 @@ type delayMW struct {
 	comp *Comp
 }
 
-func (m *delayMW) Handle(e timing.Event) bool {
+func (m *delayMW) Handle(e timing.Event) {
 	switch e := e.(type) {
 	case event.Recv:
 		if e.Port != m.comp.Ports.In.Name() {
-			return false
+			return
 		}
 
 		for {
@@ -76,10 +76,8 @@ func (m *delayMW) Handle(e timing.Event) bool {
 		m.comp.State.Done = append(m.comp.State.Done,
 			done{ID: e.ReqID, At: e.Time()})
 	default:
-		return false
+		return
 	}
-
-	return true
 }
 
 // DefaultSpec returns the component's default configuration.
