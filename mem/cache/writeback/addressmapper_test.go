@@ -18,7 +18,7 @@ func buildWired(res Resources, spec Spec) *Comp {
 	sim := akitasim.MakeBuilder().Build()
 
 	if res.Storage == nil {
-		res.Storage = mem.NewStorage(spec.TotalByteSize)
+		res.Storage = mem.NewStorage(spec.ByteSize())
 	}
 
 	builtComponent := modeling.MakeBuilder[*Comp](spec).

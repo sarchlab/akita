@@ -18,11 +18,14 @@ import (
 // LinkEndSwitchParameter defines the parameters of the end of a link that is
 // connected to a switch.
 type LinkEndSwitchParameter struct {
-	IncomingBufSize  int
-	OutgoingBufSize  int
-	NumInputChannel  int
-	NumOutputChannel int
-	Latency          int
+	RouteBufferCapacity   int
+	ForwardBufferCapacity int
+	SendBufferCapacity    int
+	IncomingBufSize       int
+	OutgoingBufSize       int
+	NumInputChannel       int
+	NumOutputChannel      int
+	Latency               int
 }
 
 // LinkEndDeviceParameter defines the parameter that associated with an end of a
@@ -34,21 +37,12 @@ type LinkEndDeviceParameter struct {
 	NumOutputChannel int
 }
 
-// LinkParameter defines the parameter of the link that connects to nodes.
-type LinkParameter struct {
-	IsIdeal       bool
-	Frequency     timing.Freq
-	NumStage      int
-	CyclePerStage int
-	PipelineWidth int
-}
-
-// DeviceToSwitchLinkParameter contains the parameters that define a link
+// DeviceConfig contains the parameters that define a link
 // between a device and a switch.
-type DeviceToSwitchLinkParameter struct {
+type DeviceConfig struct {
+	Name           string // Empty selects an automatically generated endpoint name.
 	DeviceEndParam LinkEndDeviceParameter
 	SwitchEndParam LinkEndSwitchParameter
-	LinkParam      LinkParameter
 }
 
 // SwitchToSwitchLinkParameter contains the parameters that define a link
@@ -56,7 +50,6 @@ type DeviceToSwitchLinkParameter struct {
 type SwitchToSwitchLinkParameter struct {
 	LeftEndParam  LinkEndSwitchParameter
 	RightEndParam LinkEndSwitchParameter
-	LinkParam     LinkParameter
 }
 
 // Connector builds networks with twowaybuffered.Port and direct.Connection.
@@ -111,69 +104,43 @@ func (b Builder) Build(name string) *Connector {
 	return c
 }
 
-// AddSwitch adds a new switch to the network.
-func (c *Connector) AddSwitch() (switchID int) {
-	switchID = len(c.switches)
-	name := fmt.Sprintf("Switch[%d]", switchID)
-
-	c.AddSwitchWithName(name)
-
-	return switchID
+// SwitchConfig configures a switch's setup name and optional routing table.
+// An empty name is generated; a nil table creates a fresh table. Tables are
+// populated by the network router unless WithRouter(nil) is used.
+type SwitchConfig struct {
+	Name         string
+	RoutingTable *routing.Table
 }
 
-// AddSwitchWithNameAndRoutingTable adds a new switch to the network with an
-// externally provided name and routing table.
-func (c *Connector) AddSwitchWithNameAndRoutingTable(
-	swName string,
-	rt *routing.Table,
-) (switchID int) {
+// AddSwitch creates a switch during network setup.
+func (c *Connector) AddSwitch(config SwitchConfig) int {
 	assembly.RequireSetup(c.simulation)
-	switchID = len(c.switches)
-
+	id := len(c.switches)
+	name := config.Name
+	if name == "" {
+		name = fmt.Sprintf("Switch[%d]", id)
+	}
+	table := config.RoutingTable
+	if table == nil {
+		table = routing.NewTable()
+	}
 	spec := switches.DefaultSpec()
 	spec.Freq = c.defaultFreq
-
-	node := &switchNode{
-		name:  fmt.Sprintf("%s.%s", c.name, swName),
-		table: rt, network: c,
-	}
-	node.sw = modeling.MakeBuilder[*switches.Comp](spec).
-		WithSimulation(c.simulation).
+	node := &switchNode{name: fmt.Sprintf("%s.%s", c.name, name), table: table, network: c}
+	node.sw = modeling.MakeBuilder[*switches.Comp](spec).WithSimulation(c.simulation).
 		WithResources(switches.Resources{Wiring: node}).Build(node.name)
 	c.switches = append(c.switches, node)
-
-	return switchID
+	return id
 }
 
-// AddSwitchWithName adds a new switch to the network with an externally
-// provided Name.
-func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
-	routingTable := routing.NewTable()
-	return c.AddSwitchWithNameAndRoutingTable(swName, routingTable)
-}
-
-// ConnectDevice connects a few ports that belongs to the device to a switch
-// that is identified by switchID.
-func (c *Connector) ConnectDevice(
-	switchID int,
-	ports []messaging.Port,
-	param DeviceToSwitchLinkParameter,
-) {
-	name := fmt.Sprintf("EndPoint[%d]", len(c.devices))
-	c.ConnectDeviceWithEPName(name, switchID, ports, param)
-}
-
-// ConnectDeviceWithEPName connects a few ports that belongs to the device to a
-// switch that is identified by switchID, through an endpoint with the given
-// name. Repeated calls with the same name, switch and parameters append device
-// ports to that endpoint in call order; this supports incremental mesh tiles.
-func (c *Connector) ConnectDeviceWithEPName(
-	epName string,
-	switchID int,
-	ports []messaging.Port,
-	param DeviceToSwitchLinkParameter,
-) {
+// ConnectDevice attaches device ports through an endpoint. Reusing an explicit
+// name with the same switch and parameters appends ports in binding order.
+func (c *Connector) ConnectDevice(switchID int, ports []messaging.Port, param DeviceConfig) {
 	assembly.RequireSetup(c.simulation)
+	epName := param.Name
+	if epName == "" {
+		epName = fmt.Sprintf("EndPoint[%d]", len(c.devices))
+	}
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
@@ -200,7 +167,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 	swPort := swNode.addPort(param.SwitchEndParam)
 
 	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
-	conn := c.connectPorts(epPort, swPort, param.LinkParam)
+	conn := c.connectPorts(epPort, swPort)
 	c.createRemoteInfoFoEP(epNode, swNode, epPort, swPort, conn)
 }
 
@@ -209,7 +176,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 func (c *Connector) createEndPoint(
 	name string,
 	ports []messaging.Port,
-	param DeviceToSwitchLinkParameter,
+	param DeviceConfig,
 	swNode *switchNode,
 	epPort, swPort messaging.Port,
 ) *deviceNode {
@@ -263,20 +230,15 @@ func (c *Connector) createRemoteInfoFoEP(
 
 func (c *Connector) connectPorts(
 	left, right messaging.Port,
-	linkParam LinkParameter,
 ) (conn *direct.Connection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
 	c.connectionCount++
 
-	if linkParam.IsIdeal {
-		conn = direct.NewConnection(connName, c.simulation, c.defaultFreq)
-	} else {
-		panic("non-ideal (with latency) connection is not implemented.")
-	}
+	conn = direct.NewConnection(connName, c.simulation, c.defaultFreq)
 
 	conn.BindPort(left)
 	conn.BindPort(right)
-	c.connections = append(c.connections, connectionRecord{conn.Name(), left.AsRemote(), right.AsRemote(), linkParam})
+	c.connections = append(c.connections, connectionRecord{conn.Name(), left.AsRemote(), right.AsRemote()})
 
 	return conn
 }
@@ -294,7 +256,7 @@ func (c *Connector) ConnectSwitches(
 	leftPort := leftNode.addPort(param.LeftEndParam)
 	rightPort := rightNode.addPort(param.RightEndParam)
 
-	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
+	conn := c.connectPorts(leftPort, rightPort)
 
 	c.createRemoteInfo(leftNode, rightNode, leftPort, rightPort, conn)
 }

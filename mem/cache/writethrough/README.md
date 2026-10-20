@@ -46,15 +46,15 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 ## Key Types
 
 - **Spec** — immutable config: `Freq`, `Log2BlockSize`, `WayAssociativity`,
-  `TotalByteSize`, `NumBanks`, `NumMSHREntry`, `NumReqPerCycle`,
+  `NumSets`, `NumBanks`, `NumMSHREntry`, `NumReqPerCycle`,
   `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`, `WritePolicyType`, and
-  the address-mapper fields. The number of sets is derived:
-  `TotalByteSize / (WayAssociativity * 2^Log2BlockSize)`. An empty
+  the address-mapper fields. `NumSets` specifies the directory geometry;
+  `Spec.ByteSize()` reports its byte capacity. An empty
   `WritePolicyType` means `write-around`.
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
   stages, the pause and drain flags, and the in-progress control command.
-- **Resources** — the backing `*mem.Storage` (required; at least `TotalByteSize`
+- **Resources** — the backing `*mem.Storage` (required; at least `Spec.ByteSize()`
   bytes). Destinations and mapping choices are immutable Spec configuration:
   `Bottom mem.AddressMapper` (destinations, interleaving size, and optional
   range/fallback). Middleware routes directly through this Spec value.
@@ -74,14 +74,14 @@ Configuration is supplied as a whole through `WithSpec` (start from
 ```go
 spec := writethrough.DefaultSpec()
 spec.WritePolicyType = "write-through"
-spec.TotalByteSize = 256 * mem.KB
+spec.NumSets = 512 // 256 KiB with eight ways and 64-byte lines
 spec.WayAssociativity = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := modeling.MakeBuilder[*writethrough.Comp](spec).
     WithSimulation(sim).
     WithResources(writethrough.Resources{
-        Storage:       mem.NewStorage(spec.TotalByteSize),
+        Storage:       mem.NewStorage(spec.ByteSize()),
     }).
     Build("L2Cache")
 cache.BindPort("Top", twowaybuffered.MakeBuilder().
@@ -122,3 +122,12 @@ middlewares and freezes the topology.
   `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp`.
 - **Control** — accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset,
   and, once paused, Invalidate and Flush), returns `memcontrolprotocol.Rsp`.
+
+## Independent processing and buffering
+
+`NumReqPerCycle` controls stage dispatch. `DirectoryWidth` and `BankWidth`
+control pipeline admission width. Queue depths are explicit, independent fields:
+`DirBufferCapacity`, `DirPostBufferCapacity`, `BankPostBufferCapacity`, `BankBufferCapacity`.
+Changing one field does not recalculate any other. Start from `DefaultSpec()`
+and change each desired parameter explicitly. Geometry, widths and queue depths
+must be positive; pipeline latencies must be nonnegative.

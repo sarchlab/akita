@@ -106,9 +106,9 @@ monitoring output.
 Remove connector `EstablishRoute()` / `EstablishNetwork()` calls: assembly calls
 now finish wiring, and `simulation.Initialize()` computes and validates routing.
 `BuildSwitches`, `PortAddress`, `routing.Route`, and `Table.Snapshot` are removed.
-`ConnectSwitches` and `ConnectDeviceWithEPName` no longer return internal ports.
+`ConnectSwitches` and `ConnectDevice` do not return internal ports.
 `routing.Table` is now concrete; custom routers populate `*routing.Table` values.
-Repeated `ConnectDeviceWithEPName` calls with the same switch and parameters append
+Repeated `ConnectDevice` calls with an explicit endpoint name and the same switch and parameters append
 device ports; repeated mesh `AddTile` calls retain their merge behavior.
 
 Internal endpoint device ports bind to `DeviceConnection(ep)` in arbitration
@@ -1367,3 +1367,36 @@ subdirectory. Runner selection is recorded in the workflow.
 These changes preserve the existing page-table and port checkpoint payload
 formats. Checkpoints still enforce the normal same-build requirement. MGPUSim
 migration is deferred until after the Akita v5 release and is not part of this PR.
+
+## Direct NoC, cache, and TLB configuration
+
+- `AddSwitch`, `AddSwitchWithName`, and `AddSwitchWithNameAndRoutingTable` become
+  `AddSwitch(SwitchConfig{Name: ..., RoutingTable: ...})`; fields are optional.
+- `ConnectDevice` and `ConnectDeviceWithEPName` become
+  `ConnectDevice(switchID, ports, DeviceConfig{Name: ..., DeviceEndParam: ..., SwitchEndParam: ...})`.
+  `DeviceConfig` replaces `DeviceToSwitchLinkParameter`.
+- PCIe/NVLink `PlugInDevice` becomes `ConnectDevice`; NVLink `AddPCIeSwitch`
+  becomes `AddSwitch`. `ConnectDevicesWithNVLink(a,b)` no longer takes a count.
+- Delete `LinkParameter` and `LinkParam`: links are ideal. No per-link frequency,
+  stage count, cycles-per-stage, pipeline width, or `IsIdeal` option remains.
+- Replace bandwidth/version setters with explicit flit size, input/output widths,
+  and each queue capacity. The old PCIe flit size was rounded bytes/second divided
+  by frequency: default Gen4 x16 at 1 GHz becomes 34 bytes; Gen3 x16 becomes 17.
+  The old mesh transfer setting rounded upward into both widths and port queues;
+  set those independently when reproducing a prior configuration. Also specify
+  route, forwarding, and send queue capacities (formerly the corresponding width).
+- `BandwidthFirstRouter` and `Remote.Bandwidth` are removed. NVLink now uses
+  fewest-hop routing, which can change routes and simulated timing. `WithRouter`,
+  `Router`, `Node`, `Remote`, and concrete routing tables remain available.
+- Cache `TotalByteSize` becomes `NumSets`: migrate using the old capacity divided
+  by ways and line size. Read capacity with `spec.ByteSize()`. Configure pipeline
+  widths and each stage buffer explicitly. Old write-back width one became two
+  pipeline lanes; preserve that with `DirectoryWidth: 2, BankWidth: 2`. Its bank
+  post-buffer formerly used that widened width; other queues used request width.
+  Write-through pipelines and queues formerly used `NumReqPerCycle`.
+- TLB output queues formerly used `NumReqPerCycle`; set `OutputBufferCapacity`
+  independently. Defaults remain four for each.
+
+Old checkpoints must be rebuilt after these Spec and topology changes. Default
+effective geometry, widths, and queues are preserved. DRAM configuration,
+calculations, and presets are unchanged.

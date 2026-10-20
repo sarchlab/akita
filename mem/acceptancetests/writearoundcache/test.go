@@ -102,7 +102,7 @@ func buildEnvironment(
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.NumMSHREntry = 4
 	cacheSpec.WayAssociativity = 8
-	cacheSpec.TotalByteSize = 4 * mem.KB
+	cacheSpec.NumSets = 8 // 4 KiB, eight ways, 64-byte lines
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
 
@@ -110,7 +110,7 @@ func buildEnvironment(
 	writeAroundCache := modeling.MakeBuilder[*writethrough.Comp](cacheSpec).
 		WithSimulation(s).
 		WithResources(writethrough.Resources{Storage: mem.MakeStorageBuilder().
-			WithCapacity(cacheSpec.TotalByteSize).
+			WithCapacity(cacheSpec.ByteSize()).
 			WithSimulation(s).
 			Build("Cache.Storage")}).
 		Build("Cache")

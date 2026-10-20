@@ -57,9 +57,9 @@ type Spec struct {
     BankLatency         int         // Cycles per bank read/write
     DirLatency          int         // Cycles for directory lookup
     WayAssociativity    int         // Ways per set
-    NumBanks            int         // Number of banks (below 1 means 1)
+    NumBanks            int         // Positive number of banks
     NumMSHREntry        int         // MSHR capacity
-    TotalByteSize       uint64      // Total cache storage in bytes
+    NumSets             int         // Number of sets in the directory
     WriteBufferCapacity int         // Max lines in the write buffer
     MaxInflightFetch    int         // Concurrent fetches to lower memory
     MaxInflightEviction int         // Concurrent evictions to lower memory
@@ -69,9 +69,8 @@ type Spec struct {
 }
 ```
 
-The number of sets is not configured directly: it is
-`TotalByteSize / (WayAssociativity * 2^Log2BlockSize)`, and equals
-`len(comp.State.DirectoryState.Sets)` on a built cache.
+The directory has `NumSets` sets. Its byte capacity is
+`NumSets * WayAssociativity * (1 << Log2BlockSize)`, available as `Spec.ByteSize()`.
 
 ## Builder Pattern
 
@@ -82,7 +81,7 @@ only), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := writeback.DefaultSpec()
-spec.TotalByteSize = 64 * mem.KB
+spec.NumSets = 256 // 64 KiB with four ways and 64-byte lines
 spec.WayAssociativity = 4
 spec.Log2BlockSize = 6 // 64-byte lines
 spec.NumMSHREntry = 16
@@ -91,7 +90,7 @@ spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 cache := modeling.MakeBuilder[*writeback.Comp](spec).
     WithSimulation(sim).
     WithResources(writeback.Resources{
-        Storage:             mem.NewStorage(spec.TotalByteSize),
+        Storage:             mem.NewStorage(spec.ByteSize()),
     }).
     Build("L1Cache")
 cache.BindPort("Top", twowaybuffered.MakeBuilder().
@@ -118,7 +117,7 @@ topPort := cache.Ports.Top
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 `Initialize` panics if `Resources.Storage` is nil; the cache no longer creates a
-default storage. Size the storage to hold at least `Spec.TotalByteSize` bytes.
+default storage. Size the storage to hold at least `Spec.ByteSize()` bytes.
 
 ### Default Configuration
 
@@ -160,3 +159,16 @@ middlewares and freezes the topology.
   lower-level memory.
 - **Control**: accepts `memcontrolprotocol.Req` for pause/drain/enable/reset/
   invalidate/flush operations, returns `memcontrolprotocol.Rsp`.
+
+## Independent processing and buffering
+
+`NumReqPerCycle` controls stage dispatch. `DirectoryWidth` and `BankWidth`
+control pipeline admission width. Queue depths are explicit, independent fields:
+`DirBufferCapacity`, `DirPostBufferCapacity`, `BankPostBufferCapacity`, `DirToBankBufferCapacity`, `WriteBufferToBankBufferCapacity`, `MSHRBufferCapacity`, `WriteBufferStageCapacity`.
+Changing one field does not recalculate any other. Start from `DefaultSpec()`
+and change each desired parameter explicitly. Geometry, widths and queue depths
+must be positive; pipeline latencies must be nonnegative.
+
+`BankWidth` must be at least two: the bank admission policy reserves one lane
+for upward traffic. The default has request width one and directory/bank width
+two; this is explicit rather than silently widening a requested width.

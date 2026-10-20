@@ -63,17 +63,17 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	pcieConnector := pcie.MakeBuilder().
 		WithSimulation(s).
 		WithFreq(freq).
-		WithVersion(4, 16).Build("PCIe")
+		WithFlitSize(34).Build("PCIe")
 	rootComplexID := pcieConnector.AddRootComplex(agents[0].AgentPorts)
 	switch1ID := pcieConnector.AddSwitch(rootComplexID)
 
 	for i := 0; i < numDevicePerSwitch; i++ {
-		pcieConnector.PlugInDevice(switch1ID, agents[i+1].AgentPorts)
+		pcieConnector.ConnectDevice(switch1ID, agents[i+1].AgentPorts)
 	}
 
 	switch2ID := pcieConnector.AddSwitch(rootComplexID)
 	for i := 0; i < numDevicePerSwitch; i++ {
-		pcieConnector.PlugInDevice(switch2ID,
+		pcieConnector.ConnectDevice(switch2ID,
 			agents[i+1+numDevicePerSwitch].AgentPorts)
 	}
 }

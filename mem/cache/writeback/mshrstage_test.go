@@ -68,7 +68,7 @@ func TestMSHRStage(t *testing.T) {
 		ports := makePorts(sim, "Cache", 4)
 		ports.Top = twowaybuffered.MakeBuilder().WithSimulation(sim).Build()
 		comp := buildStageTestComp(sim, spec,
-			Resources{Storage: mem.NewStorage(spec.TotalByteSize)}, ports)
+			Resources{Storage: mem.NewStorage(spec.ByteSize())}, ports)
 		topPort = comp.Ports.Top
 
 		m = comp.Middlewares.Pipeline

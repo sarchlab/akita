@@ -1,5 +1,20 @@
 # V5 release notes
 
+## Direct configuration for ideal networks, caches, and TLBs
+
+NoC construction now uses one generic switch-creation and device-connection
+method with concrete configurations. Unsupported non-ideal link settings and
+bandwidth/version presets are removed. Flit size, processing widths, and port
+and switch queue capacities are explicit and independent. NVLink uses fewest-hop
+routing; route choices and contention timing may change. Custom setup routing
+remains public.
+
+Caches use explicit set counts, directory/bank pipeline widths, and queue
+capacities. TLB output queue depth is independent of lookup width. Existing
+effective defaults are preserved, including the write-back bank's reserved
+upward lane. DRAM calculations and presets are unchanged. See the migration guide
+for converting earlier configurations; checkpoints must be rebuilt.
+
 ## CLI shell and retired legacy implementations
 
 The `akita` executable, installation path, and help remain available.
@@ -40,9 +55,9 @@ The standalone DGX acceptance programs no longer start profiling HTTP servers.
 The `one_to_one` acceptance program drops its unused checkpoint topology helper;
 its message-delivery scenario remains unchanged.
 
-Custom setup routers, public cache/MSHR/LRU helpers, `mmuCache`/`TransLatency`,
-and link timing/bandwidth settings remain. MMU-cache correctness fixes and DRAM
-configuration work are deferred; non-ideal links remain #502/#542 work.
+Custom setup routers, public cache/MSHR/LRU helpers, and `mmuCache`/`TransLatency`
+remain. MMU-cache correctness fixes and DRAM
+configuration work are deferred; non-ideal links are deferred beyond this ideal-only API.
 
 ## Engine pause API
 

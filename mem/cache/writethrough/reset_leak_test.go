@@ -27,13 +27,19 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 
 	spec := DefaultSpec()
 	spec.NumReqPerCycle = 1
+	spec.DirBufferCapacity = 1
+	spec.BankBufferCapacity = 1
+	spec.DirPostBufferCapacity = 1
+	spec.BankPostBufferCapacity = 1
+	spec.DirectoryWidth = 1
+	spec.BankWidth = 1
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 8
 	spec.WayAssociativity = 2
 	spec.Log2BlockSize = 6
 	spec.BankLatency = 1
 	spec.DirLatency = 1
-	spec.TotalByteSize = 64 * 1024
+	spec.NumSets = 512
 	spec.MaxNumConcurrentTrans = 16
 
 	spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}

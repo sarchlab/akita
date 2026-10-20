@@ -2,7 +2,6 @@ package networkconnector
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
@@ -22,11 +21,6 @@ type Remote struct {
 	RemotePort messaging.Port
 
 	Link *direct.Connection
-}
-
-// Bandwidth returns the unlimited bandwidth of an ideal direct link.
-func (r Remote) Bandwidth(_ int) float64 {
-	return math.Inf(1)
 }
 
 // Node represents an endpoint or a switch.
@@ -77,7 +71,11 @@ func (sn *switchNode) Links() []switches.Link {
 	for i, remote := range sn.remotes {
 		p := sn.ends[i]
 		links[i] = switches.Link{Remote: remote.RemotePort.AsRemote(), Latency: p.Latency,
-			NumInputChannel: p.NumInputChannel, NumOutputChannel: p.NumOutputChannel}
+			NumInputChannel: p.NumInputChannel, NumOutputChannel: p.NumOutputChannel,
+			RouteBufferCapacity:   p.RouteBufferCapacity,
+			ForwardBufferCapacity: p.ForwardBufferCapacity,
+			SendBufferCapacity:    p.SendBufferCapacity,
+		}
 	}
 	return links
 }
@@ -86,7 +84,7 @@ func (sn *switchNode) Routes() switches.RoutingTable { return sn.network.routes[
 
 type deviceNode struct {
 	ports     []messaging.Port
-	parameter DeviceToSwitchLinkParameter
+	parameter DeviceConfig
 	endPoint  *endpoint.Comp
 	sw        *switchNode
 	remote    Remote

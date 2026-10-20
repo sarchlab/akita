@@ -69,8 +69,12 @@ must not change Spec, Resources, Ports, or another component's State.
 
 With methods belong only to value Builders and return an updated Builder. A Build
 call returns a fresh object. Working objects use explicit action methods rather
-than With methods. Use WithFreq consistently. Derived parameters are computed at
-Build so frequency/bandwidth option order does not matter.
+than With methods. Use WithFreq consistently. Core configuration specifies independent structural and timing parameters directly.
+Builders must not translate bandwidth or capacity targets into other model
+choices. Future calculators may return explicit configurations before Build.
+Widths and queue capacities remain independent. Internal equations, derived
+lookup tables, and observations such as capacity from geometry remain allowed;
+DRAM timing equations and concrete Spec presets retain their existing meaning.
 
 Monitor setup is `monitoring.MakeBuilder().WithPortNumber(port).Build()`.
 Attach through `sim.Builder.WithMonitor`; Start runs only after successful
@@ -104,16 +108,17 @@ returns errors for unreachable destinations and routing loops before component
 initialization. Custom setup routers remain supported; `routing.Table` is a
 concrete type. Changing tables after Initialize is not supported.
 One topology resource per network fingerprints wiring, port/device binding order,
-link-end settings, link parameters and computed routes for checkpoint compatibility.
+link-end settings and computed routes for checkpoint compatibility.
 Type names are not part of this record. These fingerprints replace routing fields
 in internal NoC Specs; rebuild old checkpoints. Networks assembled directly without
 a connector must register their own topology record if they support checkpointing.
 The `one_to_one` acceptance program only exercises message delivery and does not
 support checkpointing, so it has no topology resource. Switch arbitration follows
 binding order. Runtime route changes require a future checkpointed-state design.
-Non-ideal transport and bandwidth-unit unification
-remain #502/#542 follow-ups; physical transport latency is distinct from switch
-pipeline latency. Other NoC packages live directly below `noc`, without a
+NoC connectors model ideal links only. Non-ideal transport options and bandwidth
+presets are absent; physical transport is deferred. NVLink uses fewest-hop
+routing. Custom setup routers remain supported. Physical transport latency is
+distinct from switch pipeline latency. Other NoC packages live directly below `noc`, without a
 `networking` layer. The cache
 package is `mem/cache/writethrough`; it retains write-around, write-evict, and
 write-through policies. Group packages by responsibility and avoid redundant

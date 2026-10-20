@@ -98,16 +98,25 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	dramTop := dram.Ports.Top
 
 	cacheSpec := writeback.DefaultSpec()
-	cacheSpec.TotalByteSize = 4 * mem.KB
+	cacheSpec.NumSets = 16
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
 
+	cacheSpec.DirBufferCapacity = 4
+	cacheSpec.DirToBankBufferCapacity = 4
+	cacheSpec.WriteBufferToBankBufferCapacity = 4
+	cacheSpec.MSHRBufferCapacity = 4
+	cacheSpec.WriteBufferStageCapacity = 4
+	cacheSpec.DirPostBufferCapacity = 4
+	cacheSpec.BankPostBufferCapacity = 4
+	cacheSpec.DirectoryWidth = 4
+	cacheSpec.BankWidth = 4
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dramTop.AsRemote()}
 	cache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(sim).
-		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
+		WithResources(writeback.Resources{Storage: mem.NewStorage(cacheSpec.ByteSize())}).
 		Build("Cache")
 
 	cache.BindPort("Top", twowaybuffered.MakeBuilder().

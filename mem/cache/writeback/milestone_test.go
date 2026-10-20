@@ -98,13 +98,22 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 		addressToPortMapper := dramTop.AsRemote()
 
 		cacheSpec := DefaultSpec()
-		cacheSpec.TotalByteSize = 1024 * 4 * 64
+		cacheSpec.NumSets = 1024
 		cacheSpec.NumReqPerCycle = 4
 
+		cacheSpec.DirBufferCapacity = 4
+		cacheSpec.DirToBankBufferCapacity = 4
+		cacheSpec.WriteBufferToBankBufferCapacity = 4
+		cacheSpec.MSHRBufferCapacity = 4
+		cacheSpec.WriteBufferStageCapacity = 4
+		cacheSpec.DirPostBufferCapacity = 4
+		cacheSpec.BankPostBufferCapacity = 4
+		cacheSpec.DirectoryWidth = 4
+		cacheSpec.BankWidth = 4
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
+			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.ByteSize())}).
 			Build("Cache")
 		cacheCompPorts := makePorts(sim, "Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)

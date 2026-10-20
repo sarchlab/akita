@@ -89,3 +89,10 @@ middlewares and freezes the topology.
 - **Bottom**: forwards `vmprotocol.TranslationReq` on a miss, receives `vmprotocol.TranslationRsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
   and returns `memcontrolprotocol.Rsp` for flush and reset.
+
+## Independent output buffering
+
+`NumReqPerCycle` sets processing/pipeline width. `OutputBufferCapacity` sets
+the post-pipeline queue depth; both default to four and must be positive.
+Changing either does not change the other. `NumSets` and `NumWays` directly
+specify TLB geometry.

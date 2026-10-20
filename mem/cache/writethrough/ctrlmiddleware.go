@@ -149,7 +149,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 		next.BankBufs[i].Clear()
 	}
 	cache.DirectoryReset(
-		&next.DirectoryState, spec.numSets(), spec.WayAssociativity,
+		&next.DirectoryState, spec.NumSets, spec.WayAssociativity,
 		spec.blockSize())
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()

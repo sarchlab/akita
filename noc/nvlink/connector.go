@@ -4,14 +4,11 @@ package nvlink
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/sarchlab/akita/v5/noc/networkconnector"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
-	// A deviceNode represents a switch associated with the device and
-	// and NVLink switch.
 	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
@@ -22,13 +19,19 @@ type deviceNode struct {
 
 // Connector can connect devices into a network of PCIe and NVLink links.
 type Connector struct {
+	inputWidth       int
+	outputWidth      int
+	incomingCapacity int
+	outgoingCapacity int
+	routeCapacity    int
+	forwardCapacity  int
+	sendCapacity     int
+
 	freq         timing.Freq
 	flitByteSize int
 
-	pcieBandwidth     uint64
 	pcieSwitchLatency int
 
-	nvlinkBandwidth     uint64
 	nvlinkSwitchLatency int
 
 	connector *networkconnector.Connector
@@ -39,17 +42,38 @@ type Connector struct {
 
 // Builder configures an independent connector; With methods do not assemble a network.
 type Builder struct {
-	simulation          modeling.Simulation
-	freq                timing.Freq
-	pcieBandwidth       uint64
-	pcieSwitchLatency   int
-	nvlinkBandwidth     uint64
+	flitByteSize     int
+	inputWidth       int
+	outputWidth      int
+	incomingCapacity int
+	outgoingCapacity int
+	routeCapacity    int
+	forwardCapacity  int
+	sendCapacity     int
+
+	simulation modeling.Simulation
+	freq       timing.Freq
+
+	pcieSwitchLatency int
+
 	nvlinkSwitchLatency int
 }
 
+// MakeBuilder returns the default direct configuration.
 func MakeBuilder() Builder {
-	return Builder{freq: timing.GHz, pcieSwitchLatency: 140, nvlinkSwitchLatency: 140}.
-		WithPCIeVersion(4, 16).WithNVLinkVersion(2)
+	return Builder{
+		inputWidth:          1,
+		outputWidth:         1,
+		incomingCapacity:    16,
+		outgoingCapacity:    16,
+		routeCapacity:       1,
+		forwardCapacity:     1,
+		sendCapacity:        1,
+		freq:                timing.GHz,
+		flitByteSize:        34,
+		pcieSwitchLatency:   140,
+		nvlinkSwitchLatency: 140,
+	}
 }
 
 func (b Builder) WithSimulation(sim modeling.Simulation) Builder { b.simulation = sim; return b }
@@ -60,48 +84,8 @@ func (b Builder) WithFreq(freq timing.Freq) Builder {
 	return b
 }
 
-func (b Builder) WithPCIeBandwidth(bytePerSecond uint64) Builder {
-	b.pcieBandwidth = bytePerSecond
-	return b
-}
-
-func (b Builder) WithPCIeVersion(version int, width int) Builder {
-	transferPerSecondTable := map[int]uint64{
-		1: 2 * (1 << 30),
-		2: 4 * (1 << 30),
-		3: 8 * (1 << 30),
-		4: 16 * (1 << 30),
-		5: 32 * (1 << 30),
-	}
-
-	transferPerSecond := transferPerSecondTable[version]
-	totalBandwidth := transferPerSecond * uint64(width) / 8
-
-	return b.WithPCIeBandwidth(totalBandwidth)
-}
-
 func (b Builder) WithPCIeSwitchLatency(numCycles int) Builder {
 	b.pcieSwitchLatency = numCycles
-	return b
-}
-
-func (b Builder) WithNVLinkBandwidth(bytePerSecond uint64) Builder {
-	b.nvlinkBandwidth = bytePerSecond
-	return b
-}
-
-func (b Builder) WithNVLinkVersion(version int) Builder {
-	switch version {
-	case 1:
-		b.nvlinkBandwidth = 2.5 * (1 << 30) * 8
-	case 2:
-		b.nvlinkBandwidth = 3.125 * (1 << 30) * 8
-	case 3:
-		b.nvlinkBandwidth = 6.25 * (1 << 30) * 8
-	default:
-		panic("NVLink version not supported.")
-	}
-
 	return b
 }
 
@@ -111,34 +95,74 @@ func (b Builder) WithNVLinkSwitchLatency(numCycle int) Builder {
 	return b
 }
 
-// Build computes derived parameters and begins a new network.
+// WithFlitSize sets bytes per flit independently of frequency.
+func (b Builder) WithFlitSize(size int) Builder { b.flitByteSize = size; return b }
+
+// WithInputWidth sets the flits per cycle.
+func (b Builder) WithInputWidth(n int) Builder { b.inputWidth = n; return b }
+
+// WithOutputWidth sets the flits per cycle.
+func (b Builder) WithOutputWidth(n int) Builder { b.outputWidth = n; return b }
+
+// WithIncomingBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithIncomingBufferCapacity(n int) Builder { b.incomingCapacity = n; return b }
+
+// WithOutgoingBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithOutgoingBufferCapacity(n int) Builder { b.outgoingCapacity = n; return b }
+
+// WithRouteBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithRouteBufferCapacity(n int) Builder { b.routeCapacity = n; return b }
+
+// WithForwardBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithForwardBufferCapacity(n int) Builder { b.forwardCapacity = n; return b }
+
+// WithSendBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithSendBufferCapacity(n int) Builder { b.sendCapacity = n; return b }
+
+// Build begins a network using the configured direct parameters.
 func (b Builder) Build(name string) *Connector {
-	size := int(math.Round(float64(b.pcieBandwidth) / float64(b.freq)))
-	if b.freq <= 0 || size <= 0 || b.nvlinkBandwidth == 0 {
-		panic("nvlink: frequency, bandwidth and derived flit size must be positive")
+	if b.inputWidth <= 0 ||
+		b.outputWidth <= 0 ||
+		b.incomingCapacity <= 0 ||
+		b.outgoingCapacity <= 0 ||
+		b.routeCapacity <= 0 ||
+		b.forwardCapacity <= 0 ||
+		b.sendCapacity <= 0 {
+		panic("nvlink: widths and buffer capacities must be positive")
 	}
+	if b.pcieSwitchLatency < 0 || b.nvlinkSwitchLatency < 0 {
+		panic("nvlink: switch latency cannot be negative")
+	}
+
 	return &Connector{
-		freq: b.freq, flitByteSize: size, pcieBandwidth: b.pcieBandwidth,
-		pcieSwitchLatency: b.pcieSwitchLatency,
-		nvlinkBandwidth:   b.nvlinkBandwidth, nvlinkSwitchLatency: b.nvlinkSwitchLatency, pcieSwitches: make(map[int]bool),
+		inputWidth:       b.inputWidth,
+		outputWidth:      b.outputWidth,
+		incomingCapacity: b.incomingCapacity,
+		outgoingCapacity: b.outgoingCapacity,
+		routeCapacity:    b.routeCapacity,
+		forwardCapacity:  b.forwardCapacity,
+		sendCapacity:     b.sendCapacity,
+		freq:             b.freq, flitByteSize: b.flitByteSize,
+		pcieSwitchLatency:   b.pcieSwitchLatency,
+		nvlinkSwitchLatency: b.nvlinkSwitchLatency, pcieSwitches: make(map[int]bool),
 		connector: networkconnector.MakeBuilder().WithSimulation(b.simulation).
-			WithFreq(b.freq).WithFlitSize(size).
-			WithRouter(networkconnector.BandwidthFirstRouter{FlitSize: size}).Build(name)}
+			WithFreq(b.freq).WithFlitSize(b.flitByteSize).Build(name)}
 }
 
 // AddRootComplex adds a new switch connecting CPU ports.
 func (c *Connector) AddRootComplex(cpuPorts []messaging.Port) (switchID int) {
-	switchID = c.connector.AddSwitchWithName("RootComplex")
+	switchID = c.connector.AddSwitch(networkconnector.SwitchConfig{Name: "RootComplex"})
 
-	c.PlugInDevice(switchID, cpuPorts)
+	c.ConnectDevice(switchID, cpuPorts)
 
 	return switchID
 }
 
-// AddPCIeSwitch adds a new switch connecting from an existing switch.
-func (c *Connector) AddPCIeSwitch() (switchID int) {
-	switchID = c.connector.AddSwitchWithName(
-		fmt.Sprintf("PCIeSwitch[%d]", len(c.pcieSwitches)))
+// AddSwitch adds an unconnected PCIe switch. Connect it with ConnectSwitchesWithPCIeLink.
+func (c *Connector) AddSwitch() (switchID int) {
+	switchID = c.connector.AddSwitch(networkconnector.SwitchConfig{
+		Name: fmt.Sprintf("PCIeSwitch[%d]", len(c.pcieSwitches)),
+	})
 
 	c.pcieSwitches[switchID] = true
 
@@ -150,40 +174,37 @@ func (c *Connector) ConnectSwitchesWithPCIeLink(switchAID, switchBID int) {
 	c.connector.ConnectSwitches(switchAID, switchBID,
 		networkconnector.SwitchToSwitchLinkParameter{
 			LeftEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.pcieSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               c.pcieSwitchLatency,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 			RightEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.pcieSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       true,
-				Frequency:     c.freq,
-				NumStage:      20,
-				CyclePerStage: 1,
-				PipelineWidth: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               c.pcieSwitchLatency,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 		})
 }
 
-// PlugInDevice connects a series of ports to a switch.
-func (c *Connector) PlugInDevice(
+// ConnectDevice connects a series of ports to a switch.
+func (c *Connector) ConnectDevice(
 	pcieSwitchID int,
 	devicePorts []messaging.Port,
 ) (deviceID int) {
 	deviceID = len(c.devices)
 
-	deviceSwitchID := c.connector.AddSwitchWithName(
-		fmt.Sprintf("DeviceSwitch[%d]", deviceID))
-	nvlinkSwitchID := c.connector.AddSwitchWithName(
-		fmt.Sprintf("NVLinkSwitch[%d]", deviceID))
+	deviceSwitchID := c.connector.AddSwitch(networkconnector.SwitchConfig{Name: fmt.Sprintf("DeviceSwitch[%d]", deviceID)})
+	nvlinkSwitchID := c.connector.AddSwitch(networkconnector.SwitchConfig{Name: fmt.Sprintf("NVLinkSwitch[%d]", deviceID)})
 
 	c.connectDeviceSwitchWithNVLinkSwitch(deviceSwitchID, nvlinkSwitchID)
 	c.connectDeviceSwitchWithPCIeSwitch(pcieSwitchID, deviceSwitchID)
@@ -205,25 +226,24 @@ func (c *Connector) connectDeviceSwitchWithNVLinkSwitch(
 	c.connector.ConnectSwitches(deviceSwitchID, nvlinkSwitchID,
 		networkconnector.SwitchToSwitchLinkParameter{
 			LeftEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          1,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               1,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 			RightEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          1,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       true,
-				Frequency:     c.freq,
-				NumStage:      20,
-				CyclePerStage: 1,
-				PipelineWidth: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               1,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 		})
 }
@@ -235,25 +255,24 @@ func (c *Connector) connectDeviceSwitchWithPCIeSwitch(
 	c.connector.ConnectSwitches(deviceSwitchID, pcieSwitchID,
 		networkconnector.SwitchToSwitchLinkParameter{
 			LeftEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          1,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               1,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 			RightEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          1,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       true,
-				Frequency:     c.freq,
-				NumStage:      20,
-				CyclePerStage: 1,
-				PipelineWidth: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               1,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 		})
 }
@@ -263,23 +282,22 @@ func (c *Connector) connectDeviceWithDeviceSwitch(
 	devicePorts []messaging.Port,
 ) {
 	c.connector.ConnectDevice(deviceSwitchID, devicePorts,
-		networkconnector.DeviceToSwitchLinkParameter{
+		networkconnector.DeviceConfig{
 			DeviceEndParam: networkconnector.LinkEndDeviceParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
+				IncomingBufSize:  c.incomingCapacity,
+				OutgoingBufSize:  c.outgoingCapacity,
+				NumInputChannel:  c.inputWidth,
+				NumOutputChannel: c.outputWidth,
 			},
 			SwitchEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.pcieSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:   true,
-				Frequency: c.freq,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               c.pcieSwitchLatency,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 		})
 }
@@ -287,37 +305,33 @@ func (c *Connector) connectDeviceWithDeviceSwitch(
 // ConnectDevicesWithNVLink establishes an NVLink Connection.
 func (c *Connector) ConnectDevicesWithNVLink(
 	deviceA, deviceB int,
-	numLink int,
 ) {
 	deviceANode := c.devices[deviceA]
 	deviceBNode := c.devices[deviceB]
-
-	freq := math.Round(float64(c.nvlinkBandwidth) / float64(c.flitByteSize))
 
 	c.connector.ConnectSwitches(
 		deviceANode.nvlinkSwitchID,
 		deviceBNode.nvlinkSwitchID,
 		networkconnector.SwitchToSwitchLinkParameter{
 			LeftEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.nvlinkSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               c.nvlinkSwitchLatency,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 			RightEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.nvlinkSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       true,
-				Frequency:     timing.Freq(freq),
-				NumStage:      20,
-				CyclePerStage: 1,
-				PipelineWidth: numLink,
+				RouteBufferCapacity:   c.routeCapacity,
+				ForwardBufferCapacity: c.forwardCapacity,
+				SendBufferCapacity:    c.sendCapacity,
+				IncomingBufSize:       c.incomingCapacity,
+				OutgoingBufSize:       c.outgoingCapacity,
+				Latency:               c.nvlinkSwitchLatency,
+				NumInputChannel:       c.inputWidth,
+				NumOutputChannel:      c.outputWidth,
 			},
 		})
 }

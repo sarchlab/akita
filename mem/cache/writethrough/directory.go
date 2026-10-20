@@ -112,7 +112,7 @@ func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.numSets(), int(blockSize),
+		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.processReadHit(trans, setID, wayID, transIdx)
@@ -195,7 +195,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
@@ -247,7 +247,7 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.numSets(), int(blockSize),
+		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.handleWriteHit(trans, setID, wayID, transIdx)

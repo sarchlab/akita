@@ -1,110 +1,66 @@
-# nvlink — NVLink and PCIe Multi-Fabric Interconnect
+# NVLink topology connector
 
-Package `nvlink` provides a connector that builds a multi-device network for the
-Akita simulation framework, combining PCIe and NVLink links. Within
-`noc`, it constructs the switches and links that move messages between a CPU and
-a set of devices (e.g. GPUs) that talk over PCIe to the host and high-bandwidth
-NVLink directly to one another.
-
-## How It Works
-
-A `Connector` models each device as a pair of switches: a device switch (on the
-PCIe side) and an NVLink switch (for peer-to-peer links). Plugging in a device
-creates both switches, links them, attaches the device ports to the device
-switch, and connects the device switch to a PCIe switch toward the host.
-
-- **PCIe** links carry CPU-device traffic; their flit size is derived from the
-  PCIe bandwidth (version × lane width) and the network frequency.
-- **NVLink** links directly join two devices' NVLink switches. The connector
-  computes link parameters from the NVLink version and `numLink`, but the
-  underlying ideal-link implementation ignores their frequency and width.
-  `WithNVLinkBandwidth`, `WithNVLinkVersion`, and `numLink` do not currently
-  change link throughput.
-
-All links are ideal direct connections at the default network frequency;
-non-ideal latency and per-link bandwidth are not modeled. Although routing
-uses a `BandwidthFirstRouter`, every link reports infinite bandwidth, so it
-cannot prefer NVLink based on bandwidth. `simulation.Initialize()` populates reachable
-paths without that guarantee. These limitations are tracked in
-[#502](https://github.com/sarchlab/akita/issues/502).
-
-## Key Types
-
-### Connector
+`nvlink` assembles PCIe-style attachment trees plus direct device-to-device
+connections. All links are ideal. The name describes topology, not a calibrated
+NVLink transport or hardware-version model.
 
 ```go
-type Connector struct { /* ... */ }
-
-func MakeBuilder() Builder
-func (b Builder) Build(name string) *Connector
-func (c *Connector) AddRootComplex(cpuPorts []messaging.Port) (switchID int)
-func (c *Connector) AddPCIeSwitch() (switchID int)
-func (c *Connector) ConnectSwitchesWithPCIeLink(switchAID, switchBID int)
-func (c *Connector) PlugInDevice(pcieSwitchID int, devicePorts []messaging.Port) (deviceID int)
-func (c *Connector) ConnectDevicesWithNVLink(deviceA, deviceB, numLink int)
+connector := nvlink.MakeBuilder().WithSimulation(s).
+    WithFlitSize(34).WithPCIeSwitchLatency(140).
+    WithNVLinkSwitchLatency(140).Build("Network")
+root := connector.AddRootComplex(cpuPorts)
+sw := connector.AddSwitch()
+connector.ConnectSwitchesWithPCIeLink(root, sw)
+a := connector.ConnectDevice(sw, gpu0Ports)
+b := connector.ConnectDevice(sw, gpu1Ports)
+connector.ConnectDevicesWithNVLink(a, b)
+if err := s.Initialize(); err != nil { panic(err) }
 ```
 
-`PlugInDevice` returns a `deviceID` used by `ConnectDevicesWithNVLink` to join
-two devices. Switch IDs returned by the `Add*` calls are used to wire
-PCIe links between switches.
+`ConnectDevice` returns a device ID for `ConnectDevicesWithNVLink`. There is no
+lane-count argument. `AddSwitch` creates a PCIe-side switch; connect it explicitly
+with `ConnectSwitchesWithPCIeLink`. A device attachment includes its device-side
+and NVLink-side internal switches.
 
-## Builder Pattern
+Routing uses the fewest-hop `FloydWarshallRouter`. This replaces the previous
+bandwidth-first policy whose links all reported infinite bandwidth; chosen
+routes and contention timing can change. The generic `networkconnector.Router`
+extension remains available for future routing policies.
 
-`MakeBuilder` returns a value builder with chained `WithX` options. Defaults are
-`1 GHz`, PCIe Gen4 x16, NVLink v2, and PCIe/NVLink switch latency 140.
+Defaults are 1 GHz, 34-byte flits, one-flit processing widths, 16-flit port
+buffers, and one-flit internal switch queues. PCIe and NVLink switch latency
+default to 140 cycles and are independently set with `WithPCIeSwitchLatency`
+and `WithNVLinkSwitchLatency`. Internal attachment switches retain their
+one-cycle latency. These are simulation parameters, not hardware calibration.
 
-```go
-connector := nvlink.MakeBuilder().
-    WithSimulation(sim).
-    WithFreq(1 * timing.GHz).
-    WithPCIeVersion(4, 16).
-    WithPCIeSwitchLatency(140).
-    WithNVLinkVersion(2).
-    WithNVLinkSwitchLatency(140).
-    Build("NVLink")
-```
+## Direct configuration
 
-### Builder Options
+These connectors model ideal direct links. Physical link bandwidth, propagation
+latency, lane count, and hardware-version presets are not modeled. A separate
+calculator may translate hardware targets into explicit configurations in a
+future release. Switch processing and buffering still constrain throughput.
 
-| Method | Description |
-|---|---|
-| `WithSimulation(sim)` | Simulation context (required) |
-| `WithFreq(f)` | Frequency of the network components |
-| `WithPCIeVersion(v, w)` / `WithPCIeBandwidth(b)` | Sets flit size from PCIe bandwidth and network frequency; not a per-link rate limit |
-| `WithPCIeSwitchLatency(n)` | Cycles per PCIe switch hop |
-| `WithNVLinkVersion(v)` / `WithNVLinkBandwidth(b)` | Stored parameters; currently no effect on link throughput |
-| `WithNVLinkSwitchLatency(n)` | Cycles per NVLink switch hop |
+Builders use value receivers and `Build(name)` creates an independent network.
+All assembly must finish before `simulation.Initialize()`. Initialization computes
+and validates routes, freezes them, and initializes component state. There is no
+connector finalization call. Network wiring, port order, queue settings, and
+computed routes participate in checkpoint compatibility checks.
 
-The connector builds its switches and endpoints with `WithSimulation(sim)`,
-so the simulation's tracer and monitor see each of them; the connector has
-no tracer or monitor option of its own.
+| Builder option | Meaning |
+| --- | --- |
+| `WithSimulation(s)` | Owning simulation, required |
+| `WithFreq(f)` | Component and ideal-connection clock |
+| `WithFlitSize(n)` | Bytes per flit, independent of frequency |
+| `WithInputWidth(n)` | Flits admitted per input per cycle |
+| `WithOutputWidth(n)` | Flits ejected per output per cycle |
+| `WithIncomingBufferCapacity(n)` | Incoming port queue capacity in flits |
+| `WithOutgoingBufferCapacity(n)` | Outgoing port queue capacity in flits |
+| `WithRouteBufferCapacity(n)` | Per-input switch routing queue capacity |
+| `WithForwardBufferCapacity(n)` | Per-input switch forwarding queue capacity |
+| `WithSendBufferCapacity(n)` | Per-output switch send queue capacity |
 
-## Usage
-
-```go
-connector := nvlink.MakeBuilder().
-    WithSimulation(sim).
-    WithFreq(1 * timing.GHz).
-    WithPCIeVersion(4, 16).
-    WithNVLinkVersion(2).
-    Build("NVLink")
-
-root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
-
-dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.Ports.Net})
-dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.Ports.Net})
-
-connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // numLink currently has no timing effect
-
-if err := sim.Initialize(); err != nil { panic(err) }
-```
-
-After `simulation.Initialize()`, the network can carry host-device and device-device
-traffic through the assembled topology. Do not use this connector to compare
-PCIe and NVLink bandwidth until the link-model limitations above are resolved.
-
-All `WithX` methods belong to the value `Builder`. `Build(name)` returns a fresh
-`*Connector`; a builder can be reused for independent networks. Derived values
-are computed by `Build`, so setting frequency and bandwidth in either order
-produces the same configuration. Use the connector's assembly methods after
-Build, then call `simulation.Initialize()` after all wiring is complete.
+Widths and queue capacities must be positive and are independently configurable.
+Changing frequency does not change flit size. Increasing a queue's depth does not
+increase its processing width. The input/output options also configure endpoint
+processing. Device-facing ports remain the ports supplied by the caller; buffer
+options configure the endpoint network port and switch ports.

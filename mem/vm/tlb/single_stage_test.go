@@ -19,6 +19,7 @@ func newSingleStageTLB(t *testing.T) *Comp {
 	spec.Latency = 1
 	spec.NumReqPerCycle = 1
 
+	spec.OutputBufferCapacity = 1
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts(sim, "TLB")
@@ -94,6 +95,7 @@ func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
 	spec.Latency = 4
 	spec.NumReqPerCycle = 1
 
+	spec.OutputBufferCapacity = 1
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts(sim, "TLB")

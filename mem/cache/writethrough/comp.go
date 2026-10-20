@@ -23,13 +23,20 @@ type Spec struct {
 	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
 	NumBanks              int         `json:"num_banks"`
 	NumMSHREntry          int         `json:"num_mshr_entry"`
-	TotalByteSize         uint64      `json:"total_byte_size"`
+	NumSets               int         `json:"num_sets"`
 	DirLatency            int         `json:"dir_latency"`
 
 	// WritePolicyType selects the write-policy strategy.
 	// Valid values: "write-around" (default, also used when empty),
 	// "write-evict", "write-through".
 	WritePolicyType string `json:"write_policy_type"`
+	// Pipeline widths and queue capacities are independent model parameters.
+	DirBufferCapacity      int `json:"dir_buffer_capacity"`
+	BankBufferCapacity     int `json:"bank_buffer_capacity"`
+	DirPostBufferCapacity  int `json:"dir_post_buffer_capacity"`
+	BankPostBufferCapacity int `json:"bank_post_buffer_capacity"`
+	DirectoryWidth         int `json:"directory_width"`
+	BankWidth              int `json:"bank_width"`
 }
 
 // blockSize returns the size of a cache line, 2^Log2BlockSize bytes.
@@ -37,10 +44,10 @@ func (s Spec) blockSize() int {
 	return 1 << s.Log2BlockSize
 }
 
-// numSets returns the number of sets in the directory,
-// TotalByteSize / (WayAssociativity * 2^Log2BlockSize).
-func (s Spec) numSets() int {
-	return int(s.TotalByteSize / uint64(s.WayAssociativity*s.blockSize()))
+// ByteSize reports the capacity implied by the configured geometry.
+// It is an observation, not a second configurable capacity.
+func (s Spec) ByteSize() uint64 {
+	return uint64(s.NumSets) * uint64(s.WayAssociativity) * (uint64(1) << s.Log2BlockSize)
 }
 
 // writePolicy returns the write policy, WritePolicyType, or "write-around" if

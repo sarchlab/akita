@@ -49,18 +49,22 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 		s.RegisterPort(item.port)
 	}
 	c := nc.MakeBuilder().WithSimulation(s).WithFlitSize(16).Build("Network")
-	left, right := c.AddSwitch(), c.AddSwitch()
-	sw := nc.LinkEndSwitchParameter{IncomingBufSize: 1, OutgoingBufSize: 1,
-		NumInputChannel: 1, NumOutputChannel: 1, Latency: 2}
-	link := nc.LinkParameter{IsIdeal: true, Frequency: timing.GHz}
-	dp := nc.DeviceToSwitchLinkParameter{
+	left, right := c.AddSwitch(nc.SwitchConfig{}), c.AddSwitch(nc.SwitchConfig{})
+	sw := nc.LinkEndSwitchParameter{
+		RouteBufferCapacity:   1,
+		ForwardBufferCapacity: 1,
+		SendBufferCapacity:    1,
+		IncomingBufSize:       1,
+		OutgoingBufSize:       1,
+		NumInputChannel:       1, NumOutputChannel: 1, Latency: 2}
+	dp := nc.DeviceConfig{
 		DeviceEndParam: nc.LinkEndDeviceParameter{IncomingBufSize: 1, OutgoingBufSize: 1,
 			NumInputChannel: 1, NumOutputChannel: 1},
-		SwitchEndParam: sw, LinkParam: link,
+		SwitchEndParam: sw,
 	}
 	c.ConnectDevice(left, []messaging.Port{src}, dp)
 	c.ConnectDevice(right, []messaging.Port{dst}, dp)
-	c.ConnectSwitches(left, right, nc.SwitchToSwitchLinkParameter{LeftEndParam: sw, RightEndParam: sw, LinkParam: link})
+	c.ConnectSwitches(left, right, nc.SwitchToSwitchLinkParameter{LeftEndParam: sw, RightEndParam: sw})
 
 	if err := s.Initialize(); err != nil {
 		t.Fatal(err)

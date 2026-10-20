@@ -59,36 +59,36 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		WithSimulation(s).Build("Network")
 
 	rootComplexID := connector.AddRootComplex(agents[8].AgentPorts)
-	switch1ID := connector.AddPCIeSwitch()
-	switch2ID := connector.AddPCIeSwitch()
+	switch1ID := connector.AddSwitch()
+	switch2ID := connector.AddSwitch()
 
 	connector.ConnectSwitchesWithPCIeLink(rootComplexID, switch1ID)
 	connector.ConnectSwitchesWithPCIeLink(rootComplexID, switch2ID)
 
 	for i := 0; i < 4; i++ {
-		connector.PlugInDevice(switch1ID, agents[i].AgentPorts)
+		connector.ConnectDevice(switch1ID, agents[i].AgentPorts)
 	}
 
 	for i := 4; i < 8; i++ {
-		connector.PlugInDevice(switch2ID, agents[i].AgentPorts)
+		connector.ConnectDevice(switch2ID, agents[i].AgentPorts)
 	}
 
-	connector.ConnectDevicesWithNVLink(0, 1, 1)
-	connector.ConnectDevicesWithNVLink(0, 2, 1)
-	connector.ConnectDevicesWithNVLink(1, 3, 1)
-	connector.ConnectDevicesWithNVLink(2, 3, 1)
-	connector.ConnectDevicesWithNVLink(0, 3, 1)
-	connector.ConnectDevicesWithNVLink(1, 2, 1)
-	connector.ConnectDevicesWithNVLink(5, 4, 1)
-	connector.ConnectDevicesWithNVLink(5, 7, 1)
-	connector.ConnectDevicesWithNVLink(7, 6, 1)
-	connector.ConnectDevicesWithNVLink(4, 6, 1)
-	connector.ConnectDevicesWithNVLink(4, 7, 1)
-	connector.ConnectDevicesWithNVLink(5, 6, 1)
-	connector.ConnectDevicesWithNVLink(0, 4, 1)
-	connector.ConnectDevicesWithNVLink(1, 5, 1)
-	connector.ConnectDevicesWithNVLink(2, 6, 1)
-	connector.ConnectDevicesWithNVLink(3, 7, 1)
+	connector.ConnectDevicesWithNVLink(0, 1)
+	connector.ConnectDevicesWithNVLink(0, 2)
+	connector.ConnectDevicesWithNVLink(1, 3)
+	connector.ConnectDevicesWithNVLink(2, 3)
+	connector.ConnectDevicesWithNVLink(0, 3)
+	connector.ConnectDevicesWithNVLink(1, 2)
+	connector.ConnectDevicesWithNVLink(5, 4)
+	connector.ConnectDevicesWithNVLink(5, 7)
+	connector.ConnectDevicesWithNVLink(7, 6)
+	connector.ConnectDevicesWithNVLink(4, 6)
+	connector.ConnectDevicesWithNVLink(4, 7)
+	connector.ConnectDevicesWithNVLink(5, 6)
+	connector.ConnectDevicesWithNVLink(0, 4)
+	connector.ConnectDevicesWithNVLink(1, 5)
+	connector.ConnectDevicesWithNVLink(2, 6)
+	connector.ConnectDevicesWithNVLink(3, 7)
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[7])

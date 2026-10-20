@@ -26,7 +26,13 @@ func (s *state) Initialize(c *Comp) {
 		panic(fmt.Sprintf("%s: switches: %d ports but %d link settings", c.Name(), len(ports), len(links)))
 	}
 	for i, link := range links {
-		if link.Remote == "" || link.Latency < 0 || link.NumInputChannel <= 0 || link.NumOutputChannel <= 0 {
+		if link.Remote == "" ||
+			link.Latency < 0 ||
+			link.NumInputChannel <= 0 ||
+			link.NumOutputChannel <= 0 ||
+			link.RouteBufferCapacity <= 0 ||
+			link.ForwardBufferCapacity <= 0 ||
+			link.SendBufferCapacity <= 0 {
 			panic(fmt.Sprintf("%s: switches: invalid link %d", c.Name(), i))
 		}
 	}
@@ -51,11 +57,11 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 		PipelineWidth:    link.NumInputChannel,
 		Pipeline:         queueing.MakePipeline[routedFlit](link.NumInputChannel, link.Latency),
 
-		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
+		RouteBuffer: queueing.MakeBuffer[routedFlit](link.RouteBufferCapacity),
 
-		ForwardBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
+		ForwardBuffer: queueing.MakeBuffer[routedFlit](link.ForwardBufferCapacity),
 
-		SendOutBuffer: queueing.MakeBuffer[routedFlit](link.NumOutputChannel),
+		SendOutBuffer: queueing.MakeBuffer[routedFlit](link.SendBufferCapacity),
 	}
 }
 

@@ -97,7 +97,7 @@ func TestCache(t *testing.T) {
 		routingSpec1.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		c = modeling.MakeBuilder[*Comp](routingSpec1).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(DefaultSpec().TotalByteSize)}).
+			WithResources(Resources{Storage: mem.NewStorage(DefaultSpec().ByteSize())}).
 			Build("Cache")
 
 		c.BindPort("Top", twowaybuffered.MakeBuilder().

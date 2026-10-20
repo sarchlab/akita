@@ -3,7 +3,6 @@ package mesh
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/noc/networkconnector"
@@ -23,28 +22,53 @@ type tile struct {
 // coordinates, including empty transit tiles. Repeated AddTile calls append
 // device ports in arbitration order.
 type Connector struct {
+	inputWidth       int
+	outputWidth      int
+	incomingCapacity int
+	outgoingCapacity int
+	routeCapacity    int
+	forwardCapacity  int
+	sendCapacity     int
+
 	name                    string
 	simulation              modeling.Simulation
 	connector               *networkconnector.Connector
 	freq                    timing.Freq
 	switchLatency, flitSize int
-	linkTransferPerCycle    float64
-	gridSize                [3]int
-	tiles                   map[[3]int]*tile
-	links                   map[[2]int]bool
+
+	gridSize [3]int
+	tiles    map[[3]int]*tile
+	links    map[[2]int]bool
 }
 
 // Builder configures a rectangular mesh connector.
 type Builder struct {
+	inputWidth       int
+	outputWidth      int
+	incomingCapacity int
+	outgoingCapacity int
+	routeCapacity    int
+	forwardCapacity  int
+	sendCapacity     int
+
 	simulation              modeling.Simulation
 	freq                    timing.Freq
 	switchLatency, flitSize int
-	linkTransferPerCycle    float64
 }
 
-// MakeBuilder returns a builder with default frequency, flit size, and bandwidth.
+// MakeBuilder returns the default direct configuration.
 func MakeBuilder() Builder {
-	return Builder{freq: timing.GHz, flitSize: 16, linkTransferPerCycle: 1}
+	return Builder{
+		inputWidth:       1,
+		outputWidth:      1,
+		incomingCapacity: 1,
+		outgoingCapacity: 1,
+		routeCapacity:    1,
+		forwardCapacity:  1,
+		sendCapacity:     1,
+		freq:             timing.GHz,
+		flitSize:         16,
+	}
 }
 
 // WithSimulation sets the owning simulation.
@@ -56,23 +80,59 @@ func (b Builder) WithFreq(f timing.Freq) Builder { b.freq = f; return b }
 // WithSwitchLatency sets the switch pipeline latency in cycles.
 func (b Builder) WithSwitchLatency(cycles int) Builder { b.switchLatency = cycles; return b }
 
-// WithBandwidth sets the link transfers per cycle.
-func (b Builder) WithBandwidth(transfersPerCycle float64) Builder {
-	b.linkTransferPerCycle = transfersPerCycle
-	return b
-}
-
 // WithFlitSize sets the number of bytes per flit.
 func (b Builder) WithFlitSize(size int) Builder { b.flitSize = size; return b }
 
+// WithInputWidth sets the flits per cycle.
+func (b Builder) WithInputWidth(n int) Builder { b.inputWidth = n; return b }
+
+// WithOutputWidth sets the flits per cycle.
+func (b Builder) WithOutputWidth(n int) Builder { b.outputWidth = n; return b }
+
+// WithIncomingBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithIncomingBufferCapacity(n int) Builder { b.incomingCapacity = n; return b }
+
+// WithOutgoingBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithOutgoingBufferCapacity(n int) Builder { b.outgoingCapacity = n; return b }
+
+// WithRouteBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithRouteBufferCapacity(n int) Builder { b.routeCapacity = n; return b }
+
+// WithForwardBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithForwardBufferCapacity(n int) Builder { b.forwardCapacity = n; return b }
+
+// WithSendBufferCapacity sets the queue capacity in flits.
+func (b Builder) WithSendBufferCapacity(n int) Builder { b.sendCapacity = n; return b }
+
 // Build creates an empty connector ready for AddTile calls.
 func (b Builder) Build(name string) *Connector {
-	if b.linkTransferPerCycle <= 0 {
-		panic("mesh: bandwidth must be positive")
+	if b.inputWidth <= 0 ||
+		b.outputWidth <= 0 ||
+		b.incomingCapacity <= 0 ||
+		b.outgoingCapacity <= 0 ||
+		b.routeCapacity <= 0 ||
+		b.forwardCapacity <= 0 ||
+		b.sendCapacity <= 0 {
+		panic("mesh: widths and buffer capacities must be positive")
 	}
-	c := &Connector{name: name, simulation: b.simulation, freq: b.freq, switchLatency: b.switchLatency,
-		flitSize: b.flitSize, linkTransferPerCycle: b.linkTransferPerCycle,
-		tiles: make(map[[3]int]*tile), links: make(map[[2]int]bool)}
+	if b.switchLatency < 0 {
+		panic("mesh: switch latency cannot be negative")
+	}
+
+	c := &Connector{
+		inputWidth:       b.inputWidth,
+		outputWidth:      b.outputWidth,
+		incomingCapacity: b.incomingCapacity,
+		outgoingCapacity: b.outgoingCapacity,
+		routeCapacity:    b.routeCapacity,
+		forwardCapacity:  b.forwardCapacity,
+		sendCapacity:     b.sendCapacity,
+		name:             name,
+		simulation:       b.simulation,
+		freq:             b.freq,
+		switchLatency:    b.switchLatency,
+		flitSize:         b.flitSize,
+		tiles:            make(map[[3]int]*tile), links: make(map[[2]int]bool)}
 	c.connector = networkconnector.MakeBuilder().WithSimulation(b.simulation).WithFreq(b.freq).
 		WithFlitSize(b.flitSize).WithRouter(meshRouter{c: c}).Build(name)
 	return c
@@ -95,10 +155,10 @@ func (c *Connector) AddTile(loc [3]int, ports []messaging.Port) {
 		}
 		switchName := fmt.Sprintf("SW[%d][%d][%d]", at[0], at[1], at[2])
 		endpointName := fmt.Sprintf("EP[%d][%d][%d]", at[0], at[1], at[2])
-		t := &tile{location: at, switchID: c.connector.AddSwitchWithName(switchName),
+		t := &tile{location: at, switchID: c.connector.AddSwitch(networkconnector.SwitchConfig{Name: switchName}),
 			switchName: c.name + "." + switchName, endpointName: endpointName}
 		c.tiles[at] = t
-		c.connector.ConnectDeviceWithEPName(endpointName, t.switchID, nil, c.deviceParameter())
+		c.connector.ConnectDevice(t.switchID, nil, c.deviceParameter(endpointName))
 	})
 	c.eachLocation(func(at [3]int) {
 		// Preserve the old mesh's front, top, left construction order.
@@ -118,7 +178,7 @@ func (c *Connector) AddTile(loc [3]int, ports []messaging.Port) {
 		}
 	})
 	t := c.tiles[loc]
-	c.connector.ConnectDeviceWithEPName(t.endpointName, t.switchID, ports, c.deviceParameter())
+	c.connector.ConnectDevice(t.switchID, ports, c.deviceParameter(t.endpointName))
 	t.ports = append(t.ports, ports...)
 }
 
@@ -131,32 +191,32 @@ func (c *Connector) eachLocation(f func([3]int)) {
 		}
 	}
 }
-func (c *Connector) deviceParameter() networkconnector.DeviceToSwitchLinkParameter {
-	width := int(math.Ceil(c.linkTransferPerCycle))
-	return networkconnector.DeviceToSwitchLinkParameter{
-		DeviceEndParam: networkconnector.LinkEndDeviceParameter{IncomingBufSize: width,
-			OutgoingBufSize:  width,
-			NumInputChannel:  width,
-			NumOutputChannel: width},
-		SwitchEndParam: networkconnector.LinkEndSwitchParameter{IncomingBufSize: width,
-			OutgoingBufSize:  width,
-			NumInputChannel:  width,
-			NumOutputChannel: width,
-			Latency:          1},
-		LinkParam: networkconnector.LinkParameter{IsIdeal: true, Frequency: c.freq},
+func (c *Connector) deviceParameter(name string) networkconnector.DeviceConfig {
+	return networkconnector.DeviceConfig{Name: name,
+		DeviceEndParam: networkconnector.LinkEndDeviceParameter{IncomingBufSize: c.incomingCapacity,
+			OutgoingBufSize:  c.outgoingCapacity,
+			NumInputChannel:  c.inputWidth,
+			NumOutputChannel: c.outputWidth},
+		SwitchEndParam: networkconnector.LinkEndSwitchParameter{
+			RouteBufferCapacity:   c.routeCapacity,
+			ForwardBufferCapacity: c.forwardCapacity,
+			SendBufferCapacity:    c.sendCapacity,
+			IncomingBufSize:       c.incomingCapacity,
+			OutgoingBufSize:       c.outgoingCapacity,
+			NumInputChannel:       c.inputWidth,
+			NumOutputChannel:      c.outputWidth,
+			Latency:               1},
 	}
 }
 func (c *Connector) switchParameter() networkconnector.SwitchToSwitchLinkParameter {
-	width := int(math.Ceil(c.linkTransferPerCycle))
-	end := networkconnector.LinkEndSwitchParameter{IncomingBufSize: width,
-		OutgoingBufSize:  width,
-		NumInputChannel:  width,
-		NumOutputChannel: width,
-		Latency:          c.switchLatency}
-	return networkconnector.SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end,
-		LinkParam: networkconnector.LinkParameter{IsIdeal: true,
-			Frequency:     c.freq * timing.Freq(c.linkTransferPerCycle),
-			NumStage:      1,
-			CyclePerStage: 1,
-			PipelineWidth: 1}}
+	end := networkconnector.LinkEndSwitchParameter{
+		RouteBufferCapacity:   c.routeCapacity,
+		ForwardBufferCapacity: c.forwardCapacity,
+		SendBufferCapacity:    c.sendCapacity,
+		IncomingBufSize:       c.incomingCapacity,
+		OutgoingBufSize:       c.outgoingCapacity,
+		NumInputChannel:       c.inputWidth,
+		NumOutputChannel:      c.outputWidth,
+		Latency:               c.switchLatency}
+	return networkconnector.SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
 }

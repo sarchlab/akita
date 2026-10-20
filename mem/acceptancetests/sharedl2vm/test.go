@@ -178,12 +178,21 @@ func buildL2Cache(
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 
+	l2Spec.DirBufferCapacity = 2
+	l2Spec.DirToBankBufferCapacity = 2
+	l2Spec.WriteBufferToBankBufferCapacity = 2
+	l2Spec.MSHRBufferCapacity = 2
+	l2Spec.WriteBufferStageCapacity = 2
+	l2Spec.DirPostBufferCapacity = 2
+	l2Spec.BankPostBufferCapacity = 2
+	l2Spec.DirectoryWidth = 2
+	l2Spec.BankWidth = 2
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
 	l2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
 		WithSimulation(s).
-		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
+		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.ByteSize(), "L2Cache.Storage")}).
 		Build("L2Cache")
 
 	l2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
@@ -222,6 +231,7 @@ func buildL2TLB(
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 
+	l2TLBSpec.OutputBufferCapacity = 4
 	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
 	l2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
 		WithSimulation(s).
@@ -268,6 +278,7 @@ func buildL1Cache(
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
+	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 
 	name := "L1Cache" + suffix
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
@@ -275,7 +286,7 @@ func buildL1Cache(
 	}
 	l1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
 		WithSimulation(s).
-		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, name+".Storage")}).
+		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.ByteSize(), name+".Storage")}).
 		Build(name)
 
 	l1Cache.BindPort("Top", newPort(s, name+".Top"))
@@ -296,6 +307,7 @@ func buildL1TLB(
 	l1TLBSpec.Log2PageSize = 12
 	l1TLBSpec.NumReqPerCycle = 2
 
+	l1TLBSpec.OutputBufferCapacity = 2
 	name := "L1TLB" + suffix
 
 	l1TLBSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}

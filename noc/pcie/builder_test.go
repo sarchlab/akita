@@ -10,8 +10,8 @@ import (
 
 func TestBuilderOrderAndIndependentNetworks(t *testing.T) {
 	b := MakeBuilder().WithSimulation(sim.MakeBuilder().Build())
-	a := b.WithBandwidth(64e9).WithFreq(2 * timing.GHz).Build("A")
-	c := b.WithFreq(2 * timing.GHz).WithBandwidth(64e9).Build("C")
+	a := b.WithFlitSize(32).WithFreq(2 * timing.GHz).Build("A")
+	c := b.WithFreq(2 * timing.GHz).WithFlitSize(32).Build("C")
 	require.Equal(t, 32, a.flitByteSize)
 	require.Equal(t, a.flitByteSize, c.flitByteSize)
 	require.Equal(t, 0, a.AddRootComplex(nil))
