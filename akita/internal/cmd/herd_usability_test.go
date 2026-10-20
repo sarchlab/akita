@@ -84,6 +84,25 @@ func TestHerdCLISubmitEachAndWait(t *testing.T) {
 	}
 }
 
+func TestHerdCLIHostScan(t *testing.T) {
+	c := queueCLI(t, herd.HostConfig{Name: "qa", Queue: &herd.QueueConfig{Slots: 1}})
+	c.must("herd", "run", "qa", "s1", "true")
+	c.waitFor("s1", "ok")
+
+	// The scan looks under the home directory; not this machine's.
+	c.env = append(c.env, "HOME="+t.TempDir())
+
+	out := c.must("herd", "host", "scan", "qa")
+	if !strings.Contains(out, "===== qa") || !strings.Contains(out, "akxq (1 session, 0 running") {
+		t.Errorf("host scan: %s", out)
+	}
+
+	if out, err := c.run("herd", "host", "add", "somewhere", "--name", "qa"); err == nil ||
+		!strings.Contains(out, "configured already") {
+		t.Errorf("host add with a taken name: %v %s", err, out)
+	}
+}
+
 func TestHerdCLIDoctor(t *testing.T) {
 	c := queueCLI(t, herd.HostConfig{Name: "qa", Queue: &herd.QueueConfig{Slots: 1}})
 

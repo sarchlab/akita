@@ -27,7 +27,14 @@ type fakeSystem struct {
 	final  map[string]string
 	http   map[string]string
 	writes map[int]float64
+	// owner (default: the probing user, fakeUID), cwd, and herdEnv
+	// describe processes.
+	owner   map[int]int
+	cwd     map[int]string
+	herdEnv map[int]bool
 }
+
+const fakeUID = 1000
 
 func (f *fakeSystem) tmuxPanes(context.Context) (map[string]int, error) { return f.panes, nil }
 
@@ -61,6 +68,19 @@ func (f *fakeSystem) httpGet(_ context.Context, url string) ([]byte, error) {
 
 	return nil, errors.New("connection refused")
 }
+
+func (f *fakeSystem) uid() int { return fakeUID }
+
+func (f *fakeSystem) procOwner(pid int) int {
+	if u, ok := f.owner[pid]; ok {
+		return u
+	}
+
+	return fakeUID
+}
+
+func (f *fakeSystem) procCwd(pid int) string         { return f.cwd[pid] }
+func (f *fakeSystem) procStartedByHerd(pid int) bool { return f.herdEnv[pid] }
 
 func (f *fakeSystem) hostStats(context.Context) hostsys.Stats {
 	return hostsys.Stats{Load: []float64{1, 2, 3}, CPUs: 8}

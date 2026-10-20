@@ -3,6 +3,7 @@ package hostsys
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/process"
@@ -20,6 +21,7 @@ type ProcInfo struct {
 // ProcTable is the machine's process tree; details are read lazily.
 type ProcTable struct {
 	children map[int][]int
+	parent   map[int]int
 	procs    map[int]bool
 	details  map[int]*ProcInfo
 	load     func(pid int) *ProcInfo
@@ -39,13 +41,31 @@ func NewProcTable(ppid map[int]int, load func(pid int) *ProcInfo) *ProcTable {
 }
 
 func newTable() *ProcTable {
-	return &ProcTable{children: map[int][]int{}, procs: map[int]bool{}, details: map[int]*ProcInfo{}}
+	return &ProcTable{
+		children: map[int][]int{}, parent: map[int]int{}, procs: map[int]bool{}, details: map[int]*ProcInfo{},
+	}
 }
 
 func (t *ProcTable) add(pid, ppid int) {
 	t.procs[pid] = true
+	t.parent[pid] = ppid
 	t.children[ppid] = append(t.children[ppid], pid)
 }
+
+// PIDs returns every process, in increasing order.
+func (t *ProcTable) PIDs() []int {
+	pids := make([]int, 0, len(t.procs))
+	for pid := range t.procs {
+		pids = append(pids, pid)
+	}
+
+	slices.Sort(pids)
+
+	return pids
+}
+
+// Parent returns the parent of a process (0 if unknown).
+func (t *ProcTable) Parent(pid int) int { return t.parent[pid] }
 
 // Descendants returns pid and the processes below it.
 func (t *ProcTable) Descendants(pid int) []int {

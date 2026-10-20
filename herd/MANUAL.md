@@ -93,6 +93,21 @@ and the web UI lists them.
 
 ## 4. Adding SSH servers and SLURM clusters
 
+To add a server, give its address:
+
+```bash
+akita herd host add lab1.example.edu      # or me@lab1, or an ~/.ssh/config alias
+```
+
+It connects (nothing needs to be installed there), and shows the machine,
+the directories that already hold Herd (or `exp`) workspaces, and the
+simulations you started there by hand, with their directory and the
+script that started them. It then proposes a host entry, with a queue
+sized to the machine, and adds it to your config when you answer yes.
+`akita herd host scan <address>` shows the same without adding
+anything. Simulations you started by hand show up under the host in the
+web UI, wherever they run.
+
 Hosts live in `~/.config/akita/herd.json` (or the file named by
 `$AKITA_HERD_CONFIG`):
 

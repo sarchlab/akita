@@ -247,7 +247,7 @@ func addProbe(st *herd.Status, hs *herd.HostStatus, r hostResult) {
 	hs.Now, hs.Load, hs.CPUs = p.Now, p.Load, p.CPUs
 	hs.MemTotalGB, hs.MemAvailGB, hs.GPUs = p.MemTotalGB, p.MemAvailGB, p.GPUs
 	hs.FetchS = math.Round(r.fetch.Seconds()*10) / 10
-	hs.Queue = p.Queue
+	hs.Queue, hs.Unmanaged = p.Queue, p.Unmanaged
 
 	for name, cfg := range p.Projects {
 		if old, ok := st.Projects[name]; !ok || old == nil {

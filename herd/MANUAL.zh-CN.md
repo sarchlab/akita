@@ -326,7 +326,14 @@ cd / && rm -rf $T
 
 示例由三部分组成，每部分都可以单独替换。需要的留下，其余删掉，不会影响别的部分。
 
-**主机**（用户配置 `~/.config/akita/herd.json`）。把两个目录换成你的服务器：`name`
+**主机**（用户配置 `~/.config/akita/herd.json`）。添加服务器最快的办法是给出地址：
+
+```bash
+akita herd host add me@server1.example.edu
+```
+
+它会连上服务器，显示那里已经在跑什么（Herd 的工作区，以及你手动启动的模拟），给出一个
+主机条目，你确认后写入配置。也可以手动把两个目录换成你的服务器：`name`
 是命令里用的名字，`address` 是任何 `ssh` 能接受的地址，`queue` 按机器设置。每台
 主机上不用装任何东西：`akita herd` 会自己把 akita 放过去（见[第 2 节](#2-安装)），
 `akita herd doctor` 检查配置。SLURM 主机没有队列，用 `run`。
@@ -425,6 +432,17 @@ done
 结果由你的程序自己写：写到 `results/<名字>/` 下，网页就会列出来。
 
 ## 4. 添加 SSH 服务器和 SLURM 集群
+
+添加服务器只需要给出地址：
+
+```bash
+akita herd host add lab1.example.edu      # 也可以是 me@lab1，或 ~/.ssh/config 里的别名
+```
+
+它会连上服务器（服务器上不用装任何东西），显示机器信息、已有 Herd（或 `exp`）工作区的
+目录，以及你手动启动的模拟（所在目录和启动它的脚本）。然后给出一个主机条目（队列按机器
+大小设置），你回答 yes 后写进配置。只想看看、不添加，用 `akita herd host scan <地址>`。
+手动启动的模拟不管在哪个目录，都会显示在网页上对应主机下面。
 
 主机写在 `~/.config/akita/herd.json`（或环境变量 `$AKITA_HERD_CONFIG` 指定的文件）里：
 

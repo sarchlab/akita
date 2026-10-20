@@ -255,6 +255,8 @@ akita herd submit [-g group] [--priority N] [--mem GB] [--host H|--hosts H,H]
                  [--each key=v1,v2]... [--file tasks.jsonl] [--no-sync] <name> "<cmd>"
 akita herd wait [--until ended|running|paused] [--timeout D] [host [name...]]
 akita herd doctor [host...]             tools, akita version, roots, agents
+akita herd host scan <address|host>     workspaces and unmanaged simulations there
+akita herd host add <address> [--name N] [--root DIR] [--akita-dir DIR] [--yes]
 akita herd queue [host...]              agent, pending, running, paused, ended
 akita herd cancel <host> <name>         pending only; a running task: stop
 akita herd balance [--watch] [-n] [host...]
@@ -434,6 +436,30 @@ and the queue (`queue list`) give each name a state: `pending`,
 or how it ended. It prints each change and returns when every named one
 reached `--until` (an end satisfies all), or, without names, when no
 state of the project is active.
+
+### Unmanaged simulations and host scan
+
+The probe also lists, as `unmanaged`, the user's processes that look like
+simulations but that no Herd session started (`probe.unmanaged`): busy
+(at least 60 s old and half a CPU on average), not a shell, editor, or
+akita herd itself, not under a running session of the probe or a tmux
+session named `herd-*`/`exp-*`, and, on Linux, without `HERD_NAME`,
+`HERD_TASK`, `HERD_HEARTBEAT`, or `EXP_HEARTBEAT` in its environment. Each
+comes with its directory and its launcher: the nearest ancestor that is
+not a wrapper (`time`, `nohup`, ...) nor an interactive shell. The
+monitor shows them under the host, whatever directory they run in.
+
+`akita herd host scan` runs `akita herd _local scan` on the host
+(`probe.Scan`, a `HostScan`, schema `herd-scan/1`): the machine; the roots
+among `~/exp`, the given roots, and the directories one and two levels
+below home that hold a queue or a workspace (a subdirectory with archive
+records or a log starting with `[start] `), with each workspace's
+session, running, and result counts; the unmanaged simulations; and the
+number of other users' busy processes. `host add` proposes
+`herd.SuggestHost` (root: the given one, else `~/exp` when it holds
+workspaces, else the busiest root; queue: half the CPUs, a tenth of the
+memory reserved, at least 4 GB) and appends it with `herd.AddHosts`, which
+keeps the config's other keys and writes `<config>.bak`.
 
 ### Deploying akita
 

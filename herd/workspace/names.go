@@ -89,6 +89,12 @@ func TmuxPane(panes map[string]int, project, name string) (pid int, ok bool) {
 	return 0, false
 }
 
+// IsHerdTmuxSession tells whether a tmux session belongs to Herd (a
+// session or an agent) or to the former exp tool.
+func IsHerdTmuxSession(name string) bool {
+	return strings.HasPrefix(name, tmuxPrefix) || strings.HasPrefix(name, legacyTmuxPrefix)
+}
+
 func tmuxName(prefix, project, name string) string {
 	return strings.NewReplacer(".", "_", ":", "_").Replace(prefix + project + "-" + name)
 }

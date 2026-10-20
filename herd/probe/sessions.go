@@ -158,6 +158,8 @@ func (p *prober) markRunning(s *herd.Session, pid int, lc *workspace.Log) {
 	cfg := p.projects[s.Project]
 
 	for _, d := range table.Descendants(pid) {
+		p.sessionPIDs[d] = true
+
 		info := table.Info(d)
 		if info == nil {
 			continue

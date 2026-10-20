@@ -17,6 +17,7 @@ const (
 	SchemaStatus  = "herd-status/1"
 	SchemaCells   = "herd-cells/1"
 	SchemaProbe   = "herd-probe/1"
+	SchemaScan    = "herd-scan/1"
 )
 
 // legacySchemaPrefix and schemaPrefix start the schema identifiers of the
@@ -344,6 +345,7 @@ type HostStatus struct {
 	GPUs       []GPU        `json:"gpus,omitempty"`
 	FetchS     float64      `json:"fetch_s,omitempty"`
 	Queue      *QueueStatus `json:"queue,omitempty"`
+	Unmanaged  []Unmanaged  `json:"unmanaged,omitempty"`
 }
 
 // Rules are the monitor's hang rules.
@@ -414,6 +416,61 @@ type HostProbe struct {
 	Sessions   []Session                 `json:"sessions"` // Host empty; health not judged
 	Runs       []Run                     `json:"runs"`     // Host empty
 	Queue      *QueueStatus              `json:"queue,omitempty"`
+	Unmanaged  []Unmanaged               `json:"unmanaged,omitempty"`
+}
+
+// Unmanaged is a process of the user that looks like a simulation (busy
+// for a while) but that no Herd session started: one started by hand
+// with nohup, in another tmux session, or by another tool.
+type Unmanaged struct {
+	PID   int     `json:"pid"`
+	Exe   string  `json:"exe"`
+	Args  string  `json:"args"`
+	Cwd   string  `json:"cwd,omitempty"` // "~/" for the home directory
+	Start float64 `json:"start"`
+	CPU   float64 `json:"cpu"` // average percent over its life
+	RSSGB float64 `json:"rss_gb"`
+	// Launcher is the command line of the script that started it, when
+	// there is one (e.g. "bash run.sh <result name>").
+	Launcher string `json:"launcher,omitempty"`
+}
+
+// HostScan is what `akita herd host scan` finds on a machine
+// (schema herd-scan/1): the machine, the workspace roots of Herd (or the
+// former exp tool) under the home directory, and the user's simulations
+// that no session of Herd started.
+type HostScan struct {
+	Schema     string      `json:"schema"`
+	Hostname   string      `json:"hostname"`
+	User       string      `json:"user"`
+	OS         string      `json:"os"`
+	Arch       string      `json:"arch"`
+	CPUs       int         `json:"cpus"`
+	MemTotalGB float64     `json:"mem_total_gb"`
+	MemAvailGB float64     `json:"mem_avail_gb"`
+	Load       []float64   `json:"load"`
+	Tmux       bool        `json:"tmux"`
+	Roots      []ScanRoot  `json:"roots"`
+	Unmanaged  []Unmanaged `json:"unmanaged"`
+	// OthersBusy is the number of processes of other users that use more
+	// than half a CPU.
+	OthersBusy int `json:"others_busy"`
+}
+
+// ScanRoot is a directory that holds workspaces ("~/" for the home
+// directory).
+type ScanRoot struct {
+	Root     string        `json:"root"`
+	Queue    bool          `json:"queue"` // has .akita-herd/
+	Projects []ScanProject `json:"projects"`
+}
+
+// ScanProject is a workspace of a scanned root.
+type ScanProject struct {
+	Name     string `json:"name"`
+	Sessions int    `json:"sessions"`
+	Running  int    `json:"running"`
+	Results  int    `json:"results"`
 }
 
 // Cell is one simulation of a campaign.

@@ -339,8 +339,16 @@ cd / && rm -rf $T
 The example has three parts, and each can be replaced on its own. Keep
 what you need and delete the rest; nothing else depends on it.
 
-**Hosts** (the user config, `~/.config/akita/herd.json`). Replace the
-two directories with your servers: `name` is what you type in commands,
+**Hosts** (the user config, `~/.config/akita/herd.json`). The quickest way
+to add a server is its address:
+
+```bash
+akita herd host add me@server1.example.edu
+```
+
+It connects, shows what already runs there (workspaces of Herd, and
+simulations you started by hand), proposes an entry, and adds it when
+you say yes. Or replace the two directories by hand: `name` is what you type in commands,
 `address` is anything `ssh` accepts, and `queue` fits the machine.
 Nothing has to be installed there: `akita herd` puts its akita on a host
 by itself ([Install](#install)), and `akita herd doctor` checks the
@@ -524,6 +532,8 @@ act on every configured host when you name none.
 | `akita herd balance [--watch] [-n] [host...]` | Moves pending tasks to idle hosts and retries tasks that died of a host's `avoid_signals`. |
 | `akita herd collect [--watch] [host...]` | Copies the results and logs of ended tasks to `remote/<host>/`. |
 | `akita herd wait [--until ended\|running\|paused] [--timeout D] [host [name...]]` | Waits until the named sessions and tasks reach the state (default: ended), printing each change; without names, until nothing of the project runs or waits. Exits 0 also when a task failed. |
+| `akita herd host scan <address\|host>` | Shows what runs on a server: the machine, the directories under the home directory that hold workspaces, and your simulations that no Herd session started (with their directory and launching script). Changes nothing there. |
+| `akita herd host add <address> [--name N] [--root DIR] [--akita-dir DIR] [--yes]` | Scans a server, proposes a host entry (name from the address, the root with the workspaces, a queue sized to the machine), and adds it to the user config once you confirm. |
 | `akita herd doctor [host...]` | Checks this machine and the hosts: ssh, `bash`, `rsync`, `tmux`, `sbatch`, `akita` and whether its version matches, the root, and the agent. Exits 1 when a check fails. |
 | `akita herd agent start\|stop\|status <host>` | Starts, stops, or shows a host's agent (tmux session `herd-agent-<host>`). Stopping it leaves its tasks running. |
 

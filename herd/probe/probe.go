@@ -105,6 +105,8 @@ func Probe(ctx context.Context, root string, opts Options) (*herd.HostProbe, err
 		out.Queue = q.Status(opts.now)
 	}
 
+	out.Unmanaged = p.unmanaged()
+
 	return out, nil
 }
 
@@ -122,7 +124,9 @@ type prober struct {
 	workspaces []wsRef
 	projects   map[string]*herd.ProjectConfig
 	procs      *hostsys.ProcTable
-	archived   map[string]map[string]bool // project -> archived result directories
+	// sessionPIDs are the processes of the running sessions found.
+	sessionPIDs map[int]bool
+	archived    map[string]map[string]bool // project -> archived result directories
 
 	// light lists sessions only: no process trees, monitors, or heartbeat;
 	// tailLines lines of every log, with the final SLURM state of a died
@@ -135,7 +139,7 @@ type prober struct {
 func newProber(ctx context.Context, opts Options) *prober {
 	return &prober{
 		ctx: ctx, opts: opts, now: herd.UnixSeconds(opts.now),
-		archived: map[string]map[string]bool{}, withArchived: true,
+		archived: map[string]map[string]bool{}, sessionPIDs: map[int]bool{}, withArchived: true,
 	}
 }
 
