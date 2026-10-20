@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -334,22 +333,4 @@ func queueHost(cmd *cobra.Command, host string,
 	ctx, cancel := commandContext(cmd)
 
 	return env, b, ctx, cancel, nil
-}
-
-// akitaVersion is the module version and VCS revision of this binary.
-func akitaVersion() string {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-
-	v := bi.Main.Version
-
-	for _, s := range bi.Settings {
-		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
-			v += " " + s.Value[:7]
-		}
-	}
-
-	return strings.TrimSpace(v)
 }

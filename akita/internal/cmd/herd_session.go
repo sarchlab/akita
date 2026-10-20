@@ -22,14 +22,17 @@ var herdRunCmd = &cobra.Command{
 workspace as session <name>: in tmux (session herd-<project>-<name>), under
 nohup setsid when tmux is missing, or as a batch job on SLURM hosts.
 Output goes to logs/<name>.log, framed by "[start] ..." and "[exit N] ..."
-lines; HERD_HEARTBEAT (and EXP_HEARTBEAT) points to logs/<name>.heartbeat.
+lines. {name} in the command is replaced by <name>; the session also gets
+it as HERD_NAME, and HERD_HEARTBEAT (and EXP_HEARTBEAT) points to
+logs/<name>.heartbeat.
 
 Quote the command, or put flags of akita herd before <host>: everything
 after <name> is the command. HERD_GROUP (or EXP_GROUP) sets the default
 group and HERD_NO_SYNC=1 (or EXP_NO_SYNC=1) skips the sync (useful after
 one akita herd sync when starting many sessions).`,
 	Example: `  akita herd run server1 seed0 "python train.py --seed 0"
-  akita herd run -g ablation cluster fir "./sim -benchmark=fir"`,
+  akita herd run -g ablation cluster fir "./sim -benchmark=fir"
+  akita herd run server1 1019_fir_base ./run.sh {name} ./sim`,
 	Args: cobra.MinimumNArgs(3),
 	RunE: runHerdRun,
 }
@@ -142,9 +145,12 @@ func runHerdRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	spec := backend.LaunchSpec{
-		Project: env.project, Name: args[1], Group: group, Command: strings.Join(args[2:], " "),
+	command, err := herd.ExpandTemplate(strings.Join(args[2:], " "), map[string]string{"name": args[1]})
+	if err != nil {
+		return err
 	}
+
+	spec := backend.LaunchSpec{Project: env.project, Name: args[1], Group: group, Command: command}
 
 	job, err := b.Launch(ctx, spec)
 	if err != nil {

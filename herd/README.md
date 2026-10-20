@@ -21,9 +21,10 @@ Everything runs on one machine (macOS or Linux with `git`, `go`, `tmux`,
 `rsync`, and `python3`): the two "hosts" `server1` and `server2` are two
 directories, and the "simulator" is a small Go program that sleeps. You
 write no code: `akita herd init --example` writes the project. Paste the
-blocks in order into one shell; the text after each block is what you
-should see (abbreviated). [Part 1](#part-1-run-and-watch) is the daily
-loop; [Part 2](#part-2-queues) adds queues across hosts. Then
+blocks in order into one shell, at your own pace: `akita herd wait`
+waits wherever something has to finish first. The text after each block
+is what you should see (abbreviated). [Part 1](#part-1-run-and-watch) is
+the daily loop; [Part 2](#part-2-queues) adds queues across hosts. Then
 [Adapting the example to your project](#adapting-the-example-to-your-project)
 lists what to replace.
 
@@ -40,12 +41,14 @@ export PATH=$T/bin:$PATH AKITA_HERD_CONFIG=$T/user.json TMUX_TMPDIR=$T
 unset TMUX
 ```
 
-**2. Write the example project.** Each line says what the file stands
-for in a real project:
+**2. Write the example project, and check the setup.** Each line of
+`init` says what the file stands for in a real project. `doctor` checks
+this machine and every host; run it whenever something does not work:
 
 ```bash
 mkdir $T/demo && cd $T/demo
 akita herd init --example
+akita herd doctor
 ```
 
 ```text
@@ -59,16 +62,26 @@ wrote go.mod       the Go module of sim (demo only)
 wrote .gitignore   ignores remote/, where pull and collect put results
 wrote /tmp/herd-demo.XXXXXX/user.json
       hosts server1 and server2: ../server1 and ../server2 (your servers)
+===== this machine =====
+ok    akita v5...
+ok    rsync
+...
+===== server1 (local) =====
+ok    root /tmp/herd-demo.XXXXXX/server1 does not exist yet; the first sync creates it
+ok    akita v5... (same as here)
+ok    agent not running (submit starts it)
+...
 ```
 
 **3. `run`** copies the project to a host and starts a command there in
-the background (a tmux session). `run.sh NAME SIM` runs one simulation
-into `results/NAME/`; `sweep.sh` runs a campaign of 3 workloads × 2
+the background (a tmux session). `{name}` in the command becomes the
+session's name: `run.sh NAME SIM` runs one simulation into
+`results/NAME/`, and `sweep.sh` runs a campaign of 3 workloads × 2
 configs. `-g` puts a session into a group:
 
 ```bash
-akita herd run server1 1018_fir_base ./run.sh 1018_fir_base go run ./sim
-akita herd run -g sweep server2 1018_all_sweep ./sweep.sh 1018_all_sweep go run ./sim
+akita herd run server1 1018_fir_base ./run.sh {name} go run ./sim
+akita herd run -g sweep server2 1018_all_sweep ./sweep.sh {name} go run ./sim
 ```
 
 ```text
@@ -108,15 +121,19 @@ fir/fast: step 0 of 2
 ^C
 ```
 
-**5. `pull`** copies `logs/` and `results/` of every host to
-`remote/<host>/`. Wait for the sweep to finish first (about 15 s):
+**5. `wait` and `pull`.** `wait` returns when nothing of the project
+runs any more, printing each change; `pull` then copies `logs/` and
+`results/` of every host to `remote/<host>/`:
 
 ```bash
-sleep 15; akita herd pull
+akita herd wait
+akita herd pull
 ls remote/*/results
 ```
 
 ```text
+14:02:41 server1:1018_fir_base ok
+14:02:49 server2:1018_all_sweep ok
 >> pulled server1 -> remote/server1/
 >> pulled server2 -> remote/server2/
 remote/server1/results:
@@ -130,7 +147,7 @@ remote/server2/results:
 Start a slow session first so there is a progress bar to watch:
 
 ```bash
-akita herd run server2 1018_mm_slow ./run.sh 1018_mm_slow go run ./sim -steps 60
+akita herd run server2 1018_mm_slow ./run.sh {name} go run ./sim -steps 60
 akita herd web
 ```
 
@@ -141,13 +158,16 @@ command, and the log. **Results** lists the result directories grouped
 by workload, with `config` as a coloured tag; click one for its
 `run.json` properties, `summary.csv`, and files. **Charts** (or "Plot"
 next to the campaign) shows the speedup of `fast` over `base` per
-workload, with the GMEAN (1.53). Press Ctrl+C to stop the server.
+workload, with the GMEAN (1.53). Press Ctrl+C to stop the server, and
+stop the slow session:
 
-That is the daily loop. Other session commands work the same way
-(see [Commands](#commands)): `akita herd stop server2 1018_mm_slow` ends a
-session, `group` regroups sessions, `archive` hides finished ones,
-`record` adds properties to a result, and `name` checks and renames
-result directories.
+```bash
+akita herd stop server2 1018_mm_slow
+```
+
+That is the daily loop. `group` regroups sessions, `archive` hides
+finished ones, `record` adds properties to a result, and `name` checks
+and renames result directories (see [Commands](#commands)).
 
 ### Part 2: queues
 
@@ -169,138 +189,140 @@ akita herd build --target $(go env GOOS)/$(go env GOARCH)
 >> sim  6353c7a  darwin/arm64  sha f825b239321d  .akita-herd/bin/f825b239321d/sim
 ```
 
-**8. `submit`** queues tasks; `{bin:sim}` becomes the path of that
-build, which `submit` uploads to the host. `submit` starts a host's
-agent (the process that runs its queue) when needed; `server2`'s is
-started by hand here so that its free memory comes from a file, for
-step 11. With `--hosts`, each task goes to the host with the most room:
-`server1` has one slot, taken by `1019_fir_base`, so the batch goes to
-`server2`:
+**8. `submit` a sweep.** `--each key=v1,v2` submits one task per
+combination: here 3 workloads × 2 configs, named by the template
+`1019_{workload}_{config}`. `{bin:sim}` becomes the path of the build,
+which `submit` uploads. Each task goes to the host with the most room
+(`server1` has one slot, `server2` four), each host is synced once, and
+`submit` starts the host's agent, the process that runs its queue:
 
 ```bash
-echo 8 > $T/mem-gb; akita herd agent start server2 --fake-mem-file $T/mem-gb
-akita herd submit --host server1 1019_fir_base ./run.sh 1019_fir_base {bin:sim}
-for n in 1019_fir_fast 1019_mm_base 1019_mm_fast; do
-  akita herd submit --hosts server1,server2 -g batch $n ./run.sh $n {bin:sim}
-done
+akita herd submit -g batch --each workload=fir,mm,bfs --each config=base,fast \
+  1019_{workload}_{config} ./run.sh {name} {bin:sim}
 ```
 
 ```text
->> starting the agent of server2 (tmux session herd-agent-server2)
->> agent of server2 runs: pid 4242, root /tmp/herd-demo.XXXXXX/server2, 4 slots
 >> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
->> queued 1 tasks on server1
+>> queued 2 tasks on server1
 >> starting the agent of server1 (tmux session herd-agent-server1)
 >> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
->> queued 1 tasks on server2
-...
+>> queued 4 tasks on server2
+>> starting the agent of server2 (tmux session herd-agent-server2)
 ```
 
-**9. `queue`** shows each host's agent and its tasks. Both hosts are
-this machine, so each agent also counts the other's `sim` processes
-("simulators") against its slots; a host does not start more tasks
-while they fill its slots:
+**9. `queue`** shows each host's agent and its tasks (what you see
+depends on the moment); `wait` waits for them all:
 
 ```bash
-sleep 6; akita herd queue
+akita herd queue
+akita herd wait
 ```
 
 ```text
 ===== server1 =====
-agent: running (pid 4250), heartbeat 2s ago; slots 4/1 (own 1, simulators 4); MemAvailable 8.0 GB
+agent: running (pid 4250), heartbeat 2s ago; slots 1/1 (own 1, simulators 0); MemAvailable 7.1 GB
 STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_fir_base  5     -    7s     pid 4255
+pending  demo     1019_bfs_fast  5     -    2s
+running  demo     1019_mm_fast   5     -    2s     pid 4255
 ===== server2 =====
-agent: running (pid 4242), heartbeat 3s ago; slots 3/4 (own 3, simulators 1); MemAvailable 8.0 GB
+agent: running (pid 4242), heartbeat 0s ago; slots 3/4 (own 3, simulators 1); MemAvailable 7.1 GB
 STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_fir_fast  5     -    3s     pid 4310
-running  demo     1019_mm_base   5     -    3s     pid 4320
-running  demo     1019_mm_fast   5     -    3s     pid 4330
+pending  demo     1019_bfs_base  5     -    2s
+running  demo     1019_fir_base  5     -    0s     pid 4310
+running  demo     1019_fir_fast  5     -    0s     pid 4320
+running  demo     1019_mm_base   5     -    0s     pid 4330
+14:03:16 server1:1019_mm_fast running
+14:03:16 server1:1019_bfs_fast pending
+...
+14:03:42 server1:1019_bfs_fast ok
 ```
 
+Both hosts are this machine, so each agent also counts the other's `sim`
+processes ("simulators") against its slots.
+
 **10. Retry and `balance`.** A task killed by one of its host's
-`avoid_signals` (`server1` has "bad memory": `flaky.sh` dies of SIGBUS
-there) is retryable, and `balance` resubmits it to another host. It
-also moves pending tasks of a busy host to an idle one. `-n` only shows
-what it would do:
+`avoid_signals` is retryable (`server1` has "bad memory": `flaky.sh`
+dies of SIGBUS there), and `balance` resubmits it to another host. It
+also moves pending tasks of a busy host to an idle one. Queue three
+tasks on `server1`, and wait until the second runs (the first has then
+died):
 
 ```bash
-sleep 20
-akita herd submit --host server1 1019_bfs_fast ./run.sh 1019_bfs_fast ./flaky.sh {bin:sim}
-akita herd submit --host server1 1019_fir_long ./run.sh 1019_fir_long {bin:sim} -steps 15
-akita herd submit --host server1 1019_mm_long ./run.sh 1019_mm_long {bin:sim}
-sleep 12; akita herd queue server1
+akita herd submit --host server1 1020_bfs_fast ./run.sh {name} ./flaky.sh {bin:sim}
+akita herd submit --host server1 1020_fir_long ./run.sh {name} {bin:sim} -steps 15
+akita herd submit --host server1 1020_mm_long ./run.sh {name} {bin:sim}
+akita herd wait --until running server1 1020_fir_long
+akita herd queue server1
 akita herd balance -n
 akita herd balance
 ```
 
 ```text
 ...
+14:03:50 server1:1020_fir_long running
 ===== server1 =====
-agent: running (pid 4250), heartbeat 4s ago; slots 1/1 (own 1, simulators 0); MemAvailable 8.1 GB
+agent: running (pid 4250), heartbeat 0s ago; slots 1/1 (own 1, simulators 0); MemAvailable 7.2 GB
 STATE        PROJECT  NAME           PRIO  MEM  SINCE  INFO
-pending      demo     1019_mm_long   5     -    12s
-running      demo     1019_fir_long  5     -    4s     pid 4500
-failed(138)  demo     1019_bfs_fast  5     -    4s     SIGBUS retryable
-ok           demo     1019_fir_base  5     -    29s
-14:05:38 would retry 1019_bfs_fast (SIGBUS on server1) -> server2
-14:05:38 would move 1019_mm_long: server1 -> server2
+pending      demo     1020_mm_long   5     -    8s
+running      demo     1020_fir_long  5     -    0s     pid 4500
+failed(138)  demo     1020_bfs_fast  5     -    0s     SIGBUS retryable
+...
+14:03:51 would retry 1020_bfs_fast (SIGBUS on server1) -> server2
+14:03:51 would move 1020_mm_long: server1 -> server2
 >> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
-14:05:39 retry 1019_bfs_fast (SIGBUS on server1) -> server2
-14:05:39 move 1019_mm_long: server1 -> server2
+14:03:51 retry 1020_bfs_fast (SIGBUS on server1) -> server2
+14:03:51 move 1020_mm_long: server1 -> server2
 ```
 
 (The exit status of SIGBUS is 138 on macOS and 135 on Linux.)
+`akita herd web --balance` runs `balance` every minute, and its **Queue**
+view shows all of this.
 
-**11. Memory guard.** Below `mem_pause_gb` of free memory the agent
-pauses (SIGSTOP) the newest task of the lowest priority (the largest
-`--priority`); above `mem_resume_gb` it resumes it (SIGCONT). Lower and
-raise the fake free memory of `server2`:
-
-```bash
-sleep 10
-akita herd submit --host server2 --priority 9 1019_bfs_slow ./run.sh 1019_bfs_slow {bin:sim} -steps 12
-sleep 7; echo 0.1 > $T/mem-gb; sleep 7; akita herd queue server2
-echo 8 > $T/mem-gb; sleep 7; akita herd queue server2
-```
-
-```text
->> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
->> queued 1 tasks on server2
-===== server2 =====
-agent: running (pid 4242), heartbeat 4s ago; slots 1/4 (own 1, simulators 1); MemAvailable 0.1 GB
-STATE   PROJECT  NAME           PRIO  MEM  SINCE  INFO
-paused  demo     1019_bfs_slow  9     -    9s     pid 4600
-ok      demo     1019_bfs_fast  5     -    9s
-ok      demo     1019_mm_long   5     -    14s
-...
-===== server2 =====
-agent: running (pid 4242), heartbeat 0s ago; slots 1/4 (own 1, simulators 1); MemAvailable 8.0 GB
-STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_bfs_slow  9     -    16s    pid 4600
-ok       demo     1019_bfs_fast  5     -    16s
-...
-```
-
-**12. `collect`** copies the results and logs of ended tasks to
+**11. `collect`** copies the results and logs of ended tasks to
 `remote/<host>/`, once per task and without `collect.exclude` (here
-`stats/`). `akita herd web` shows all of this in its **Queue** view;
-`web --balance` also runs `balance` every minute.
+`stats/`):
 
 ```bash
-sleep 15; akita herd collect
-ls remote/server2/results/1019_bfs_fast
+akita herd wait
+akita herd collect
+ls remote/server2/results/1020_bfs_fast
 ```
 
 ```text
-14:06:25 collected server1:1019_fir_long (ok) -> remote/server1/
-14:06:25 collected server1:1019_bfs_fast (failed) -> remote/server1/
-14:06:25 collected server1:1019_fir_base (ok) -> remote/server1/
-14:06:25 collected server2:1019_bfs_slow (ok) -> remote/server2/
-14:06:25 collected server2:1019_bfs_fast (ok) -> remote/server2/
-14:06:25 collected server2:1019_mm_long (ok) -> remote/server2/
+...
+14:04:06 collected server1:1020_fir_long (ok) -> remote/server1/
+14:04:06 collected server1:1020_bfs_fast (failed) -> remote/server1/
+...
+14:04:06 collected server2:1020_bfs_fast (ok) -> remote/server2/
 ...
 meta.json  run.json  summary.csv
+```
+
+**12. Optional: the memory guard.** Below `mem_pause_gb` of free memory,
+an agent pauses (SIGSTOP) the newest task of the lowest priority (the
+largest `--priority`); above `mem_resume_gb`, it resumes it (SIGCONT).
+To show it without using real memory, restart `server2`'s agent so that
+it reads its free memory from a file (`--fake-mem-file` is a flag for
+tests), then lower and raise the number:
+
+```bash
+echo 8 > $T/mem-gb
+akita herd agent stop server2; akita herd agent start server2 --fake-mem-file $T/mem-gb
+akita herd submit --host server2 --priority 9 1021_bfs_slow ./run.sh {name} {bin:sim} -steps 30
+akita herd wait --until running server2 1021_bfs_slow
+echo 0.1 > $T/mem-gb; akita herd wait --until paused server2 1021_bfs_slow
+echo 8 > $T/mem-gb; akita herd wait --until running server2 1021_bfs_slow
+akita herd stop server2 1021_bfs_slow
+```
+
+```text
+...
+14:04:12 server2:1021_bfs_slow running
+14:04:12 server2:1021_bfs_slow running
+14:04:18 server2:1021_bfs_slow paused
+14:04:18 server2:1021_bfs_slow paused
+14:04:22 server2:1021_bfs_slow running
+>> stopped server2:1021_bfs_slow
 ```
 
 **13. Clean up.** Stop the agents (tasks that still run would keep
@@ -364,7 +386,8 @@ simulator is up to you:
 - `flaky.sh`, `go.mod`, and `legacy.py` exist only for the demo.
 
 In commands, replace `go run ./sim` (sessions) or `{bin:sim}` (queued
-tasks) with your simulator, and the result names with yours.
+tasks) with your simulator, and the result names and `--each` values
+with yours; keep `{name}` so that each run writes under its own name.
 
 ## Install
 
@@ -479,7 +502,7 @@ act on every configured host when you name none.
 |---|---|
 | `akita herd init [--example]` | Writes `./herd.json` and the user config if they are missing. `--example` writes the walkthrough's project instead, and its hosts only to a new `$AKITA_HERD_CONFIG`. |
 | `akita herd sync [host...]` | Copies the project to `<root>/<project>` with `rsync --delete`, so the copy matches the project. Files you delete locally are deleted on the host too, except for the paths listed above. |
-| `akita herd run [-g group] [--no-sync] <host> <name> <command>...` | Syncs, then starts the command in the workspace as session `<name>`. Output goes to `logs/<name>.log`. `HERD_GROUP` sets the default group, and `HERD_NO_SYNC=1` skips the sync. Put the flags before `<host>`. Everything after `<name>` is the command. |
+| `akita herd run [-g group] [--no-sync] <host> <name> <command>...` | Syncs, then starts the command in the workspace as session `<name>`; `{name}` in the command becomes `<name>`. Output goes to `logs/<name>.log`. `HERD_GROUP` sets the default group, and `HERD_NO_SYNC=1` skips the sync. Put the flags before `<host>`. Everything after `<name>` is the command. |
 | `akita herd status [-a] [-n lines] [host...]` | Lists sessions with their state, group, start time, and duration, followed by the last log lines of the most recent ones. `-a` also lists archived sessions. |
 | `akita herd log <host> <name> [-f] [-n 50]` | Shows the end of a log; archived logs work too. With `-f`, Ctrl+C stops following, not the session. |
 | `akita herd stop <host> <name>` | Appends `[stopped] <date>  akita herd stop` to the log, then kills the tmux session or process group, or runs `scancel` for a SLURM job. |
@@ -494,11 +517,13 @@ act on every configured host when you name none.
 | `akita herd web [--port 8765] [--no-browser] [--balance] [host...]` | Serves the monitor on `http://127.0.0.1:8765`. `--balance` also runs `balance` every minute. |
 | `akita herd probe --json [--root DIR]` | Prints the workspaces of this machine as JSON. The monitor runs this command, as well as `probe run` and `probe campaign`. |
 | `akita herd build [--commit REV] [--target linux/amd64] [name...]` | Builds the binaries of `herd.json` `build` in a temporary git worktree and keeps them in `.akita-herd/bin/<sha12>/`. |
-| `akita herd submit [-g group] [--priority N] [--mem GB] [--host H\|--hosts H,H] [--file tasks.jsonl] <name> <command>...` | Queues tasks on hosts' queues; see [Queues](#queues). |
+| `akita herd submit [-g group] [--priority N] [--mem GB] [--host H\|--hosts H,H] [--each key=v1,v2]... [--file tasks.jsonl] <name> <command>...` | Queues tasks on hosts' queues; see [Queues](#queues). `--each` submits one task per combination of the values, with `{key}` replaced in the name template and the command. |
 | `akita herd queue [host...]` | Shows each host's agent and its pending, running, paused, and ended tasks. |
 | `akita herd cancel <host> <name>` | Removes a pending task. |
 | `akita herd balance [--watch] [-n] [host...]` | Moves pending tasks to idle hosts and retries tasks that died of a host's `avoid_signals`. |
 | `akita herd collect [--watch] [host...]` | Copies the results and logs of ended tasks to `remote/<host>/`. |
+| `akita herd wait [--until ended\|running\|paused] [--timeout D] [host [name...]]` | Waits until the named sessions and tasks reach the state (default: ended), printing each change; without names, until nothing of the project runs or waits. Exits 0 also when a task failed. |
+| `akita herd doctor [host...]` | Checks this machine and the hosts: ssh, `bash`, `rsync`, `tmux`, `sbatch`, `akita` and whether its version matches, the root, and the agent. Exits 1 when a check fails. |
 | `akita herd agent start\|stop\|status <host>` | Starts, stops, or shows a host's agent (tmux session `herd-agent-<host>`). Stopping it leaves its tasks running. |
 
 ### Sessions
@@ -544,7 +569,9 @@ A session can be in one of these states:
 | `died` | It ended without an `[exit]` line, for example because the host rebooted or SLURM hit a time limit. In the time-limit case, `status` adds the final SLURM state. |
 
 The command runs in a subshell, so `exit 3` is recorded as `[exit 3]`, and
-you can use single quotes in it. `HERD_HEARTBEAT` (also exported as
+you can use single quotes in it. `{name}` in the command is replaced by
+the session's name when it has only letters, digits, and `._+=,@%:-`
+(it is not quoted); the session also gets it as `HERD_NAME`. `HERD_HEARTBEAT` (also exported as
 `EXP_HEARTBEAT`, its name before the rename) points to
 `logs/<name>.heartbeat`, which a program can rewrite with progress
 information (see DESIGN.md).

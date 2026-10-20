@@ -52,6 +52,10 @@ type Backend interface {
 	// returns its stdout (the status fallback without akita on the host).
 	Shell(ctx context.Context, project, command string) ([]byte, error)
 
+	// Script runs a shell script on the host, outside any workspace, and
+	// returns its stdout (`akita herd doctor`).
+	Script(ctx context.Context, script string) ([]byte, error)
+
 	// Stream runs a shell command in a project's workspace and streams its
 	// output (`akita herd log`).
 	Stream(ctx context.Context, project, command string, stdout, stderr io.Writer) error

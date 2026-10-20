@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/debug"
 
 	"github.com/sarchlab/akita/v5/herd"
 	"github.com/sarchlab/akita/v5/herd/probe"
@@ -85,7 +86,48 @@ var herdLocalSessionsCmd = &cobra.Command{
 	},
 }
 
+var herdLocalVersionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version of this akita (akita herd doctor compares them).",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		fmt.Fprintln(cmd.OutOrStdout(), akitaVersion())
+	},
+}
+
+// akitaVersion is the module version of this binary (go install ...@v),
+// else its git revision ("-dirty" with uncommitted changes), else
+// "unknown".
+func akitaVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v
+	}
+
+	var rev, dirty string
+
+	for _, s := range info.Settings {
+		switch {
+		case s.Key == "vcs.revision" && len(s.Value) >= 12:
+			rev = s.Value[:12]
+		case s.Key == "vcs.modified" && s.Value == "true":
+			dirty = "-dirty"
+		}
+	}
+
+	if rev == "" {
+		return "unknown"
+	}
+
+	return rev + dirty
+}
+
 func init() {
+	herdLocalCmd.AddCommand(herdLocalVersionCmd)
 	herdLocalSessionsCmd.Flags().String("project", "", "project name (default: the workspace's name)")
 	herdLocalSessionsCmd.Flags().Int("tail", 3, "log lines per session")
 	herdLocalSessionsCmd.Flags().Bool("archived", false, "include archived sessions")

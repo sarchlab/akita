@@ -89,6 +89,11 @@ func (b *baseBackend) Akita(ctx context.Context, args ...string) ([]byte, error)
 	return b.output(ctx, script)
 }
 
+// Script runs a shell script on the host, outside any workspace.
+func (b *baseBackend) Script(ctx context.Context, script string) ([]byte, error) {
+	return b.output(ctx, pathPrelude+script)
+}
+
 // Shell runs a command in a project's workspace.
 func (b *baseBackend) Shell(ctx context.Context, project, command string) ([]byte, error) {
 	return b.output(ctx, b.inWorkspace(project, command))

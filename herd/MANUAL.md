@@ -129,8 +129,10 @@ Hosts live in `~/.config/akita/herd.json` (or the file named by
   when you run `akita herd` on the login node itself. A job waiting in the
   queue shows as `queued`.
 
-Check the setup with `akita herd sync lab1` and
-`akita herd run lab1 hello "hostname"`.
+Check the setup with `akita herd doctor`: for this machine and each host,
+it checks ssh, `bash`, `rsync`, `tmux`, `sbatch`, that `akita` is found
+and has the same version as yours, the root, and the agent, and says
+what to fix.
 
 ## 5. Everyday work
 
@@ -150,6 +152,9 @@ akita herd run -g ablation lab1 fir-opt "./sim -benchmark=fir -opt"
   when the whole group has finished.
 - Put options before the host. Everything after the session name is the
   command; quote it when it contains `;`, `|`, or `&&`.
+- `{name}` in the command becomes the session name, so you write it only
+  once: `akita herd run lab1 1019_fir_base ./run.sh {name}`. The session
+  also gets it as `$HERD_NAME`.
 - A name can be used again once the old session has ended. The new run
   overwrites the old log; archive the old session first if you want to
   keep it.
@@ -166,7 +171,13 @@ so results there are safe.
 akita herd status            # every host; add -a for archived sessions
 akita herd log lab1 fir-opt -f  # follow; Ctrl+C stops following only
 akita herd stop lab1 fir-opt
+akita herd wait                 # until nothing of the project runs
+akita herd wait lab1 fir-opt    # until this one ends
 ```
+
+`wait` prints each change of state, and with `--until running` or
+`--until paused` waits for that state instead; use it in scripts
+instead of `sleep`.
 
 On a host, `tmux attach -t herd-<project>-<name>` shows a live session;
 press Ctrl+B, then D, to leave it running.
@@ -215,9 +226,14 @@ runs low, and keeps going while your laptop is closed.
 3. Submit:
 
    ```bash
-   akita herd submit --host lab1 --mem 20 1019_diag_fir_base_a41f7e2 "./run.sh {bin:sim} fir"
+   akita herd submit --host lab1 --mem 20 1019_diag_fir_base_a41f7e2 "./run.sh {name} {bin:sim}"
+   akita herd submit --hosts lab1,lab2 -g round2 --each w=fir,mm,bfs --each c=base,opt \
+     1019_diag_{w}_{c}_a41f7e2 ./run.sh {name} {bin:sim}
    akita herd submit --hosts lab1,lab2 -g round2 --file tasks.jsonl
    ```
+
+   `--each key=v1,v2` submits one task per combination of the values
+   (here 3 × 2), with `{key}` replaced in the name and the command.
 
    `submit` syncs the project, uploads the binary if the host lacks it,
    queues the task, and starts the host's agent if it is not running.

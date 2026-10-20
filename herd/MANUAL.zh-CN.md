@@ -31,9 +31,10 @@ Herd（akita herd；可以想象成一只秋田犬把一群模拟实验赶到各
 所有操作都在一台机器上完成（装有 `git`、`go`、`tmux`、`rsync` 和 `python3` 的 macOS
 或 Linux）：两台"主机" `server1` 和 `server2` 其实是两个目录，"模拟器"是一个只会
 sleep 的小 Go 程序。你不需要写代码：`akita herd init --example` 会生成整个项目。按顺序
-把代码块粘贴到同一个 shell 里；每个代码块后面是你应该看到的输出（有删节）。
-[第一部分](#第一部分运行和查看)是日常流程；[第二部分](#第二部分队列)加上跨主机的队列。
-之后的[换成你自己的项目](#换成你自己的项目)列出要替换哪些内容。
+把代码块粘贴到同一个 shell 里，快慢随意：需要等某件事完成的地方都用 `akita herd wait`
+等待。每个代码块后面是你应该看到的输出（有删节）。[第一部分](#第一部分运行和查看)是
+日常流程；[第二部分](#第二部分队列)加上跨主机的队列。之后的
+[换成你自己的项目](#换成你自己的项目)列出要替换哪些内容。
 
 ### 第一部分：运行和查看
 
@@ -47,11 +48,13 @@ export PATH=$T/bin:$PATH AKITA_HERD_CONFIG=$T/user.json TMUX_TMPDIR=$T
 unset TMUX
 ```
 
-**2. 生成示例项目。** 每一行说明这个文件在真实项目里对应什么：
+**2. 生成示例项目，检查环境。** `init` 的每一行说明这个文件在真实项目里对应什么。
+`doctor` 检查本机和每台主机；遇到问题时先运行它：
 
 ```bash
 mkdir $T/demo && cd $T/demo
 akita herd init --example
+akita herd doctor
 ```
 
 ```text
@@ -65,15 +68,24 @@ wrote go.mod       the Go module of sim (demo only)
 wrote .gitignore   ignores remote/, where pull and collect put results
 wrote /tmp/herd-demo.XXXXXX/user.json
       hosts server1 and server2: ../server1 and ../server2 (your servers)
+===== this machine =====
+ok    akita v5...
+ok    rsync
+...
+===== server1 (local) =====
+ok    root /tmp/herd-demo.XXXXXX/server1 does not exist yet; the first sync creates it
+ok    akita v5... (same as here)
+ok    agent not running (submit starts it)
+...
 ```
 
-**3. `run`** 把项目复制到一台主机，在那里后台启动一条命令（一个 tmux 会话）。
-`run.sh 名字 模拟器` 跑一次模拟，结果写到 `results/名字/`；`sweep.sh` 跑一个
-3 个负载 × 2 个配置的 campaign。`-g` 把会话放进一个组：
+**3. `run`** 把项目复制到一台主机，在那里后台启动一条命令（一个 tmux 会话）。命令里的
+`{name}` 会换成会话名：`run.sh 名字 模拟器` 跑一次模拟，结果写到 `results/名字/`；
+`sweep.sh` 跑一个 3 个负载 × 2 个配置的 campaign。`-g` 把会话放进一个组：
 
 ```bash
-akita herd run server1 1018_fir_base ./run.sh 1018_fir_base go run ./sim
-akita herd run -g sweep server2 1018_all_sweep ./sweep.sh 1018_all_sweep go run ./sim
+akita herd run server1 1018_fir_base ./run.sh {name} go run ./sim
+akita herd run -g sweep server2 1018_all_sweep ./sweep.sh {name} go run ./sim
 ```
 
 ```text
@@ -112,15 +124,18 @@ fir/fast: step 0 of 2
 ^C
 ```
 
-**5. `pull`** 把每台主机的 `logs/` 和 `results/` 复制到 `remote/<主机>/`。先等
-sweep 跑完（大约 15 秒）：
+**5. `wait` 和 `pull`。** `wait` 等到项目里没有任何东西在运行，并打印每次状态变化；
+然后 `pull` 把每台主机的 `logs/` 和 `results/` 复制到 `remote/<主机>/`：
 
 ```bash
-sleep 15; akita herd pull
+akita herd wait
+akita herd pull
 ls remote/*/results
 ```
 
 ```text
+14:02:41 server1:1018_fir_base ok
+14:02:49 server2:1018_all_sweep ok
 >> pulled server1 -> remote/server1/
 >> pulled server2 -> remote/server2/
 remote/server1/results:
@@ -134,7 +149,7 @@ remote/server2/results:
 会话，好看到进度条：
 
 ```bash
-akita herd run server2 1018_mm_slow ./run.sh 1018_mm_slow go run ./sim -steps 60
+akita herd run server2 1018_mm_slow ./run.sh {name} go run ./sim -steps 60
 akita herd web
 ```
 
@@ -142,11 +157,15 @@ akita herd web
 campaign `1018_all_sweep`（6/6）。在**会话**里点一个会话，可以看到进度、`sim`
 进程、命令和日志。**结果**按负载分组列出结果目录，`config` 显示为彩色标签；点一个
 可以看它 `run.json` 里的属性、`summary.csv` 和文件。**图表**（或 campaign 旁的
-"画图"）显示每个负载上 `fast` 相对 `base` 的加速比和 GMEAN（1.53）。按 Ctrl+C 停止。
+"画图"）显示每个负载上 `fast` 相对 `base` 的加速比和 GMEAN（1.53）。按 Ctrl+C 停止
+服务器，再停掉这个慢会话：
 
-这就是日常流程。其他会话命令用法相同（见[第 5 节](#5-日常使用)）：
-`akita herd stop server2 1018_mm_slow` 停止会话，`group` 重新分组，`archive` 隐藏
-已结束的会话，`record` 给结果加属性，`name` 检查和重命名结果目录。
+```bash
+akita herd stop server2 1018_mm_slow
+```
+
+这就是日常流程。`group` 重新分组，`archive` 隐藏已结束的会话，`record` 给结果加属性，
+`name` 检查和重命名结果目录（见[第 5 节](#5-日常使用)）。
 
 ### 第二部分：队列
 
@@ -165,131 +184,133 @@ akita herd build --target $(go env GOOS)/$(go env GOARCH)
 >> sim  6353c7a  darwin/arm64  sha f825b239321d  .akita-herd/bin/f825b239321d/sim
 ```
 
-**8. `submit`** 把任务放进队列；`{bin:sim}` 会换成这次构建的路径，`submit` 会把它
-上传到主机。`submit` 在需要时启动主机的 agent（运行队列的进程）；这里先手动启动
-`server2` 的 agent，让它从一个文件读可用内存，供第 11 步使用。用 `--hosts` 时，每个
-任务分给最空闲的主机：`server1`
-只有一个槽位，被 `1019_fir_base` 占用，所以这一批都去 `server2`：
+**8. 用 `submit` 提交一组实验。** `--each 键=值1,值2` 为每种组合提交一个任务：这里是
+3 个负载 × 2 个配置，名字按模板 `1019_{workload}_{config}` 生成。`{bin:sim}` 会换成
+构建出的二进制的路径，`submit` 会把它上传。每个任务分给最空闲的主机（`server1` 有
+1 个槽位，`server2` 有 4 个），每台主机只同步一次，`submit` 还会启动主机的 agent
+（运行队列的进程）：
 
 ```bash
-echo 8 > $T/mem-gb; akita herd agent start server2 --fake-mem-file $T/mem-gb
-akita herd submit --host server1 1019_fir_base ./run.sh 1019_fir_base {bin:sim}
-for n in 1019_fir_fast 1019_mm_base 1019_mm_fast; do
-  akita herd submit --hosts server1,server2 -g batch $n ./run.sh $n {bin:sim}
-done
+akita herd submit -g batch --each workload=fir,mm,bfs --each config=base,fast \
+  1019_{workload}_{config} ./run.sh {name} {bin:sim}
 ```
 
 ```text
->> starting the agent of server2 (tmux session herd-agent-server2)
->> agent of server2 runs: pid 4242, root /tmp/herd-demo.XXXXXX/server2, 4 slots
 >> sync demo -> server1:/tmp/herd-demo.XXXXXX/server1/demo
->> queued 1 tasks on server1
+>> queued 2 tasks on server1
 >> starting the agent of server1 (tmux session herd-agent-server1)
 >> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
->> queued 1 tasks on server2
-...
+>> queued 4 tasks on server2
+>> starting the agent of server2 (tmux session herd-agent-server2)
 ```
 
-**9. `queue`** 显示每台主机的 agent 和任务。两台主机其实是同一台机器，所以每个
-agent 也把另一台的 `sim` 进程（"simulators"）算进自己的槽位；槽位被占满时，主机不再
-启动新任务：
+**9. `queue`** 显示每台主机的 agent 和任务（具体内容取决于时机）；`wait` 等它们全部
+结束：
 
 ```bash
-sleep 6; akita herd queue
+akita herd queue
+akita herd wait
 ```
 
 ```text
 ===== server1 =====
-agent: running (pid 4250), heartbeat 2s ago; slots 4/1 (own 1, simulators 4); MemAvailable 8.0 GB
+agent: running (pid 4250), heartbeat 2s ago; slots 1/1 (own 1, simulators 0); MemAvailable 7.1 GB
 STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_fir_base  5     -    7s     pid 4255
+pending  demo     1019_bfs_fast  5     -    2s
+running  demo     1019_mm_fast   5     -    2s     pid 4255
 ===== server2 =====
-agent: running (pid 4242), heartbeat 3s ago; slots 3/4 (own 3, simulators 1); MemAvailable 8.0 GB
+agent: running (pid 4242), heartbeat 0s ago; slots 3/4 (own 3, simulators 1); MemAvailable 7.1 GB
 STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_fir_fast  5     -    3s     pid 4310
-running  demo     1019_mm_base   5     -    3s     pid 4320
-running  demo     1019_mm_fast   5     -    3s     pid 4330
+pending  demo     1019_bfs_base  5     -    2s
+running  demo     1019_fir_base  5     -    0s     pid 4310
+running  demo     1019_fir_fast  5     -    0s     pid 4320
+running  demo     1019_mm_base   5     -    0s     pid 4330
+14:03:16 server1:1019_mm_fast running
+14:03:16 server1:1019_bfs_fast pending
+...
+14:03:42 server1:1019_bfs_fast ok
 ```
+
+两台主机其实是同一台机器，所以每个 agent 也把另一台的 `sim` 进程（"simulators"）
+算进自己的槽位。
 
 **10. 重试和 `balance`。** 被主机 `avoid_signals` 里的信号杀死的任务可以重试
 （`server1` 有"坏内存"：`flaky.sh` 在那里死于 SIGBUS），`balance` 把它重新提交到
-别的主机。它还把忙碌主机上排队的任务移到空闲的主机。`-n` 只显示会做什么：
+别的主机。它还把忙碌主机上排队的任务移到空闲的主机。在 `server1` 上排三个任务，
+等第二个开始运行（这时第一个已经死了）：
 
 ```bash
-sleep 20
-akita herd submit --host server1 1019_bfs_fast ./run.sh 1019_bfs_fast ./flaky.sh {bin:sim}
-akita herd submit --host server1 1019_fir_long ./run.sh 1019_fir_long {bin:sim} -steps 15
-akita herd submit --host server1 1019_mm_long ./run.sh 1019_mm_long {bin:sim}
-sleep 12; akita herd queue server1
+akita herd submit --host server1 1020_bfs_fast ./run.sh {name} ./flaky.sh {bin:sim}
+akita herd submit --host server1 1020_fir_long ./run.sh {name} {bin:sim} -steps 15
+akita herd submit --host server1 1020_mm_long ./run.sh {name} {bin:sim}
+akita herd wait --until running server1 1020_fir_long
+akita herd queue server1
 akita herd balance -n
 akita herd balance
 ```
 
 ```text
 ...
+14:03:50 server1:1020_fir_long running
 ===== server1 =====
-agent: running (pid 4250), heartbeat 4s ago; slots 1/1 (own 1, simulators 0); MemAvailable 8.1 GB
+agent: running (pid 4250), heartbeat 0s ago; slots 1/1 (own 1, simulators 0); MemAvailable 7.2 GB
 STATE        PROJECT  NAME           PRIO  MEM  SINCE  INFO
-pending      demo     1019_mm_long   5     -    12s
-running      demo     1019_fir_long  5     -    4s     pid 4500
-failed(138)  demo     1019_bfs_fast  5     -    4s     SIGBUS retryable
-ok           demo     1019_fir_base  5     -    29s
-14:05:38 would retry 1019_bfs_fast (SIGBUS on server1) -> server2
-14:05:38 would move 1019_mm_long: server1 -> server2
+pending      demo     1020_mm_long   5     -    8s
+running      demo     1020_fir_long  5     -    0s     pid 4500
+failed(138)  demo     1020_bfs_fast  5     -    0s     SIGBUS retryable
+...
+14:03:51 would retry 1020_bfs_fast (SIGBUS on server1) -> server2
+14:03:51 would move 1020_mm_long: server1 -> server2
 >> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
-14:05:39 retry 1019_bfs_fast (SIGBUS on server1) -> server2
-14:05:39 move 1019_mm_long: server1 -> server2
+14:03:51 retry 1020_bfs_fast (SIGBUS on server1) -> server2
+14:03:51 move 1020_mm_long: server1 -> server2
 ```
 
-（SIGBUS 的退出码在 macOS 上是 138，在 Linux 上是 135。）
+（SIGBUS 的退出码在 macOS 上是 138，在 Linux 上是 135。）`akita herd web --balance`
+每分钟运行一次 `balance`，它的**队列**页面显示上面这一切。
 
-**11. 内存保护。** 可用内存低于 `mem_pause_gb` 时，agent 暂停（SIGSTOP）优先级最低
-（`--priority` 最大）的任务中最新启动的那个；高于 `mem_resume_gb` 时恢复它
-（SIGCONT）。把 `server2` 的假可用内存调低再调高：
+**11. `collect`** 把已结束任务的结果和日志复制到 `remote/<主机>/`，每个任务只复制
+一次，跳过 `collect.exclude`（这里是 `stats/`）：
 
 ```bash
-sleep 10
-akita herd submit --host server2 --priority 9 1019_bfs_slow ./run.sh 1019_bfs_slow {bin:sim} -steps 12
-sleep 7; echo 0.1 > $T/mem-gb; sleep 7; akita herd queue server2
-echo 8 > $T/mem-gb; sleep 7; akita herd queue server2
+akita herd wait
+akita herd collect
+ls remote/server2/results/1020_bfs_fast
 ```
 
 ```text
->> sync demo -> server2:/tmp/herd-demo.XXXXXX/server2/demo
->> queued 1 tasks on server2
-===== server2 =====
-agent: running (pid 4242), heartbeat 4s ago; slots 1/4 (own 1, simulators 1); MemAvailable 0.1 GB
-STATE   PROJECT  NAME           PRIO  MEM  SINCE  INFO
-paused  demo     1019_bfs_slow  9     -    9s     pid 4600
-ok      demo     1019_bfs_fast  5     -    9s
-ok      demo     1019_mm_long   5     -    14s
 ...
-===== server2 =====
-agent: running (pid 4242), heartbeat 0s ago; slots 1/4 (own 1, simulators 1); MemAvailable 8.0 GB
-STATE    PROJECT  NAME           PRIO  MEM  SINCE  INFO
-running  demo     1019_bfs_slow  9     -    16s    pid 4600
-ok       demo     1019_bfs_fast  5     -    16s
+14:04:06 collected server1:1020_fir_long (ok) -> remote/server1/
+14:04:06 collected server1:1020_bfs_fast (failed) -> remote/server1/
 ...
-```
-
-**12. `collect`** 把已结束任务的结果和日志复制到 `remote/<主机>/`，每个任务只复制
-一次，跳过 `collect.exclude`（这里是 `stats/`）。`akita herd web` 的**队列**页面显示
-上面这一切；`web --balance` 还会每分钟运行一次 `balance`。
-
-```bash
-sleep 15; akita herd collect
-ls remote/server2/results/1019_bfs_fast
-```
-
-```text
-14:06:25 collected server1:1019_fir_long (ok) -> remote/server1/
-14:06:25 collected server1:1019_bfs_fast (failed) -> remote/server1/
-14:06:25 collected server1:1019_fir_base (ok) -> remote/server1/
-14:06:25 collected server2:1019_bfs_slow (ok) -> remote/server2/
-14:06:25 collected server2:1019_bfs_fast (ok) -> remote/server2/
-14:06:25 collected server2:1019_mm_long (ok) -> remote/server2/
+14:04:06 collected server2:1020_bfs_fast (ok) -> remote/server2/
 ...
 meta.json  run.json  summary.csv
+```
+
+**12. 可选：内存保护。** 可用内存低于 `mem_pause_gb` 时，agent 暂停（SIGSTOP）优先级
+最低（`--priority` 最大）的任务中最新启动的那个；高于 `mem_resume_gb` 时恢复它
+（SIGCONT）。为了不真的占用内存，重启 `server2` 的 agent，让它从一个文件读可用内存
+（`--fake-mem-file` 是测试用的参数），再把数字调低、调高：
+
+```bash
+echo 8 > $T/mem-gb
+akita herd agent stop server2; akita herd agent start server2 --fake-mem-file $T/mem-gb
+akita herd submit --host server2 --priority 9 1021_bfs_slow ./run.sh {name} {bin:sim} -steps 30
+akita herd wait --until running server2 1021_bfs_slow
+echo 0.1 > $T/mem-gb; akita herd wait --until paused server2 1021_bfs_slow
+echo 8 > $T/mem-gb; akita herd wait --until running server2 1021_bfs_slow
+akita herd stop server2 1021_bfs_slow
+```
+
+```text
+...
+14:04:12 server2:1021_bfs_slow running
+14:04:12 server2:1021_bfs_slow running
+14:04:18 server2:1021_bfs_slow paused
+14:04:18 server2:1021_bfs_slow paused
+14:04:22 server2:1021_bfs_slow running
+>> stopped server2:1021_bfs_slow
 ```
 
 **13. 清理。** 停止 agent（还在运行的任务会继续运行）和这次演练的 tmux 服务器，
@@ -345,8 +366,8 @@ cd / && rm -rf $T
 - `sweep.sh` 是一个 campaign；换成你的 sweep 脚本，或者删掉。
 - `flaky.sh`、`go.mod` 和 `legacy.py` 只用于演示。
 
-命令里把 `go run ./sim`（会话）或 `{bin:sim}`（队列任务）换成你的模拟器，把结果名换成
-你自己的。
+命令里把 `go run ./sim`（会话）或 `{bin:sim}`（队列任务）换成你的模拟器，把结果名和
+`--each` 的取值换成你自己的；保留 `{name}`，让每次运行写到自己名下。
 
 ## 1. 基本概念
 
@@ -437,7 +458,8 @@ done
   的 SLURM 主机直接用本机的 `sbatch`，适合在登录节点上运行 `akita herd` 的情况。
   在队列里等待的作业显示为 `queued`。
 
-可以用 `akita herd sync lab1` 和 `akita herd run lab1 hello "hostname"` 检查配置是否正确。
+用 `akita herd doctor` 检查配置：它对本机和每台主机检查 ssh、`bash`、`rsync`、`tmux`、
+`sbatch`，`akita` 是否找得到、版本是否和你的一致，root 目录和 agent，并告诉你该改什么。
 
 ## 5. 日常使用
 
@@ -455,6 +477,8 @@ akita herd run -g ablation lab1 fir-opt "./sim -benchmark=fir -opt"
   网页会把一组折叠成一行，并在整组跑完时通知你。
 - 选项要写在主机名前面。会话名后面的所有内容都是命令；命令里有 `;`、`|`、`&&`
   时要加引号。
+- 命令里的 `{name}` 会换成会话名，名字只需写一次：
+  `akita herd run lab1 1019_fir_base ./run.sh {name}`。会话里也能用 `$HERD_NAME` 拿到它。
 - 旧会话结束后，名字可以重复使用。新会话会覆盖旧日志；想保留的话先把旧会话归档。
 
 `sync` 会复制项目里的所有内容，但以下这些除外：`.git/`、`logs/`、`results/`、
@@ -468,7 +492,12 @@ akita herd run -g ablation lab1 fir-opt "./sim -benchmark=fir -opt"
 akita herd status            # 所有主机；加 -a 包括已归档的会话
 akita herd log lab1 fir-opt -f  # 持续跟踪；Ctrl+C 只停止跟踪，不停实验
 akita herd stop lab1 fir-opt
+akita herd wait                 # 等到项目里没有任何东西在运行
+akita herd wait lab1 fir-opt    # 等这个会话结束
 ```
+
+`wait` 会打印每次状态变化；加 `--until running` 或 `--until paused` 则等到那个状态。
+写脚本时用它代替 `sleep`。
 
 在主机上，`tmux attach -t herd-<项目名>-<会话名>` 可以实时看会话；按 Ctrl+B 再按 D
 退出，实验继续运行。
@@ -513,9 +542,14 @@ akita herd stop lab1 fir-opt
 3. 提交：
 
    ```bash
-   akita herd submit --host lab1 --mem 20 1019_diag_fir_base_a41f7e2 "./run.sh {bin:sim} fir"
+   akita herd submit --host lab1 --mem 20 1019_diag_fir_base_a41f7e2 "./run.sh {name} {bin:sim}"
+   akita herd submit --hosts lab1,lab2 -g round2 --each w=fir,mm,bfs --each c=base,opt \
+     1019_diag_{w}_{c}_a41f7e2 ./run.sh {name} {bin:sim}
    akita herd submit --hosts lab1,lab2 -g round2 --file tasks.jsonl
    ```
+
+   `--each 键=值1,值2` 为每种取值组合提交一个任务（这里是 3 × 2 个），名字和命令里的
+   `{键}` 换成对应的值。
 
    `submit` 会同步项目，主机上没有这个二进制时上传它，把任务放进队列，agent 没在运行
    时启动它。用 `--hosts` 时，每个任务分给最空闲的主机。文件里每行一个 JSON 任务：

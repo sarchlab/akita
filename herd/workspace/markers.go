@@ -28,8 +28,9 @@ const logDate = `$(LC_ALL=C date '+%a %b %e %I:%M:%S %p %Z %Y')`
 // WrapperScript is the bash script that runs a session's command in a
 // workspace and writes logs/<name>.log with the "[start] <date>  <host>
 // <git revision>" and "[exit <code>] <date>" markers. The command runs in
-// a subshell, so `exit N` is recorded. HERD_HEARTBEAT (and EXP_HEARTBEAT,
-// its name before the rename) points to logs/<name>.heartbeat.
+// a subshell, so `exit N` is recorded. HERD_NAME is the session's name,
+// and HERD_HEARTBEAT (and EXP_HEARTBEAT, its name before the rename)
+// points to logs/<name>.heartbeat.
 func WrapperScript(host, workspace, name, command string) string {
 	logPath := ShellQuote(ScriptFile(name, LogExt))
 	heartbeat := ShellQuote("/" + ScriptFile(name, HeartbeatExt))
@@ -37,7 +38,8 @@ func WrapperScript(host, workspace, name, command string) string {
 	return "cd " + ShellPath(workspace) + " || exit 1\n" +
 		"{ printf '[start] %s  %s  %s\\n' \"" + logDate + "\" " + ShellQuote(host) +
 		" \"$(git rev-parse --short HEAD 2>/dev/null)\"; " +
-		"export HERD_HEARTBEAT=\"$PWD\"" + heartbeat + " EXP_HEARTBEAT=\"$PWD\"" + heartbeat + "; " +
+		"export HERD_NAME=" + ShellQuote(name) +
+		" HERD_HEARTBEAT=\"$PWD\"" + heartbeat + " EXP_HEARTBEAT=\"$PWD\"" + heartbeat + "; " +
 		"( eval " + ShellQuote(command) + " ); " +
 		"echo \"[exit $?] " + logDate + "\"; } 2>&1 | tee -a " + logPath + "\n"
 }

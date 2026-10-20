@@ -57,6 +57,10 @@ plot a campaign of runs all come from the project's `herd.json`.
   option `@herd_log`, and `run` refuses a name whose tmux session belongs
   to another session; `stop` never kills another session's tmux session. SLURM
   sessions are batch jobs whose script writes the same log markers.
+  `{name}` in the command is replaced by the name before launch
+  (`herd.ExpandTemplate`: only for names of letters, digits, and
+  `._+=,@%:-`, since it is inserted unquoted), and the wrapper exports
+  `HERD_NAME`.
 - **Run**: one result directory `results/<name>/`. Its record is
   `run.json` (below); a run may also hold Akita SQLite outputs
   (`*.sqlite3`), whose `exec_info` table is read as properties.
@@ -249,7 +253,9 @@ akita herd web [--port 8765] [--no-browser] [--balance] [host...]
 akita herd probe --json [--root DIR]    (used by the monitor)
 akita herd build [--commit REV] [--target linux/amd64] [name...]
 akita herd submit [-g group] [--priority N] [--mem GB] [--host H|--hosts H,H]
-                 [--file tasks.jsonl] [--no-sync] <name> "<cmd>"
+                 [--each key=v1,v2]... [--file tasks.jsonl] [--no-sync] <name> "<cmd>"
+akita herd wait [--until ended|running|paused] [--timeout D] [host [name...]]
+akita herd doctor [host...]             tools, akita version, roots, agents
 akita herd queue [host...]              agent, pending, running, paused, ended
 akita herd cancel <host> <name>         pending only; a running task: stop
 akita herd balance [--watch] [-n] [host...]
@@ -388,8 +394,10 @@ shipped by accident.
 
 ### submit and placement
 
-`submit` checks each name (also against `naming` when the project has
-one), adds the latest build of each `{bin:<name>}` of the command, picks
+`submit` expands `--each` (`herd.Combinations`: one task per
+combination, `{key}` replaced in the name template and the command;
+names must differ), replaces `{name}` in each command, checks each name
+(also against `naming` when the project has one), adds the latest build of each `{bin:<name>}` of the command, picks
 a host per task, and for each chosen host syncs the project (unless
 `--no-sync`), uploads the binaries the host lacks (`Backend.Upload`: rsync
 to `bin/<sha12>/<file>`, skipped when the file exists), puts the tasks
@@ -418,6 +426,24 @@ One round, for the project's tasks over the hosts (all by default):
 
 `--watch` repeats every 60 s; `akita herd web --balance` runs the same
 loop and shows its activity in the Queue view.
+
+### wait
+
+`wait` polls each host (every 2 s): the sessions (`_local sessions`)
+and the queue (`queue list`) give each name a state: `pending`,
+`queued`, `running`, `paused` (queue entries win over session files),
+or how it ended. It prints each change and returns when every named one
+reached `--until` (an end satisfies all), or, without names, when no
+state of the project is active.
+
+### doctor
+
+`doctor` checks this machine's tools (rsync; ssh, tmux, git, go when the
+hosts and the project need them), then on each host, with one
+`Backend.Script` (bounded by 20 s, since a password prompt would wait
+forever): bash, rsync, tmux, sbatch, and the root; then `akita herd
+_local version` (the module version, else the VCS revision) against
+this binary's; then the agent of a host with a queue.
 
 ### collect
 

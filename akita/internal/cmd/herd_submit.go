@@ -30,14 +30,20 @@ const (
 var binRe = regexp.MustCompile(`\{bin:([^}]+)\}`)
 
 var herdSubmitCmd = &cobra.Command{
-	Use:   "submit [-g group] [--priority N] [--mem GB] [--host H|--hosts H,H] [--file tasks.jsonl] <name> <command>...",
-	Short: "Queue a command (or a file of them) on a host's queue.",
+	Use: "submit [-g group] [--priority N] [--mem GB] [--host H|--hosts H,H] " +
+		"[--each key=v1,v2]... [--file tasks.jsonl] <name> <command>...",
+	Short: "Queue a command (or a sweep or a file of them) on hosts' queues.",
 	Long: `Queue tasks on hosts. Each task runs as session <name> in the project's
 workspace when the host's agent has a free slot and memory for it
 (MemAvailable - mem_gb >= mem_reserve_gb); a smaller priority starts
-first. {bin:<name>} in the command is replaced by the path of the latest
-build of that binary (akita herd build), which is uploaded to the host if
-it does not have it.
+first. {name} in the command is replaced by the task's name.
+{bin:<name>} is replaced by the path of the latest build of that binary
+(akita herd build), which is uploaded to the host if it does not have it.
+
+--each key=v1,v2 (repeatable) submits one task per combination of the
+values: {key} in <name> and in the command is replaced by the value, so
+<name> is a template that must use every key with more than one value.
+All tasks are placed at once, and each host is synced once.
 
 With --hosts (or without a host: the hosts with a "queue" entry in the
 user config), each task goes to the host that can start the most tasks
@@ -47,6 +53,7 @@ to each chosen host (unless --no-sync) and starts its agent if it does not
 run. --file reads one JSON task per line: {"name", "cmd", "group",
 "priority", "mem_gb"}; flags give the defaults.`,
 	Example: `  akita herd submit --host server1 --mem 20 1019_diag_x_base_a41f7e2 "./run.sh {bin:sim} x"
+  akita herd submit --each w=fir,mm,bfs --each c=base,fast 1019_{w}_{c} ./run.sh {name} {bin:sim}
   akita herd submit --hosts server1,server2 -g round2 --file tasks.jsonl`,
 	RunE: runSubmit,
 }
@@ -101,6 +108,7 @@ func init() {
 	f.String("host", "", "queue on this host")
 	f.StringSlice("hosts", nil, "place each task on the best of these hosts")
 	f.String("file", "", "read tasks from a JSON-lines file")
+	f.StringArray("each", nil, "key=v1,v2: one task per value, {key} in the name and command (repeatable)")
 	f.Bool("no-sync", false, "do not sync the project first")
 	f.SetInterspersed(false)
 	herdBalanceCmd.Flags().Bool("watch", false, "repeat every minute")
@@ -185,33 +193,104 @@ func submitTasks(cmd *cobra.Command, env *herdEnv, args []string) ([]*herd.Task,
 		def.Group = getenvLegacy("HERD_GROUP", "EXP_GROUP")
 	}
 
-	var tasks []*herd.Task
+	eaches, _ := f.GetStringArray("each")
+
+	var (
+		tasks []*herd.Task
+		err   error
+	)
 
 	switch {
 	case file != "" && len(args) > 0:
 		return nil, errors.New("give either --file or <name> <command>")
+	case file != "" && len(eaches) > 0:
+		return nil, errors.New("--each takes <name> <command>, not --file")
 	case file != "":
-		var err error
 		if tasks, err = readTaskFile(file, def); err != nil {
 			return nil, err
 		}
 	case len(args) < 2:
 		return nil, errors.New("usage: akita herd submit [flags] <name> <command>...")
 	default:
-		t := def
-		t.Name, t.Cmd = args[0], strings.Join(args[1:], " ")
-		tasks = []*herd.Task{&t}
-	}
-
-	builds, err := queue.LoadBuilds(env.projectDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, t := range tasks {
-		if err := checkTask(env, t, builds); err != nil {
+		if tasks, err = sweepTasks(def, args[0], strings.Join(args[1:], " "), eaches); err != nil {
 			return nil, err
 		}
+	}
+
+	return tasks, finishTasks(env, tasks)
+}
+
+// finishTasks checks that the names differ, replaces {name} in the
+// commands, and checks each task (checkTask).
+func finishTasks(env *herdEnv, tasks []*herd.Task) error {
+	builds, err := queue.LoadBuilds(env.projectDir)
+	if err != nil {
+		return err
+	}
+
+	seen := map[string]bool{}
+
+	for _, t := range tasks {
+		if seen[t.Name] {
+			return fmt.Errorf("two tasks are named %s (with --each, the name must use every key "+
+				"with several values)", t.Name)
+		}
+
+		seen[t.Name] = true
+
+		if t.Cmd, err = herd.ExpandTemplate(t.Cmd, map[string]string{"name": t.Name}); err != nil {
+			return fmt.Errorf("%s: %w", t.Name, err)
+		}
+
+		if err := checkTask(env, t, builds); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// sweepTasks are the tasks of a name template and a command, one per
+// combination of the --each values ({key} replaced in both).
+func sweepTasks(def herd.Task, name, cmd string, eaches []string) ([]*herd.Task, error) {
+	dims := make([]herd.Each, 0, len(eaches))
+	keys := map[string]bool{}
+
+	for _, s := range eaches {
+		d, err := herd.ParseEach(s)
+		if err != nil {
+			return nil, err
+		}
+
+		if keys[d.Key] {
+			return nil, fmt.Errorf("--each %s given twice", d.Key)
+		}
+
+		keys[d.Key] = true
+		dims = append(dims, d)
+	}
+
+	for _, k := range herd.Placeholders(name) {
+		if !keys[k] {
+			return nil, fmt.Errorf("the name %s uses {%s}, but there is no --each %s=...", name, k, k)
+		}
+	}
+
+	var tasks []*herd.Task
+
+	for _, vars := range herd.Combinations(dims) {
+		t := def
+
+		var err error
+		if t.Name, err = herd.ExpandTemplate(name, vars); err != nil {
+			return nil, err
+		}
+
+		if t.Cmd, err = herd.ExpandTemplate(cmd, vars); err != nil {
+			return nil, fmt.Errorf("%s: %w", t.Name, err)
+		}
+
+		tasks = append(tasks, &t)
 	}
 
 	return tasks, nil
