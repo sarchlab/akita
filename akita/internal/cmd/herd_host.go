@@ -108,30 +108,14 @@ func hostFor(env *herdEnv, name string) (herd.HostConfig, bool) {
 	return herd.HostConfig{Name: herd.HostNameFor(name), Type: herd.HostSSH, Address: name}, false
 }
 
-// scanHost runs `akita herd _local scan` on a host (putting akita there
-// when needed).
+// scanHost scans a host (see backend.Scan).
 func scanHost(ctx context.Context, h herd.HostConfig) (*herd.HostScan, error) {
 	b, err := backend.New(h)
 	if err != nil {
 		return nil, err
 	}
 
-	args := []string{"herd", "_local", "scan"}
-	if h.Root != "" {
-		args = append(args, "--root", h.Root)
-	}
-
-	data, err := b.Akita(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	scan := &herd.HostScan{}
-	if err := json.Unmarshal(data, scan); err != nil {
-		return nil, fmt.Errorf("%s: bad scan: %w", h.Name, err)
-	}
-
-	return scan, nil
+	return backend.Scan(ctx, b)
 }
 
 func printScan(w io.Writer, h herd.HostConfig, s *herd.HostScan) {
@@ -240,7 +224,7 @@ func runHostAdd(cmd *cobra.Command, args []string) error {
 	printScan(env.out, h, scan)
 
 	if root == "" {
-		root = pickRoot(scan)
+		root = herd.PickRoot(scan)
 	}
 
 	entry := herd.SuggestHost(h.Name, h.Address, root, scan)
@@ -278,6 +262,10 @@ func runHostAdd(cmd *cobra.Command, args []string) error {
 // newHostOf is the host host add adds at address, from the flags; its
 // name must be free.
 func newHostOf(cmd *cobra.Command, env *herdEnv, address string) (herd.HostConfig, error) {
+	if err := herd.ValidateAddress(address); err != nil {
+		return herd.HostConfig{}, err
+	}
+
 	h := herd.HostConfig{Type: herd.HostSSH, Address: address}
 	h.Name, _ = cmd.Flags().GetString("name")
 	h.Root, _ = cmd.Flags().GetString("root")
@@ -309,29 +297,6 @@ func printOtherRoots(env *herdEnv, scan *herd.HostScan, h herd.HostConfig, root,
 				r.Root, h.Address, h.Name, lastPart(r.Root), r.Root, extra)
 		}
 	}
-}
-
-// pickRoot is the root host add proposes: ~/exp when it holds workspaces
-// or nothing does, else the root with the most sessions.
-func pickRoot(s *herd.HostScan) string {
-	best, most := herd.DefaultRoot, -1
-
-	for _, r := range s.Roots {
-		n := 0
-		for _, p := range r.Projects {
-			n += p.Sessions + p.Results
-		}
-
-		if r.Root == herd.DefaultRoot {
-			return r.Root
-		}
-
-		if n > most {
-			best, most = r.Root, n
-		}
-	}
-
-	return best
 }
 
 func lastPart(p string) string {

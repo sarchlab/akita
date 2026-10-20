@@ -308,9 +308,21 @@ names follow an old convention, using the mapping command you configure
 
 `akita herd web` polls every host (or the hosts you name) and serves the
 page on `http://127.0.0.1:8765` (`--port` to change it, `--no-browser` to
-not open a browser). The page is read-only: it never starts, stops, or
-changes an experiment. It only listens on this machine; to view it from
-elsewhere, use SSH port forwarding.
+not open a browser). The page never starts, stops, or changes an
+experiment; the only thing it can change is your host list (below). It
+only listens on this machine; to view it from elsewhere, use SSH port
+forwarding.
+
+**Adding a server.** The last card of the Overview, "Add a server", asks
+for an address, scans the server as `akita herd host scan` does, and
+shows what runs there with a proposed host entry you can edit (name,
+root, queue slots, memory kept free). "Add" writes it to your user config
+and the page starts showing the host.
+
+**Simulations started by hand.** A host card lists the simulations you
+started there without Herd (with nohup, or in a tmux session of your
+own): each with its result name or program, CPU, memory, run time,
+directory, and the script that started it. Herd only shows them.
 
 **Language.** The page is in English or Chinese. It follows your browser's
 language; the button at the top right (EN / 中文) switches and remembers

@@ -158,8 +158,10 @@ command, and the log. **Results** lists the result directories grouped
 by workload, with `config` as a coloured tag; click one for its
 `run.json` properties, `summary.csv`, and files. **Charts** (or "Plot"
 next to the campaign) shows the speedup of `fast` over `base` per
-workload, with the GMEAN (1.53). Press Ctrl+C to stop the server, and
-stop the slow session:
+workload, with the GMEAN (1.53). The last card of **Overview**, "Add a
+server", adds a real server by its address (see
+[Adapting the example to your project](#adapting-the-example-to-your-project)).
+Press Ctrl+C to stop the server, and stop the slow session:
 
 ```bash
 akita herd stop server2 1018_mm_slow

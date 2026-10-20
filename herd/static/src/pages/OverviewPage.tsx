@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, BarChart3 } from "lucide-react";
+import { AlertTriangle, BarChart3, Plus } from "lucide-react";
+import AddHostDialog, { UnmanagedList } from "../components/AddHostDialog";
 import Meter from "../components/Meter";
 import ProgressBar from "../components/ProgressBar";
 import RunName from "../components/RunName";
@@ -39,6 +41,12 @@ function HostCard({ h, status }: { h: Host; status: Status }) {
           </div>
         ))}
         {!(h.gpus ?? []).length ? <div className="text-xs text-muted-foreground">{t("ov.noGpu")}</div> : null}
+        {h.unmanaged?.length ? (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-amber-700 dark:text-amber-300" title={t("ov.unmanagedHint")}>{t("ov.unmanaged", { n: h.unmanaged.length })}</summary>
+            <div className="mt-1"><UnmanagedList items={h.unmanaged} now={h.now ?? Date.now() / 1000} /></div>
+          </details>
+        ) : null}
         <div className="text-[11px] text-muted-foreground" title={utcTitle(h.now)}>{t("ov.hostTime", { time: fmtTime(h.now) })}</div>
       </div>
     </WidgetCard>
@@ -115,9 +123,19 @@ function Kpis({ status, now }: { status: Status; now: number }) {
   );
 }
 
+function AddHostCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} title={t("ov.addHostHint")}
+      className="flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border border-dashed text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary">
+      <Plus className="h-5 w-5" />{t("ov.addHost")}
+    </button>
+  );
+}
+
 export default function OverviewPage() {
   const { status } = useStatusState();
   const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
   if (!status) return <div className="herd-page h-full"><EmptyState title={t("common.connecting")} hint={t("common.readingStatus")} /></div>;
   const now = status.updated ?? Date.now() / 1000;
   const running = status.sessions.filter((s) => isLive(s) && !s.archived)
@@ -152,7 +170,9 @@ export default function OverviewPage() {
         <Kpis status={status} now={now} />
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]">
           {status.hosts.map((h) => <HostCard key={h.name} h={h} status={status} />)}
+          <AddHostCard onClick={() => setAdding(true)} />
         </div>
+        {adding ? <AddHostDialog onClose={() => setAdding(false)} /> : null}
         <div className="gap-3 lg:columns-2">
           <WidgetCard className={card} title={t("ov.running")} expandHref="/sessions" contentClassName="p-0"
             headerRight={<span className="font-mono text-xs text-muted-foreground">{running.length}</span>}>

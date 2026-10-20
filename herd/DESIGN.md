@@ -207,6 +207,14 @@ to every kind.
 | `GET /api/v1/status` | `Status` (below) |
 | `GET /api/v1/run?host=&project=&name=` | `RunDetail` |
 | `GET /api/v1/campaign?host=&project=&name=[&refresh=1]` | `CampaignCells` + `{host, project, name, fetched_at, finished}` |
+| `POST /api/v1/hosts/scan` `{address, name?, root?, akita_dir?}` | `{scan: HostScan, host: <proposed entry>, taken, config}` |
+| `POST /api/v1/hosts` `{host}` | adds an ssh host to the user config and polls it: `{added, config}` |
+
+The two POST routes are the only ones that change anything. They take a
+JSON body and require the header `X-Herd-Request` (a page of another
+site cannot send it: the server answers no CORS preflight) and, when the
+browser sends `Origin`, this server's own; the server listens on
+127.0.0.1 only. A host's status carries its `unmanaged` simulations.
 
 `Status` (`herd-status/1`) is defined in `herd/types.go`: `hosts`, `projects`
 (name → project config), `sessions` (state, progress bars, simulators,

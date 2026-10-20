@@ -115,7 +115,57 @@ export interface Host {
   fetch_s?: number;
   /** The host root's queue; absent when the root has none. */
   queue?: QueueStatus | null;
+  /** The user's simulations that no Herd session started. */
+  unmanaged?: Unmanaged[] | null;
 }
+
+/** A busy process of the user that no Herd session started (started by hand). */
+export interface Unmanaged {
+  pid: number;
+  exe: string;
+  args: string;
+  cwd?: string;
+  start: number;
+  /** Average percent of a CPU over its life. */
+  cpu: number;
+  rss_gb: number;
+  /** The command line of the script that started it, when there is one. */
+  launcher?: string;
+}
+
+// ---------- adding hosts (herd-scan/1) ----------
+
+export interface ScanProject { name: string; sessions: number; running: number; results: number }
+export interface ScanRoot { root: string; queue: boolean; projects: ScanProject[] | null }
+
+export interface HostScan {
+  schema: string;
+  hostname: string;
+  user: string;
+  os: string;
+  arch: string;
+  cpus: number;
+  mem_total_gb: number;
+  mem_avail_gb: number;
+  load: number[] | null;
+  tmux: boolean;
+  roots: ScanRoot[] | null;
+  unmanaged: Unmanaged[] | null;
+  others_busy: number;
+}
+
+/** A host entry of the user config. */
+export interface HostConfig {
+  name: string;
+  type: string;
+  address?: string;
+  root?: string;
+  akita_dir?: string;
+  queue?: { slots?: number; mem_reserve_gb?: number; mem_pause_gb?: number; mem_resume_gb?: number; avoid_signals?: string[] } | null;
+}
+
+/** What POST /api/v1/hosts/scan returns: the scan and the proposed entry. */
+export interface HostScanResponse { scan: HostScan; host: HostConfig; taken: boolean; config: string }
 
 // ---------- queue (herd-task/1) ----------
 

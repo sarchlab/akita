@@ -61,6 +61,7 @@ type Monitor struct {
 	results  map[string]hostResult
 	judge    *healthJudge
 	activity []string
+	wake     chan struct{} // polls now (a host was added)
 
 	cache *detailCache
 }
@@ -99,6 +100,7 @@ func newWithBackends(cfg *herd.UserConfig, backends []backend.Backend) *Monitor 
 		now:     time.Now,
 		results: map[string]hostResult{},
 		judge:   newHealthJudge(cfg.Rules()),
+		wake:    make(chan struct{}, 1),
 	}
 	m.cache = newDetailCache(func() time.Time { return m.now() })
 
@@ -122,6 +124,7 @@ func (m *Monitor) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-m.wake:
 		case <-time.After(interval):
 		}
 	}
@@ -129,11 +132,15 @@ func (m *Monitor) Run(ctx context.Context) {
 
 // pollOnce probes all hosts concurrently and updates the status.
 func (m *Monitor) pollOnce(ctx context.Context) {
-	results := make([]hostResult, len(m.hosts))
+	m.mu.RLock()
+	hosts := slices.Clone(m.hosts)
+	m.mu.RUnlock()
+
+	results := make([]hostResult, len(hosts))
 
 	var wg sync.WaitGroup
 
-	for i, h := range m.hosts {
+	for i, h := range hosts {
 		wg.Go(func() { results[i] = probeHost(ctx, h) })
 	}
 
@@ -142,7 +149,7 @@ func (m *Monitor) pollOnce(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for i, h := range m.hosts {
+	for i, h := range hosts {
 		name := h.backend.Host().Name
 		r := results[i]
 
@@ -182,6 +189,36 @@ func probeHost(ctx context.Context, h monitorHost) hostResult {
 	r.probe = p
 
 	return r
+}
+
+// AddHost starts polling a host (one just added to the user config); the
+// next poll reads it.
+func (m *Monitor) AddHost(h herd.HostConfig) error {
+	b, err := backend.New(h)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, x := range m.hosts {
+		if x.backend.Host().Name == h.Name {
+			return fmt.Errorf("host %s is polled already", h.Name)
+		}
+	}
+
+	root, projects := backend.ProbeScope(b)
+	m.hosts = append(m.hosts, monitorHost{backend: b, root: root, projects: projects})
+	m.cfg.Hosts = append(m.cfg.Hosts, h)
+	m.status = m.build()
+
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+
+	return nil
 }
 
 // AddActivity records a line of what the balance loop did; the status
@@ -279,6 +316,9 @@ func errorText(err error) string {
 
 // host returns the polled host of a run or campaign of project.
 func (m *Monitor) host(name, project string) (monitorHost, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	for _, h := range m.hosts {
 		if h.backend.Host().Name != name {
 			continue

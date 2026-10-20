@@ -66,15 +66,21 @@ func loadHerdEnv(cmd *cobra.Command) (*herdEnv, error) {
 	}
 
 	errOut := cmd.ErrOrStderr()
-	backend.SetDeployer(&backend.Deployer{Key: deploy.Key, Binary: deploy.Binary,
-		Notify: func(host, path string) {
-			fmt.Fprintf(errOut, ">> put akita %s on %s: %s\n", deploy.Version(), host, path)
-		}})
+	setDeployer(errOut)
 
 	return &herdEnv{
 		user: user, projectDir: dir, project: filepath.Base(dir), projectCfg: pcfg,
 		out: cmd.OutOrStdout(), errOut: errOut,
 	}, nil
+}
+
+// setDeployer makes backends put this akita on hosts that need it, and
+// report each upload to w.
+func setDeployer(w io.Writer) {
+	backend.SetDeployer(&backend.Deployer{Key: deploy.Key, Binary: deploy.Binary,
+		Notify: func(host, path string) {
+			fmt.Fprintf(w, ">> put akita %s on %s: %s\n", deploy.Version(), host, path)
+		}})
 }
 
 // backend returns the backend of a configured host.

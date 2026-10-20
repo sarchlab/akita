@@ -106,6 +106,8 @@ func runHerdWeb(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("user config %s: %w", herd.UserConfigPath(), err)
 	}
 
+	setDeployer(cmd.ErrOrStderr())
+
 	m, err := monitor.New(user, args)
 	if err != nil {
 		return err

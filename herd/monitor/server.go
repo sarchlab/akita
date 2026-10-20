@@ -28,6 +28,8 @@ func (m *Monitor) handler(assets http.FileSystem) http.Handler {
 	mux.HandleFunc("/api/v1/status", m.apiStatus)
 	mux.HandleFunc("/api/v1/run", m.apiRun)
 	mux.HandleFunc("/api/v1/campaign", m.apiCampaign)
+	mux.HandleFunc("/api/v1/hosts/scan", m.apiHostScan)
+	mux.HandleFunc("/api/v1/hosts", m.apiHostAdd)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "no such API route")
 	})
