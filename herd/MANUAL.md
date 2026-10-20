@@ -53,21 +53,15 @@ go install github.com/sarchlab/akita/v5/akita@latest
 ```
 
 `akita herd` also needs `rsync` locally. Each SSH or SLURM host needs
-`bash`, `rsync`, and the `akita` program itself, because the monitor runs
-`akita herd probe` there. `tmux` is recommended on hosts. Without it,
-sessions run under `nohup setsid`.
+`bash` and `rsync`; `tmux` is recommended (without it, sessions run under
+`nohup setsid`).
 
-To put `akita` on a Linux host from a Mac or another machine, cross-compile
-it and copy it:
-
-```bash
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o akita-linux github.com/sarchlab/akita/v5/akita
-scp akita-linux myserver:bin/akita
-```
-
-If the program is not on the host's `PATH` (`~/go/bin` and `~/.local/bin`
-are searched too), tell `akita herd` where it is with the host's `"akita"`
-key (section 4).
+You do not install anything else on the hosts. The monitor and the queue
+run `akita herd` there, and the first time a host needs it, `akita herd`
+copies the same akita there by itself (built for the host's platform
+when it differs, which needs Go on your machine; the build is cached).
+To use an akita you installed on a host instead, set the host's
+`"akita"` key (section 4).
 
 ## 3. A first experiment on your machine
 
@@ -521,7 +515,7 @@ has the full table.
 Herd also keeps the on-disk layout of the `exp` script, so existing
 workspaces need no migration:
 
-1. Install `akita` locally and on each host (section 2).
+1. Install `akita` locally (section 2); it puts itself on the hosts.
 2. List the old hosts in `~/.config/akita/herd.json`; the default root
    `~/exp` is the old one.
 3. Use `akita herd` where you used `exp`. The commands and their options
@@ -538,7 +532,7 @@ keys; hosts need `akita` instead of `python3`; `logs/<name>.job` is new.
 
 | Problem | What to check |
 |---|---|
-| A host shows an error in the web UI | Can you `ssh <address> true` without a password? Is `akita` on the host (`ssh <address> akita herd probe --json`)? Set `"akita"` in the host config if it is elsewhere. |
+| A host shows an error in the web UI | Can you `ssh <address> true` without a password? Run `akita herd doctor <host>`: it says what is missing, and puts akita on the host when it can. |
 | `run` says the session is already running | The name is in use. Pick another, or `stop` the old one. |
 | A command works by hand but fails as a session | Sessions start a login shell (`bash -l`) in the workspace. Check paths relative to the project root and environment set only in interactive shells. |
 | `sync` did not copy a file | It is ignored by `.gitignore`, `sync.exclude`, or `.herdignore`, or it is under `logs/`, `results/`, or `remote/`. |

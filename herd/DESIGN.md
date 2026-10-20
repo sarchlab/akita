@@ -226,8 +226,7 @@ runs it locally for the local host and via `ssh <address> akita herd probe`
 for ssh/slurm hosts. A local host without a root has no root of its own
 (its workspace is the project directory), so the monitor probes only the
 project directory it was started in (hidden flag `--project <name>`,
-relative to the parent directory), never its siblings, so `akita` must be installed on those hosts
-(`go install github.com/sarchlab/akita/v5/akita@latest`). Session states:
+relative to the parent directory), never its siblings. Session states:
 `running` (tmux session / pid / slurm job alive), `ok` / `failed`
 (`[exit N]`), `stopped` (`[stopped]`), `died` (none of these), plus
 `stalled` when a running session's CPU stays below `idle_cpu` % for
@@ -435,6 +434,21 @@ and the queue (`queue list`) give each name a state: `pending`,
 or how it ended. It prints each change and returns when every named one
 reached `--until` (an end satisfies all), or, without names, when no
 state of the project is active.
+
+### Deploying akita
+
+A host whose config has no `akita` runs the copy akita herd puts there:
+`<akita_dir>/<key>/akita` (`akita_dir` defaults to `~/.cache/akita-herd`;
+`key` = this akita's version and the first 12 hex digits of the SHA-256
+of its executable, `deploy.Key`). Scripts that run akita on the host try
+that copy and exit 97 when it is missing; the backend then reads `uname
+-s`/`-m`, gets a local akita for that platform (`deploy.Binary`: this
+executable, or `go build -trimpath` of the akita command in the module
+directory this binary was built from, cached under the user cache
+directory), uploads it (`Backend.Upload`), and runs the script again.
+When that fails, the akita on the host's `PATH` is used. `StartAkita`
+(the agent) checks for the copy first. The local host always runs this
+executable.
 
 ### doctor
 

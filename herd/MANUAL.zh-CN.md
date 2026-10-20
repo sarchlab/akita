@@ -328,7 +328,8 @@ cd / && rm -rf $T
 
 **主机**（用户配置 `~/.config/akita/herd.json`）。把两个目录换成你的服务器：`name`
 是命令里用的名字，`address` 是任何 `ssh` 能接受的地址，`queue` 按机器设置。每台
-主机都要装 `akita`（见[第 2 节](#2-安装)）。SLURM 主机没有队列，用 `run`。
+主机上不用装任何东西：`akita herd` 会自己把 akita 放过去（见[第 2 节](#2-安装)），
+`akita herd doctor` 检查配置。SLURM 主机没有队列，用 `run`。
 
 ```json
 {
@@ -391,19 +392,12 @@ cd / && rm -rf $T
 go install github.com/sarchlab/akita/v5/akita@latest
 ```
 
-本机还需要 `rsync`。每台 SSH 或 SLURM 主机需要 `bash`、`rsync`，以及 `akita`
-程序本身，因为监控页面会在那里运行 `akita herd probe`。主机上建议装 `tmux`；没有
-的话，会话用 `nohup setsid` 运行。
+本机还需要 `rsync`。每台 SSH 或 SLURM 主机需要 `bash` 和 `rsync`；建议装 `tmux`
+（没有的话，会话用 `nohup setsid` 运行）。
 
-要从 Mac 或其他机器把 `akita` 放到 Linux 主机上，可以交叉编译后拷过去：
-
-```bash
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o akita-linux github.com/sarchlab/akita/v5/akita
-scp akita-linux myserver:bin/akita
-```
-
-如果程序不在主机的 `PATH` 里（也会查找 `~/go/bin` 和 `~/.local/bin`），用主机配置里
-的 `"akita"` 告诉 `akita herd` 它在哪（见第 4 节）。
+主机上不用再装别的。监控和队列会在主机上运行 `akita herd`，第一次需要时，`akita herd`
+会自己把同一版本的 akita 拷过去（主机平台不同时会为它编译，这需要本机有 Go；编译结果
+会缓存）。想改用你在主机上自己装的 akita，设置主机配置里的 `"akita"`（见第 4 节）。
 
 ## 3. 在本机跑第一个实验
 
@@ -778,7 +772,7 @@ tmux 会话里运行的实验。写入时只用新名字（`herd.json`、`herd-*
 
 Herd 还沿用 `exp` 脚本在磁盘上的目录结构，已有的工作区不需要任何迁移：
 
-1. 在本机和每台主机上安装 `akita`（见第 2 节）。
+1. 在本机安装 `akita`（见第 2 节）；它会自己放到各台主机上。
 2. 把原来的主机写进 `~/.config/akita/herd.json`；默认的 root `~/exp` 就是原来的目录。
 3. 把 `exp` 换成 `akita herd`。命令和选项（`-g`、`-n`、`--results`、`EXP_GROUP` 或
    `HERD_GROUP`、`EXP_NO_SYNC` 或 `HERD_NO_SYNC`）都一样。
@@ -792,7 +786,7 @@ Herd 还沿用 `exp` 脚本在磁盘上的目录结构，已有的工作区不�
 
 | 问题 | 检查什么 |
 |---|---|
-| 网页上某台主机显示错误 | 能否不输密码执行 `ssh <地址> true`？主机上有没有 `akita`（`ssh <地址> akita herd probe --json`）？如果在别的路径，在主机配置里设置 `"akita"`。 |
+| 网页上某台主机显示错误 | 能否不输密码执行 `ssh <地址> true`？运行 `akita herd doctor <主机>`：它会指出缺什么，能放 akita 时会自己放过去。 |
 | `run` 提示会话已在运行 | 这个名字正被使用。换个名字，或先 `stop` 旧的。 |
 | 手动能跑，作为会话就失败 | 会话在工作区里用登录 shell（`bash -l`）启动。检查相对于项目根目录的路径，以及只在交互式 shell 里设置的环境变量。 |
 | `sync` 没有复制某个文件 | 它被 `.gitignore`、`sync.exclude` 或 `.herdignore` 忽略了，或者位于 `logs/`、`results/`、`remote/` 下。 |

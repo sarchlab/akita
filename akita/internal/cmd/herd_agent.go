@@ -14,6 +14,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/herd"
 	"github.com/sarchlab/akita/v5/herd/backend"
+	"github.com/sarchlab/akita/v5/herd/deploy"
 	"github.com/sarchlab/akita/v5/herd/queue"
 	"github.com/spf13/cobra"
 )
@@ -170,7 +171,7 @@ func runAgent(cmd *cobra.Command, _ []string) error {
 	}
 	fake, _ := f.GetString("fake-mem-file")
 
-	cfg := queue.Config{Host: host, Version: akitaVersion()}
+	cfg := queue.Config{Host: host, Version: deploy.Version()}
 	cfg.Slots, _ = f.GetInt("slots")
 	cfg.MemReserveGB, _ = f.GetFloat64("mem-reserve-gb")
 	cfg.MemPauseGB, _ = f.GetFloat64("mem-pause-gb")

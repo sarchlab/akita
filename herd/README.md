@@ -341,9 +341,10 @@ what you need and delete the rest; nothing else depends on it.
 
 **Hosts** (the user config, `~/.config/akita/herd.json`). Replace the
 two directories with your servers: `name` is what you type in commands,
-`address` is anything `ssh` accepts, and `queue` fits the machine. Install
-`akita` on each host (see [Install](#install)). A SLURM host has no
-queue; use `run` there.
+`address` is anything `ssh` accepts, and `queue` fits the machine.
+Nothing has to be installed there: `akita herd` puts its akita on a host
+by itself ([Install](#install)), and `akita herd doctor` checks the
+setup. A SLURM host has no queue; use `run` there.
 
 ```json
 {
@@ -395,16 +396,15 @@ with yours; keep `{name}` so that each run writes under its own name.
 go install github.com/sarchlab/akita/v5/akita@latest
 ```
 
-Install `akita` on every SSH and SLURM host as well. `status`, `archive`,
-`group`, and the web UI run `akita herd ...` there. If `akita` is not on
-the host's `PATH` (`~/go/bin` and `~/.local/bin` are searched as well),
-set `"akita"` in the host's config. A Linux binary can be cross-compiled
-and copied to the host:
-
-```bash
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o akita-linux github.com/sarchlab/akita/v5/akita
-scp akita-linux myhost:bin/akita
-```
+Nothing needs to be installed on SSH and SLURM hosts by hand: `status`,
+`archive`, the queue, and the web UI run `akita herd ...` there, and the
+first time a host needs it, `akita herd` puts the same akita there
+(`~/.cache/akita-herd/<version>-<hash>/akita`, or under the host's
+`akita_dir`). For another platform (a Linux server from a Mac), it is
+built from the source this akita was built from, which needs Go here;
+the build is cached. When that fails, the `akita` on the host's `PATH`
+(`~/go/bin` and `~/.local/bin` are searched too) is used. Set `"akita"`
+in the host's config to always use an akita you installed there.
 
 Hosts need `bash`. `tmux` is recommended; without it, sessions run
 under `nohup setsid`. You also need `rsync` locally and on the hosts.
@@ -439,7 +439,8 @@ new one does not exist.
 | `type` | One of `local`, `ssh`, or `slurm`. |
 | `address` | Anything `ssh` accepts; an `~/.ssh/config` alias works. A SLURM host without an address uses the local `sbatch`. |
 | `root` | The directory that holds the workspaces: `<root>/<project>`. The default is `~/exp` on SSH and SLURM hosts. On the local host, the workspace is the project directory itself, unless you set a root. Then `sync` copies the project there. |
-| `akita` | The path of `akita` on the host. The default is `akita`. A leading `~/` is expanded on the host. |
+| `akita` | The path of an `akita` you installed on the host. A leading `~/` is expanded on the host. Unset, `akita herd` puts its own there (see [Install](#install)). |
+| `akita_dir` | Where `akita herd` puts its akita on the host. The default is `~/.cache/akita-herd`. |
 | `tmux` | `false` runs sessions under `nohup setsid` even where tmux is installed. The default is to use tmux when it is available. |
 | `slurm` | `#SBATCH` options. `extra` holds more options, such as `--gres=gpu:1`. |
 | `queue` | Settings of the host's queue agent: `slots`, `mem_reserve_gb`, `mem_pause_gb`, `mem_resume_gb`, and `avoid_signals`. See [Queues](#queues). |
@@ -728,7 +729,7 @@ that script's files on the hosts:
 
 To switch from the script, follow these steps:
 
-1. Install `akita` locally and on each host.
+1. Install `akita` locally (it puts itself on the hosts).
 2. Put the old hosts in `~/.config/akita/herd.json`. With the default root
    `~/exp`, the old workspaces are used as they are:
 

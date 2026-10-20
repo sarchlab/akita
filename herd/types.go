@@ -82,9 +82,13 @@ type HostConfig struct {
 	Address string       `json:"address,omitempty"`
 	Root    string       `json:"root,omitempty"` // default "~/exp" (ssh, slurm)
 	Slurm   *SlurmConfig `json:"slurm,omitempty"`
-	// Akita is the path of the akita binary on the host (default "akita";
-	// "~/" is expanded on the host).
+	// Akita is the path of the akita binary on the host; "~/" is expanded
+	// on the host. Unset, akita herd puts its own akita there (in
+	// AkitaDir) and falls back to "akita" on the host's PATH.
 	Akita string `json:"akita,omitempty"`
+	// AkitaDir is where akita herd puts its akita on the host (default
+	// "~/.cache/akita-herd").
+	AkitaDir string `json:"akita_dir,omitempty"`
 	// Tmux, when false, runs sessions under nohup setsid even where tmux
 	// is installed. Default true.
 	Tmux *bool `json:"tmux,omitempty"`

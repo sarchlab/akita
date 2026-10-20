@@ -12,6 +12,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/herd"
 	"github.com/sarchlab/akita/v5/herd/backend"
+	"github.com/sarchlab/akita/v5/herd/deploy"
 	"github.com/spf13/cobra"
 )
 
@@ -64,9 +65,15 @@ func loadHerdEnv(cmd *cobra.Command) (*herdEnv, error) {
 		return nil, err
 	}
 
+	errOut := cmd.ErrOrStderr()
+	backend.SetDeployer(&backend.Deployer{Key: deploy.Key, Binary: deploy.Binary,
+		Notify: func(host, path string) {
+			fmt.Fprintf(errOut, ">> put akita %s on %s: %s\n", deploy.Version(), host, path)
+		}})
+
 	return &herdEnv{
 		user: user, projectDir: dir, project: filepath.Base(dir), projectCfg: pcfg,
-		out: cmd.OutOrStdout(), errOut: cmd.ErrOrStderr(),
+		out: cmd.OutOrStdout(), errOut: errOut,
 	}, nil
 }
 

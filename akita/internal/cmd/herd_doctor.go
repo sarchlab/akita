@@ -9,6 +9,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/herd"
 	"github.com/sarchlab/akita/v5/herd/backend"
+	"github.com/sarchlab/akita/v5/herd/deploy"
 	"github.com/sarchlab/akita/v5/herd/workspace"
 	"github.com/spf13/cobra"
 )
@@ -75,7 +76,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 // local checks the tools this machine needs for the hosts and the project.
 func (d *doctor) local(bs []backend.Backend) {
 	d.env.printf("===== this machine =====\n")
-	d.linef("ok", "akita %s", akitaVersion())
+	d.linef("ok", "akita %s", deploy.Version())
 
 	need := map[string]string{"rsync": "sync and pull"}
 	for _, b := range bs {
@@ -226,7 +227,7 @@ func (d *doctor) tools(h herd.HostConfig, out, root string) {
 func (d *doctor) akita(ctx context.Context, b backend.Backend) {
 	out, err := b.Akita(ctx, "herd", "_local", "version")
 
-	switch here, there := akitaVersion(), strings.TrimSpace(string(out)); {
+	switch here, there := deploy.Version(), strings.TrimSpace(string(out)); {
 	case err != nil && strings.Contains(err.Error(), "unknown command"):
 		d.linef("FAIL", "akita there is older than herd doctor; install the same akita as here (%s)", here)
 	case err != nil:

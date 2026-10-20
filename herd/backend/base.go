@@ -32,6 +32,7 @@ type baseBackend struct {
 	host      herd.HostConfig
 	runner    runner
 	workspace func(project string) string // nil: <root>/<project>
+	deployed  deployState
 }
 
 // Host returns the host's configuration.
@@ -85,8 +86,7 @@ func (b *baseBackend) akitaPath() string {
 
 // Akita runs `akita <args...>` on the host.
 func (b *baseBackend) Akita(ctx context.Context, args ...string) ([]byte, error) {
-	script := pathPrelude + "exec " + ws.ShellPath(b.akitaPath()) + " " + ws.ShellJoin(args)
-	return b.output(ctx, script)
+	return b.runAkita(ctx, args)
 }
 
 // Script runs a shell script on the host, outside any workspace.
@@ -152,7 +152,12 @@ func (b *baseBackend) Upload(ctx context.Context, localPath, hostPath string) er
 // StartAkita starts akita in a tmux session, or under nohup setsid without
 // tmux (or when the host config disables it).
 func (b *baseBackend) StartAkita(ctx context.Context, session string, args ...string) error {
-	run := strings.TrimSpace(pathPrelude) + " exec " + ws.ShellPath(b.akitaPath()) + " " + ws.ShellJoin(args)
+	akita, err := b.ensureAkita(ctx)
+	if err != nil {
+		return err
+	}
+
+	run := strings.TrimSpace(pathPrelude) + " exec " + ws.ShellPath(akita) + " " + ws.ShellJoin(args)
 
 	useTmux := "command -v tmux >/dev/null 2>&1"
 	if b.host.Tmux != nil && !*b.host.Tmux {
@@ -160,7 +165,7 @@ func (b *baseBackend) StartAkita(ctx context.Context, session string, args ...st
 	}
 
 	sess := ws.ShellQuote(session)
-	_, err := b.output(ctx, "if "+useTmux+"; then\n"+
+	_, err = b.output(ctx, "if "+useTmux+"; then\n"+
 		"  if tmux has-session -t "+ws.ShellQuote("="+session)+" 2>/dev/null; then\n"+
 		"    echo "+ws.ShellQuote("tmux session "+session+" exists")+" >&2; exit 3\n  fi\n"+
 		"  tmux new-session -d -s "+sess+" "+ws.ShellQuote(run)+"\n"+
