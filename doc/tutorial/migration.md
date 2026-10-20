@@ -1386,7 +1386,9 @@ migration is deferred until after the Akita v5 release and is not part of this P
   set those independently when reproducing a prior configuration. Also specify
   route, forwarding, and send queue capacities (formerly the corresponding width).
 - `BandwidthFirstRouter` and `Remote.Bandwidth` are removed. NVLink now uses
-  fewest-hop routing, which can change routes and simulated timing. `WithRouter`,
+  fewest-hop routing, which can change routes and simulated timing. Devices
+  sharing a PCIe switch take its shorter path even when an NVLink connects them.
+  `WithRouter`,
   `Router`, `Node`, `Remote`, and concrete routing tables remain available.
 - Cache `TotalByteSize` becomes `NumSets`: migrate using the old capacity divided
   by ways and line size. Read capacity with `spec.ByteSize()`. Configure pipeline

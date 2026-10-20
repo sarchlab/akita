@@ -24,7 +24,9 @@ and NVLink-side internal switches.
 
 Routing uses the fewest-hop `FloydWarshallRouter`. This replaces the previous
 bandwidth-first policy whose links all reported infinite bandwidth; chosen
-routes and contention timing can change. The generic `networkconnector.Router`
+routes and contention timing can change. Devices sharing a PCIe switch take
+the PCIe path (two switch-to-switch hops), even when a direct NVLink path
+exists (three hops through the NVLink-side switches). The generic `networkconnector.Router`
 extension remains available for future routing policies.
 
 Defaults are 1 GHz, 34-byte flits, one-flit processing widths, 16-flit port

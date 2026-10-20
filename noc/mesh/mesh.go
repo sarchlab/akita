@@ -30,11 +30,10 @@ type Connector struct {
 	forwardCapacity  int
 	sendCapacity     int
 
-	name                    string
-	simulation              modeling.Simulation
-	connector               *networkconnector.Connector
-	freq                    timing.Freq
-	switchLatency, flitSize int
+	name          string
+	simulation    modeling.Simulation
+	connector     *networkconnector.Connector
+	switchLatency int
 
 	gridSize [3]int
 	tiles    map[[3]int]*tile
@@ -129,9 +128,7 @@ func (b Builder) Build(name string) *Connector {
 		sendCapacity:     b.sendCapacity,
 		name:             name,
 		simulation:       b.simulation,
-		freq:             b.freq,
 		switchLatency:    b.switchLatency,
-		flitSize:         b.flitSize,
 		tiles:            make(map[[3]int]*tile), links: make(map[[2]int]bool)}
 	c.connector = networkconnector.MakeBuilder().WithSimulation(b.simulation).WithFreq(b.freq).
 		WithFlitSize(b.flitSize).WithRouter(meshRouter{c: c}).Build(name)
@@ -193,30 +190,33 @@ func (c *Connector) eachLocation(f func([3]int)) {
 }
 func (c *Connector) deviceParameter(name string) networkconnector.DeviceConfig {
 	return networkconnector.DeviceConfig{Name: name,
-		DeviceEndParam: networkconnector.LinkEndDeviceParameter{IncomingBufSize: c.incomingCapacity,
-			OutgoingBufSize:  c.outgoingCapacity,
-			NumInputChannel:  c.inputWidth,
-			NumOutputChannel: c.outputWidth},
-		SwitchEndParam: networkconnector.LinkEndSwitchParameter{
-			RouteBufferCapacity:   c.routeCapacity,
-			ForwardBufferCapacity: c.forwardCapacity,
-			SendBufferCapacity:    c.sendCapacity,
-			IncomingBufSize:       c.incomingCapacity,
-			OutgoingBufSize:       c.outgoingCapacity,
-			NumInputChannel:       c.inputWidth,
-			NumOutputChannel:      c.outputWidth,
-			Latency:               1},
+		DeviceEndParam: c.deviceEnd(),
+		SwitchEndParam: c.switchEnd(1),
 	}
 }
 func (c *Connector) switchParameter() networkconnector.SwitchToSwitchLinkParameter {
-	end := networkconnector.LinkEndSwitchParameter{
-		RouteBufferCapacity:   c.routeCapacity,
-		ForwardBufferCapacity: c.forwardCapacity,
-		SendBufferCapacity:    c.sendCapacity,
+	end := c.switchEnd(c.switchLatency)
+	return networkconnector.SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
+}
+
+func (c *Connector) switchEnd(latency int) networkconnector.LinkEndSwitchParameter {
+	return networkconnector.LinkEndSwitchParameter{
 		IncomingBufSize:       c.incomingCapacity,
 		OutgoingBufSize:       c.outgoingCapacity,
 		NumInputChannel:       c.inputWidth,
 		NumOutputChannel:      c.outputWidth,
-		Latency:               c.switchLatency}
-	return networkconnector.SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
+		RouteBufferCapacity:   c.routeCapacity,
+		ForwardBufferCapacity: c.forwardCapacity,
+		SendBufferCapacity:    c.sendCapacity,
+		Latency:               latency,
+	}
+}
+
+func (c *Connector) deviceEnd() networkconnector.LinkEndDeviceParameter {
+	return networkconnector.LinkEndDeviceParameter{
+		IncomingBufSize:  c.incomingCapacity,
+		OutgoingBufSize:  c.outgoingCapacity,
+		NumInputChannel:  c.inputWidth,
+		NumOutputChannel: c.outputWidth,
+	}
 }
