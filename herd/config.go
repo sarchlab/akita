@@ -216,6 +216,12 @@ func UserConfigPath() string {
 	return p
 }
 
+// UserConfigFromEnv reports whether $AKITA_HERD_CONFIG or
+// $AKITA_EXP_CONFIG names the user config.
+func UserConfigFromEnv() bool {
+	return os.Getenv(userConfigEnv) != "" || os.Getenv(legacyUserConfigEnv) != ""
+}
+
 // defaultUserConfig is the config used when no user config exists: the
 // local host only, default rules.
 func defaultUserConfig() *UserConfig {

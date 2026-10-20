@@ -263,6 +263,43 @@ func TestHerdCLILegacyNames(t *testing.T) {
 	}
 }
 
+func TestHerdCLIInitExample(t *testing.T) {
+	c := newCLI(t, "demo")
+
+	out := c.must("herd", "init", "--example")
+	if !strings.Contains(out, "wrote run.sh") || !strings.Contains(out, "hosts server1 and server2") {
+		t.Fatalf("init --example: %s", out)
+	}
+
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(c.project), "user.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg herd.UserConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The working directory has its symlinks resolved (/var on macOS).
+	parent, err := filepath.EvalSymlinks(filepath.Dir(c.project))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.Hosts) != 2 || cfg.Hosts[1].Root != filepath.Join(parent, "server2") {
+		t.Errorf("hosts: %+v", cfg.Hosts)
+	}
+
+	if out := c.must("herd", "name", "check", "1018_fir_base"); strings.TrimSpace(out) != "ok" {
+		t.Errorf("name check with the example's herd.json: %s", out)
+	}
+
+	if out, err := c.run("herd", "init", "--example"); err == nil || !strings.Contains(out, "exists") {
+		t.Errorf("second init --example: %v %s", err, out)
+	}
+}
+
 func TestHerdCLINamesAndRecord(t *testing.T) {
 	c := newCLI(t, "akxname")
 	c.write("herd.json", `{"schema": "herd-project/1", "naming": {"separator": "_", "fields": [

@@ -1,0 +1,24 @@
+{
+  "schema": "herd-project/1",
+  "sync": {"exclude": ["*.tmp"]},
+  "naming": {
+    "separator": "_",
+    "fields": [
+      {"name": "date", "pattern": "\\d{4}"},
+      {"name": "workload", "pattern": "[a-z0-9]+"},
+      {"name": "config", "pattern": "[a-z0-9]+"}
+    ],
+    "group_by": ["workload"],
+    "compare_by": "config",
+    "legacy": "python3 legacy.py"
+  },
+  "simulators": [{"executable": "sim", "label_flag": "-workload", "output_flag": "-metrics"}],
+  "campaigns": {"detect": ["campaign.json"], "adapter": {"type": "runs"}},
+  "plots": [{"name": "speedup", "kind": "ratio", "metric": "total_time",
+             "lower_is_better": true, "x": "workload", "series": "config",
+             "baseline": "base", "summary": "gmean"}],
+  "build": {"binaries": [{"name": "sim", "dir": "sim",
+                          "command": ["go", "build", "-o", "{out}", "."],
+                          "env": {"CGO_ENABLED": "0"}}]},
+  "collect": {"exclude": ["stats/"]}
+}

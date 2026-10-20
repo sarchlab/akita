@@ -232,7 +232,8 @@ relative to the parent directory), never its siblings, so `akita` must be instal
 ## Commands
 
 ```text
-akita herd init                         write herd.json and the user config skeleton
+akita herd init [--example]             write herd.json and the user config skeleton
+                                        (--example: the walkthrough's project)
 akita herd sync [host...]               rsync the project to hosts
 akita herd run [-g group] [--no-sync] <host> <name> "<cmd>"
 akita herd status [host...]             sessions and recent log lines
@@ -459,6 +460,7 @@ list, and `akita/internal/cmd` (the CLI) sits on top:
 | `herd/backend` | reaching a host: the `Backend` interface, local/ssh/slurm, launch and stop scripts, starting akita in the background, rsync (sync, pull, a run's files, uploads) |
 | `herd/workspace` | the on-disk format: layout and file names, log markers and the wrapper script that writes them, a session's files before it starts, `.job` and heartbeat files, log reading, the liveness rule, `.herd_archive.json`, archive/unarchive/group, renaming result directories |
 | `herd` | the documents: user and project config, naming, `run.json`, tasks (`herd-task/1`), SQLite `exec_info`, and the JSON types of the probe and the API |
+| `herd/example` | the walkthrough's project (`files/`, embedded) and its hosts, written by `akita herd init --example` |
 | `herd/internal/hostsys` | the machine: bounded file reads and atomic writes, flock, commands with timeouts, tmux panes, processes (`/proc` on Linux) and process groups (start, signal, start time), SLURM job state, host statistics and MemAvailable |
 
 `herd/internal/testutil` holds test helpers shared by the packages.

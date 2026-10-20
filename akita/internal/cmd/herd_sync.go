@@ -11,6 +11,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/herd"
 	"github.com/sarchlab/akita/v5/herd/backend"
+	"github.com/sarchlab/akita/v5/herd/example"
 	"github.com/spf13/cobra"
 )
 
@@ -86,11 +87,23 @@ var herdInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Write ./herd.json and the user config if they do not exist.",
 	Long: `Write ./herd.json and the user config if they do not exist. A project
-or user config under its former name (exp.json) counts as existing.`,
+or user config under its former name (exp.json) counts as existing.
+
+With --example, write the project of the walkthrough in the README
+instead (a fake simulator, its scripts, and a herd.json that uses every
+key) into the current directory, which must not hold any of its files.
+Its user config, with the hosts server1 and server2 (the directories
+server1/ and server2/ next to the project), is written only to a
+$AKITA_HERD_CONFIG that does not exist yet, never to the default
+location.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir, err := os.Getwd()
 		if err != nil {
 			return err
+		}
+
+		if herdInitExample {
+			return writeExample(cmd, dir)
 		}
 
 		project := &herd.ProjectConfig{
@@ -109,8 +122,44 @@ or user config under its former name (exp.json) counts as existing.`,
 	},
 }
 
+var herdInitExample bool
+
 func init() {
+	herdInitCmd.Flags().BoolVar(&herdInitExample, "example", false,
+		"write the walkthrough's example project and hosts")
 	herdCmd.AddCommand(herdSyncCmd, herdPullCmd, herdInitCmd)
+}
+
+// writeExample writes the example project into dir and, when
+// $AKITA_HERD_CONFIG names the user config, its hosts there.
+func writeExample(cmd *cobra.Command, dir string) error {
+	if err := example.Write(dir); err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	for _, f := range example.Files {
+		fmt.Fprintf(out, "wrote %-12s %s\n", f.Path, f.Role)
+	}
+
+	if !herd.UserConfigFromEnv() {
+		fmt.Fprintln(out, "user config not written: set $AKITA_HERD_CONFIG to a new file to get the example's hosts")
+		return nil
+	}
+
+	path := herd.UserConfigPath()
+	if _, err := os.Stat(path); err == nil {
+		fmt.Fprintf(out, "%s exists, left unchanged: the example needs its hosts server1 and server2\n", path)
+		return nil
+	}
+
+	if err := writeIfMissing(cmd, path, example.Hosts(dir)); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "      hosts server1 and server2: ../server1 and ../server2 (your servers)")
+
+	return nil
 }
 
 // syncTo syncs the project to a host unless its workspace is the project.

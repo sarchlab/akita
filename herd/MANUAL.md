@@ -12,7 +12,7 @@ archive, and plot what runs there. Closing the laptop stops nothing.
 
 This manual walks through Herd task by task. The [README](README.md)
 lists every command, option, and file format in reference form.
-To try every feature on one machine first, follow the
+To try Herd on one machine first, without writing code, follow the
 [five-minute walkthrough](README.md#try-it-a-five-minute-walkthrough) in
 the README.
 
@@ -81,7 +81,10 @@ akita herd web              # opens http://127.0.0.1:8765
 ```
 
 `init` writes a minimal project config and a user config with one host,
-`local`. Each session's output goes to `logs/<name>.log`, framed by a
+`local`. To start from a complete example instead, run `akita herd init
+--example` in an empty directory; the README's [Adapting the example to
+your project](README.md#adapting-the-example-to-your-project) says what
+to replace. Each session's output goes to `logs/<name>.log`, framed by a
 start line and an exit line:
 
 ```text
