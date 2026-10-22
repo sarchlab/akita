@@ -53,9 +53,15 @@ func (s *Set) Lookup(key string) (wayID int, found bool) {
 }
 
 // UpdateKey removes the old key mapping and installs the new one pointing to
-// wayID. The caller is responsible for updating the block payload.
+// wayID. The old key is only removed while it still refers to wayID: after a
+// block is invalidated in place and its key is refilled into another way, the
+// key belongs to that other way and reusing the invalidated way must not
+// unmap it. The caller is responsible for updating the block payload.
 func (s *Set) UpdateKey(wayID int, oldKey, newKey string) {
-	delete(s.keyMap, oldKey)
+	if w, ok := s.keyMap[oldKey]; ok && w == wayID {
+		delete(s.keyMap, oldKey)
+	}
+
 	s.keyMap[newKey] = wayID
 }
 
