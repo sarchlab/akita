@@ -337,6 +337,46 @@ func TestTLB(t *testing.T) {
 			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 		})
 
+		t.Run("keeps a page refilled after a single-page invalidation reachable", func(t *testing.T) {
+			setup1(t)
+
+			next := &tlbComp.State
+			next.TLBState = tlbStatePause
+
+			setUpdate(&next.Sets[0], 0,
+				vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000, Valid: true})
+			setUpdate(&next.Sets[0], 1,
+				vm.Page{PID: 1, VAddr: 0x3000, PAddr: 0x4000, Valid: true})
+
+			invReq := messaging.Msg{Payload: memcontrolprotocol.Req{
+				Command:   memcontrolprotocol.CmdInvalidate,
+				Addresses: []uint64{0x1000},
+				PID:       1,
+			},
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: controlPort.AsRemote(),
+			}
+			controlPort.Deliver(invReq)
+			require.True(t, tlbCtrlMW.handleIncomingCommands())
+
+			_, _, found := setLookup(&next.Sets[0], 1, 0x3000)
+			require.True(t, found)
+
+			// The page moved: the miss refills it into another way, and the
+			// invalidated way is later reused for an unrelated page.
+			setUpdate(&next.Sets[0], 2,
+				vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x9000, Valid: true})
+			setUpdate(&next.Sets[0], 0,
+				vm.Page{PID: 1, VAddr: 0x5000, PAddr: 0x6000, Valid: true})
+
+			wayID, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
+			require.True(t, found)
+			require.Equal(t, 2, wayID)
+			require.True(t, gotPage.Valid)
+			require.Equal(t, uint64(0x9000), gotPage.PAddr)
+		})
+
 		t.Run("should reject Invalidate while enabled", func(t *testing.T) {
 			setup1(t)
 
