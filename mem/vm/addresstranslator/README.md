@@ -33,16 +33,35 @@ saved in a transaction record while the translation is outstanding.
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
+### Migration hook
+
+`Resources.MigrationHook` is optional and nil by default. A page-migration
+manager sets it to gate and observe the translated accesses:
+
+- `Resolve` is called when a translation arrives. It returns the page to use
+  (the manager can replace a stale translation with the current mapping) and
+  whether the access may proceed. An access that may not proceed is held in
+  `State.HeldReqs` without blocking later translations; after the hook wakes
+  the translator with `TickLater`, held accesses are resolved again and sent
+  in arrival order.
+- `Issued` and `Completed` report each translated access when it is sent on
+  `Bottom` and when its response arrives, so the manager can wait until no
+  access to a frame is in flight.
+
+A Drain completes only after the held accesses have been sent and answered;
+a Reset drops them.
+
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
   `NumReqPerCycle`. Port buffer sizes are chosen by the system builder when it
   creates the port instances, not in the `Spec`.
 - `State` — mutable runtime data: the control state, the in-flight translation
-  transactions, and the requests forwarded to the bottom port awaiting
-  responses.
-- `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom and Translation).
-  Middleware calls their `Find` methods directly; Resources has no routing override.
+  transactions, the requests forwarded to the bottom port awaiting
+  responses, and the accesses held by the migration hook.
+- `Resources` — the optional `MigrationHook`. Routing uses `mem.AddressMapper` values in Spec
+  (Bottom and Translation). Middleware calls their `Find` methods directly; Resources has no
+  routing override.
 - `Ports` — the `Top`, `Bottom`, `Translation`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands), `ParseTranslate` (accept and
   translate), and `RespondPipeline` (forward and respond), run in that order
@@ -80,7 +99,7 @@ at.BindPort("Control", twowaybuffered.MakeBuilder().WithSimulation(sim).Build())
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
-| `WithResources(Resources{})` | Optional empty Resources |
+| `WithResources(Resources{...})` | Optional migration hook |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 ## Ports

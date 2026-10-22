@@ -38,15 +38,16 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
-// completePendingDrain finalizes a Drain once no transactions and no
-// in-flight bottom-side requests remain.
+// completePendingDrain finalizes a Drain once no transactions, no held
+// accesses, and no in-flight bottom-side requests remain.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
 	if state.ControlState != controlStateDraining {
 		return false
 	}
 
-	if len(state.Transactions) != 0 || len(state.InflightReqToBottom) != 0 {
+	if len(state.Transactions) != 0 || len(state.InflightReqToBottom) != 0 ||
+		len(state.HeldReqs) != 0 {
 		return false
 	}
 
@@ -127,6 +128,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	m.endInflightTasks()
 	state.Transactions = nil
 	state.InflightReqToBottom = nil
+	state.HeldReqs = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled
@@ -157,9 +159,10 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 // and finalizes the req_out it currently owns, so a hard Reset that drops both
 // transaction tables leaves no started-never-ended task. A request awaiting translation (Transactions) holds a
 // translation req_out (TranslationReqID); one already translated and forwarded
-// (InflightReqToBottom) holds the downstream req_out (ReqToBottomID). The end is
+// (InflightReqToBottom) holds the downstream req_out (ReqToBottomID); a held
+// access (HeldReqs) owns only its req_in. The end is
 // idempotent for a req_out a response already finalized. Mirrors respond()
-// (req_in + downstream req_out) and traceTranslationComplete (translation
+// (req_in + downstream req_out) and traceTranslationDone (translation
 // req_out) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
@@ -172,6 +175,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	for _, r := range m.comp.State.InflightReqToBottom {
 		m.comp.TaskTracker().EndReqIn(r.RecvTaskID)
 		m.comp.TaskTracker().EndReqOut(r.SendTaskID)
+	}
+
+	for _, h := range m.comp.State.HeldReqs {
+		m.comp.TaskTracker().EndReqIn(h.Req.RecvTaskID)
 	}
 }
 
