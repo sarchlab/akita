@@ -33,16 +33,35 @@ middleware also handles `mem.ControlReq` flush and reset commands on the
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
+### Migration hook
+
+`Resources.MigrationHook` is optional and nil by default. A page-migration
+manager sets it to gate and observe the translated accesses:
+
+- `Resolve` is called when a translation arrives. It returns the page to use
+  (the manager can replace a stale translation with the current mapping) and
+  whether the access may proceed. An access that may not proceed is held in
+  `State.HeldReqs` without blocking later translations; after the hook wakes
+  the translator with `TickLater`, held accesses are resolved again and sent
+  in arrival order.
+- `Issued` and `Completed` report each translated access when it is sent on
+  `Bottom` and when its response arrives, so the manager can wait until no
+  access to a frame is in flight.
+
+A Drain completes only after the held accesses have been sent and answered;
+a Reset drops them.
+
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
   `NumReqPerCycle`. Port buffer sizes are chosen by the caller when the port
   instances are built and assigned, not in the `Spec`.
 - `State` — mutable runtime data: the in-flight translation transactions, the
-  requests forwarded to the bottom port awaiting responses, and the flushing
-  flag.
+  requests forwarded to the bottom port awaiting responses, the accesses held
+  by the migration hook, and the flushing flag.
 - `Resources` — external wiring; holds the `MemProviderMapper` and the
-  `TranslationProviderMapper` (both `mem.AddressToPortMapper`).
+  `TranslationProviderMapper` (both `mem.AddressToPortMapper`) and the optional
+  `MigrationHook`.
 - `Comp` — `modeling.Component[Spec, State, Resources]`.
 
 ## Builder Pattern

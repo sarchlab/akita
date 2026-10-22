@@ -26,6 +26,39 @@ type Spec struct {
 type Resources struct {
 	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
 	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
+
+	// MigrationHook is nil unless pages can migrate while the simulation
+	// runs. When set, every translated access is resolved against it before
+	// it is sent, and its issue and completion are reported to it.
+	MigrationHook MigrationHook `json:"-"`
+}
+
+// MigrationHook lets a page-migration manager gate and observe the accesses
+// of an address translator. A migration holds the accesses to the pages it
+// moves, waits until the accesses already sent to the old frames complete,
+// copies the pages, and then lets the held accesses proceed with the new
+// mapping.
+type MigrationHook interface {
+	// Resolve is called when the translation of an access arrives, and again
+	// for every held access after the hook wakes the translator. It returns
+	// the page to use, which can differ from the translated page (a TLB may
+	// return a mapping that a migration has replaced), and false if the
+	// access must wait because its page is migrating. The hook must call
+	// waker.TickLater once a held access may proceed.
+	Resolve(waker Waker, pid vm.PID, vAddr uint64, page vm.Page) (vm.Page, bool)
+
+	// Issued is called after a translated access is sent to the memory
+	// system.
+	Issued(pid vm.PID, vAddr, pAddr uint64)
+
+	// Completed is called when the response to the access sent to pAddr
+	// arrives.
+	Completed(pAddr uint64)
+}
+
+// Waker is a component that can be asked to tick again.
+type Waker interface {
+	TickLater()
 }
 
 // incomingReqState is a serializable representation of an incoming request.
@@ -65,6 +98,14 @@ type reqToBottomState struct {
 	ReqToBottomSrc  messaging.RemotePort `json:"req_to_bottom_src"`
 	ReqToBottomDst  messaging.RemotePort `json:"req_to_bottom_dst"`
 	ReqToBottomType string               `json:"req_to_bottom_type"`
+	ReqToBottomAddr uint64               `json:"req_to_bottom_addr"`
+}
+
+// heldReqState is an access whose translation arrived while its page was
+// migrating. Page is the translation it received.
+type heldReqState struct {
+	Req  incomingReqState `json:"req"`
+	Page vm.Page          `json:"page"`
 }
 
 // State contains mutable runtime data for the AddressTranslator.
@@ -74,6 +115,11 @@ type State struct {
 	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
 	Transactions        []transactionState       `json:"transactions"`
 	InflightReqToBottom []reqToBottomState       `json:"inflight_req_to_bottom"`
+
+	// HeldReqs are the accesses the migration hook holds, in arrival order.
+	// NumHeldReqs counts every access that was ever held.
+	HeldReqs    []heldReqState `json:"held_reqs"`
+	NumHeldReqs uint64         `json:"num_held_reqs"`
 }
 
 // Helper functions
@@ -227,6 +273,7 @@ func buildReqToBottom(
 		ReqToBottomSrc:  translatedReq.Meta().Src,
 		ReqToBottomDst:  translatedReq.Meta().Dst,
 		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
+		ReqToBottomAddr: translatedReq.(memprotocol.AccessReq).GetAddress(),
 	}
 }
 

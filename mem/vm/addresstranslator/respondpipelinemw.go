@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -49,6 +50,8 @@ func (m *respondPipelineMW) Tick() bool {
 		madeProgress = m.respond() || madeProgress
 	}
 
+	madeProgress = m.releaseHeld() || madeProgress
+
 	for range spec.NumReqPerCycle {
 		madeProgress = m.parseTranslation() || madeProgress
 	}
@@ -73,33 +76,41 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
-	spec := m.comp.Spec()
-	translatedReq := createTranslatedReq(reqState, rsp.Page,
-		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Resources().MemProviderMapper)
 
-	if !m.bottomPort().CanSend() {
-		return false
+	page, proceed := rsp.Page, true
+	if hook := m.comp.Resources().MigrationHook; hook != nil {
+		page, proceed = hook.Resolve(m.comp, reqState.PID, reqState.Address,
+			rsp.Page)
 	}
 
-	m.bottomPort().Send(translatedReq)
+	var translatedReq messaging.Msg
+	if proceed {
+		translatedReq = m.translatedReq(reqState, page)
 
-	nextTrans = &nextState.Transactions[transIdx]
+		if !m.bottomPort().CanSend() {
+			return false
+		}
+	}
+
 	nextTrans.TranslationDone = true
 	nextTrans.Page = rsp.Page
 
-	reqToBot := buildReqToBottom(reqState, translatedReq)
-	nextState.InflightReqToBottom = append(
-		nextState.InflightReqToBottom, reqToBot)
-	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
-
-	// Trace before removeTransaction. traceTranslationComplete reads the
+	// Trace before removeTransaction. traceTranslationDone reads the
 	// translation identity through nextTrans; removeTransaction's
 	// append-shift would leave nextTrans pointing at a different (or no)
 	// transaction, finalizing the wrong translation req_out and orphaning
 	// the correct one's children.
-	m.traceTranslationComplete(nextTrans, reqState, translatedReq)
+	m.traceTranslationDone(nextTrans, reqState)
 
+	if proceed {
+		m.sendTranslated(reqState, translatedReq)
+	} else {
+		nextState.HeldReqs = append(nextState.HeldReqs,
+			heldReqState{Req: reqState, Page: rsp.Page})
+		nextState.NumHeldReqs++
+	}
+
+	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
 	if len(nextTrans.IncomingReqs) == 0 {
 		removeTransaction(nextState, transIdx)
 	}
@@ -109,27 +120,73 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	return true
 }
 
-// traceTranslationComplete records, on the top req_in task, the milestones
-// for a completed translation (the translation resolving, then the
-// network-busy wait to push the translated request downstream), finalizes
-// the translation req_out, and initiates the downstream (translated)
-// req_out parented to the top req_in. trans must still be live in
-// State.Transactions — the caller invokes this before removeTransaction so
-// the translation identity reads from the correct transaction.
-func (m *respondPipelineMW) traceTranslationComplete(
-	trans *transactionState,
+// releaseHeld retries, in arrival order, the accesses held by the migration
+// hook. It stops at the first access that must still wait or cannot be sent,
+// so held accesses leave in order.
+func (m *respondPipelineMW) releaseHeld() bool {
+	nextState := &m.comp.State
+	hook := m.comp.Resources().MigrationHook
+	madeProgress := false
+
+	for len(nextState.HeldReqs) > 0 {
+		held := nextState.HeldReqs[0]
+
+		page, proceed := hook.Resolve(m.comp, held.Req.PID, held.Req.Address,
+			held.Page)
+		if !proceed {
+			return madeProgress
+		}
+
+		translatedReq := m.translatedReq(held.Req, page)
+		if !m.bottomPort().CanSend() {
+			return madeProgress
+		}
+
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: m.topTaskID(held.Req),
+			Kind:   tracing.MilestoneKindDependency,
+			What:   "migration",
+		})
+
+		m.sendTranslated(held.Req, translatedReq)
+		nextState.HeldReqs = nextState.HeldReqs[1:]
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
+// translatedReq creates the request that accesses the physical address of
+// page.
+func (m *respondPipelineMW) translatedReq(
+	reqState incomingReqState,
+	page vm.Page,
+) messaging.Msg {
+	spec := m.comp.Spec()
+
+	return createTranslatedReq(reqState, page,
+		spec.Log2PageSize, m.bottomPort().AsRemote(),
+		m.comp.Resources().MemProviderMapper)
+}
+
+// sendTranslated sends a translated request to the memory system. The caller
+// has checked that the Bottom port can send.
+func (m *respondPipelineMW) sendTranslated(
 	reqState incomingReqState,
 	translatedReq messaging.Msg,
 ) {
-	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
-		reqState.RspTo, reqState.Type)
-	topTaskID := tracing.MsgIDAtReceiver(fakeFromTop, m.comp)
+	m.bottomPort().Send(translatedReq)
 
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: topTaskID,
-		Kind:   tracing.MilestoneKindTranslation,
-		What:   "translation",
-	})
+	nextState := &m.comp.State
+	reqToBot := buildReqToBottom(reqState, translatedReq)
+	nextState.InflightReqToBottom = append(
+		nextState.InflightReqToBottom, reqToBot)
+
+	if hook := m.comp.Resources().MigrationHook; hook != nil {
+		hook.Issued(reqState.PID, reqState.Address, reqToBot.ReqToBottomAddr)
+	}
+
+	topTaskID := m.topTaskID(reqState)
 
 	// The translated request leaves through the Bottom port; this
 	// network-busy wait belongs to the top req_in, not to the downstream
@@ -141,6 +198,31 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		What:   m.bottomPort().Name(),
 	})
 
+	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
+}
+
+func (m *respondPipelineMW) topTaskID(reqState incomingReqState) uint64 {
+	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
+		reqState.RspTo, reqState.Type)
+
+	return tracing.MsgIDAtReceiver(fakeFromTop, m.comp)
+}
+
+// traceTranslationDone records, on the top req_in task, the milestone for a
+// completed translation and finalizes the translation req_out. trans must
+// still be live in State.Transactions — the caller invokes this before
+// removeTransaction so the translation identity reads from the correct
+// transaction.
+func (m *respondPipelineMW) traceTranslationDone(
+	trans *transactionState,
+	reqState incomingReqState,
+) {
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: m.topTaskID(reqState),
+		Kind:   tracing.MilestoneKindTranslation,
+		What:   "translation",
+	})
+
 	fakeTransReq := vmprotocol.TranslationReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  trans.TranslationReqID,
@@ -149,7 +231,6 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		},
 	}
 	tracing.TraceReqFinalize(m.comp, fakeTransReq)
-	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
 }
 
 //nolint:funlen,gocyclo
@@ -247,6 +328,10 @@ func (m *respondPipelineMW) respond() bool {
 
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
+
+		if hook := m.comp.Resources().MigrationHook; hook != nil {
+			hook.Completed(reqFromTopState.ReqToBottomAddr)
+		}
 
 		fakeReqToBottom := restoreMemMsg(
 			reqFromTopState.ReqToBottomID,

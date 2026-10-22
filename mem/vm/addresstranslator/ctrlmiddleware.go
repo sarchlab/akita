@@ -40,15 +40,16 @@ func (m *ctrlMiddleware) Tick() bool {
 	return madeProgress
 }
 
-// completePendingDrain finalizes a Drain once no transactions and no
-// in-flight bottom-side requests remain.
+// completePendingDrain finalizes a Drain once no transactions, no held
+// accesses, and no in-flight bottom-side requests remain.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
 	if state.ControlState != memcontrolprotocol.StateDraining {
 		return false
 	}
 
-	if len(state.Transactions) != 0 || len(state.InflightReqToBottom) != 0 {
+	if len(state.Transactions) != 0 || len(state.InflightReqToBottom) != 0 ||
+		len(state.HeldReqs) != 0 {
 		return false
 	}
 
@@ -129,6 +130,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	m.endInflightTasks()
 	state.Transactions = nil
 	state.InflightReqToBottom = nil
+	state.HeldReqs = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled
@@ -151,9 +153,10 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 // transaction tables leaves no started-never-ended task and no leaked
 // receiver-registry entry. A request awaiting translation (Transactions) holds a
 // translation req_out (TranslationReqID); one already translated and forwarded
-// (InflightReqToBottom) holds the downstream req_out (ReqToBottomID). The end is
+// (InflightReqToBottom) holds the downstream req_out (ReqToBottomID); a held
+// access (HeldReqs) owns only its req_in. The end is
 // idempotent for a req_out a response already finalized. Mirrors respond()
-// (req_in + downstream req_out) and traceTranslationComplete (translation
+// (req_in + downstream req_out) and traceTranslationDone (translation
 // req_out) completion.
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
@@ -166,6 +169,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	for _, r := range m.comp.State.InflightReqToBottom {
 		tracing.EndReqInOnReset(m.comp, r.ReqFromTopID)
 		tracing.EndTaskOnReset(m.comp, r.ReqToBottomID)
+	}
+
+	for _, h := range m.comp.State.HeldReqs {
+		tracing.EndReqInOnReset(m.comp, h.Req.ID)
 	}
 }
 
