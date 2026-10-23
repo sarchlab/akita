@@ -51,9 +51,9 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	c := nc.MakeBuilder().WithSimulation(s).WithFlitSize(16).Build("Network")
 	left, right := c.AddSwitch(nc.SwitchConfig{}), c.AddSwitch(nc.SwitchConfig{})
 	sw := nc.LinkEndSwitchParameter{
-		NumInputChannel: 1, NumOutputChannel: 1, Latency: 2}
+		InputWidth: 1, OutputWidth: 1, Latency: 2}
 	dp := nc.DeviceConfig{
-		DeviceEndParam: nc.LinkEndDeviceParameter{NumInputChannel: 1, NumOutputChannel: 1},
+		DeviceEndParam: nc.LinkEndDeviceParameter{InputWidth: 1, OutputWidth: 1},
 		SwitchEndParam: sw,
 	}
 	c.ConnectDevice(left, []messaging.Port{src}, dp)

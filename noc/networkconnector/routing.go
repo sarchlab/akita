@@ -58,7 +58,7 @@ func (sn *switchNode) addPort(param LinkEndSwitchParameter) messaging.Port {
 	assembly.RequireSetup(sn.network.simulation)
 	port := twowaybuffered.MakeBuilder().
 		WithSimulation(sn.network.simulation).
-		WithSpec(twowaybuffered.Spec{IncomingCapacity: param.NumInputChannel, OutgoingCapacity: param.NumOutputChannel}).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: param.InputWidth, OutgoingCapacity: param.OutputWidth}).
 		Build()
 	sn.sw.BindPort(fmt.Sprintf("Links[%d]", len(sn.ports)), port)
 	sn.ports = append(sn.ports, port)
@@ -71,7 +71,7 @@ func (sn *switchNode) Links() []switches.Link {
 	for i, remote := range sn.remotes {
 		p := sn.ends[i]
 		links[i] = switches.Link{Remote: remote.RemotePort.AsRemote(), Latency: p.Latency,
-			NumInputChannel: p.NumInputChannel, NumOutputChannel: p.NumOutputChannel,
+			NumInputChannel: p.InputWidth, NumOutputChannel: p.OutputWidth,
 		}
 	}
 	return links

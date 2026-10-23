@@ -45,6 +45,12 @@ the writer's `ListTables` are removed; use SQLite directly for custom analysis.
 The unused `mem.AddressConverter` interface and duplicate `mem.ConvertAddress`
 helper are removed; the concrete `mem.InterleavingConverter` remains available.
 
+`networkconnector.LinkEndSwitchParameter` and `LinkEndDeviceParameter` rename
+`NumInputChannel`/`NumOutputChannel` to `InputWidth`/`OutputWidth`, matching
+the NoC builders. These remain positive flits-per-cycle limits with unchanged
+queue sizing. Update struct literals and field accesses; no aliases remain.
+The topology checkpoint fingerprint changes, so rebuild old NoC checkpoints.
+
 The standalone ticking scheduler, ID generator, source archive helpers, Daisen
 server library/assets, monitoring assets, and acceptance/test helpers are now
 internal. The Daisen command and component-level scheduling remain supported.

@@ -24,10 +24,10 @@ func TestConnector(t *testing.T) {
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(0, []messaging.Port{port},
 				DeviceConfig{
-					DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1, NumOutputChannel: 1},
-					SwitchEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					DeviceEndParam: LinkEndDeviceParameter{InputWidth: 1, OutputWidth: 1},
+					SwitchEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
 				})
 		}
@@ -48,10 +48,10 @@ func TestConnector(t *testing.T) {
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(1+i, []messaging.Port{port},
 				DeviceConfig{
-					DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1, NumOutputChannel: 1},
-					SwitchEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					DeviceEndParam: LinkEndDeviceParameter{InputWidth: 1, OutputWidth: 1},
+					SwitchEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
 				})
 		}
@@ -59,13 +59,13 @@ func TestConnector(t *testing.T) {
 		for i := 1; i < 3; i++ {
 			connector.ConnectSwitches(i, (i-1)/2,
 				SwitchToSwitchLinkParameter{
-					LeftEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					LeftEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
-					RightEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					RightEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
 				})
 		}
@@ -86,10 +86,10 @@ func TestConnector(t *testing.T) {
 			port.BindOwner(routeTestOwner{}, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(8+i, []messaging.Port{port},
 				DeviceConfig{
-					DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1, NumOutputChannel: 1},
-					SwitchEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					DeviceEndParam: LinkEndDeviceParameter{InputWidth: 1, OutputWidth: 1},
+					SwitchEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
 				})
 		}
@@ -97,13 +97,13 @@ func TestConnector(t *testing.T) {
 		for i := 1; i < 16; i++ {
 			connector.ConnectSwitches(i, i/2,
 				SwitchToSwitchLinkParameter{
-					LeftEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					LeftEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
-					RightEndParam: LinkEndSwitchParameter{NumInputChannel: 1,
-						NumOutputChannel: 1,
-						Latency:          1,
+					RightEndParam: LinkEndSwitchParameter{InputWidth: 1,
+						OutputWidth: 1,
+						Latency:     1,
 					},
 				})
 		}
