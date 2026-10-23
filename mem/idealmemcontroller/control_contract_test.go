@@ -18,7 +18,7 @@ func TestControlContract(t *testing.T) {
 
 		storage := mem.NewStorage(1 * mem.MB)
 		spec := DefaultSpec()
-		spec.Width = 1
+		spec.NumReqPerCycle = 1
 		spec.Latency = 10
 
 		comp := modeling.MakeBuilder[*Comp](spec).

@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -27,9 +28,9 @@ func (m *dataTransferMW) outsidePort() messaging.Port {
 func (m *dataTransferMW) srcPort() messaging.Port {
 	state := &m.comp.State
 	switch state.SrcSide {
-	case "inside":
+	case datamoverprotocol.SideInside:
 		return m.insidePort()
-	case "outside":
+	case datamoverprotocol.SideOutside:
 		return m.outsidePort()
 	default:
 		return nil
@@ -39,9 +40,9 @@ func (m *dataTransferMW) srcPort() messaging.Port {
 func (m *dataTransferMW) dstPort() messaging.Port {
 	state := &m.comp.State
 	switch state.DstSide {
-	case "inside":
+	case datamoverprotocol.SideInside:
 		return m.insidePort()
-	case "outside":
+	case datamoverprotocol.SideOutside:
 		return m.outsidePort()
 	default:
 		return nil
@@ -57,13 +58,13 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 }
 
 // mapperFor returns the mapper for the "inside" or "outside" side.
-func (m *dataTransferMW) mapperFor(side string) mem.AddressMapper {
+func (m *dataTransferMW) mapperFor(side datamoverprotocol.Side) mem.AddressMapper {
 	var mapper mem.AddressMapper
 
 	switch side {
-	case "inside":
+	case datamoverprotocol.SideInside:
 		mapper = m.comp.Spec.Inside
-	case "outside":
+	case datamoverprotocol.SideOutside:
 		mapper = m.comp.Spec.Outside
 	default:
 		log.Panicf("unknown side %q", side)

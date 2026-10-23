@@ -9,11 +9,11 @@ two memory-facing ports.
 
 ## How It Works
 
-A move is driven by a single `DataMoveReq` on the `Top` port. The
+A move is driven by a single `Req` on the `Top` port. The
 component processes one transaction at a time:
 
 ```
-Top ──► DataMoveReq ──► dataTransferMW ──► DataMoveRsp ──► Top
+Top ──► Req ──► dataTransferMW ──► Rsp ──► Top
                                       │
               ┌───────────────────────┴────────────────────────┐
         read side (src)                                  write side (dst)
@@ -33,9 +33,9 @@ Each tick the `dataTransferMW` middleware:
 4. **processWriteDoneFromDst** — clears the matching pending write on each
    `memprotocol.WriteDoneRsp`.
 
-The `ctrlParseMW` middleware parses incoming `DataMoveReq`s (rejecting a new
+The `ctrlParseMW` middleware parses incoming `Req`s (rejecting a new
 one while a transaction is active) and, once every byte has been written back,
-sends a `DataMoveRsp` to the original requester.
+sends a `Rsp` to the original requester.
 
 The source and destination each name one of the two sides — `"inside"` or
 `"outside"` — so a move can go inside→outside, outside→inside, or same-side. The
@@ -47,13 +47,13 @@ and write transfer sizes.
 ```go
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
-type DataMoveReq struct {
+type Req struct {
     SrcAddress, DstAddress uint64
     ByteSize               uint64
-    SrcSide, DstSide       DataMovePort // "inside" or "outside"
+    SrcSide, DstSide       Side // "inside" or "outside"
 }
 
-type DataMoveRsp struct {
+type Rsp struct {
 }
 ```
 
@@ -124,7 +124,7 @@ buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
-- **Top** — accepts `DataMoveReq`, returns `DataMoveRsp` to the
+- **Top** — accepts `Req`, returns `Rsp` to the
   requester once the move completes.
 - **Inside** / **Outside** — the two memory-facing ports. Whichever side a move
   names as source issues `memprotocol.ReadReq`s (receiving `memprotocol.DataReadyRsp`); the

@@ -36,7 +36,7 @@ type Ports struct {
 	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
 	// Translation sends translation requests to the translation providers.
-	Translation messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
+	Translation messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.requester"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
@@ -70,12 +70,11 @@ type incomingReqState struct {
 	Type  string               `json:"type"`
 
 	// Fields preserved for translated request creation.
-	Address            uint64 `json:"address"`
-	AccessByteSize     uint64 `json:"access_byte_size"`
-	PID                vm.PID `json:"pid"`
-	Data               []byte `json:"data,omitempty"`
-	DirtyMask          []bool `json:"dirty_mask,omitempty"`
-	CanWaitForCoalesce bool   `json:"can_wait_for_coalesce"`
+	Address        uint64 `json:"address"`
+	AccessByteSize uint64 `json:"access_byte_size"`
+	PID            vm.PID `json:"pid"`
+	Data           []byte `json:"data,omitempty"`
+	DirtyMask      []bool `json:"dirty_mask,omitempty"`
 }
 
 // transactionState is a serializable representation of a runtime transaction.
@@ -135,13 +134,11 @@ func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 		s.Address = content.Address
 		s.AccessByteSize = content.AccessByteSize
 		s.PID = content.PID
-		s.CanWaitForCoalesce = content.CanWaitForCoalesce
 	case memprotocol.WriteReq:
 		s.Address = content.Address
 		s.PID = content.PID
 		s.Data = content.Data
 		s.DirtyMask = content.DirtyMask
-		s.CanWaitForCoalesce = content.CanWaitForCoalesce
 	default:
 		log.Panicf("cannot convert message of type %T", msg.Payload)
 	}
@@ -166,8 +163,7 @@ func createTranslatedReq(
 			Address:        addr,
 			AccessByteSize: reqState.AccessByteSize,
 			PID:            0,
-
-			CanWaitForCoalesce: reqState.CanWaitForCoalesce},
+		},
 			ID:  newID(),
 			Src: bottomPortRemote,
 			Dst: memProviderMapper.Find(addr),
@@ -182,8 +178,7 @@ func createTranslatedReq(
 			DirtyMask: reqState.DirtyMask,
 			Address:   addr,
 			PID:       0,
-
-			CanWaitForCoalesce: reqState.CanWaitForCoalesce},
+		},
 			ID:  newID(),
 			Src: bottomPortRemote,
 			Dst: memProviderMapper.Find(addr),

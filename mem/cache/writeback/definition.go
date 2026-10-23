@@ -12,20 +12,20 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:                1 * timing.GHz,
-		NumReqPerCycle:      1,
-		Log2BlockSize:       6,
-		BankLatency:         10,
-		NumWays:             4,
-		NumBanks:            1,
-		NumMSHREntries:      16,
-		NumSets:             2048,
-		WriteBufferCapacity: 1024,
-		MaxInflightFetch:    128,
-		MaxInflightEviction: 128,
-		DirectoryWidth:      2,
-		BankWidth:           2,
-		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
+		Freq:                 1 * timing.GHz,
+		NumReqPerCycle:       1,
+		Log2BlockSize:        6,
+		BankLatency:          10,
+		NumWays:              4,
+		NumBanks:             1,
+		NumMSHREntries:       16,
+		NumSets:              2048,
+		WriteBufferCapacity:  1024,
+		MaxInFlightFetches:   128,
+		MaxInFlightEvictions: 128,
+		DirectoryWidth:       2,
+		BankWidth:            2,
+		Bottom:               mem.AddressMapper{InterleavingSize: 4096},
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -87,7 +87,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 	if !ok {
 		return false
 	}
-	_, ok = msgI.Payload.(vmprotocol.TranslationReq)
+	_, ok = msgI.Payload.(addrtransprotocol.Req)
 	msg := msgI
 	if !ok {
 		return false
@@ -100,14 +100,14 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg messaging.Msg,
 ) bool {
 	spec := m.comp.Spec
-	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
+	totalLatency := uint64(spec.LatencyPerLevel) * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
 		found := m.lookupLevel(level, msg)
 		if !found {
 			break
 		}
-		totalLatency -= spec.LatencyPerLevel
+		totalLatency -= uint64(spec.LatencyPerLevel)
 	}
 
 	ok := m.sendReqToBottom(msg, totalLatency)
@@ -122,8 +122,8 @@ func (m *mmuCacheMiddleware) lookupLevel(
 ) bool {
 	spec := m.comp.Spec
 	next := &m.comp.State
-	vAddr := req.Payload.(vmprotocol.TranslationReq).VAddr
-	pid := req.Payload.(vmprotocol.TranslationReq).PID
+	vAddr := req.Payload.(addrtransprotocol.Req).VAddr
+	pid := req.Payload.(addrtransprotocol.Req).PID
 
 	vpn := vAddr >> spec.Log2PageSize
 	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
@@ -147,10 +147,10 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 	res := m.comp.Resources
 
-	reqToBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
-		PID:          req.Payload.(vmprotocol.TranslationReq).PID,
-		VAddr:        req.Payload.(vmprotocol.TranslationReq).VAddr,
-		DeviceID:     req.Payload.(vmprotocol.TranslationReq).DeviceID,
+	reqToBottom := messaging.Msg{Payload: addrtransprotocol.Req{
+		PID:          req.Payload.(addrtransprotocol.Req).PID,
+		VAddr:        req.Payload.(addrtransprotocol.Req).VAddr,
+		DeviceID:     req.Payload.(addrtransprotocol.Req).DeviceID,
 		TransLatency: latency},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
@@ -191,7 +191,7 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	}
 
 	switch itemI.Payload.(type) {
-	case vmprotocol.TranslationRsp:
+	case addrtransprotocol.Rsp:
 		item := itemI
 
 		madeProgress = m.handleRsp(item) || madeProgress
@@ -219,8 +219,8 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 
 	res := m.comp.Resources
 
-	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
-		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
+	rspToTop := messaging.Msg{Payload: addrtransprotocol.Rsp{
+		Page: rsp.Payload.(addrtransprotocol.Rsp).Page,
 	},
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),
@@ -270,7 +270,7 @@ func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
 func (m *mmuCacheMiddleware) updateCacheLevels(rsp messaging.Msg) bool {
 	spec := m.comp.Spec
 	next := &m.comp.State
-	page := rsp.Payload.(vmprotocol.TranslationRsp).Page
+	page := rsp.Payload.(addrtransprotocol.Rsp).Page
 	vAddr := page.VAddr
 	pid := page.PID
 

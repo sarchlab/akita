@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -57,7 +57,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 
 	// Admit a read: translate opens the top req_in and the translation req_out,
 	// then awaits the translation response (which never comes — the request is in
-	// flight). Tick until the transaction is created and the TranslationReq has
+	// flight). Tick until the transaction is created and the Req has
 	// actually gone out the Translation port.
 	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4},
 		ID:           sim.NewID(),
@@ -72,7 +72,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	for range 8 {
 		modelingtest.Tick(at)
 		if out, ok := translationPort.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 				transReqSent = true
 				break
 			}

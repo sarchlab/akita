@@ -154,7 +154,7 @@ func buildMemCtrl(
 	combinedRange uint64,
 ) *idealmemcontroller.Comp {
 	memCtrlSpec := idealmemcontroller.DefaultSpec()
-	memCtrlSpec.Width = 1
+	memCtrlSpec.NumReqPerCycle = 1
 	memCtrlSpec.Latency = 100
 	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
 		WithSimulation(s).
@@ -201,7 +201,7 @@ func buildMMU(
 ) *mmu.Comp {
 	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = 12
-	mmuSpec.MaxRequestsInFlight = 16
+	mmuSpec.MaxInFlightTranslations = 16
 	mmuSpec.Latency = 10
 	ioMMU := modeling.MakeBuilder[*mmu.Comp](mmuSpec).
 		WithSimulation(s).
@@ -268,7 +268,7 @@ func buildL1Cache(
 	l2Cache *writeback.Comp,
 ) *writethrough.Comp {
 	l1Spec := writethrough.DefaultSpec()
-	l1Spec.WritePolicyType = "write-through"
+	l1Spec.WritePolicy = "write-through"
 	l1Spec.NumWays = 2
 	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 

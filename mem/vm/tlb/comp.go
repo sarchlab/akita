@@ -33,10 +33,10 @@ func (s Spec) pageSize() uint64 {
 // Ports holds the TLB's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
 
 	// Bottom sends translation requests for misses to the next level.
-	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.requester"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`

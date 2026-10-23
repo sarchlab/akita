@@ -17,13 +17,13 @@ do the translation work.
 
 For each incoming `memprotocol.ReadReq` / `memprotocol.WriteReq` on the `Top` port, the
 translator computes the virtual page ID (`addr >> Log2PageSize << Log2PageSize`)
-and sends a `vmprotocol.TranslationReq` on the `Translation` port to the provider
+and sends a `addrtransprotocol.Req` on the `Translation` port to the provider
 resolved by the Spec routing value. The original request's fields are
 saved in a transaction record while the translation is outstanding.
 
 ### RespondPipeline — forward and respond
 
-1. **parseTranslation** — When a `vmprotocol.TranslationRsp` returns, the saved request is
+1. **parseTranslation** — When a `addrtransprotocol.Rsp` returns, the saved request is
    cloned with its address rewritten to `page.PAddr + offset` (where `offset` is
    the original address modulo the page size) and sent downstream on the `Bottom`
    port to the memory provider resolved by the Spec.Bottom routing value.
@@ -94,5 +94,5 @@ middlewares and freezes the topology.
   `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp`.
 - **Bottom**: forwards translated `memprotocol.ReadReq` / `memprotocol.WriteReq` (physical
   addresses), receives `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp`.
-- **Translation**: sends `vmprotocol.TranslationReq`, receives `vmprotocol.TranslationRsp`.
+- **Translation**: sends `addrtransprotocol.Req`, receives `addrtransprotocol.Rsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (flush / reset), returns `memcontrolprotocol.Rsp`.

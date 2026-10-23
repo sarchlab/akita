@@ -70,3 +70,15 @@ func TestInvalidDirectGeometryAndWidths(t *testing.T) {
 		require.Error(t, validateSpec(spec))
 	}
 }
+
+func TestWritePolicyChoices(t *testing.T) {
+	for _, policy := range []WritePolicy{"", WritePolicyWriteAround, WritePolicyWriteEvict, WritePolicyWriteThrough} {
+		spec := DefaultSpec()
+		spec.WritePolicy = policy
+		spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
+		require.NoError(t, validateSpec(spec))
+	}
+	spec := DefaultSpec()
+	spec.WritePolicy = "unsupported"
+	require.ErrorContains(t, validateSpec(spec), "unsupported write policy")
+}

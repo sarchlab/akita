@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -107,7 +107,7 @@ func TestMMUMilestones(t *testing.T) {
 	}
 
 	makeReq := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 0},
@@ -171,7 +171,7 @@ func TestMMUMilestones(t *testing.T) {
 		for i := 0; i < 64 && !sent; i++ {
 			mw.Handle(modelingtest.TickEvent(mmuComp))
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					sent = true
 				}
 			}

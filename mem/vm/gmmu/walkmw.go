@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -55,7 +55,7 @@ func (m *walkMW) parseFromTop() bool {
 		return false
 	}
 
-	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(state.WalkingTranslations) >= spec.MaxInFlightTranslations {
 		return false
 	}
 
@@ -68,7 +68,7 @@ func (m *walkMW) parseFromTop() bool {
 	m.topPort().RetrieveIncoming()
 
 	switch reqI.Payload.(type) {
-	case vmprotocol.TranslationReq:
+	case addrtransprotocol.Req:
 		req := reqI
 
 		m.startWalking(req)
@@ -91,9 +91,9 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 		RecvTaskID: recvTaskID,
 		ReqSrc:     req.Src,
 		ReqDst:     req.Dst,
-		PID:        uint64(req.Payload.(vmprotocol.TranslationReq).PID),
-		VAddr:      req.Payload.(vmprotocol.TranslationReq).VAddr,
-		DeviceID:   req.Payload.(vmprotocol.TranslationReq).DeviceID,
+		PID:        uint64(req.Payload.(addrtransprotocol.Req).PID),
+		VAddr:      req.Payload.(addrtransprotocol.Req).VAddr,
+		DeviceID:   req.Payload.(addrtransprotocol.Req).DeviceID,
 		CycleLeft:  spec.Latency,
 	}
 
@@ -181,7 +181,7 @@ func (m *walkMW) processRemoteMemReq(
 	spec := m.comp.Spec
 	walking := state.WalkingTranslations[walkingIndex]
 
-	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	req := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      vm.PID(walking.PID),
 		VAddr:    walking.VAddr,
 		DeviceID: walking.DeviceID},
@@ -238,7 +238,7 @@ func (m *walkMW) doPageWalkHit(
 	}
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 		Page: pageFromPageState(walking.Page),
 	},
 		ID:    m.comp.NewID(),

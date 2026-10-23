@@ -8,14 +8,17 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:                1 * timing.GHz,
-		Log2PageSize:        12,
-		Latency:             10,
-		MaxRequestsInFlight: 16,
+		Freq:                    1 * timing.GHz,
+		Log2PageSize:            12,
+		Latency:                 10,
+		MaxInFlightTranslations: 16,
 	}
 }
 
 func (m *middlewares) Initialize(c *Comp) {
+	if c.Spec.Latency < 0 {
+		panic("vm/mmu: Latency must be nonnegative")
+	}
 	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("mmu: Resources.PageTable is required")

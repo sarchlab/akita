@@ -25,7 +25,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	storage := mem.NewStorage(1 * mem.MB)
 
 	spec := DefaultSpec()
-	spec.Width = 4
+	spec.NumReqPerCycle = 4
 	// A long latency keeps the access in flight: one Tick admits it into
 	// InflightTransactions (opening req_in) but is far short of completing it.
 	spec.Latency = 100

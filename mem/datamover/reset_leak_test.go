@@ -54,7 +54,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	dataMover.TaskTracker().Subscribe(rec, dataMover)
 
 	makeMove := func() messaging.Msg {
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 0,

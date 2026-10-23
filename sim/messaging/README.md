@@ -105,7 +105,7 @@ Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.res
 ```
 
 The inspector checks each tag against the protocol's roles. Each protocol lives in its
-own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
+own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/addrtransprotocol`)
 that owns the message types and the protocol definition. A
 registration-coverage audit
 (`protocolaudit_test.go`) fails CI for concrete payloads constructed in library message literals that are

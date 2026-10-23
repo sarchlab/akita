@@ -16,16 +16,16 @@ type Spec struct {
 	PageSize        uint64      `json:"page_size"`
 	Log2PageSize    uint64      `json:"log2_page_size"`
 	NumReqPerCycle  int         `json:"num_req_per_cycle"`
-	LatencyPerLevel uint64      `json:"latency_per_level"`
+	LatencyPerLevel int         `json:"latency_per_level"`
 }
 
 // Ports holds the mmuCache's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
 
 	// Bottom forwards translation requests for misses to the low module.
-	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.requester"`
 
 	// Control receives enable, pause, drain, flush, invalidate, and reset
 	// commands.

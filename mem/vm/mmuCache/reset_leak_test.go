@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -57,7 +57,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// Deliver a lookup that misses the empty cache. lookup forwards it out the
 	// Bottom port and opens both the top req_in and the forwarded req_out, then
 	// waits on the bottom response — which never comes, so the walk is in flight.
-	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	req := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      1,
 		VAddr:    0x1000,
 		DeviceID: 1},

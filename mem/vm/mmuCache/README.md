@@ -19,12 +19,12 @@ On a request arriving from the `Top` port:
    level for the corresponding segment. Each level that hits subtracts
    `LatencyPerLevel` from the total walk latency; the walk stops at the first
    miss.
-2. **sendReqToBottom** — A `vmprotocol.TranslationReq` is forwarded on the `Bottom` port
+2. **sendReqToBottom** — A `addrtransprotocol.Req` is forwarded on the `Bottom` port
    to `LowModulePort`, carrying the remaining latency in its `TransLatency`
    field so the downstream provider can account for the cached levels.
-3. **handleRsp** — When a `vmprotocol.TranslationRsp` returns on `Bottom`, every level is
+3. **handleRsp** — When a `addrtransprotocol.Rsp` returns on `Bottom`, every level is
    filled with the resolved page's segments (using LRU replacement within each
-   level) and a `vmprotocol.TranslationRsp` is relayed up to `UpModulePort`.
+   level) and a `addrtransprotocol.Rsp` is relayed up to `UpModulePort`.
 
 Up to `NumReqPerCycle` lookups and responses are processed each tick. The cache
 runs an `enable` / `drain` / `pause` / `flush` state machine; a flush clears all
@@ -92,8 +92,8 @@ buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
-- **Top**: accepts `vmprotocol.TranslationReq` from the upstream requester.
-- **Bottom**: forwards `vmprotocol.TranslationReq` to the downstream provider and
-  receives `vmprotocol.TranslationRsp`, which is then relayed back to `UpModulePort`.
+- **Top**: accepts `addrtransprotocol.Req` from the upstream requester.
+- **Bottom**: forwards `addrtransprotocol.Req` to the downstream provider and
+  receives `addrtransprotocol.Rsp`, which is then relayed back to `UpModulePort`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
   and returns `memcontrolprotocol.Rsp` for flush and reset.

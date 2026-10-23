@@ -80,7 +80,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Latency = 5
-	dramSpec.Width = 4
+	dramSpec.NumReqPerCycle = 4
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).

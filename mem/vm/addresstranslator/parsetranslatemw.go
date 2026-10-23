@@ -1,7 +1,7 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -49,7 +49,7 @@ func (m *parseTranslateMW) translate() bool {
 	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	transReq := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      incoming.PID,
 		VAddr:    vPageID,
 		DeviceID: spec.DeviceID},

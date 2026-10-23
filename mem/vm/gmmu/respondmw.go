@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -51,7 +51,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	switch rspI.Payload.(type) {
-	case vmprotocol.TranslationRsp:
+	case addrtransprotocol.Rsp:
 		rsp := rspI
 
 		return m.handleTranslationRsp(rsp)
@@ -78,8 +78,8 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 		return false
 	}
 
-	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
-		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
+	rspToTop := messaging.Msg{Payload: addrtransprotocol.Rsp{
+		Page: rsp.Payload.(addrtransprotocol.Rsp).Page,
 	},
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),

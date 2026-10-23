@@ -46,6 +46,9 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
+	if spec.Latency < 0 {
+		return fmt.Errorf("TLB latency must be nonnegative")
+	}
 	if spec.NumReqPerCycle <= 0 {
 		return fmt.Errorf("TLB processing width must be positive")
 	}

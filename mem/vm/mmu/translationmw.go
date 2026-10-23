@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -105,7 +105,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 		Page: walking.Page,
 	},
 		ID:    m.comp.NewID(),
@@ -143,7 +143,7 @@ func (m *translationMW) parseFromTop() bool {
 		return false
 	}
 
-	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(state.WalkingTranslations) >= spec.MaxInFlightTranslations {
 		return false
 	}
 
@@ -156,7 +156,7 @@ func (m *translationMW) parseFromTop() bool {
 	m.topPort().RetrieveIncoming()
 
 	switch reqI.Payload.(type) {
-	case vmprotocol.TranslationReq:
+	case addrtransprotocol.Req:
 		req := reqI
 
 		m.startWalking(req)
@@ -179,10 +179,10 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 		RecvTaskID:   recvTaskID,
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
-		PID:          uint32(req.Payload.(vmprotocol.TranslationReq).PID),
-		VAddr:        req.Payload.(vmprotocol.TranslationReq).VAddr,
-		DeviceID:     req.Payload.(vmprotocol.TranslationReq).DeviceID,
-		TransLatency: req.Payload.(vmprotocol.TranslationReq).TransLatency,
+		PID:          uint32(req.Payload.(addrtransprotocol.Req).PID),
+		VAddr:        req.Payload.(addrtransprotocol.Req).VAddr,
+		DeviceID:     req.Payload.(addrtransprotocol.Req).DeviceID,
+		TransLatency: req.Payload.(addrtransprotocol.Req).TransLatency,
 		CycleLeft:    spec.Latency,
 	}
 

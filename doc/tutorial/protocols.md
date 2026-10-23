@@ -130,7 +130,7 @@ declaration *is* the protocol. Akita's protocols:
 | --- | --- | --- |
 | `mem/memprotocol` | memory access | requester / responder |
 | `mem/memcontrolprotocol` | memory-agent control | requester / responder |
-| `mem/vm/vmprotocol` | address translation | requester / responder |
+| `mem/vm/addrtransprotocol` | address translation | requester / responder |
 | `mem/datamoverprotocol` | data move | requester / responder |
 | `noc/packetization` | flit transport | link |
 

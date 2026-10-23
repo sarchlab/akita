@@ -438,7 +438,7 @@ func (m *migMW) tickCopying() bool {
 		return false
 	}
 
-	req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+	req := messaging.Msg{Payload: datamoverprotocol.Req{
 		SrcAddress: state.SrcAddr,
 		DstAddress: state.DstAddr,
 		ByteSize:   pageSize,
@@ -473,7 +473,7 @@ func (m *migMW) processMoveRsp() bool {
 	if !ok {
 		return false
 	}
-	_, ok = msgI.Payload.(datamoverprotocol.DataMoveRsp)
+	_, ok = msgI.Payload.(datamoverprotocol.Rsp)
 	if !ok {
 		log.Panicf("migration: unexpected mover msg %T", msgI.Payload)
 	}

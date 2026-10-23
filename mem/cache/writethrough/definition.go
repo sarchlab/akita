@@ -12,20 +12,20 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:                  1 * timing.GHz,
-		NumReqPerCycle:        4,
-		Log2BlockSize:         6,
-		BankLatency:           20,
-		NumWays:               4,
-		MaxNumConcurrentTrans: 16,
-		NumBanks:              1,
-		NumMSHREntries:        4,
-		NumSets:               16,
-		DirLatency:            2,
-		WritePolicyType:       "write-around",
-		DirectoryWidth:        4,
-		BankWidth:             4,
-		Bottom:                mem.AddressMapper{InterleavingSize: 4096},
+		Freq:                1 * timing.GHz,
+		NumReqPerCycle:      4,
+		Log2BlockSize:       6,
+		BankLatency:         20,
+		NumWays:             4,
+		MaxInFlightRequests: 16,
+		NumBanks:            1,
+		NumMSHREntries:      4,
+		NumSets:             16,
+		DirLatency:          2,
+		WritePolicy:         WritePolicyWriteAround,
+		DirectoryWidth:      4,
+		BankWidth:           4,
+		Bottom:              mem.AddressMapper{InterleavingSize: 4096},
 	}
 }
 
@@ -92,6 +92,11 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
+	switch spec.writePolicy() {
+	case WritePolicyWriteAround, WritePolicyWriteEvict, WritePolicyWriteThrough:
+	default:
+		return fmt.Errorf("unsupported write policy %q", spec.WritePolicy)
+	}
 	if spec.NumSets <= 0 || spec.NumWays <= 0 || spec.Log2BlockSize >= 63 {
 		return fmt.Errorf("cache geometry must have positive sets and ways and a block exponent below 63")
 	}

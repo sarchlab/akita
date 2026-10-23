@@ -1,6 +1,6 @@
 // Package writethrough provides a unified GPU cache implementation supporting
 // multiple write policies (write-around, write-evict, write-through) via the
-// Spec.WritePolicyType string field.
+// Spec.WritePolicy field.
 //
 // The cache is a ticking component. The system builder builds it with
 // modeling.MakeBuilder[*Comp](DefaultSpec()): configuration is supplied as a whole through WithSpec

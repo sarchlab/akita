@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -193,7 +193,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 		transReqID := at.State.Transactions[0].TranslationReqID
 		translationPort.RetrieveOutgoing()
 
-		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		transRsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		},
 			ID:    sim.NewID(),
@@ -313,7 +313,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 			},
 		}
 
-		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		transRsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		},
 			ID:    sim.NewID(),

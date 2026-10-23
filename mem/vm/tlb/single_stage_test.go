@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -33,7 +33,7 @@ func newSingleStageTLB(t *testing.T) *Comp {
 func deliverSingleStageRequest(comp *Comp) messaging.Msg {
 	req := messaging.Msg{
 		ID: comp.NewID(), Src: "Requester", Dst: comp.Ports.Top.AsRemote(),
-		Payload: vmprotocol.TranslationReq{PID: 1, VAddr: 0x1000, DeviceID: 1},
+		Payload: addrtransprotocol.Req{PID: 1, VAddr: 0x1000, DeviceID: 1},
 	}
 	comp.Ports.Top.Deliver(req)
 	return req
@@ -59,7 +59,7 @@ func TestSingleStageTLBHitCompletes(t *testing.T) {
 	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, req.ID, rsp.RspTo)
-	require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+	require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 	_, ok = comp.Ports.Bottom.RetrieveOutgoing()
 	require.False(t, ok, "a resident hit must not fetch a translation")
 }
@@ -74,14 +74,14 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 	page := vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000, Valid: true}
 	comp.Ports.Bottom.Deliver(messaging.Msg{
 		ID: comp.NewID(), Src: "Walker", Dst: comp.Ports.Bottom.AsRemote(),
-		RspTo: fetch.ID, Payload: vmprotocol.TranslationRsp{Page: page},
+		RspTo: fetch.ID, Payload: addrtransprotocol.Rsp{Page: page},
 	})
 	require.True(t, modelingtest.Tick(comp)) // Receive the downstream mapping.
 	require.True(t, modelingtest.Tick(comp)) // Respond to the original requester.
 	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, req.ID, rsp.RspTo)
-	require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+	require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 	require.Empty(t, comp.State.MSHREntries)
 	require.False(t, comp.State.HasRespondingMSHR)
 }

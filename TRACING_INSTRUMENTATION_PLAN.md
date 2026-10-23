@@ -253,7 +253,7 @@ fixed as part of the Step 5 rollout.** Item 2 (gmmu remote-path) and item 4
 (endpoint `msg_e2e`) remain.
 
 1. **mmuCache — no data-path tracing.** — DONE (Step 5 rollout). `mmucachemiddleware.go` opens no
-   `req_in` and initiates no `req_out` for the downstream `TranslationReq`; its
+   `req_in` and initiates no `req_out` for the downstream `Req`; its
    only tracing is control-path milestones (`ctrlmiddleware.go:115,133,153,184,277`)
    that attach to **phantom tasks** (`MsgIDAtReceiver` with no `TraceReqReceive`).
    → Add `TraceReqReceive`/`TraceReqComplete` for Top requests and
@@ -273,8 +273,8 @@ fixed as part of the Step 5 rollout.** Item 2 (gmmu remote-path) and item 4
      `doPageWalkHit` path completes it, `walkmw.go:245`).
    → Drop the response-side `TraceReqReceive` and complete the top `req_in` when
    the remote response returns.
-3. **datamover — wrong-key `req_in` close.** Opens on `DataMoveReq.ID`
-   (`ctrlparsemw.go:97`), closes on a fresh `DataMoveRsp.ID` (`:148`), so
+3. **datamover — wrong-key `req_in` close.** Opens on `Req.ID`
+   (`ctrlparsemw.go:97`), closes on a fresh `Rsp.ID` (`:148`), so
    the `req_in` never ends and leaks a registry entry every transaction. → Close
    using a reconstruction carrying the request ID (as the ROB does via
    `topReqTraceMsg`).

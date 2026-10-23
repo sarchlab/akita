@@ -9,9 +9,9 @@ import (
 
 // Spec contains immutable configuration for the ideal memory controller.
 type Spec struct {
-	Freq    timing.Freq `json:"freq"`
-	Width   int         `json:"width"`
-	Latency int         `json:"latency"`
+	Freq           timing.Freq `json:"freq"`
+	NumReqPerCycle int         `json:"num_req_per_cycle"`
+	Latency        int         `json:"latency"`
 }
 
 // inflightTransaction tracks an in-progress memory request with a countdown.

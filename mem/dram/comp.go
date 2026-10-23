@@ -8,43 +8,43 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// protocol defines the category of the memory controller.
-type protocol int
+// Protocol defines the category of the memory controller.
+type Protocol string
 
 // A list of all supported DRAM protocols.
 const (
-	protoDDR3 protocol = iota
-	protoDDR4
-	protoGDDR5
-	protoGDDR5X
-	protoGDDR6
-	protoLPDDR
-	protoLPDDR3
-	protoLPDDR4
-	protoHBM
-	protoHBM2
-	protoHMC
-	protoDDR5
-	protoHBM3
-	protoLPDDR5
-	protoHBM3E
+	ProtocolDDR3   Protocol = "ddr3"
+	ProtocolDDR4   Protocol = "ddr4"
+	ProtocolGDDR5  Protocol = "gddr5"
+	ProtocolGDDR5X Protocol = "gddr5x"
+	ProtocolGDDR6  Protocol = "gddr6"
+	ProtocolLPDDR  Protocol = "lpddr"
+	ProtocolLPDDR3 Protocol = "lpddr3"
+	ProtocolLPDDR4 Protocol = "lpddr4"
+	ProtocolHBM    Protocol = "hbm"
+	ProtocolHBM2   Protocol = "hbm2"
+	ProtocolHMC    Protocol = "hmc"
+	ProtocolDDR5   Protocol = "ddr5"
+	ProtocolHBM3   Protocol = "hbm3"
+	ProtocolLPDDR5 Protocol = "lpddr5"
+	ProtocolHBM3E  Protocol = "hbm3e"
 )
 
-func (p protocol) isGDDR() bool {
-	return p == protoGDDR5 || p == protoGDDR5X || p == protoGDDR6
+func (p Protocol) isGDDR() bool {
+	return p == ProtocolGDDR5 || p == ProtocolGDDR5X || p == ProtocolGDDR6
 }
 
-func (p protocol) isHBM() bool {
-	return p == protoHBM || p == protoHBM2 || p == protoHBM3 || p == protoHBM3E
+func (p Protocol) isHBM() bool {
+	return p == ProtocolHBM || p == ProtocolHBM2 || p == ProtocolHBM3 || p == ProtocolHBM3E
 }
 
 // PagePolicy defines the page management policy for the DRAM controller.
-type PagePolicy int
+type PagePolicy string
 
 // A list of supported page policies.
 const (
-	PagePolicyClose PagePolicy = 0
-	PagePolicyOpen  PagePolicy = 1
+	PagePolicyClose PagePolicy = "close"
+	PagePolicyOpen  PagePolicy = "open"
 )
 
 // Spec contains immutable configuration for the DRAM memory controller. The
@@ -56,7 +56,7 @@ type Spec struct {
 	Freq timing.Freq `json:"freq"`
 
 	// Protocol
-	Protocol int `json:"protocol"`
+	Protocol Protocol `json:"protocol"`
 
 	// Page policy
 	PagePolicy PagePolicy `json:"page_policy"`
@@ -120,12 +120,12 @@ type Spec struct {
 // bus: BurstLength divided by the number of transfers per cycle of the
 // protocol.
 func (s Spec) burstCycle() int {
-	switch protocol(s.Protocol) {
-	case protoGDDR5:
+	switch s.Protocol {
+	case ProtocolGDDR5:
 		return s.BurstLength / 4
-	case protoGDDR5X:
+	case ProtocolGDDR5X:
 		return s.BurstLength / 8
-	case protoGDDR6:
+	case ProtocolGDDR6:
 		return s.BurstLength / 16
 	default:
 		return s.BurstLength / 2
@@ -171,6 +171,30 @@ func (s Spec) log2AccessUnitSize() uint64 {
 // mustBeSupported panics if the Spec describes a configuration the
 // controller does not model.
 func (s Spec) mustBeSupported() {
+	switch s.Protocol {
+	case ProtocolDDR3, ProtocolDDR4, ProtocolDDR5,
+		ProtocolGDDR5, ProtocolGDDR5X, ProtocolGDDR6,
+		ProtocolLPDDR, ProtocolLPDDR3, ProtocolLPDDR4, ProtocolLPDDR5,
+		ProtocolHBM, ProtocolHBM2, ProtocolHBM3, ProtocolHBM3E, ProtocolHMC:
+	default:
+		panic("dram: unsupported protocol " + string(s.Protocol))
+	}
+	switch s.PagePolicy {
+	case "", PagePolicyClose, PagePolicyOpen:
+	default:
+		panic("dram: unsupported page policy " + string(s.PagePolicy))
+	}
+	for _, latency := range []int{
+		s.TAL, s.TCL, s.TCWL, s.TRCD, s.TRP, s.TRAS,
+		s.TCCDS, s.TCCDL, s.TRTRS, s.TRTP, s.TWTRL, s.TWTRS,
+		s.TWR, s.TPPD, s.TRRDS, s.TRRDL, s.TFAW, s.TRCDRD,
+		s.TRCDWR, s.TREFI, s.TRFC, s.TRFCb, s.TCKESR, s.TXS,
+	} {
+		if latency < 0 {
+			panic("dram: timing parameters must be nonnegative")
+		}
+	}
+
 	// One component per channel: the address decode produces a Channel field
 	// that the single-channel controller does not act on, so NumChannel > 1
 	// would silently alias all channels onto the same banks. Multi-channel is

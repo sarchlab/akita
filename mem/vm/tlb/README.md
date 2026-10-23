@@ -8,7 +8,7 @@ locally, and forwards misses down to the MMU (or another translation provider).
 ## How It Works
 
 The TLB is a set-associative cache of `vm.Page` entries keyed by `(PID, VAddr)`.
-Translation requests arrive on the `Top` port as `vmprotocol.TranslationReq` messages and
+Translation requests arrive on the `Top` port as `addrtransprotocol.Req` messages and
 flow through a fixed-latency pipeline before lookup:
 
 1. **Insert / pipeline** — Incoming requests are accepted into a
@@ -16,12 +16,12 @@ flow through a fixed-latency pipeline before lookup:
    requests move per tick.
 2. **Lookup** — On exit from the pipeline the request is looked up in the set
    selected by `vAddr / 2^Log2PageSize % NumSets`.
-   - **Hit** (entry present and `Valid`): a `vmprotocol.TranslationRsp` carrying the
+   - **Hit** (entry present and `Valid`): a `addrtransprotocol.Rsp` carrying the
      `vm.Page` is sent back on `Top`, and the matched way is marked
      most-recently-used.
    - **MSHR hit**: an outstanding miss already covers this `(PID, VAddr)`, so the
      request is attached to the existing MSHR entry.
-   - **Miss**: an MSHR entry is allocated and a `vmprotocol.TranslationReq` is forwarded
+   - **Miss**: an MSHR entry is allocated and a `addrtransprotocol.Req` is forwarded
      on the `Bottom` port to the translation provider resolved by
      the Spec routing value.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
@@ -85,8 +85,8 @@ buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
-- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
-- **Bottom**: forwards `vmprotocol.TranslationReq` on a miss, receives `vmprotocol.TranslationRsp`.
+- **Top**: accepts `addrtransprotocol.Req`, returns `addrtransprotocol.Rsp`.
+- **Bottom**: forwards `addrtransprotocol.Req` on a miss, receives `addrtransprotocol.Rsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
   and returns `memcontrolprotocol.Rsp` for flush and reset.
 

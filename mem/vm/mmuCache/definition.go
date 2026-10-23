@@ -18,6 +18,9 @@ func DefaultSpec() Spec {
 }
 
 func (s *state) Initialize(c *Comp) {
+	if c.Spec.LatencyPerLevel < 0 {
+		panic("vm/mmuCache: LatencyPerLevel must be nonnegative")
+	}
 	spec := c.Spec
 
 	if spec.NumBlocks <= 0 {

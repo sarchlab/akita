@@ -30,7 +30,7 @@ func TestIdealMemoryControllerControlBehavior(t *testing.T) {
 
 	build := func() {
 		spec := DefaultSpec()
-		spec.Width = 4
+		spec.NumReqPerCycle = 4
 		spec.Latency = 10
 
 		memController = modeling.MakeBuilder[*Comp](spec).

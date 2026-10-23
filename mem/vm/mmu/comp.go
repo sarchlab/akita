@@ -9,17 +9,17 @@ import (
 
 // Spec contains immutable configuration for the MMU.
 type Spec struct {
-	Freq                timing.Freq `json:"freq"`
-	Latency             int         `json:"latency"`
-	MaxRequestsInFlight int         `json:"max_requests_in_flight"`
-	AutoPageAllocation  bool        `json:"auto_page_allocation"`
-	Log2PageSize        uint64      `json:"log2_page_size"`
+	Freq                    timing.Freq `json:"freq"`
+	Latency                 int         `json:"latency"`
+	MaxInFlightTranslations int         `json:"max_in_flight_translations"`
+	AutoPageAllocation      bool        `json:"auto_page_allocation"`
+	Log2PageSize            uint64      `json:"log2_page_size"`
 }
 
 // Ports holds the MMU's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`

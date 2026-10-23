@@ -14,7 +14,7 @@ When a countdown reaches zero, the controller reads from or writes to its
 backing `mem.Storage` and sends the response.
 
 There is no limit on the number of concurrent inflight transactions — all
-requests proceed in parallel. At most `Width` new requests are accepted per
+requests proceed in parallel. At most `NumReqPerCycle` new requests are accepted per
 tick.
 
 Two middlewares, the fields of `Middlewares`, run each tick in this order:
@@ -22,7 +22,7 @@ Two middlewares, the fields of `Middlewares`, run each tick in this order:
 | Middleware | Role |
 |---|---|
 | **Ctrl** | Handles `memcontrolprotocol.Req` on the `Control` port (enable, pause, drain, reset). |
-| **Memory** | Accepts new read/write requests (up to `Width` per tick), decrements countdowns, performs storage I/O, and sends responses. |
+| **Memory** | Accepts new read/write requests (up to `NumReqPerCycle` per tick), decrements countdowns, performs storage I/O, and sends responses. |
 
 ### Controller States
 
@@ -48,7 +48,7 @@ Two middlewares, the fields of `Middlewares`, run each tick in this order:
 ```go
 type Spec struct {
     Freq          timing.Freq // Operating frequency
-    Width         int         // Max new requests accepted per tick
+    NumReqPerCycle         int         // Max new requests accepted per tick
     Latency       int         // Fixed response latency in cycles
 }
 ```
@@ -110,7 +110,7 @@ topPort := ctrl.Ports.Top
 |---|---|
 | Frequency | 1 GHz |
 | Latency | 100 cycles |
-| Width | 1 request/tick |
+| NumReqPerCycle | 1 request/tick |
 | Cache line size | 64 bytes |
 
 ## Ports

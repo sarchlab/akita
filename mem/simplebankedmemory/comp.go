@@ -19,23 +19,9 @@ type Spec struct {
 
 	BankSelectorLog2InterleaveSize uint64 `json:"bank_selector_log2_interleave_size"`
 
-	// Bank-selection address conversion. Bank selection runs on this
-	// conversion of the request address; storage is always global, so this
-	// conversion affects bank selection only. With an empty BankAddrConvKind
-	// (the default) bank selection runs on the global address directly — fine
-	// for a standalone memory, or when the bank stride is coarser than any
-	// upstream inter-controller interleave. When this memory is one of several
-	// controllers interleaved at a finer granularity (e.g. 64 B banks behind a
-	// 128 B controller stride), the global address is strided and a contiguous
-	// bank selector cannot stripe finely on it. Set these fields (kind
-	// "interleaving" with this controller's element index) to strip the
-	// inter-controller interleaving so bank selection sees a contiguous
-	// controller-local address and stripes across all banks.
-	BankAddrConvKind            string `json:"bank_addr_conv_kind"`
-	BankAddrInterleavingSize    uint64 `json:"bank_addr_interleaving_size"`
-	BankAddrTotalNumOfElements  int    `json:"bank_addr_total_num_of_elements"`
-	BankAddrCurrentElementIndex int    `json:"bank_addr_current_element_index"`
-	BankAddrOffset              uint64 `json:"bank_addr_offset"`
+	// BankAddressConversion affects bank selection only; storage uses global addresses.
+	// The zero value selects banks directly from the global address.
+	BankAddressConversion BankAddressConversion `json:"bank_address_conversion"`
 }
 
 // bankPipelineItemState is a serializable representation of a pipeline item.
@@ -152,16 +138,16 @@ func selectBank(spec Spec, addr uint64) int {
 	return int((addr / interleaveSize) % uint64(spec.NumBanks))
 }
 
-// bankSelectionAddress converts a request address to the address fed to
-// selectBank. Storage is global and is never converted; this conversion
-// affects bank selection only. With an empty BankAddrConvKind it is the
-// identity, so bank selection runs on the global address. Set the BankAddr*
-// fields to strip an upstream inter-controller interleaving so banks stripe on
-// the contiguous controller-local address. See the BankAddrConv* Spec fields.
 func bankSelectionAddress(spec Spec, addr uint64) uint64 {
-	return mem.ConvertAddress(
-		spec.BankAddrConvKind, spec.BankAddrOffset,
-		spec.BankAddrInterleavingSize, spec.BankAddrTotalNumOfElements,
-		spec.BankAddrCurrentElementIndex, addr,
-	)
+	conversion := spec.BankAddressConversion
+	if conversion.Kind == "" {
+		return addr
+	}
+	converter := mem.InterleavingConverter{
+		InterleavingSize:    conversion.InterleavingSize,
+		TotalNumOfElements:  conversion.NumElements,
+		CurrentElementIndex: conversion.ElementIndex,
+		Offset:              conversion.Offset,
+	}
+	return converter.ConvertExternalToInternal(addr)
 }

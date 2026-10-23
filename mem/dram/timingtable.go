@@ -7,7 +7,7 @@ package dram
 // enforced separately by the bank timing table, so it must NOT shorten the
 // completion to tRP.
 func buildCmdCycles(spec *Spec) map[commandKind]int {
-	proto := protocol(spec.Protocol)
+	proto := spec.Protocol
 
 	cmdCycles := map[commandKind]int{
 		cmdKindRead:           spec.readDelay(),
@@ -35,7 +35,7 @@ func buildCmdCycles(spec *Spec) map[commandKind]int {
 //
 //nolint:gocyclo,funlen
 func generateTiming(s *Spec) dramTiming {
-	proto := protocol(s.Protocol)
+	proto := s.Protocol
 
 	burstCycle := s.burstCycle()
 	tRL := s.tRL()
@@ -231,7 +231,7 @@ func generateTiming(s *Spec) dramTiming {
 		{NextCmdKind: cmdKindSRefEnter, MinCycleInBetween: prechargeToActivate},
 	}
 
-	if proto.isGDDR() || proto == protoLPDDR4 {
+	if proto.isGDDR() || proto == ProtocolLPDDR4 {
 		t.OtherBanksInBankGroup[cmdKindPrecharge] = []timeTableEntry{
 			{NextCmdKind: cmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
 		}

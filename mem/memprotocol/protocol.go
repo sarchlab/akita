@@ -26,19 +26,17 @@ var (
 
 // ReadReq is a read request sent to a memory controller.
 type ReadReq struct {
-	Address            uint64
-	AccessByteSize     uint64
-	PID                vm.PID
-	CanWaitForCoalesce bool
+	Address        uint64
+	AccessByteSize uint64
+	PID            vm.PID
 }
 
 // WriteReq is a write request sent to a memory controller.
 type WriteReq struct {
-	Address            uint64
-	Data               []byte
-	DirtyMask          []bool
-	PID                vm.PID
-	CanWaitForCoalesce bool
+	Address   uint64
+	Data      []byte
+	DirtyMask []bool
+	PID       vm.PID
 }
 
 // DataReadyRsp is a response carrying data loaded from memory.
