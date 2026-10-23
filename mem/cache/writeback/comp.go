@@ -26,48 +26,30 @@ type Spec struct {
 	// Lower memory routing configuration.
 	Bottom mem.AddressMapper `json:"bottom"`
 
-	Freq             timing.Freq `json:"freq"`
-	NumReqPerCycle   int         `json:"num_req_per_cycle"`
-	Log2BlockSize    uint64      `json:"log2_block_size"`
-	BankLatency      int         `json:"bank_latency"`
-	WayAssociativity int         `json:"way_associativity"`
+	Freq           timing.Freq `json:"freq"`
+	NumReqPerCycle int         `json:"num_req_per_cycle"`
+	Log2BlockSize  uint64      `json:"log2_block_size"`
+	BankLatency    int         `json:"bank_latency"`
+	NumWays        int         `json:"num_ways"`
 
-	// NumBanks is the number of banks; a value below 1 means one bank.
-	NumBanks            int    `json:"num_banks"`
-	NumMSHREntry        int    `json:"num_mshr_entry"`
-	TotalByteSize       uint64 `json:"total_byte_size"`
-	DirLatency          int    `json:"dir_latency"`
-	WriteBufferCapacity int    `json:"write_buffer_capacity"`
-	MaxInflightFetch    int    `json:"max_inflight_fetch"`
-	MaxInflightEviction int    `json:"max_inflight_eviction"`
+	// NumBanks is the number of banks and must be positive.
+	NumBanks            int `json:"num_banks"`
+	NumMSHREntries      int `json:"num_mshr_entries"`
+	NumSets             int `json:"num_sets"`
+	DirLatency          int `json:"dir_latency"`
+	WriteBufferCapacity int `json:"write_buffer_capacity"`
+	MaxInflightFetch    int `json:"max_inflight_fetch"`
+	MaxInflightEviction int `json:"max_inflight_eviction"`
+	// Pipeline widths are entries per cycle. Internal output queues hold one
+	// cycle of their pipeline width; other stage queues use NumReqPerCycle.
+	DirectoryWidth int `json:"directory_width"`
+	BankWidth      int `json:"bank_width"`
 }
 
-// numSets returns the number of sets in the directory,
-// TotalByteSize / (WayAssociativity * 2^Log2BlockSize).
-func (s Spec) numSets() int {
-	blockSize := 1 << s.Log2BlockSize
-
-	return int(s.TotalByteSize / uint64(s.WayAssociativity*blockSize))
-}
-
-// numBanks returns the number of banks: NumBanks, or 1 if NumBanks is below 1.
-func (s Spec) numBanks() int {
-	if s.NumBanks < 1 {
-		return 1
-	}
-
-	return s.NumBanks
-}
-
-// laneWidth returns the width of the directory and bank pipelines:
-// NumReqPerCycle, widened to 2 when it is 1 so that a bank can always reserve
-// one lane for up-going transactions.
-func (s Spec) laneWidth() int {
-	if s.NumReqPerCycle == 1 {
-		return 2
-	}
-
-	return s.NumReqPerCycle
+// ByteSize reports the capacity implied by the configured geometry.
+// It is an observation, not a second configurable capacity.
+func (s Spec) ByteSize() uint64 {
+	return uint64(s.NumSets) * uint64(s.NumWays) * (uint64(1) << s.Log2BlockSize)
 }
 
 // Ports holds the writeback cache's ports.

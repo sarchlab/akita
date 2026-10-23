@@ -48,10 +48,10 @@ func TestDirectoryStage(t *testing.T) {
 		}
 
 		spec := stageTestSpec()
-		spec.NumMSHREntry = 16
+		spec.NumMSHREntries = 16
 		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 		comp := buildStageTestComp(sim, spec,
-			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			Resources{Storage: mem.NewStorage(spec.ByteSize())},
 			makePorts(sim, "Cache", 4))
 
 		m = comp.Middlewares.Pipeline

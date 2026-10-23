@@ -1,92 +1,55 @@
-# pcie — PCIe Root-Complex and Switch Interconnect
+# PCIe topology connector
 
-Package `pcie` provides a connector that builds a PCIe-style interconnect for
-the Akita simulation framework. Within `noc`, it constructs a tree of switches
-rooted at a root complex and moves messages between the CPU and attached
-devices over links sized to a chosen PCIe version.
-
-## How It Works
-
-A `Connector` builds the network from switches. One switch acts as the root
-complex (attached to the CPU ports); additional switches branch off existing
-switches to form a tree. Device ports plug into any switch.
-
-Link bandwidth is derived from the configured PCIe version and lane width: the
-per-lane transfer rate is multiplied by the width and divided by 8 to get
-bytes/second, which together with the network frequency determines the flit
-size (`bandwidth / freq`). Each switch adds a configurable forwarding latency.
-After the topology is built, routing tables are populated in a single pass.
-
-## Key Types
-
-### Connector
+`pcie` assembles a tree of ideal-connected switches. It does not implement PCIe
+link serialization or the PCIe protocol.
 
 ```go
-type Connector struct { /* ... */ }
-
-func MakeBuilder() Builder
-func (b Builder) Build(name string) *Connector
-func (c *Connector) AddRootComplex(cpuPorts []messaging.Port) (switchID int)
-func (c *Connector) AddSwitch(baseSwitchID int) (switchID int)
-func (c *Connector) PlugInDevice(baseSwitchID int, devicePorts []messaging.Port)
-```
-
-`AddRootComplex` creates the root switch and connects the CPU ports to it,
-returning its switch ID. `AddSwitch` adds a downstream switch linked to an
-existing one. `PlugInDevice` attaches device ports to a switch. Switch IDs
-returned by these calls are used to wire the tree together.
-
-## Builder Pattern
-
-`MakeBuilder` returns a value builder configured with chained `WithX` options.
-By default it runs at `1 GHz`, PCIe version 4 at width 16, and a switch latency
-of 140 cycles.
-
-```go
-connector := pcie.MakeBuilder().
-    WithSimulation(sim).
-    WithFreq(1 * timing.GHz).
-    WithVersion(4, 16).      // PCIe Gen4, x16 lanes
-    WithSwitchLatency(140). // cycles per switch hop
-    Build("PCIe")
-```
-
-### Builder Options
-
-| Method | Description |
-|---|---|
-| `WithSimulation(sim)` | Simulation context (required) |
-| `WithFreq(f)` | Frequency of the network interfaces |
-| `WithVersion(v, w)` | PCIe generation (1–5) and lane width; sets bandwidth |
-| `WithBandwidth(b)` | Set link bandwidth directly in bytes/second |
-| `WithSwitchLatency(n)` | Latency in cycles added at each switch |
-
-The connector builds its switches and endpoints with `WithSimulation(sim)`,
-so the simulation's tracer and monitor see each of them; the connector has
-no tracer or monitor option of its own.
-
-## Usage
-
-```go
-connector := pcie.MakeBuilder().
-    WithSimulation(sim).
-    WithFreq(1 * timing.GHz).
-    WithVersion(4, 16).
-    Build("PCIe")
-
-root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
+connector := pcie.MakeBuilder().WithSimulation(s).
+    WithFreq(timing.GHz).WithFlitSize(34).
+    WithInputWidth(1).WithOutputWidth(1).
+    WithSwitchLatency(140).Build("PCIe")
+root := connector.AddRootComplex(cpuPorts)
 sw := connector.AddSwitch(root)
-connector.PlugInDevice(sw, []messaging.Port{gpu.Ports.PCIe})
-
-if err := sim.Initialize(); err != nil { panic(err) }
+connector.ConnectDevice(sw, gpuPorts)
+if err := s.Initialize(); err != nil { panic(err) }
 ```
 
-After `simulation.Initialize()`, a message sent from the CPU port to a device port is
-routed down the switch tree to its destination, accumulating switch and link
-latency along the way.
+`AddRootComplex` creates a switch and attaches CPU ports. `AddSwitch(parent)`
+creates and connects a child switch. `ConnectDevice(switchID, ports)` attaches a
+device's ports through an endpoint. Switch IDs belong to their connector.
 
-All `WithX` methods belong to the value `Builder`. `Build(name)` returns a fresh
-`*Connector`; a builder can be reused for independent networks. Derived values
-are computed by `Build`, so setting frequency and bandwidth in either order
-produces the same configuration. Use the connector's assembly methods after
-Build, then call `simulation.Initialize()` after all wiring is complete.
+Defaults are 1 GHz, 34-byte flits, 140-cycle switch latency, width one,
+and one-flit network-owned port and internal switch queues. Port buffers were
+previously 16 flits; the smaller queues can change backpressure and timing. The unusual 34-byte default preserves the prior rounded flit
+size; it is not a PCIe hardware claim. `WithSwitchLatency(n)` sets switch
+processing latency in cycles and requires a nonnegative value.
+
+## Direct configuration
+
+These connectors model ideal direct links. Physical link bandwidth, propagation
+latency, lane count, and hardware-version presets are not modeled. A separate
+calculator may translate hardware targets into explicit configurations in a
+future release. Switch processing and buffering still constrain throughput.
+
+Builders use value receivers and `Build(name)` creates an independent network.
+All assembly must finish before `simulation.Initialize()`. Initialization computes
+and validates routes, freezes them, and initializes component state. There is no
+connector finalization call. Network wiring, port order, queue settings, and
+computed routes participate in checkpoint compatibility checks.
+
+| Builder option | Meaning |
+| --- | --- |
+| `WithSimulation(s)` | Owning simulation, required |
+| `WithFreq(f)` | Component and ideal-connection clock |
+| `WithFlitSize(n)` | Bytes per flit, independent of frequency |
+| `WithInputWidth(n)` | Flits admitted per input per cycle |
+| `WithOutputWidth(n)` | Flits ejected per output per cycle |
+
+Input/output widths must be positive and are configured separately. Changing
+frequency does not change flit size. Network-owned buffers are calculated:
+incoming port, route, and forward queues hold `InputWidth` flits; send and
+outgoing port queues hold `OutputWidth` flits. Endpoint network ports use the
+same rule. Device-facing ports remain caller-owned with their original sizes.
+Forwarding shares each output's width among contenders, limits each input to
+its input width, and rotates priority in binding order each cycle. Buffering is
+one cycle of capacity, not a guarantee of full throughput under contention.

@@ -18,7 +18,6 @@ func (r frozenRoutes) FindPort(dst messaging.RemotePort) messaging.RemotePort { 
 type connectionRecord struct {
 	Name        string
 	Left, Right messaging.RemotePort
-	Parameter   LinkParameter
 }
 
 func (c *Connector) initializeRoutes() error {
@@ -109,7 +108,7 @@ type switchRecord struct {
 type deviceRecord struct {
 	Name      string
 	Ports     []messaging.RemotePort
-	Parameter DeviceToSwitchLinkParameter
+	Parameter DeviceConfig
 }
 type networkRecord struct {
 	Switches    []switchRecord

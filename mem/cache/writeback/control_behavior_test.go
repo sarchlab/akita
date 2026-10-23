@@ -36,11 +36,14 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 
 	build := func() {
 		spec := DefaultSpec()
-		spec.TotalByteSize = 64 * 1024
+		spec.NumSets = 512
 		spec.NumBanks = 1
-		spec.NumMSHREntry = 16
+		spec.NumMSHREntries = 16
 		spec.NumReqPerCycle = 4
-		spec.WayAssociativity = 2
+
+		spec.DirectoryWidth = 4
+		spec.BankWidth = 4
+		spec.NumWays = 2
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1
@@ -123,7 +126,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 	// a later flush write-back can be identified by its payload. It returns
 	// the block's set ID so the test can inspect it after the verb.
 	residentDirtyBlock := func(addr uint64, fill byte) int {
-		setID := cache.DirectorySetID(addr, blockSize, comp.Spec.numSets())
+		setID := cache.DirectorySetID(addr, blockSize, comp.Spec.NumSets)
 		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = addr
 		block.PID = 0

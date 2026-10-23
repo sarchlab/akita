@@ -61,28 +61,19 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		WithFreq(freq).
 		WithFlitSize(16).Build("Network")
 
-	switchID := connector.AddSwitch()
+	switchID := connector.AddSwitch(nc.SwitchConfig{})
 
 	for _, agent := range agents {
 		connector.ConnectDevice(
 			switchID,
 			agent.AgentPorts,
-			nc.DeviceToSwitchLinkParameter{
+			nc.DeviceConfig{
 				DeviceEndParam: nc.LinkEndDeviceParameter{
-					IncomingBufSize:  2,
-					OutgoingBufSize:  2,
 					NumInputChannel:  4,
 					NumOutputChannel: 4,
 				},
-				SwitchEndParam: nc.LinkEndSwitchParameter{
-					IncomingBufSize:  2,
-					OutgoingBufSize:  2,
-					NumInputChannel:  4,
+				SwitchEndParam: nc.LinkEndSwitchParameter{NumInputChannel: 4,
 					NumOutputChannel: 4,
-				},
-				LinkParam: nc.LinkParameter{
-					IsIdeal:   true,
-					Frequency: freq,
 				},
 			})
 	}

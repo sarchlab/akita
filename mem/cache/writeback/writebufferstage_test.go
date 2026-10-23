@@ -54,7 +54,7 @@ func TestWriteBufferStage(t *testing.T) {
 		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 		comp := buildStageTestComp(sim, spec,
 			Resources{
-				Storage: mem.NewStorage(spec.TotalByteSize),
+				Storage: mem.NewStorage(spec.ByteSize()),
 			},
 			makePorts(sim, "Cache", 4))
 		bottomPort = comp.Ports.Bottom

@@ -21,7 +21,7 @@ type Spec struct {
 	NumWays        int         `json:"num_ways"`
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
-	MSHRSize       int         `json:"mshr_size"`
+	NumMSHREntries int         `json:"num_mshr_entries"`
 	Latency        int         `json:"latency"`
 }
 

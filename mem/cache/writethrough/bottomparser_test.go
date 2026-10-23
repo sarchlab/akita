@@ -46,14 +46,20 @@ func TestBottomParser(t *testing.T) {
 		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 		ports := makePorts(sim, "Cache", 4)
 		c = buildStageTestCache(sim,
-			Spec{Bottom: mem.AddressMapper{Destinations: []messaging.RemotePort{"Memory.Top"}},
-				Freq:             1 * timing.GHz,
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumMSHREntry:     4,
-				TotalByteSize:    4 * mem.KB,
-				NumBanks:         1,
-				WritePolicyType:  "write-around",
+			Spec{
+				NumReqPerCycle: 1,
+
+				DirectoryWidth: 1,
+				BankWidth:      1,
+				Bottom: mem.AddressMapper{
+					Destinations: []messaging.RemotePort{"Memory.Top"}},
+				Freq:            1 * timing.GHz,
+				Log2BlockSize:   6,
+				NumWays:         4,
+				NumMSHREntries:  4,
+				NumSets:         16,
+				NumBanks:        1,
+				WritePolicyType: "write-around",
 			},
 			Resources{Storage: mem.NewStorage(4 * mem.KB)},
 			ports,

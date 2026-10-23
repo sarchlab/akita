@@ -63,8 +63,12 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *admissionRecorde
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.MaxNumConcurrentTrans, spec.NumReqPerCycle = 1, 1
+
+	spec.DirectoryWidth = 1
+	spec.BankWidth = 1
+
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).
-		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).Build("Cache")
+		WithResources(Resources{Storage: mem.NewStorage(spec.ByteSize())}).Build("Cache")
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		p := twowaybuffered.MakeBuilder().
 			WithSimulation(sim).

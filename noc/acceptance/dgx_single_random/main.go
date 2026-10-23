@@ -54,7 +54,7 @@ func createNetwork(
 
 	connector := nvlink.MakeBuilder().
 		WithSimulation(s).
-		WithPCIeVersion(3, 16).Build("Network")
+		WithFlitSize(17).Build("Network")
 
 	deviceIDs := createPCIeNetwork(connector, agents)
 	createNVLinkNetwork(connector, deviceIDs)
@@ -88,8 +88,8 @@ func createPCIeNetwork(
 	agents []*acceptance.Agent,
 ) []int {
 	rootComplexID := connector.AddRootComplex(agents[0].AgentPorts)
-	switch1ID := connector.AddPCIeSwitch()
-	switch2ID := connector.AddPCIeSwitch()
+	switch1ID := connector.AddSwitch()
+	switch2ID := connector.AddSwitch()
 
 	connector.ConnectSwitchesWithPCIeLink(rootComplexID, switch1ID)
 	connector.ConnectSwitchesWithPCIeLink(rootComplexID, switch2ID)
@@ -97,12 +97,12 @@ func createPCIeNetwork(
 	deviceIDs := []int{0}
 
 	for i := 1; i < 5; i++ {
-		deviceID := connector.PlugInDevice(switch1ID, agents[i].AgentPorts)
+		deviceID := connector.ConnectDevice(switch1ID, agents[i].AgentPorts)
 		deviceIDs = append(deviceIDs, deviceID)
 	}
 
 	for i := 5; i < 9; i++ {
-		deviceID := connector.PlugInDevice(switch2ID, agents[i].AgentPorts)
+		deviceID := connector.ConnectDevice(switch2ID, agents[i].AgentPorts)
 		deviceIDs = append(deviceIDs, deviceID)
 	}
 
@@ -110,20 +110,20 @@ func createPCIeNetwork(
 }
 
 func createNVLinkNetwork(connector *nvlink.Connector, deviceIDs []int) {
-	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[2], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[3], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[3], deviceIDs[4], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[4], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[3], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[4], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[5], deviceIDs[6], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[7], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[7], deviceIDs[8], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[8], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[5], deviceIDs[7], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[8], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[6], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[5], 2)
-	connector.ConnectDevicesWithNVLink(deviceIDs[4], deviceIDs[8], 1)
-	connector.ConnectDevicesWithNVLink(deviceIDs[3], deviceIDs[7], 2)
+	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[2])
+	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[3])
+	connector.ConnectDevicesWithNVLink(deviceIDs[3], deviceIDs[4])
+	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[4])
+	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[3])
+	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[4])
+	connector.ConnectDevicesWithNVLink(deviceIDs[5], deviceIDs[6])
+	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[7])
+	connector.ConnectDevicesWithNVLink(deviceIDs[7], deviceIDs[8])
+	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[8])
+	connector.ConnectDevicesWithNVLink(deviceIDs[5], deviceIDs[7])
+	connector.ConnectDevicesWithNVLink(deviceIDs[6], deviceIDs[8])
+	connector.ConnectDevicesWithNVLink(deviceIDs[1], deviceIDs[6])
+	connector.ConnectDevicesWithNVLink(deviceIDs[2], deviceIDs[5])
+	connector.ConnectDevicesWithNVLink(deviceIDs[4], deviceIDs[8])
+	connector.ConnectDevicesWithNVLink(deviceIDs[3], deviceIDs[7])
 }

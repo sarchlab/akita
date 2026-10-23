@@ -26,7 +26,10 @@ func (s *state) Initialize(c *Comp) {
 		panic(fmt.Sprintf("%s: switches: %d ports but %d link settings", c.Name(), len(ports), len(links)))
 	}
 	for i, link := range links {
-		if link.Remote == "" || link.Latency < 0 || link.NumInputChannel <= 0 || link.NumOutputChannel <= 0 {
+		if link.Remote == "" ||
+			link.Latency < 0 ||
+			link.NumInputChannel <= 0 ||
+			link.NumOutputChannel <= 0 {
 			panic(fmt.Sprintf("%s: switches: invalid link %d", c.Name(), i))
 		}
 	}

@@ -51,7 +51,7 @@ are tracked by the shared `mshr` package.
 spec := tlb.DefaultSpec()
 spec.NumSets = 64
 spec.NumWays = 4
-spec.MSHRSize = 8
+spec.NumMSHREntries = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"MMU.Top"}
 
 t := modeling.MakeBuilder[*tlb.Comp](spec).
@@ -89,3 +89,11 @@ middlewares and freezes the topology.
 - **Bottom**: forwards `vmprotocol.TranslationReq` on a miss, receives `vmprotocol.TranslationRsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
   and returns `memcontrolprotocol.Rsp` for flush and reset.
+
+## Processing width and internal buffering
+
+`NumReqPerCycle` sets lookup/pipeline width and the calculated output queue
+capacity; the default is four and the width must be positive. The output queue
+has no public capacity override. `NumSets` and `NumWays` specify TLB geometry;
+`NumMSHREntries` independently sets the capacity for outstanding translation
+misses.

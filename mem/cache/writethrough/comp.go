@@ -19,17 +19,21 @@ type Spec struct {
 	NumReqPerCycle        int         `json:"num_req_per_cycle"`
 	Log2BlockSize         uint64      `json:"log2_block_size"`
 	BankLatency           int         `json:"bank_latency"`
-	WayAssociativity      int         `json:"way_associativity"`
+	NumWays               int         `json:"num_ways"`
 	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
 	NumBanks              int         `json:"num_banks"`
-	NumMSHREntry          int         `json:"num_mshr_entry"`
-	TotalByteSize         uint64      `json:"total_byte_size"`
+	NumMSHREntries        int         `json:"num_mshr_entries"`
+	NumSets               int         `json:"num_sets"`
 	DirLatency            int         `json:"dir_latency"`
 
 	// WritePolicyType selects the write-policy strategy.
 	// Valid values: "write-around" (default, also used when empty),
 	// "write-evict", "write-through".
 	WritePolicyType string `json:"write_policy_type"`
+	// Pipeline widths are entries per cycle. Internal output queues hold one
+	// cycle of their pipeline width; other stage queues use NumReqPerCycle.
+	DirectoryWidth int `json:"directory_width"`
+	BankWidth      int `json:"bank_width"`
 }
 
 // blockSize returns the size of a cache line, 2^Log2BlockSize bytes.
@@ -37,10 +41,10 @@ func (s Spec) blockSize() int {
 	return 1 << s.Log2BlockSize
 }
 
-// numSets returns the number of sets in the directory,
-// TotalByteSize / (WayAssociativity * 2^Log2BlockSize).
-func (s Spec) numSets() int {
-	return int(s.TotalByteSize / uint64(s.WayAssociativity*s.blockSize()))
+// ByteSize reports the capacity implied by the configured geometry.
+// It is an observation, not a second configurable capacity.
+func (s Spec) ByteSize() uint64 {
+	return uint64(s.NumSets) * uint64(s.NumWays) * (uint64(1) << s.Log2BlockSize)
 }
 
 // writePolicy returns the write policy, WritePolicyType, or "write-around" if

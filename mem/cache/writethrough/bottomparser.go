@@ -230,7 +230,7 @@ func (p *bottomParser) getBankBuf(
 	setID, wayID int,
 ) *queueing.Buffer[int] {
 	next := &p.cache.comp.State
-	numWaysPerSet := p.cache.comp.Spec.WayAssociativity
+	numWaysPerSet := p.cache.comp.Spec.NumWays
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

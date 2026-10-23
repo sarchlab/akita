@@ -1,90 +1,55 @@
-# networkconnector — Topology Assembly and Routing
+# Generic ideal-network connector
 
-Package `networkconnector` provides a connector that wires switches, endpoints,
-and links into an arbitrary network topology for the Akita simulation framework.
-Within the `noc` networking stack it is the assembly layer: it builds the
-`switches` and `endpoint` components, connects them with links, and computes the
-`routing` tables. The higher-level mesh, PCIe, and NVLink builders are thin
-wrappers that drive a `Connector` to lay out their specific topologies.
-
-## Key Types
-
-### Connector
-
-`Builder` configures a new `*Connector`. Its configuration methods return a copy;
-`Build(name)` allocates independent assembly state. The connector accumulates
-switches and devices and then establishes routes:
+`networkconnector` assembles endpoints, switches, and ideal direct connections.
+Device ports must be `*twowaybuffered.Port`. Physical transport bandwidth and
+latency are not modeled; switch processing widths, latency, and buffering are.
 
 ```go
-conn := networkconnector.MakeBuilder().
-    WithSimulation(sim).
-    WithFreq(1 * timing.GHz).
-    WithFlitSize(64).
-    WithRouter(networkconnector.FloydWarshallRouter{}).
-    Build("Network")
+network := networkconnector.MakeBuilder().WithSimulation(s).
+    WithFreq(timing.GHz).WithFlitSize(64).Build("Network")
+sw := network.AddSwitch(networkconnector.SwitchConfig{Name: "Switch"})
+network.ConnectDevice(sw, devicePorts, networkconnector.DeviceConfig{
+    Name: "GPU0",
+    DeviceEndParam: networkconnector.LinkEndDeviceParameter{
+        NumInputChannel: 1, NumOutputChannel: 1,
+    },
+    SwitchEndParam: networkconnector.LinkEndSwitchParameter{
+        NumInputChannel: 1, NumOutputChannel: 1, Latency: 2,
+    },
+})
+if err := s.Initialize(); err != nil { panic(err) }
 ```
 
-Topology methods:
+`AddSwitch(SwitchConfig)` accepts an optional name and `*routing.Table`.
+An empty name is generated; a nil table creates an independent table.
+`ConnectDevice(switchID, ports, DeviceConfig)` accepts an optional endpoint name.
+Repeated explicit names append ports only when switch and configuration match.
+`ConnectSwitches(a, b, SwitchToSwitchLinkParameter)` takes a separate
+`LinkEndSwitchParameter` for each end. No operation returns internal ports.
 
-- `AddSwitch()` / `AddSwitchWithName(name)` — add a switch, returns its ID.
-- `ConnectDevice(switchID, ports, param)` — create an endpoint for the device's
-  ports and link it to a switch.
-- `ConnectSwitches(leftID, rightID, param)` — add a bidirectional switch link.
-- `ConnectDeviceWithEPName(name, switchID, ports, param)` — create a named
-  endpoint, or append ports to it when the switch and parameters match.
+`NumInputChannel` and `NumOutputChannel` are positive flits-per-cycle limits.
+`Latency` is nonnegative processing latency inside the receiving switch.
+Network-owned incoming ports, route queues, and forward queues each hold
+`NumInputChannel` flits. Send queues and outgoing ports hold `NumOutputChannel`
+flits. Endpoint network ports follow the same input/output rule. Device ports
+supplied by the caller retain their own capacities. The topology wrappers
+provide width defaults; hand-written end parameters must specify both widths.
 
-Call `simulation.Initialize()` after all platform wiring. There is no separate
-connector finalization call, address prediction, or returned internal switch port.
+## Routing and lifecycle
 
-Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
-and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel
-counts, latency, and link frequency. Only ideal (zero-latency `direct.Connection`)
-links are implemented; non-ideal links panic.
+`WithRouter` retains the public setup-router extension. `FloydWarshallRouter`
+selects fewest-hop routes by default. Use `WithRouter(nil)` with supplied routing
+tables to keep manually defined routes. A non-nil router runs at initialization
+and may populate the supplied tables. `Node`, `Remote`, and the concrete
+`routing.Table` remain public. There is no bandwidth-first router or
+`Remote.Bandwidth` method for the ideal-only model.
 
-### Node, Remote, Router
+All connect calls precede `s.Initialize()`. It derives routes from bound ports,
+rejects disconnected networks, unreachable destinations, and routing loops, and
+copies routes for runtime use. Changing source tables after initialization does
+not change runtime routing. Endpoint/switch implementation packages are internal.
 
-`Node` abstracts a switch or endpoint, exposing `ListRemotes()`, `Table()`, and
-`Name()`. A `Remote` records one directed link (local/remote node, ports, and
-the `messaging.Connection`). A `Router` computes routes over the node list:
-
-```go
-type Router interface {
-    EstablishRoute(nodes []Node)
-}
-```
-
-Two implementations are provided: `FloydWarshallRouter` (fewest hops, the
-default) and `BandwidthFirstRouter` (maximizes the minimum link bandwidth along
-a path). Both run Floyd–Warshall and then call `DefineRoute` on each switch's
-table for every reachable device port.
-
-## How It Works
-
-`AddSwitch` builds a switch immediately. Connect calls bind both port owners and
-attach both ends of the connection. Indexed port groups grow until Initialize.
-The network's shared topology resource computes routes during setup validation
-from actual bound addresses. It returns errors for disconnected networks, invalid
-next hops, and forwarding loops before any component initializes runtime state.
-Accessing wiring during assembly does not compute or cache routes.
-
-Custom `Router` implementations use the concrete `routing.Table` type. Changing
-tables after Initialize is not supported. Switch arbitration uses port binding
-order; the routing interface does not configure arbitration priority.
-
-`ConnectDeviceWithEPName` may be called repeatedly with the same endpoint name,
-switch, and parameters. Each call appends device ports in call order to the existing
-endpoint. Reusing the name with a different switch or parameters is rejected.
-
-One network topology record validates wiring, port/device order, link settings,
-and computed routes on checkpoint restore, without depending on Go policy type
-names. Endpoint peers are explicitly supplied through Resources. Direct networks
-built without a connector register their own topology record (see `one_to_one`).
-Runtime route mutation and non-ideal link transport are deferred.
-
-## Supported ports and links
-
-The connector creates `twowaybuffered.Port` instances directly and uses only
-`direct.Connection` links. There is no configurable port factory. Device ports
-must be `*twowaybuffered.Port`; endpoint construction rejects other implementations
-before attaching device ports. Component port fields remain `messaging.Port`.
-Wire ports and non-ideal links are outside this connector's current support.
+A network-owned checkpoint record fingerprints wiring, binding order, queue
+settings, and computed routes. Runtime switch queues are checkpointed separately.
+Reusing a builder creates independent networks. No explicit finalization or reset
+method exists. Wire ports and non-ideal links remain unsupported.

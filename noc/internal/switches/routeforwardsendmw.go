@@ -88,17 +88,17 @@ func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst messaging.RemotePort) in
 
 func (m *routeForwardSendMW) forward() (madeProgress bool) {
 	state := &m.comp.State
-	occupiedOutputPort := make([]bool, len(m.ports()))
+	sentToOutput := make([]int, len(m.ports()))
 
 	for offset := 0; offset < len(m.ports()); offset++ {
 		i := (state.NextArbPort + offset) % len(m.ports())
 		pcs := &state.PortComplexes[i]
 
-		for pcs.ForwardBuffer.Size() > 0 {
+		for n := 0; n < pcs.NumInputChannel && pcs.ForwardBuffer.Size() > 0; n++ {
 			item, _ := pcs.ForwardBuffer.Peek()
 			outIdx := item.OutputBufIdx
 
-			if occupiedOutputPort[outIdx] {
+			if sentToOutput[outIdx] >= state.PortComplexes[outIdx].NumOutputChannel {
 				break
 			}
 
@@ -123,7 +123,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 				})
 			}
 
-			occupiedOutputPort[outIdx] = true
+			sentToOutput[outIdx]++
 			madeProgress = true
 		}
 	}

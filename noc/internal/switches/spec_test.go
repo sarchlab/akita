@@ -19,10 +19,12 @@ func (w *fixtureWiring) Routes() switches.RoutingTable { return nil }
 
 func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 	s := sim.MakeBuilder().Build()
-	wiring := &fixtureWiring{links: []switches.Link{{Remote: "Peer.Top",
-		Latency:          2,
-		NumInputChannel:  1,
-		NumOutputChannel: 1}}}
+	wiring := &fixtureWiring{
+		links: []switches.Link{{
+			Remote:           "Peer.Top",
+			Latency:          2,
+			NumInputChannel:  1,
+			NumOutputChannel: 1}}}
 	sw := modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).WithSimulation(s).
 		WithResources(switches.Resources{Wiring: wiring}).Build("Switch")
 	require.Empty(t, sw.State.PortComplexes)
@@ -43,10 +45,12 @@ func TestLinkConfigurationAndBindingValidation(t *testing.T) {
 func TestInvalidLinkRejectedAtInitialization(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	port := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
-	wiring := &fixtureWiring{links: []switches.Link{{Remote: "Peer.Top",
-		Latency:          -1,
-		NumInputChannel:  1,
-		NumOutputChannel: 1}}}
+	wiring := &fixtureWiring{
+		links: []switches.Link{{
+			Remote:           "Peer.Top",
+			Latency:          -1,
+			NumInputChannel:  1,
+			NumOutputChannel: 1}}}
 	sw := modeling.MakeBuilder[*switches.Comp](switches.DefaultSpec()).WithSimulation(s).
 		WithResources(switches.Resources{Wiring: wiring}).Build("Switch")
 	sw.BindPort("Links[0]", port)

@@ -56,10 +56,10 @@ type Spec struct {
     Log2BlockSize       uint64      // Cache line size = 1 << Log2BlockSize
     BankLatency         int         // Cycles per bank read/write
     DirLatency          int         // Cycles for directory lookup
-    WayAssociativity    int         // Ways per set
-    NumBanks            int         // Number of banks (below 1 means 1)
-    NumMSHREntry        int         // MSHR capacity
-    TotalByteSize       uint64      // Total cache storage in bytes
+    NumWays    int         // Ways per set
+    NumBanks            int         // Positive number of banks
+    NumMSHREntries        int         // MSHR capacity
+    NumSets             int         // Number of sets in the directory
     WriteBufferCapacity int         // Max lines in the write buffer
     MaxInflightFetch    int         // Concurrent fetches to lower memory
     MaxInflightEviction int         // Concurrent evictions to lower memory
@@ -69,9 +69,8 @@ type Spec struct {
 }
 ```
 
-The number of sets is not configured directly: it is
-`TotalByteSize / (WayAssociativity * 2^Log2BlockSize)`, and equals
-`len(comp.State.DirectoryState.Sets)` on a built cache.
+The directory has `NumSets` sets. Its byte capacity is
+`NumSets * NumWays * (1 << Log2BlockSize)`, available as `Spec.ByteSize()`.
 
 ## Builder Pattern
 
@@ -82,16 +81,16 @@ only), and `component.BindPort` after Build (the port instances).
 
 ```go
 spec := writeback.DefaultSpec()
-spec.TotalByteSize = 64 * mem.KB
-spec.WayAssociativity = 4
+spec.NumSets = 256 // 64 KiB with four ways and 64-byte lines
+spec.NumWays = 4
 spec.Log2BlockSize = 6 // 64-byte lines
-spec.NumMSHREntry = 16
+spec.NumMSHREntries = 16
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := modeling.MakeBuilder[*writeback.Comp](spec).
     WithSimulation(sim).
     WithResources(writeback.Resources{
-        Storage:             mem.NewStorage(spec.TotalByteSize),
+        Storage:             mem.NewStorage(spec.ByteSize()),
     }).
     Build("L1Cache")
 cache.BindPort("Top", twowaybuffered.MakeBuilder().
@@ -118,7 +117,7 @@ topPort := cache.Ports.Top
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
 `Initialize` panics if `Resources.Storage` is nil; the cache no longer creates a
-default storage. Size the storage to hold at least `Spec.TotalByteSize` bytes.
+default storage. Size the storage to hold at least `Spec.ByteSize()` bytes.
 
 ### Default Configuration
 
@@ -160,3 +159,22 @@ middlewares and freezes the topology.
   lower-level memory.
 - **Control**: accepts `memcontrolprotocol.Req` for pause/drain/enable/reset/
   invalidate/flush operations, returns `memcontrolprotocol.Rsp`.
+
+## Processing widths and internal buffering
+
+`NumReqPerCycle` controls stage dispatch. `DirectoryWidth` and `BankWidth`
+control pipeline admission width, in entries per cycle. Internal request queues
+use `NumReqPerCycle`; the directory output queue uses `DirectoryWidth`, and each
+bank output queue uses `BankWidth`. Queue sizes are calculated at initialization
+and have no public override. These sizes hold one processing batch and may
+stall under contention. Geometry and widths must be positive; pipeline latencies
+must be nonnegative.
+
+`NumSets` and `NumWays` define geometry. `NumMSHREntries` remains the public
+capacity for outstanding cache-line misses; it is separate from the internal
+MSHR work queue.
+
+`WriteBufferCapacity` remains the public capacity for buffered cache lines.
+`BankWidth` must be at least two: the existing bank admission policy reserves
+an upward lane. Defaults are request width one and directory/bank width two;
+the directory output queue now holds two entries instead of one.

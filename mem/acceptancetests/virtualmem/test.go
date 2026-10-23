@@ -140,15 +140,17 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
 
 	l2Spec := writeback.DefaultSpec()
-	l2Spec.WayAssociativity = 4
+	l2Spec.NumWays = 4
 	l2Spec.NumReqPerCycle = 2
 
+	l2Spec.DirectoryWidth = 2
+	l2Spec.BankWidth = 2
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
 		memCtrl.Ports.Top.AsRemote(),
 	}
 	L2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
 		WithSimulation(s).
-		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
+		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.ByteSize(), "L2Cache.Storage")}).
 		Build("L2Cache")
 
 	L2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
@@ -157,14 +159,15 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
-	l1Spec.WayAssociativity = 2
+	l1Spec.NumWays = 2
+	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
 		L2Cache.Ports.Top.AsRemote(),
 	}
 	L1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
 		WithSimulation(s).
-		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage")}).
+		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.ByteSize(), "L1Cache.Storage")}).
 		Build("L1Cache")
 
 	L1Cache.BindPort("Top", newPort(s, "L1Cache.Top"))

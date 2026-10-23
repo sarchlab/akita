@@ -10,7 +10,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/naming"
-	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,20 +34,15 @@ func (s *lateResources) initialize() error {
 	}
 	return s.Initialize()
 }
-func topologyParameters() (DeviceToSwitchLinkParameter, SwitchToSwitchLinkParameter) {
-	end := LinkEndSwitchParameter{IncomingBufSize: 2,
-		OutgoingBufSize:  2,
+func topologyParameters() (DeviceConfig, SwitchToSwitchLinkParameter) {
+	end := LinkEndSwitchParameter{
 		NumInputChannel:  1,
 		NumOutputChannel: 1,
 		Latency:          2}
-	link := LinkParameter{IsIdeal: true, Frequency: timing.GHz}
-	return DeviceToSwitchLinkParameter{DeviceEndParam: LinkEndDeviceParameter{IncomingBufSize: 2,
-			OutgoingBufSize:  2,
-			NumInputChannel:  1,
+	return DeviceConfig{DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1,
 			NumOutputChannel: 1},
-			SwitchEndParam: end,
-			LinkParam:      link},
-		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end, LinkParam: link}
+			SwitchEndParam: end},
+		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
 }
 func topologyPort(s modeling.Simulation, name string) messaging.Port {
 	p := twowaybuffered.MakeBuilder().
@@ -70,7 +64,7 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			}
 			router := &countingRouter{}
 			c := MakeBuilder().WithSimulation(service).WithRouter(router).Build("Network")
-			a, b := c.AddSwitch(), c.AddSwitch()
+			a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 			dp, sp := topologyParameters()
 			src, dst := topologyPort(service, "Source.Port"), topologyPort(service, "Target.Port")
 			c.ConnectDevice(a, []messaging.Port{src}, dp)
@@ -97,7 +91,7 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			c.switches[a].table.DefineRoute(dst.AsRemote(), "NotABoundPort")
 			require.Equal(t, output, c.switches[a].Routes().FindPort(dst.AsRemote()))
 			require.Equal(t, 1, router.calls)
-			require.Panics(t, func() { c.AddSwitch() })
+			require.Panics(t, func() { c.AddSwitch(SwitchConfig{}) })
 			require.Panics(t, func() { c.ConnectSwitches(a, b, sp) })
 			require.Panics(t, func() { c.ConnectDevice(a, nil, dp) })
 			require.Len(t, c.switches, 2)
@@ -130,7 +124,7 @@ func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, r
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).WithRouter(router).Build("Network")
 	for range 4 {
-		c.AddSwitch()
+		c.AddSwitch(SwitchConfig{})
 	}
 	dp, sp := topologyParameters()
 	sp.LeftEndParam.Latency = latency
@@ -209,7 +203,7 @@ func TestInvalidTopologyFailsBeforeRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := sim.MakeBuilder().Build()
 			c := MakeBuilder().WithSimulation(s).WithRouter(tc.router).Build("Network")
-			a, b := c.AddSwitch(), c.AddSwitch()
+			a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 			dp, sp := topologyParameters()
 			c.ConnectDevice(a, []messaging.Port{topologyPort(s, "Source.Port")}, dp)
 			c.ConnectDevice(b, []messaging.Port{topologyPort(s, "Target.Port")}, dp)
@@ -236,7 +230,7 @@ func (invalidHopRouter) EstablishRoute(nodes []Node) {
 func TestValidationCanBeRetriedAfterCompletingWiring(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).Build("Network")
-	a, b := c.AddSwitch(), c.AddSwitch()
+	a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 	dp, sp := topologyParameters()
 	c.ConnectDevice(a, []messaging.Port{topologyPort(s, "Source.Port")}, dp)
 	c.ConnectDevice(b, []messaging.Port{topologyPort(s, "Target.Port")}, dp)
@@ -248,13 +242,14 @@ func TestValidationCanBeRetriedAfterCompletingWiring(t *testing.T) {
 	t.Log("Disconnected wiring returns an error; completing wiring and retrying Initialize computes valid routes")
 }
 
-func TestSwitchUsesIndependentBufferSizes(t *testing.T) {
+func TestSwitchUsesCalculatedAsymmetricBufferSizes(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).Build("Network")
-	a, b := c.AddSwitch(), c.AddSwitch()
+	a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 	_, sp := topologyParameters()
-	sp.LeftEndParam.IncomingBufSize = 3
-	sp.LeftEndParam.OutgoingBufSize = 1
+	sp.LeftEndParam.NumInputChannel = 3
+	sp.LeftEndParam.NumOutputChannel = 1
+
 	c.ConnectSwitches(a, b, sp)
 	require.NoError(t, s.Initialize())
 	p := c.switches[a].ports[0]
@@ -272,11 +267,12 @@ func TestSwitchUsesIndependentBufferSizes(t *testing.T) {
 func TestRepeatedEndpointRequiresMatchingConfiguration(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).Build("Network")
-	a, b := c.AddSwitch(), c.AddSwitch()
+	a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 	dp, _ := topologyParameters()
-	c.ConnectDeviceWithEPName("EP", a, nil, dp)
-	require.Panics(t, func() { c.ConnectDeviceWithEPName("EP", b, nil, dp) })
+	dp.Name = "EP"
+	c.ConnectDevice(a, nil, dp)
+	require.Panics(t, func() { c.ConnectDevice(b, nil, dp) })
 	dp.SwitchEndParam.Latency++
-	require.Panics(t, func() { c.ConnectDeviceWithEPName("EP", a, nil, dp) })
+	require.Panics(t, func() { c.ConnectDevice(a, nil, dp) })
 	require.Len(t, c.devices, 1)
 }

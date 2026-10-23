@@ -112,7 +112,7 @@ func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.numSets(), int(blockSize),
+		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.processReadHit(trans, setID, wayID, transIdx)
@@ -195,13 +195,13 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 
@@ -247,7 +247,7 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.numSets(), int(blockSize),
+		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.handleWriteHit(trans, setID, wayID, transIdx)
@@ -334,7 +334,7 @@ func (d *directory) fetchFromBottom(
 	trans.HasBlock = true
 
 	entryIdx := cache.MSHRAdd(
-		&next.MSHRState, spec.NumMSHREntry, pid, cacheLineID)
+		&next.MSHRState, spec.NumMSHREntries, pid, cacheLineID)
 	entry := &next.MSHRState.Entries[entryIdx]
 	entry.TransactionIndices = append(entry.TransactionIndices,
 		transIdx)
@@ -356,7 +356,7 @@ func (d *directory) fetchFromBottom(
 
 func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
 	next := &d.cache.comp.State
-	numWaysPerSet := d.cache.comp.Spec.WayAssociativity
+	numWaysPerSet := d.cache.comp.Spec.NumWays
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

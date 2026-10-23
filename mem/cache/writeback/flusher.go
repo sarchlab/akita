@@ -116,7 +116,7 @@ func (f *flusher) processFlush() bool {
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
-		spec.WayAssociativity,
+		spec.NumWays,
 		len(next.DirToBankBufs))
 	bankBuf := &next.DirToBankBufs[bankNum]
 

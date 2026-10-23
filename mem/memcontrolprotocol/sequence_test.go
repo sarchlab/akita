@@ -388,11 +388,14 @@ func buildWritebackForSequence(
 	storage := mem.NewStorage(1 * mem.MB)
 
 	spec := writeback.DefaultSpec()
-	spec.TotalByteSize = 64 * 1024
+	spec.NumSets = 512
 	spec.NumBanks = 1
-	spec.NumMSHREntry = 16
+	spec.NumMSHREntries = 16
 	spec.NumReqPerCycle = 4
-	spec.WayAssociativity = 2
+
+	spec.DirectoryWidth = 4
+	spec.BankWidth = 4
+	spec.NumWays = 2
 	spec.Log2BlockSize = 6
 	spec.BankLatency = 1
 	spec.DirLatency = 1

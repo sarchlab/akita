@@ -1,5 +1,27 @@
 # V5 release notes
 
+## Direct configuration for ideal networks, caches, and TLBs
+
+NoC construction now uses one generic switch-creation and device-connection
+method with concrete configurations. Unsupported non-ideal link settings and
+bandwidth/version presets are removed. Flit size and input/output widths remain
+separate direct settings. Internal queues and network-owned ports derive their
+capacities from the corresponding widths; caller-owned device ports keep their
+sizes. Forwarding now honors multi-flit input/output budgets with rotating
+priority. PCIe/NVLink default port depths change from 16 to 1 at width one.
+NVLink uses fewest-hop routing. These changes can alter contention and timing;
+custom setup routing remains public.
+
+Caches use explicit set counts and directory/bank pipeline widths. Cache request
+queues use request width; directory/bank output queues use their pipeline widths.
+TLB output depth equals lookup width. Both caches and the TLB use `NumSets`,
+`NumWays`, and `NumMSHREntries`. Architectural MSHR and write-buffer capacities
+remain public; internal queue capacities are not configuration fields. The
+writeback bank retains its reserved upward lane; its default directory output
+queue grows from one to two entries. DRAM calculations and presets are unchanged.
+See the migration guide; these pre-v5 Spec/topology changes require rebuilding
+old checkpoints.
+
 ## CLI shell and retired legacy implementations
 
 The `akita` executable, installation path, and help remain available.
@@ -40,9 +62,9 @@ The standalone DGX acceptance programs no longer start profiling HTTP servers.
 The `one_to_one` acceptance program drops its unused checkpoint topology helper;
 its message-delivery scenario remains unchanged.
 
-Custom setup routers, public cache/MSHR/LRU helpers, `mmuCache`/`TransLatency`,
-and link timing/bandwidth settings remain. MMU-cache correctness fixes and DRAM
-configuration work are deferred; non-ideal links remain #502/#542 work.
+Custom setup routers, public cache/MSHR/LRU helpers, and `mmuCache`/`TransLatency`
+remain. MMU-cache correctness fixes and DRAM
+configuration work are deferred; non-ideal links are deferred beyond this ideal-only API.
 
 ## Engine pause API
 
@@ -302,8 +324,9 @@ transport and mutable/adaptive runtime routing are deferred.
 Mesh switch arbitration now uses deterministic port binding order. Under
 contention, arbitration order and simulated timing can differ from v4 and depend
 on assembly order. No public routing hook configures arbitration priority.
-Switch incoming buffers now use `IncomingBufSize` rather than `OutgoingBufSize`,
-so asymmetric buffer configurations can also change results. `routing.Table` is
+Network-owned incoming and outgoing buffers now follow their respective
+processing widths, and forwarding supports multiple flits per output per cycle.
+The smaller PCIe/NVLink default queues can also change results. `routing.Table` is
 a concrete type; custom setup routers remain supported. Checkpoint fingerprints
 record computed routes rather than Go router/table type names.
 

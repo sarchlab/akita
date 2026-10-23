@@ -81,17 +81,19 @@ func buildEnvironment(
 	dram := buildDRAM(s)
 
 	cacheSpec := writeback.DefaultSpec()
-	cacheSpec.TotalByteSize = 16 * mem.KB
+	cacheSpec.NumSets = 64
 	cacheSpec.Log2BlockSize = 6
-	cacheSpec.WayAssociativity = 4
-	cacheSpec.NumMSHREntry = 4
+	cacheSpec.NumWays = 4
+	cacheSpec.NumMSHREntries = 4
 	cacheSpec.NumReqPerCycle = 16
 
+	cacheSpec.DirectoryWidth = 16
+	cacheSpec.BankWidth = 16
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}
 	writeBackCache := modeling.MakeBuilder[*writeback.Comp](cacheSpec).
 		WithSimulation(s).
 		WithResources(writeback.Resources{Storage: mem.MakeStorageBuilder().
-			WithCapacity(cacheSpec.TotalByteSize).
+			WithCapacity(cacheSpec.ByteSize()).
 			WithSimulation(s).
 			Build("Cache.Storage")}).
 		Build("Cache")

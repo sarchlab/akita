@@ -16,13 +16,15 @@ func DefaultSpec() Spec {
 		NumReqPerCycle:        4,
 		Log2BlockSize:         6,
 		BankLatency:           20,
-		WayAssociativity:      4,
+		NumWays:               4,
 		MaxNumConcurrentTrans: 16,
 		NumBanks:              1,
-		NumMSHREntry:          4,
-		TotalByteSize:         4 * mem.KB,
+		NumMSHREntries:        4,
+		NumSets:               16,
 		DirLatency:            2,
 		WritePolicyType:       "write-around",
+		DirectoryWidth:        4,
+		BankWidth:             4,
 		Bottom:                mem.AddressMapper{InterleavingSize: 4096},
 	}
 }
@@ -44,13 +46,13 @@ func (s *state) Initialize(c *Comp) {
 	bankPipelines := make([]queueing.Pipeline[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
 		bankPipelines[i] = queueing.MakePipeline[int](
-			spec.NumReqPerCycle,
+			spec.BankWidth,
 			spec.BankLatency)
 	}
 
 	bankPostBufs := make([]queueing.Buffer[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankPostBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
+		bankPostBufs[i] = queueing.MakeBuffer[int](spec.BankWidth)
 	}
 
 	initial := state{
@@ -58,17 +60,17 @@ func (s *state) Initialize(c *Comp) {
 
 		BankBufs: bankBufs,
 		DirPipeline: queueing.MakePipeline[int](
-			spec.NumReqPerCycle,
+			spec.DirectoryWidth,
 			spec.DirLatency),
 
-		DirPostBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
+		DirPostBuf: queueing.MakeBuffer[int](spec.DirectoryWidth),
 
 		BankPipelines: bankPipelines,
 		BankPostBufs:  bankPostBufs,
 	}
 
 	cache.DirectoryReset(
-		&initial.DirectoryState, spec.numSets(), spec.WayAssociativity,
+		&initial.DirectoryState, spec.NumSets, spec.NumWays,
 		spec.blockSize())
 
 	*s = initial
@@ -90,5 +92,18 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
+	if spec.NumSets <= 0 || spec.NumWays <= 0 || spec.Log2BlockSize >= 63 {
+		return fmt.Errorf("cache geometry must have positive sets and ways and a block exponent below 63")
+	}
+	if uint64(spec.NumSets) > (^uint64(0)>>spec.Log2BlockSize)/uint64(spec.NumWays) {
+		return fmt.Errorf("cache byte size overflows uint64")
+	}
+	if spec.NumBanks <= 0 || spec.NumReqPerCycle <= 0 || spec.BankLatency < 0 || spec.DirLatency < 0 {
+		return fmt.Errorf("cache banks and request width must be positive and latencies nonnegative")
+	}
+	if spec.DirectoryWidth <= 0 || spec.BankWidth <= 0 {
+		return fmt.Errorf("pipeline widths must be positive")
+	}
+
 	return spec.Bottom.Validate()
 }

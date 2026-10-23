@@ -15,7 +15,7 @@ func DefaultSpec() Spec {
 		NumSets:        1,
 		NumWays:        32,
 		Log2PageSize:   12,
-		MSHRSize:       4,
+		NumMSHREntries: 4,
 		Latency:        4,
 	}
 }
@@ -46,5 +46,8 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
+	if spec.NumReqPerCycle <= 0 {
+		return fmt.Errorf("TLB processing width must be positive")
+	}
 	return spec.Bottom.Validate()
 }

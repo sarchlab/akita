@@ -20,7 +20,7 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 	spec.Bottom.Destinations = []messaging.RemotePort{"DRAM0", "DRAM1"}
 	comp := modeling.MakeBuilder[*Comp](spec).
 		WithSimulation(setupSim1).
-		WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
+		WithResources(Resources{Storage: mem.NewStorage(spec.ByteSize())}).
 		Build("Cache")
 	compPorts := makePorts(setupSim1, "Cache", 4)
 	comp.BindPort("Top", compPorts.Top)

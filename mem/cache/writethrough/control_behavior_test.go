@@ -42,13 +42,16 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 	build := func() {
 		spec := DefaultSpec()
 		spec.NumReqPerCycle = 1
+
+		spec.DirectoryWidth = 1
+		spec.BankWidth = 1
 		spec.NumBanks = 1
-		spec.NumMSHREntry = 8
-		spec.WayAssociativity = 2
+		spec.NumMSHREntries = 8
+		spec.NumWays = 2
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1
-		spec.TotalByteSize = 64 * 1024
+		spec.NumSets = 512
 		spec.MaxNumConcurrentTrans = 16
 
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
@@ -133,7 +136,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		ds := &comp.State.DirectoryState
 		cacheLineID := addr / blockSize * blockSize
 		setID, _, _ := cache.DirectoryLookup(
-			ds, comp.Spec.numSets(), int(blockSize), pid, cacheLineID)
+			ds, comp.Spec.NumSets, int(blockSize), pid, cacheLineID)
 		wayID := 0
 		block := &ds.Sets[setID].Blocks[wayID]
 		block.IsValid = true

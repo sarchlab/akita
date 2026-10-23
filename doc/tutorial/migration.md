@@ -106,9 +106,9 @@ monitoring output.
 Remove connector `EstablishRoute()` / `EstablishNetwork()` calls: assembly calls
 now finish wiring, and `simulation.Initialize()` computes and validates routing.
 `BuildSwitches`, `PortAddress`, `routing.Route`, and `Table.Snapshot` are removed.
-`ConnectSwitches` and `ConnectDeviceWithEPName` no longer return internal ports.
+`ConnectSwitches` and `ConnectDevice` do not return internal ports.
 `routing.Table` is now concrete; custom routers populate `*routing.Table` values.
-Repeated `ConnectDeviceWithEPName` calls with the same switch and parameters append
+Repeated `ConnectDevice` calls with an explicit endpoint name and the same switch and parameters append
 device ports; repeated mesh `AddTile` calls retain their merge behavior.
 
 Internal endpoint device ports bind to `DeviceConnection(ep)` in arbitration
@@ -1367,3 +1367,53 @@ subdirectory. Runner selection is recorded in the workflow.
 These changes preserve the existing page-table and port checkpoint payload
 formats. Checkpoints still enforce the normal same-build requirement. MGPUSim
 migration is deferred until after the Akita v5 release and is not part of this PR.
+
+## Direct NoC, cache, and TLB configuration
+
+- `AddSwitch`, `AddSwitchWithName`, and `AddSwitchWithNameAndRoutingTable` become
+  `AddSwitch(SwitchConfig{Name: ..., RoutingTable: ...})`; fields are optional.
+- `ConnectDevice` and `ConnectDeviceWithEPName` become
+  `ConnectDevice(switchID, ports, DeviceConfig{Name: ..., DeviceEndParam: ..., SwitchEndParam: ...})`.
+  `DeviceConfig` replaces `DeviceToSwitchLinkParameter`.
+- PCIe/NVLink `PlugInDevice` becomes `ConnectDevice`; NVLink `AddPCIeSwitch`
+  becomes `AddSwitch`. PCIe `AddSwitch(parent)` creates and connects a child;
+  NVLink `AddSwitch()` creates an unconnected switch, connected separately with
+  `ConnectSwitchesWithPCIeLink`. `ConnectDevicesWithNVLink(a,b)` no longer takes a count.
+- Delete `LinkParameter` and `LinkParam`: links are ideal. No per-link frequency,
+  stage count, cycles-per-stage, pipeline width, or `IsIdeal` option remains.
+- Replace bandwidth/version setters with explicit flit size and input/output
+  widths. The old PCIe flit size was rounded bytes/second divided by frequency:
+  default Gen4 x16 at 1 GHz becomes 34 bytes; Gen3 x16 becomes 17. Hardware-target
+  calculators are deferred. There are no public internal-buffer setters.
+- Network-owned incoming, route, and forwarding queues use input width; send
+  and outgoing queues use output width. Remove capacity fields from link-end
+  parameters and capacity setters from topology builders. Caller-supplied device
+  ports keep their sizes. PCIe/NVLink default port queues change from 16 to 1 at
+  width one. Switch forwarding now enforces both widths, instead of limiting
+  each output to one flit per cycle. Contention and timing can change.
+- `BandwidthFirstRouter` and `Remote.Bandwidth` are removed. NVLink now uses
+  fewest-hop routing, which can change routes and simulated timing. Devices
+  sharing a PCIe switch take its shorter path even when an NVLink connects them.
+  `WithRouter`,
+  `Router`, `Node`, `Remote`, and concrete routing tables remain available.
+- Cache `TotalByteSize` becomes `NumSets`: migrate using the old capacity divided
+  by ways and line size. Read capacity with `spec.ByteSize()`. Rename cache
+  `WayAssociativity` to `NumWays`, and both caches' `NumMSHREntry` and TLB's
+  `MSHRSize` to `NumMSHREntries`. Corresponding JSON names are `num_ways` and
+  `num_mshr_entries`; these are pre-v5 schema changes.
+- Configure cache `DirectoryWidth` and `BankWidth` explicitly. To preserve the
+  old pipeline widths, set both to `max(2, NumReqPerCycle)` for writeback and
+  `NumReqPerCycle` for writethrough. Their defaults are two and four respectively
+  and no longer follow changes to `NumReqPerCycle`. Request-stage queues use
+  `NumReqPerCycle`; directory and bank
+  output queues use their respective pipeline widths. Remove internal queue
+  capacity fields. The default writeback directory output queue changes from
+  one to two entries. Architectural `WriteBufferCapacity` and `NumMSHREntries`
+  remain configurable.
+- Writeback `NumBanks` must be positive; zero or negative values are no longer
+  treated as one bank.
+- TLB output queue capacity continues to equal `NumReqPerCycle` (default four).
+
+Old checkpoints must be rebuilt after these Spec and topology changes. Default
+geometry and widths are preserved, but queue sizing and NoC forwarding can
+change results. DRAM configuration, calculations, and presets are unchanged.

@@ -244,7 +244,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	spec := m.pipeline.comp.Spec
 	blockSize := 1 << spec.Log2BlockSize
 	cache.DirectoryReset(
-		&next.DirectoryState, spec.numSets(), spec.WayAssociativity, blockSize)
+		&next.DirectoryState, spec.NumSets, spec.NumWays, blockSize)
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil

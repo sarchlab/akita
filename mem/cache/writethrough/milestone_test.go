@@ -126,7 +126,7 @@ func TestCacheMilestones(t *testing.T) {
 		spec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		c = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(spec.TotalByteSize)}).
+			WithResources(Resources{Storage: mem.NewStorage(spec.ByteSize())}).
 			Build("Cache")
 
 		c.BindPort("Top", twowaybuffered.MakeBuilder().

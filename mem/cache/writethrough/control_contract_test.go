@@ -28,11 +28,14 @@ func TestControlContract(t *testing.T) {
 		storage := mem.NewStorage(1 * mem.MB)
 
 		spec := DefaultSpec()
-		spec.TotalByteSize = 64 * 1024
+		spec.NumSets = 512
 		spec.NumBanks = 1
-		spec.NumMSHREntry = 4
+		spec.NumMSHREntries = 4
 		spec.NumReqPerCycle = 1
-		spec.WayAssociativity = 2
+
+		spec.DirectoryWidth = 1
+		spec.BankWidth = 1
+		spec.NumWays = 2
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1

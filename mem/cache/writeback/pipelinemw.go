@@ -33,13 +33,13 @@ func (m *pipelineMW) createInternalStages() {
 	m.topParser = &topParser{cache: m}
 	m.dirStage = &directoryStage{cache: m}
 
-	numBanks := spec.numBanks()
+	numBanks := spec.NumBanks
 	m.bankStages = make([]*bankStage, numBanks)
 	for i := 0; i < numBanks; i++ {
 		m.bankStages[i] = &bankStage{
 			cache:         m,
 			bankID:        i,
-			pipelineWidth: spec.laneWidth(),
+			pipelineWidth: spec.BankWidth,
 		}
 	}
 

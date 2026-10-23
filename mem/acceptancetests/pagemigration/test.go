@@ -216,14 +216,16 @@ func buildL2Cache(
 	deviceStride uint64,
 ) *writeback.Comp {
 	l2Spec := writeback.DefaultSpec()
-	l2Spec.WayAssociativity = 4
+	l2Spec.NumWays = 4
 	l2Spec.NumReqPerCycle = 2
 
+	l2Spec.DirectoryWidth = 2
+	l2Spec.BankWidth = 2
 	l2Spec.Bottom.Destinations = memCtrlPorts
 	l2Spec.Bottom.InterleavingSize = deviceStride
 	l2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
 		WithSimulation(s).
-		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage")}).
+		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.ByteSize(), "L2Cache.Storage")}).
 		Build("L2Cache")
 
 	l2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
@@ -306,7 +308,8 @@ func buildL1Cache(
 ) *writethrough.Comp {
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
-	l1Spec.WayAssociativity = 2
+	l1Spec.NumWays = 2
+	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 
 	name := "L1Cache" + suffix
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
@@ -314,7 +317,7 @@ func buildL1Cache(
 	}
 	l1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
 		WithSimulation(s).
-		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.TotalByteSize, name+".Storage")}).
+		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.ByteSize(), name+".Storage")}).
 		Build(name)
 
 	l1Cache.BindPort("Top", newPort(s, name+".Top"))

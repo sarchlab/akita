@@ -76,11 +76,13 @@ func stageTestSpec() Spec {
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.Log2BlockSize = 6
-	spec.WayAssociativity = 4
-	spec.TotalByteSize = 64 * 4 * 64
+	spec.NumWays = 4
+	spec.NumSets = 64
 	spec.NumBanks = 1
 	spec.NumReqPerCycle = 4
 
+	spec.DirectoryWidth = 4
+	spec.BankWidth = 4
 	return spec
 }
 
@@ -155,13 +157,15 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		addressToPortMapper = dramTop.AsRemote()
 
 		cacheSpec := DefaultSpec()
-		cacheSpec.TotalByteSize = 1024 * 4 * 64
+		cacheSpec.NumSets = 1024
 		cacheSpec.NumReqPerCycle = 4
 
+		cacheSpec.DirectoryWidth = 4
+		cacheSpec.BankWidth = 4
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		cacheComp = modeling.MakeBuilder[*Comp](cacheSpec).
 			WithSimulation(sim).
-			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.TotalByteSize)}).
+			WithResources(Resources{Storage: mem.NewStorage(cacheSpec.ByteSize())}).
 			Build("Cache")
 		cacheCompPorts := makePorts(sim, "Cache", 8)
 		cacheComp.BindPort("Top", cacheCompPorts.Top)
@@ -187,7 +191,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		state := m.comp.State
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -230,7 +234,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		state := m.comp.State
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -426,8 +430,8 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		state := m.comp.State
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
-		for i := 0; i < spec.WayAssociativity; i++ {
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
+		for i := 0; i < spec.NumWays; i++ {
 			block := &state.DirectoryState.Sets[setID].Blocks[i]
 			block.IsValid = true
 			block.IsDirty = true

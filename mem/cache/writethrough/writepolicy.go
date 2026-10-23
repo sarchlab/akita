@@ -327,12 +327,12 @@ func (d *directory) writethroughPartialWriteMiss(
 
 	next := &d.cache.comp.State
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.ReadCount > 0 || victim.IsLocked {
 		return false
@@ -375,7 +375,7 @@ func (d *directory) writethroughFullLineWriteMiss(
 	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
 
 	// Install the line via the shared core, not writethroughWriteHit: this is a
 	// miss, so writethroughWriteMiss owns the write-miss tag. Calling the hit
