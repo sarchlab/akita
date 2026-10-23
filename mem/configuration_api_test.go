@@ -83,7 +83,12 @@ func TestNegativeSpecLatenciesRejected(t *testing.T) {
 			c.Spec.Latency = -1
 			c.Middlewares.Initialize(c)
 		}, want: "idealmemcontroller: Latency must be nonnegative"},
-		{name: "mmu", initialize: func() { c := &mmu.Comp{}; c.Spec = mmu.DefaultSpec(); c.Spec.Latency = -1; c.Middlewares.Initialize(c) }, want: "vm/mmu: Latency must be nonnegative"},
+		{name: "mmu", initialize: func() {
+			c := &mmu.Comp{}
+			c.Spec = mmu.DefaultSpec()
+			c.Spec.Latency = -1
+			c.Middlewares.Initialize(c)
+		}, want: "vm/mmu: Latency must be nonnegative"},
 		{name: "gmmu", initialize: func() {
 			c := &gmmu.Comp{}
 			c.Spec = gmmu.DefaultSpec()
@@ -96,14 +101,24 @@ func TestNegativeSpecLatenciesRejected(t *testing.T) {
 			c.Spec.LatencyPerLevel = -1
 			c.State.Initialize(c)
 		}, want: "vm/mmuCache: LatencyPerLevel must be nonnegative"},
-		{name: "tlb", initialize: func() { c := &tlb.Comp{}; c.Spec = tlb.DefaultSpec(); c.Spec.Latency = -1; c.State.Initialize(c) }, want: errors.New(": TLB latency must be nonnegative")},
+		{name: "tlb", initialize: func() {
+			c := &tlb.Comp{}
+			c.Spec = tlb.DefaultSpec()
+			c.Spec.Latency = -1
+			c.State.Initialize(c)
+		}, want: errors.New(": TLB latency must be nonnegative")},
 		{name: "banked", initialize: func() {
 			c := &simplebankedmemory.Comp{}
 			c.Spec = simplebankedmemory.DefaultSpec()
 			c.Spec.StageLatency = -1
 			c.State.Initialize(c)
 		}, want: "simplebankedmemory: StageLatency must be nonnegative"},
-		{name: "dram", initialize: func() { c := &dram.Comp{}; c.Spec = dram.DefaultSpec(); c.Spec.TCL = -1; c.Middlewares.Initialize(c) }, want: "dram: timing parameters must be nonnegative"},
+		{name: "dram", initialize: func() {
+			c := &dram.Comp{}
+			c.Spec = dram.DefaultSpec()
+			c.Spec.TCL = -1
+			c.Middlewares.Initialize(c)
+		}, want: "dram: timing parameters must be nonnegative"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
