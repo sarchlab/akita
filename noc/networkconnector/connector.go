@@ -16,23 +16,19 @@ import (
 )
 
 // LinkEndSwitchParameter defines the parameters of the end of a link that is
-// connected to a switch.
+// connected to a switch. Widths are positive flits per cycle; latency is
+// nonnegative switch-processing cycles. Internal input/output queues are sized
+// to their respective widths.
 type LinkEndSwitchParameter struct {
-	RouteBufferCapacity   int
-	ForwardBufferCapacity int
-	SendBufferCapacity    int
-	IncomingBufSize       int
-	OutgoingBufSize       int
-	NumInputChannel       int
-	NumOutputChannel      int
-	Latency               int
+	NumInputChannel  int
+	NumOutputChannel int
+	Latency          int
 }
 
 // LinkEndDeviceParameter defines the parameter that associated with an end of a
-// link that is connected to a device.
+// link that is connected to a device. Widths are positive flits per cycle and
+// size the endpoint network port buffers; caller-owned device ports are unchanged.
 type LinkEndDeviceParameter struct {
-	IncomingBufSize  int
-	OutgoingBufSize  int
 	NumInputChannel  int
 	NumOutputChannel int
 }
@@ -160,8 +156,8 @@ func (c *Connector) ConnectDevice(switchID int, ports []messaging.Port, param De
 	epPort := twowaybuffered.MakeBuilder().
 		WithSimulation(c.simulation).
 		WithSpec(twowaybuffered.Spec{
-			IncomingCapacity: param.DeviceEndParam.IncomingBufSize,
-			OutgoingCapacity: param.DeviceEndParam.OutgoingBufSize,
+			IncomingCapacity: param.DeviceEndParam.NumInputChannel,
+			OutgoingCapacity: param.DeviceEndParam.NumOutputChannel,
 		}).
 		Build()
 	swPort := swNode.addPort(param.SwitchEndParam)

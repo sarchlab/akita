@@ -56,9 +56,9 @@ type Spec struct {
     Log2BlockSize       uint64      // Cache line size = 1 << Log2BlockSize
     BankLatency         int         // Cycles per bank read/write
     DirLatency          int         // Cycles for directory lookup
-    WayAssociativity    int         // Ways per set
+    NumWays    int         // Ways per set
     NumBanks            int         // Positive number of banks
-    NumMSHREntry        int         // MSHR capacity
+    NumMSHREntries        int         // MSHR capacity
     NumSets             int         // Number of sets in the directory
     WriteBufferCapacity int         // Max lines in the write buffer
     MaxInflightFetch    int         // Concurrent fetches to lower memory
@@ -70,7 +70,7 @@ type Spec struct {
 ```
 
 The directory has `NumSets` sets. Its byte capacity is
-`NumSets * WayAssociativity * (1 << Log2BlockSize)`, available as `Spec.ByteSize()`.
+`NumSets * NumWays * (1 << Log2BlockSize)`, available as `Spec.ByteSize()`.
 
 ## Builder Pattern
 
@@ -82,9 +82,9 @@ only), and `component.BindPort` after Build (the port instances).
 ```go
 spec := writeback.DefaultSpec()
 spec.NumSets = 256 // 64 KiB with four ways and 64-byte lines
-spec.WayAssociativity = 4
+spec.NumWays = 4
 spec.Log2BlockSize = 6 // 64-byte lines
-spec.NumMSHREntry = 16
+spec.NumMSHREntries = 16
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := modeling.MakeBuilder[*writeback.Comp](spec).
@@ -160,15 +160,21 @@ middlewares and freezes the topology.
 - **Control**: accepts `memcontrolprotocol.Req` for pause/drain/enable/reset/
   invalidate/flush operations, returns `memcontrolprotocol.Rsp`.
 
-## Independent processing and buffering
+## Processing widths and internal buffering
 
 `NumReqPerCycle` controls stage dispatch. `DirectoryWidth` and `BankWidth`
-control pipeline admission width. Queue depths are explicit, independent fields:
-`DirBufferCapacity`, `DirPostBufferCapacity`, `BankPostBufferCapacity`, `DirToBankBufferCapacity`, `WriteBufferToBankBufferCapacity`, `MSHRBufferCapacity`, `WriteBufferStageCapacity`.
-Changing one field does not recalculate any other. Start from `DefaultSpec()`
-and change each desired parameter explicitly. Geometry, widths and queue depths
-must be positive; pipeline latencies must be nonnegative.
+control pipeline admission width, in entries per cycle. Internal request queues
+use `NumReqPerCycle`; the directory output queue uses `DirectoryWidth`, and each
+bank output queue uses `BankWidth`. Queue sizes are calculated at initialization
+and have no public override. These sizes hold one processing batch and may
+stall under contention. Geometry and widths must be positive; pipeline latencies
+must be nonnegative.
 
-`BankWidth` must be at least two: the bank admission policy reserves one lane
-for upward traffic. The default has request width one and directory/bank width
-two; this is explicit rather than silently widening a requested width.
+`NumSets` and `NumWays` define geometry. `NumMSHREntries` remains the public
+capacity for outstanding cache-line misses; it is separate from the internal
+MSHR work queue.
+
+`WriteBufferCapacity` remains the public capacity for buffered cache lines.
+`BankWidth` must be at least two: the existing bank admission policy reserves
+an upward lane. Defaults are request width one and directory/bank width two;
+the directory output queue now holds two entries instead of one.

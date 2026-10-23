@@ -8,7 +8,6 @@ for the third coordinate in a 2D mesh. Negative coordinates are rejected.
 connector := mesh.MakeBuilder().WithSimulation(s).
     WithFreq(timing.GHz).WithFlitSize(16).
     WithInputWidth(2).WithOutputWidth(2).
-    WithIncomingBufferCapacity(8).WithOutgoingBufferCapacity(8).
     WithSwitchLatency(1).Build("Mesh")
 connector.AddTile([3]int{0, 0, 0}, tile0Ports)
 connector.AddTile([3]int{1, 0, 0}, tile1Ports)
@@ -44,14 +43,12 @@ computed routes participate in checkpoint compatibility checks.
 | `WithFlitSize(n)` | Bytes per flit, independent of frequency |
 | `WithInputWidth(n)` | Flits admitted per input per cycle |
 | `WithOutputWidth(n)` | Flits ejected per output per cycle |
-| `WithIncomingBufferCapacity(n)` | Incoming port queue capacity in flits |
-| `WithOutgoingBufferCapacity(n)` | Outgoing port queue capacity in flits |
-| `WithRouteBufferCapacity(n)` | Per-input switch routing queue capacity |
-| `WithForwardBufferCapacity(n)` | Per-input switch forwarding queue capacity |
-| `WithSendBufferCapacity(n)` | Per-output switch send queue capacity |
 
-Widths and queue capacities must be positive and are independently configurable.
-Changing frequency does not change flit size. Increasing a queue's depth does not
-increase its processing width. The input/output options also configure endpoint
-processing. Device-facing ports remain the ports supplied by the caller; buffer
-options configure the endpoint network port and switch ports.
+Input/output widths must be positive and are configured separately. Changing
+frequency does not change flit size. Network-owned buffers are calculated:
+incoming port, route, and forward queues hold `InputWidth` flits; send and
+outgoing port queues hold `OutputWidth` flits. Endpoint network ports use the
+same rule. Device-facing ports remain caller-owned with their original sizes.
+Forwarding shares each output's width among contenders, limits each input to
+its input width, and rotates priority in binding order each cycle. Buffering is
+one cycle of capacity, not a guarantee of full throughput under contention.

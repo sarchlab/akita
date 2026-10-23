@@ -30,15 +30,12 @@ func TestControlContract(t *testing.T) {
 		spec := DefaultSpec()
 		spec.NumSets = 512
 		spec.NumBanks = 1
-		spec.NumMSHREntry = 4
+		spec.NumMSHREntries = 4
 		spec.NumReqPerCycle = 1
-		spec.DirBufferCapacity = 1
-		spec.BankBufferCapacity = 1
-		spec.DirPostBufferCapacity = 1
-		spec.BankPostBufferCapacity = 1
+
 		spec.DirectoryWidth = 1
 		spec.BankWidth = 1
-		spec.WayAssociativity = 2
+		spec.NumWays = 2
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1

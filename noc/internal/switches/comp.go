@@ -31,9 +31,7 @@ type Resources struct{ Wiring Wiring }
 
 // Link describes the link behind one switch port.
 type Link struct {
-	RouteBufferCapacity   int `json:"route_buffer_capacity"`
-	ForwardBufferCapacity int `json:"forward_buffer_capacity"`
-	SendBufferCapacity    int `json:"send_buffer_capacity"`
+
 	// Remote is the port at the other end of the link: an endpoint's network
 	// port or another switch's port.
 	Remote messaging.RemotePort `json:"remote"`

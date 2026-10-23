@@ -76,18 +76,11 @@ func stageTestSpec() Spec {
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.Log2BlockSize = 6
-	spec.WayAssociativity = 4
+	spec.NumWays = 4
 	spec.NumSets = 64
 	spec.NumBanks = 1
 	spec.NumReqPerCycle = 4
 
-	spec.DirBufferCapacity = 4
-	spec.DirToBankBufferCapacity = 4
-	spec.WriteBufferToBankBufferCapacity = 4
-	spec.MSHRBufferCapacity = 4
-	spec.WriteBufferStageCapacity = 4
-	spec.DirPostBufferCapacity = 4
-	spec.BankPostBufferCapacity = 4
 	spec.DirectoryWidth = 4
 	spec.BankWidth = 4
 	return spec
@@ -167,13 +160,6 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		cacheSpec.NumSets = 1024
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheSpec.DirBufferCapacity = 4
-		cacheSpec.DirToBankBufferCapacity = 4
-		cacheSpec.WriteBufferToBankBufferCapacity = 4
-		cacheSpec.MSHRBufferCapacity = 4
-		cacheSpec.WriteBufferStageCapacity = 4
-		cacheSpec.DirPostBufferCapacity = 4
-		cacheSpec.BankPostBufferCapacity = 4
 		cacheSpec.DirectoryWidth = 4
 		cacheSpec.BankWidth = 4
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
@@ -445,7 +431,7 @@ func TestWriteBackCacheIntegration(t *testing.T) {
 		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
 		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
-		for i := 0; i < spec.WayAssociativity; i++ {
+		for i := 0; i < spec.NumWays; i++ {
 			block := &state.DirectoryState.Sets[setID].Blocks[i]
 			block.IsValid = true
 			block.IsDirty = true

@@ -100,17 +100,10 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.NumSets = 16
 	cacheSpec.Log2BlockSize = 6
-	cacheSpec.WayAssociativity = 4
-	cacheSpec.NumMSHREntry = 8
+	cacheSpec.NumWays = 4
+	cacheSpec.NumMSHREntries = 8
 	cacheSpec.NumReqPerCycle = 4
 
-	cacheSpec.DirBufferCapacity = 4
-	cacheSpec.DirToBankBufferCapacity = 4
-	cacheSpec.WriteBufferToBankBufferCapacity = 4
-	cacheSpec.MSHRBufferCapacity = 4
-	cacheSpec.WriteBufferStageCapacity = 4
-	cacheSpec.DirPostBufferCapacity = 4
-	cacheSpec.BankPostBufferCapacity = 4
 	cacheSpec.DirectoryWidth = 4
 	cacheSpec.BankWidth = 4
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dramTop.AsRemote()}

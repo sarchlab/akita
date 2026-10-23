@@ -36,17 +36,10 @@ func (s *lateResources) initialize() error {
 }
 func topologyParameters() (DeviceConfig, SwitchToSwitchLinkParameter) {
 	end := LinkEndSwitchParameter{
-		RouteBufferCapacity:   1,
-		ForwardBufferCapacity: 1,
-		SendBufferCapacity:    1,
-		IncomingBufSize:       2,
-		OutgoingBufSize:       2,
-		NumInputChannel:       1,
-		NumOutputChannel:      1,
-		Latency:               2}
-	return DeviceConfig{DeviceEndParam: LinkEndDeviceParameter{IncomingBufSize: 2,
-			OutgoingBufSize:  2,
-			NumInputChannel:  1,
+		NumInputChannel:  1,
+		NumOutputChannel: 1,
+		Latency:          2}
+	return DeviceConfig{DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1,
 			NumOutputChannel: 1},
 			SwitchEndParam: end},
 		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
@@ -249,13 +242,14 @@ func TestValidationCanBeRetriedAfterCompletingWiring(t *testing.T) {
 	t.Log("Disconnected wiring returns an error; completing wiring and retrying Initialize computes valid routes")
 }
 
-func TestSwitchUsesIndependentBufferSizes(t *testing.T) {
+func TestSwitchUsesCalculatedAsymmetricBufferSizes(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).Build("Network")
 	a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 	_, sp := topologyParameters()
-	sp.LeftEndParam.IncomingBufSize = 3
-	sp.LeftEndParam.OutgoingBufSize = 1
+	sp.LeftEndParam.NumInputChannel = 3
+	sp.LeftEndParam.NumOutputChannel = 1
+
 	c.ConnectSwitches(a, b, sp)
 	require.NoError(t, s.Initialize())
 	p := c.switches[a].ports[0]

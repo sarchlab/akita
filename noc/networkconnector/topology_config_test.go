@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Exercise real topology assembly and delivery with widths different from every
-// queue depth. This catches wrapper setters that never reach the runtime model.
+// Exercise topology assembly and delivery with unequal input/output widths.
+// Network-owned queues follow those widths; device-owned queues stay unchanged.
 func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 	for _, topology := range []string{"pcie", "nvlink", "mesh"} {
 		t.Run(topology, func(t *testing.T) {
@@ -36,15 +36,13 @@ func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 			case "pcie":
 				c := pcie.MakeBuilder().WithSimulation(s).WithFreq(2 * timing.GHz).WithFlitSize(32).
 					WithInputWidth(3).WithOutputWidth(2).
-					WithIncomingBufferCapacity(4).WithOutgoingBufferCapacity(5).
-					WithRouteBufferCapacity(1).WithForwardBufferCapacity(6).WithSendBufferCapacity(7).Build("Network")
+					Build("Network")
 				a := c.AddRootComplex(ports[:1])
 				c.ConnectDevice(c.AddSwitch(a), ports[1:])
 			case "nvlink":
 				c := nvlink.MakeBuilder().WithSimulation(s).WithFreq(2 * timing.GHz).WithFlitSize(32).
 					WithInputWidth(3).WithOutputWidth(2).
-					WithIncomingBufferCapacity(4).WithOutgoingBufferCapacity(5).
-					WithRouteBufferCapacity(1).WithForwardBufferCapacity(6).WithSendBufferCapacity(7).Build("Network")
+					Build("Network")
 				a, middle, b := c.AddSwitch(), c.AddSwitch(), c.AddSwitch()
 				c.ConnectSwitchesWithPCIeLink(a, middle)
 				c.ConnectSwitchesWithPCIeLink(middle, b)
@@ -53,8 +51,7 @@ func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 			case "mesh":
 				c := mesh.MakeBuilder().WithSimulation(s).WithFreq(2 * timing.GHz).WithFlitSize(32).
 					WithInputWidth(3).WithOutputWidth(2).
-					WithIncomingBufferCapacity(4).WithOutgoingBufferCapacity(5).
-					WithRouteBufferCapacity(1).WithForwardBufferCapacity(6).WithSendBufferCapacity(7).Build("Network")
+					Build("Network")
 				c.AddTile([3]int{0, 0, 0}, ports[:1])
 				c.AddTile([3]int{2, 0, 0}, ports[1:])
 			}
@@ -65,11 +62,11 @@ func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 					for i, pc := range c.State.PortComplexes {
 						require.Equal(t, 3, pc.NumInputChannel)
 						require.Equal(t, 2, pc.NumOutputChannel)
-						require.Equal(t, 1, pc.RouteBuffer.Capacity())
-						require.Equal(t, 6, pc.ForwardBuffer.Capacity())
-						require.Equal(t, 7, pc.SendOutBuffer.Capacity())
-						require.Equal(t, 4, c.Ports.Links[i].IncomingBuf().Capacity())
-						require.Equal(t, 5, c.Ports.Links[i].OutgoingBuf().Capacity())
+						require.Equal(t, 3, pc.RouteBuffer.Capacity())
+						require.Equal(t, 3, pc.ForwardBuffer.Capacity())
+						require.Equal(t, 2, pc.SendOutBuffer.Capacity())
+						require.Equal(t, 3, c.Ports.Links[i].IncomingBuf().Capacity())
+						require.Equal(t, 2, c.Ports.Links[i].OutgoingBuf().Capacity())
 					}
 					if topology == "nvlink" && c.Name() == "Network.DeviceSwitch[0]" {
 						// The NVLink path is three switch-to-switch hops; PCIe is
@@ -82,9 +79,13 @@ func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 					require.Equal(t, 2*timing.GHz, c.Spec.Freq)
 					require.Equal(t, 3, c.Spec.NumInputChannels)
 					require.Equal(t, 2, c.Spec.NumOutputChannels)
+					require.Equal(t, 3, c.Ports.NetworkPort.IncomingBuf().Capacity())
+					require.Equal(t, 2, c.Ports.NetworkPort.OutgoingBuf().Capacity())
 				}
 			}
 			for i := range 2 {
+				require.Equal(t, 4, ports[i].IncomingBuf().Capacity())
+				require.Equal(t, 4, ports[i].OutgoingBuf().Capacity())
 				ports[i].Send(messaging.Msg{ID: s.NewID(), Src: ports[i].AsRemote(),
 					Dst: ports[1-i].AsRemote(), TrafficBytes: 128, Payload: memprotocol.ReadReq{Address: 256, AccessByteSize: 128}})
 			}

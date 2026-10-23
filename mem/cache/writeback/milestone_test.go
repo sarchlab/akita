@@ -101,13 +101,6 @@ func TestWriteBackCacheMilestones(t *testing.T) {
 		cacheSpec.NumSets = 1024
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheSpec.DirBufferCapacity = 4
-		cacheSpec.DirToBankBufferCapacity = 4
-		cacheSpec.WriteBufferToBankBufferCapacity = 4
-		cacheSpec.MSHRBufferCapacity = 4
-		cacheSpec.WriteBufferStageCapacity = 4
-		cacheSpec.DirPostBufferCapacity = 4
-		cacheSpec.BankPostBufferCapacity = 4
 		cacheSpec.DirectoryWidth = 4
 		cacheSpec.BankWidth = 4
 		cacheSpec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}

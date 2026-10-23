@@ -76,8 +76,7 @@ func TestSwitch(t *testing.T) {
 		}
 
 		link := func(remote *MockPort) Link {
-			return Link{RouteBufferCapacity: 1, ForwardBufferCapacity: 1, SendBufferCapacity: 1,
-				Remote:           remote.AsRemote(),
+			return Link{Remote: remote.AsRemote(),
 				NumInputChannel:  1,
 				NumOutputChannel: 1,
 				Latency:          1,

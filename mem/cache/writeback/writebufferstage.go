@@ -88,7 +88,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	spec := wb.cache.comp.Spec
 	next := &wb.cache.comp.State
 	bankNum := bankID(trans.BlockSetID, trans.BlockWayID,
-		spec.WayAssociativity,
+		spec.NumWays,
 		len(next.WriteBufferToBankBufs))
 	bankBuf := &next.WriteBufferToBankBufs[bankNum]
 
@@ -173,7 +173,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	next := &wb.cache.comp.State
 	bankNum := bankID(
 		trans.BlockSetID, trans.BlockWayID,
-		spec.WayAssociativity,
+		spec.NumWays,
 		len(next.WriteBufferToBankBufs),
 	)
 	bankBuf := &next.WriteBufferToBankBufs[bankNum]
@@ -299,7 +299,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	trans := &next.Transactions[transIdx]
 	bankIndex := bankID(
 		trans.BlockSetID, trans.BlockWayID,
-		spec.WayAssociativity,
+		spec.NumWays,
 		len(next.WriteBufferToBankBufs),
 	)
 	bankBuf := &next.WriteBufferToBankBufs[bankIndex]

@@ -183,7 +183,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 	next := &ds.cache.comp.State
 	cacheLineID, _ := getCacheLineID(trans.ReadAddress, spec.Log2BlockSize)
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 
@@ -335,7 +335,7 @@ func (ds *directoryStage) writePartialLineMiss(transIdx int, trans *transactionS
 	next := &ds.cache.comp.State
 	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 
@@ -365,7 +365,7 @@ func (ds *directoryStage) readFromBank(
 	spec := ds.cache.comp.Spec
 	next := &ds.cache.comp.State
 	numBanks := len(next.DirToBankBufs)
-	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
+	bank := bankID(setID, wayID, spec.NumWays, numBanks)
 	bankBuf := &next.DirToBankBufs[bank]
 
 	if !bankBuf.CanPush() {
@@ -395,7 +395,7 @@ func (ds *directoryStage) writeToBank(
 	spec := ds.cache.comp.Spec
 	next := &ds.cache.comp.State
 	numBanks := len(next.DirToBankBufs)
-	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
+	bank := bankID(setID, wayID, spec.NumWays, numBanks)
 	bankBuf := &next.DirToBankBufs[bank]
 
 	if !bankBuf.CanPush() {
@@ -430,7 +430,7 @@ func (ds *directoryStage) evict(
 	spec := ds.cache.comp.Spec
 	next := &ds.cache.comp.State
 	bankNum := bankID(victimSetID, victimWayID,
-		spec.WayAssociativity, len(next.DirToBankBufs))
+		spec.NumWays, len(next.DirToBankBufs))
 	bankBuf := &next.DirToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
@@ -510,7 +510,7 @@ func (ds *directoryStage) updateTransForEviction(
 
 	if ds.evictionNeedFetch(trans, spec.Log2BlockSize) {
 		mshrIdx := cache.MSHRAdd(
-			&next.MSHRState, spec.NumMSHREntry,
+			&next.MSHRState, spec.NumMSHREntries,
 			pid, cacheLineID)
 		entry := &next.MSHRState.Entries[mshrIdx]
 		entry.BlockSetID = victimSetID
@@ -552,7 +552,7 @@ func (ds *directoryStage) fetch(
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	bankNum := bankID(setID, wayID,
-		spec.WayAssociativity, len(next.DirToBankBufs))
+		spec.NumWays, len(next.DirToBankBufs))
 	bankBuf := &next.DirToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
@@ -560,7 +560,7 @@ func (ds *directoryStage) fetch(
 	}
 
 	mshrIdx := cache.MSHRAdd(
-		&next.MSHRState, spec.NumMSHREntry,
+		&next.MSHRState, spec.NumMSHREntries,
 		pid, cacheLineID)
 	trans.MSHREntryIndex = mshrIdx
 	trans.HasMSHREntry = true

@@ -1,39 +1,42 @@
 package tlb
 
 import (
-	"testing"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
-func TestOutputCapacityIndependentOfLookupWidth(t *testing.T) {
-	for _, capacity := range []int{1, 8} {
+func TestCalculatedOutputQueueStallsAndDrains(t *testing.T) {
+	for _, width := range []int{1, 4} {
 		c := &Comp{}
 		c.Spec = DefaultSpec()
 		c.Spec.Bottom.Destinations = []messaging.RemotePort{"Walker.Top"}
-		c.Spec.NumReqPerCycle = 3
-		c.Spec.OutputBufferCapacity = capacity
+		c.Spec.NumReqPerCycle = width
 		c.Spec.Latency = 1
 		c.State.Initialize(c)
-		for range 3 {
-			require.True(t, c.State.Pipeline.CanAccept())
+		require.Equal(t, width, c.State.BufferItems.Capacity())
+		for range width {
 			c.State.Pipeline.Accept(pipelineTLBReqState{})
 		}
-		require.False(t, c.State.Pipeline.CanAccept())
 		c.State.Pipeline.Tick(&c.State.BufferItems)
-		require.Equal(t, min(3, capacity), c.State.BufferItems.Size())
-		count := 0
-		for c.State.BufferItems.Size() > 0 || len(c.State.Pipeline.Stages()) > 0 {
-			for c.State.BufferItems.Size() > 0 {
-				c.State.BufferItems.Pop()
-				count++
-			}
+		for range width {
+			c.State.Pipeline.Accept(pipelineTLBReqState{})
+		}
+		for range 5 {
 			c.State.Pipeline.Tick(&c.State.BufferItems)
 		}
-		require.Equal(t, 3, count)
+		require.Equal(t, width, c.State.BufferItems.Size())
+		require.Len(t, c.State.Pipeline.Stages(), width)
+		for range 2 * width {
+			_, ok := c.State.BufferItems.Pop()
+			require.True(t, ok)
+			c.State.Pipeline.Tick(&c.State.BufferItems)
+		}
+		require.Zero(t, c.State.BufferItems.Size())
+		require.Empty(t, c.State.Pipeline.Stages())
+		t.Logf("width %d: full output queue stalls lookup pipeline; all %d entries drain", width, 2*width)
 	}
 	spec := DefaultSpec()
-	spec.OutputBufferCapacity = 0
+	spec.NumReqPerCycle = 0
 	require.Error(t, validateSpec(spec))
 }

@@ -83,17 +83,10 @@ func buildEnvironment(
 	cacheSpec := writeback.DefaultSpec()
 	cacheSpec.NumSets = 64
 	cacheSpec.Log2BlockSize = 6
-	cacheSpec.WayAssociativity = 4
-	cacheSpec.NumMSHREntry = 4
+	cacheSpec.NumWays = 4
+	cacheSpec.NumMSHREntries = 4
 	cacheSpec.NumReqPerCycle = 16
 
-	cacheSpec.DirBufferCapacity = 16
-	cacheSpec.DirToBankBufferCapacity = 16
-	cacheSpec.WriteBufferToBankBufferCapacity = 16
-	cacheSpec.MSHRBufferCapacity = 16
-	cacheSpec.WriteBufferStageCapacity = 16
-	cacheSpec.DirPostBufferCapacity = 16
-	cacheSpec.BankPostBufferCapacity = 16
 	cacheSpec.DirectoryWidth = 16
 	cacheSpec.BankWidth = 16
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{dram.Ports.Top.AsRemote()}

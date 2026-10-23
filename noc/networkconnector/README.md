@@ -11,13 +11,10 @@ sw := network.AddSwitch(networkconnector.SwitchConfig{Name: "Switch"})
 network.ConnectDevice(sw, devicePorts, networkconnector.DeviceConfig{
     Name: "GPU0",
     DeviceEndParam: networkconnector.LinkEndDeviceParameter{
-        IncomingBufSize: 8, OutgoingBufSize: 8,
         NumInputChannel: 1, NumOutputChannel: 1,
     },
     SwitchEndParam: networkconnector.LinkEndSwitchParameter{
-        IncomingBufSize: 8, OutgoingBufSize: 8,
         NumInputChannel: 1, NumOutputChannel: 1, Latency: 2,
-        RouteBufferCapacity: 4, ForwardBufferCapacity: 4, SendBufferCapacity: 4,
     },
 })
 if err := s.Initialize(); err != nil { panic(err) }
@@ -30,12 +27,13 @@ Repeated explicit names append ports only when switch and configuration match.
 `ConnectSwitches(a, b, SwitchToSwitchLinkParameter)` takes a separate
 `LinkEndSwitchParameter` for each end. No operation returns internal ports.
 
-`NumInputChannel` and `NumOutputChannel` are flits per cycle, not buffer sizes.
-`Latency` is processing inside the receiving switch, not physical propagation.
-All port and switch queue capacities are independent positive counts of flits.
-Switch latency must be nonnegative. The topology wrappers expose corresponding
-direct setters and provide defaults; hand-written end parameters specify all
-required widths and queue capacities explicitly.
+`NumInputChannel` and `NumOutputChannel` are positive flits-per-cycle limits.
+`Latency` is nonnegative processing latency inside the receiving switch.
+Network-owned incoming ports, route queues, and forward queues each hold
+`NumInputChannel` flits. Send queues and outgoing ports hold `NumOutputChannel`
+flits. Endpoint network ports follow the same input/output rule. Device ports
+supplied by the caller retain their own capacities. The topology wrappers
+provide width defaults; hand-written end parameters must specify both widths.
 
 ## Routing and lifecycle
 

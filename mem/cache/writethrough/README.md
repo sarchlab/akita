@@ -45,8 +45,8 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 
 ## Key Types
 
-- **Spec** — immutable config: `Freq`, `Log2BlockSize`, `WayAssociativity`,
-  `NumSets`, `NumBanks`, `NumMSHREntry`, `NumReqPerCycle`,
+- **Spec** — immutable config: `Freq`, `Log2BlockSize`, `NumWays`,
+  `NumSets`, `NumBanks`, `NumMSHREntries`, `NumReqPerCycle`,
   `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`, `WritePolicyType`, and
   the address-mapper fields. `NumSets` specifies the directory geometry;
   `Spec.ByteSize()` reports its byte capacity. An empty
@@ -75,7 +75,7 @@ Configuration is supplied as a whole through `WithSpec` (start from
 spec := writethrough.DefaultSpec()
 spec.WritePolicyType = "write-through"
 spec.NumSets = 512 // 256 KiB with eight ways and 64-byte lines
-spec.WayAssociativity = 8
+spec.NumWays = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}
 
 cache := modeling.MakeBuilder[*writethrough.Comp](spec).
@@ -123,11 +123,16 @@ middlewares and freezes the topology.
 - **Control** — accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset,
   and, once paused, Invalidate and Flush), returns `memcontrolprotocol.Rsp`.
 
-## Independent processing and buffering
+## Processing widths and internal buffering
 
 `NumReqPerCycle` controls stage dispatch. `DirectoryWidth` and `BankWidth`
-control pipeline admission width. Queue depths are explicit, independent fields:
-`DirBufferCapacity`, `DirPostBufferCapacity`, `BankPostBufferCapacity`, `BankBufferCapacity`.
-Changing one field does not recalculate any other. Start from `DefaultSpec()`
-and change each desired parameter explicitly. Geometry, widths and queue depths
-must be positive; pipeline latencies must be nonnegative.
+control pipeline admission width, in entries per cycle. Internal request queues
+use `NumReqPerCycle`; the directory output queue uses `DirectoryWidth`, and each
+bank output queue uses `BankWidth`. Queue sizes are calculated at initialization
+and have no public override. These sizes hold one processing batch and may
+stall under contention. Geometry and widths must be positive; pipeline latencies
+must be nonnegative.
+
+`NumSets` and `NumWays` define geometry. `NumMSHREntries` remains the public
+capacity for outstanding cache-line misses; it is separate from the internal
+MSHR work queue.

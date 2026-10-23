@@ -16,14 +16,13 @@ type Spec struct {
 	// Translation routing configuration.
 	Bottom mem.AddressMapper `json:"bottom"`
 
-	Freq                 timing.Freq `json:"freq"`
-	NumSets              int         `json:"num_sets"`
-	NumWays              int         `json:"num_ways"`
-	Log2PageSize         uint64      `json:"log2_page_size"`
-	NumReqPerCycle       int         `json:"num_req_per_cycle"`
-	OutputBufferCapacity int         `json:"output_buffer_capacity"`
-	MSHRSize             int         `json:"mshr_size"`
-	Latency              int         `json:"latency"`
+	Freq           timing.Freq `json:"freq"`
+	NumSets        int         `json:"num_sets"`
+	NumWays        int         `json:"num_ways"`
+	Log2PageSize   uint64      `json:"log2_page_size"`
+	NumReqPerCycle int         `json:"num_req_per_cycle"`
+	NumMSHREntries int         `json:"num_mshr_entries"`
+	Latency        int         `json:"latency"`
 }
 
 // pageSize returns the size of a page, 2^Log2PageSize bytes.

@@ -175,16 +175,9 @@ func buildL2Cache(
 	memCtrl *idealmemcontroller.Comp,
 ) *writeback.Comp {
 	l2Spec := writeback.DefaultSpec()
-	l2Spec.WayAssociativity = 4
+	l2Spec.NumWays = 4
 	l2Spec.NumReqPerCycle = 2
 
-	l2Spec.DirBufferCapacity = 2
-	l2Spec.DirToBankBufferCapacity = 2
-	l2Spec.WriteBufferToBankBufferCapacity = 2
-	l2Spec.MSHRBufferCapacity = 2
-	l2Spec.WriteBufferStageCapacity = 2
-	l2Spec.DirPostBufferCapacity = 2
-	l2Spec.BankPostBufferCapacity = 2
 	l2Spec.DirectoryWidth = 2
 	l2Spec.BankWidth = 2
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
@@ -231,7 +224,6 @@ func buildL2TLB(
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 
-	l2TLBSpec.OutputBufferCapacity = 4
 	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
 	l2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
 		WithSimulation(s).
@@ -277,7 +269,7 @@ func buildL1Cache(
 ) *writethrough.Comp {
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
-	l1Spec.WayAssociativity = 2
+	l1Spec.NumWays = 2
 	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 
 	name := "L1Cache" + suffix
@@ -307,7 +299,6 @@ func buildL1TLB(
 	l1TLBSpec.Log2PageSize = 12
 	l1TLBSpec.NumReqPerCycle = 2
 
-	l1TLBSpec.OutputBufferCapacity = 2
 	name := "L1TLB" + suffix
 
 	l1TLBSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}

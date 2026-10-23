@@ -63,10 +63,7 @@ func setupAdmissionWait(t *testing.T) (*admissionClock, *Comp, *admissionRecorde
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"Memory.Top"}
 	spec.MaxNumConcurrentTrans, spec.NumReqPerCycle = 1, 1
-	spec.DirBufferCapacity = 1
-	spec.BankBufferCapacity = 1
-	spec.DirPostBufferCapacity = 1
-	spec.BankPostBufferCapacity = 1
+
 	spec.DirectoryWidth = 1
 	spec.BankWidth = 1
 

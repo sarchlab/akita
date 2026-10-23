@@ -68,21 +68,18 @@ func TestDirectory(t *testing.T) {
 
 		c = buildStageTestCache(sim,
 			Spec{
-				DirBufferCapacity:      4,
-				BankBufferCapacity:     4,
-				DirPostBufferCapacity:  4,
-				BankPostBufferCapacity: 4,
-				DirectoryWidth:         4,
-				BankWidth:              4,
-				Freq:                   1 * timing.GHz,
-				Log2BlockSize:          6,
-				NumReqPerCycle:         4,
-				WayAssociativity:       4,
-				NumMSHREntry:           4,
-				NumSets:                16, // 16 sets
-				NumBanks:               1,
-				WritePolicyType:        "write-around",
-				Bottom:                 mem.AddressMapper{Destinations: []messaging.RemotePort{"DRAM"}},
+
+				DirectoryWidth:  4,
+				BankWidth:       4,
+				Freq:            1 * timing.GHz,
+				Log2BlockSize:   6,
+				NumReqPerCycle:  4,
+				NumWays:         4,
+				NumMSHREntries:  4,
+				NumSets:         16, // 16 sets
+				NumBanks:        1,
+				WritePolicyType: "write-around",
+				Bottom:          mem.AddressMapper{Destinations: []messaging.RemotePort{"DRAM"}},
 			},
 			Resources{
 				Storage: mem.NewStorage(4 * mem.KB),

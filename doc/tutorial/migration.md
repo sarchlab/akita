@@ -1379,26 +1379,36 @@ migration is deferred until after the Akita v5 release and is not part of this P
   becomes `AddSwitch`. `ConnectDevicesWithNVLink(a,b)` no longer takes a count.
 - Delete `LinkParameter` and `LinkParam`: links are ideal. No per-link frequency,
   stage count, cycles-per-stage, pipeline width, or `IsIdeal` option remains.
-- Replace bandwidth/version setters with explicit flit size, input/output widths,
-  and each queue capacity. The old PCIe flit size was rounded bytes/second divided
-  by frequency: default Gen4 x16 at 1 GHz becomes 34 bytes; Gen3 x16 becomes 17.
-  The old mesh transfer setting rounded upward into both widths and port queues;
-  set those independently when reproducing a prior configuration. Also specify
-  route, forwarding, and send queue capacities (formerly the corresponding width).
+- Replace bandwidth/version setters with explicit flit size and input/output
+  widths. The old PCIe flit size was rounded bytes/second divided by frequency:
+  default Gen4 x16 at 1 GHz becomes 34 bytes; Gen3 x16 becomes 17. Hardware-target
+  calculators are deferred. There are no public internal-buffer setters.
+- Network-owned incoming, route, and forwarding queues use input width; send
+  and outgoing queues use output width. Remove capacity fields from link-end
+  parameters and capacity setters from topology builders. Caller-supplied device
+  ports keep their sizes. PCIe/NVLink default port queues change from 16 to 1 at
+  width one. Switch forwarding now enforces both widths, instead of limiting
+  each output to one flit per cycle. Contention and timing can change.
 - `BandwidthFirstRouter` and `Remote.Bandwidth` are removed. NVLink now uses
   fewest-hop routing, which can change routes and simulated timing. Devices
   sharing a PCIe switch take its shorter path even when an NVLink connects them.
   `WithRouter`,
   `Router`, `Node`, `Remote`, and concrete routing tables remain available.
 - Cache `TotalByteSize` becomes `NumSets`: migrate using the old capacity divided
-  by ways and line size. Read capacity with `spec.ByteSize()`. Configure pipeline
-  widths and each stage buffer explicitly. Old write-back width one became two
-  pipeline lanes; preserve that with `DirectoryWidth: 2, BankWidth: 2`. Its bank
-  post-buffer formerly used that widened width; other queues used request width.
-  Write-through pipelines and queues formerly used `NumReqPerCycle`.
-- TLB output queues formerly used `NumReqPerCycle`; set `OutputBufferCapacity`
-  independently. Defaults remain four for each.
+  by ways and line size. Read capacity with `spec.ByteSize()`. Rename cache
+  `WayAssociativity` to `NumWays`, and both caches' `NumMSHREntry` and TLB's
+  `MSHRSize` to `NumMSHREntries`. Corresponding JSON names are `num_ways` and
+  `num_mshr_entries`; these are pre-v5 schema changes.
+- Configure cache `DirectoryWidth` and `BankWidth` explicitly. Old writeback
+  width one became two pipeline lanes; preserve that with `DirectoryWidth: 2,
+  BankWidth: 2`. Request-stage queues use `NumReqPerCycle`; directory and bank
+  output queues use their respective pipeline widths. Remove internal queue
+  capacity fields. The default writeback directory output queue changes from
+  one to two entries. Architectural `WriteBufferCapacity` and `NumMSHREntries`
+  remain configurable.
+- TLB output queue capacity equals `NumReqPerCycle` (default four); remove
+  `OutputBufferCapacity` from intermediate pre-v5 configurations.
 
 Old checkpoints must be rebuilt after these Spec and topology changes. Default
-effective geometry, widths, and queues are preserved. DRAM configuration,
-calculations, and presets are unchanged.
+geometry and widths are preserved, but queue sizing and NoC forwarding can
+change results. DRAM configuration, calculations, and presets are unchanged.

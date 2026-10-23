@@ -72,8 +72,15 @@ call returns a fresh object. Working objects use explicit action methods rather
 than With methods. Use WithFreq consistently. Core configuration specifies independent structural and timing parameters directly.
 Builders must not translate bandwidth or capacity targets into other model
 choices. Future calculators may return explicit configurations before Build.
-Widths and queue capacities remain independent. Internal equations, derived
-lookup tables, and observations such as capacity from geometry remain allowed;
+Internal pipeline queues and network-owned port buffers are implementation
+state, sized from processing widths at initialization/construction. NoC incoming,
+route, and forward queues use input width; send/outgoing queues use output
+width. Cache request queues use request width and pipeline output queues use
+their respective pipeline widths; TLB output queues use lookup width. Caller-owned
+ports and architectural capacities (MSHR entries and buffered cache lines)
+remain configurable. Use NumSets, NumWays, and NumMSHREntries across Cache/TLB.
+Internal equations, derived lookup tables, and observations such as capacity
+from geometry remain allowed;
 DRAM timing equations and concrete Spec presets retain their existing meaning.
 
 Monitor setup is `monitoring.MakeBuilder().WithPortNumber(port).Build()`.

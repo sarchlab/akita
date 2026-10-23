@@ -201,7 +201,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 		return false
 	}
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 
@@ -334,7 +334,7 @@ func (d *directory) fetchFromBottom(
 	trans.HasBlock = true
 
 	entryIdx := cache.MSHRAdd(
-		&next.MSHRState, spec.NumMSHREntry, pid, cacheLineID)
+		&next.MSHRState, spec.NumMSHREntries, pid, cacheLineID)
 	entry := &next.MSHRState.Entries[entryIdx]
 	entry.TransactionIndices = append(entry.TransactionIndices,
 		transIdx)
@@ -356,7 +356,7 @@ func (d *directory) fetchFromBottom(
 
 func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
 	next := &d.cache.comp.State
-	numWaysPerSet := d.cache.comp.Spec.WayAssociativity
+	numWaysPerSet := d.cache.comp.Spec.NumWays
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

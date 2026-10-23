@@ -48,7 +48,7 @@ func TestDirectoryStage(t *testing.T) {
 		}
 
 		spec := stageTestSpec()
-		spec.NumMSHREntry = 16
+		spec.NumMSHREntries = 16
 		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 		comp := buildStageTestComp(sim, spec,
 			Resources{Storage: mem.NewStorage(spec.ByteSize())},

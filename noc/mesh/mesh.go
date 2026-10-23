@@ -22,13 +22,8 @@ type tile struct {
 // coordinates, including empty transit tiles. Repeated AddTile calls append
 // device ports in arbitration order.
 type Connector struct {
-	inputWidth       int
-	outputWidth      int
-	incomingCapacity int
-	outgoingCapacity int
-	routeCapacity    int
-	forwardCapacity  int
-	sendCapacity     int
+	inputWidth  int
+	outputWidth int
 
 	name          string
 	simulation    modeling.Simulation
@@ -42,13 +37,8 @@ type Connector struct {
 
 // Builder configures a rectangular mesh connector.
 type Builder struct {
-	inputWidth       int
-	outputWidth      int
-	incomingCapacity int
-	outgoingCapacity int
-	routeCapacity    int
-	forwardCapacity  int
-	sendCapacity     int
+	inputWidth  int
+	outputWidth int
 
 	simulation              modeling.Simulation
 	freq                    timing.Freq
@@ -58,15 +48,11 @@ type Builder struct {
 // MakeBuilder returns the default direct configuration.
 func MakeBuilder() Builder {
 	return Builder{
-		inputWidth:       1,
-		outputWidth:      1,
-		incomingCapacity: 1,
-		outgoingCapacity: 1,
-		routeCapacity:    1,
-		forwardCapacity:  1,
-		sendCapacity:     1,
-		freq:             timing.GHz,
-		flitSize:         16,
+		inputWidth:  1,
+		outputWidth: 1,
+
+		freq:     timing.GHz,
+		flitSize: 16,
 	}
 }
 
@@ -82,54 +68,31 @@ func (b Builder) WithSwitchLatency(cycles int) Builder { b.switchLatency = cycle
 // WithFlitSize sets the number of bytes per flit.
 func (b Builder) WithFlitSize(size int) Builder { b.flitSize = size; return b }
 
-// WithInputWidth sets the flits per cycle.
+// WithInputWidth sets flits per input per cycle and the calculated incoming,
+// routing, and forwarding queue capacities.
 func (b Builder) WithInputWidth(n int) Builder { b.inputWidth = n; return b }
 
-// WithOutputWidth sets the flits per cycle.
+// WithOutputWidth sets flits per output per cycle and the calculated send and
+// outgoing queue capacities.
 func (b Builder) WithOutputWidth(n int) Builder { b.outputWidth = n; return b }
-
-// WithIncomingBufferCapacity sets the queue capacity in flits.
-func (b Builder) WithIncomingBufferCapacity(n int) Builder { b.incomingCapacity = n; return b }
-
-// WithOutgoingBufferCapacity sets the queue capacity in flits.
-func (b Builder) WithOutgoingBufferCapacity(n int) Builder { b.outgoingCapacity = n; return b }
-
-// WithRouteBufferCapacity sets the queue capacity in flits.
-func (b Builder) WithRouteBufferCapacity(n int) Builder { b.routeCapacity = n; return b }
-
-// WithForwardBufferCapacity sets the queue capacity in flits.
-func (b Builder) WithForwardBufferCapacity(n int) Builder { b.forwardCapacity = n; return b }
-
-// WithSendBufferCapacity sets the queue capacity in flits.
-func (b Builder) WithSendBufferCapacity(n int) Builder { b.sendCapacity = n; return b }
 
 // Build creates an empty connector ready for AddTile calls.
 func (b Builder) Build(name string) *Connector {
-	if b.inputWidth <= 0 ||
-		b.outputWidth <= 0 ||
-		b.incomingCapacity <= 0 ||
-		b.outgoingCapacity <= 0 ||
-		b.routeCapacity <= 0 ||
-		b.forwardCapacity <= 0 ||
-		b.sendCapacity <= 0 {
-		panic("mesh: widths and buffer capacities must be positive")
+	if b.inputWidth <= 0 || b.outputWidth <= 0 {
+		panic("mesh: widths must be positive")
 	}
 	if b.switchLatency < 0 {
 		panic("mesh: switch latency cannot be negative")
 	}
 
 	c := &Connector{
-		inputWidth:       b.inputWidth,
-		outputWidth:      b.outputWidth,
-		incomingCapacity: b.incomingCapacity,
-		outgoingCapacity: b.outgoingCapacity,
-		routeCapacity:    b.routeCapacity,
-		forwardCapacity:  b.forwardCapacity,
-		sendCapacity:     b.sendCapacity,
-		name:             name,
-		simulation:       b.simulation,
-		switchLatency:    b.switchLatency,
-		tiles:            make(map[[3]int]*tile), links: make(map[[2]int]bool)}
+		inputWidth:  b.inputWidth,
+		outputWidth: b.outputWidth,
+
+		name:          name,
+		simulation:    b.simulation,
+		switchLatency: b.switchLatency,
+		tiles:         make(map[[3]int]*tile), links: make(map[[2]int]bool)}
 	c.connector = networkconnector.MakeBuilder().WithSimulation(b.simulation).WithFreq(b.freq).
 		WithFlitSize(b.flitSize).WithRouter(meshRouter{c: c}).Build(name)
 	return c
@@ -201,21 +164,14 @@ func (c *Connector) switchParameter() networkconnector.SwitchToSwitchLinkParamet
 
 func (c *Connector) switchEnd(latency int) networkconnector.LinkEndSwitchParameter {
 	return networkconnector.LinkEndSwitchParameter{
-		IncomingBufSize:       c.incomingCapacity,
-		OutgoingBufSize:       c.outgoingCapacity,
-		NumInputChannel:       c.inputWidth,
-		NumOutputChannel:      c.outputWidth,
-		RouteBufferCapacity:   c.routeCapacity,
-		ForwardBufferCapacity: c.forwardCapacity,
-		SendBufferCapacity:    c.sendCapacity,
-		Latency:               latency,
+		NumInputChannel:  c.inputWidth,
+		NumOutputChannel: c.outputWidth,
+		Latency:          latency,
 	}
 }
 
 func (c *Connector) deviceEnd() networkconnector.LinkEndDeviceParameter {
 	return networkconnector.LinkEndDeviceParameter{
-		IncomingBufSize:  c.incomingCapacity,
-		OutgoingBufSize:  c.outgoingCapacity,
 		NumInputChannel:  c.inputWidth,
 		NumOutputChannel: c.outputWidth,
 	}

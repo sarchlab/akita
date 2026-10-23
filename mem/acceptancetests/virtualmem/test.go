@@ -140,16 +140,9 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
 
 	l2Spec := writeback.DefaultSpec()
-	l2Spec.WayAssociativity = 4
+	l2Spec.NumWays = 4
 	l2Spec.NumReqPerCycle = 2
 
-	l2Spec.DirBufferCapacity = 2
-	l2Spec.DirToBankBufferCapacity = 2
-	l2Spec.WriteBufferToBankBufferCapacity = 2
-	l2Spec.MSHRBufferCapacity = 2
-	l2Spec.WriteBufferStageCapacity = 2
-	l2Spec.DirPostBufferCapacity = 2
-	l2Spec.BankPostBufferCapacity = 2
 	l2Spec.DirectoryWidth = 2
 	l2Spec.BankWidth = 2
 	l2Spec.Bottom.Destinations = []messaging.RemotePort{
@@ -166,7 +159,7 @@ func buildMemoryHierarchy(s *sim.Simulation) (
 
 	l1Spec := writethrough.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
-	l1Spec.WayAssociativity = 2
+	l1Spec.NumWays = 2
 	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
 
 	l1Spec.Bottom.Destinations = []messaging.RemotePort{
@@ -214,7 +207,6 @@ func buildTranslationHierarchy(
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 
-	l2TLBSpec.OutputBufferCapacity = 4
 	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{L2TLBMapper}
 	L2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
 		WithSimulation(s).
@@ -230,7 +222,6 @@ func buildTranslationHierarchy(
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
 
-	tlbSpec.OutputBufferCapacity = 2
 	tlbSpec.Bottom.Destinations = []messaging.RemotePort{L2TLB.Ports.Top.AsRemote()}
 	TLB := modeling.MakeBuilder[*tlb.Comp](tlbSpec).
 		WithSimulation(s).

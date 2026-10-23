@@ -29,8 +29,9 @@ the PCIe path (two switch-to-switch hops), even when a direct NVLink path
 exists (three hops through the NVLink-side switches). The generic `networkconnector.Router`
 extension remains available for future routing policies.
 
-Defaults are 1 GHz, 34-byte flits, one-flit processing widths, 16-flit port
-buffers, and one-flit internal switch queues. PCIe and NVLink switch latency
+Defaults are 1 GHz, 34-byte flits, one-flit processing widths, and one-flit
+network-owned port and internal switch queues. Port buffers were previously
+16 flits; the smaller queues can change backpressure and timing. PCIe and NVLink switch latency
 default to 140 cycles and are independently set with `WithPCIeSwitchLatency`
 and `WithNVLinkSwitchLatency`. Internal attachment switches retain their
 one-cycle latency. These are simulation parameters, not hardware calibration.
@@ -55,14 +56,12 @@ computed routes participate in checkpoint compatibility checks.
 | `WithFlitSize(n)` | Bytes per flit, independent of frequency |
 | `WithInputWidth(n)` | Flits admitted per input per cycle |
 | `WithOutputWidth(n)` | Flits ejected per output per cycle |
-| `WithIncomingBufferCapacity(n)` | Incoming port queue capacity in flits |
-| `WithOutgoingBufferCapacity(n)` | Outgoing port queue capacity in flits |
-| `WithRouteBufferCapacity(n)` | Per-input switch routing queue capacity |
-| `WithForwardBufferCapacity(n)` | Per-input switch forwarding queue capacity |
-| `WithSendBufferCapacity(n)` | Per-output switch send queue capacity |
 
-Widths and queue capacities must be positive and are independently configurable.
-Changing frequency does not change flit size. Increasing a queue's depth does not
-increase its processing width. The input/output options also configure endpoint
-processing. Device-facing ports remain the ports supplied by the caller; buffer
-options configure the endpoint network port and switch ports.
+Input/output widths must be positive and are configured separately. Changing
+frequency does not change flit size. Network-owned buffers are calculated:
+incoming port, route, and forward queues hold `InputWidth` flits; send and
+outgoing port queues hold `OutputWidth` flits. Endpoint network ports use the
+same rule. Device-facing ports remain caller-owned with their original sizes.
+Forwarding shares each output's width among contenders, limits each input to
+its input width, and rotates priority in binding order each cycle. Buffering is
+one cycle of capacity, not a guarantee of full throughput under contention.

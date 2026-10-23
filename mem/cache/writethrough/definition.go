@@ -12,24 +12,20 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:                   1 * timing.GHz,
-		NumReqPerCycle:         4,
-		Log2BlockSize:          6,
-		BankLatency:            20,
-		WayAssociativity:       4,
-		MaxNumConcurrentTrans:  16,
-		NumBanks:               1,
-		NumMSHREntry:           4,
-		NumSets:                16,
-		DirLatency:             2,
-		WritePolicyType:        "write-around",
-		DirBufferCapacity:      4,
-		BankBufferCapacity:     4,
-		DirPostBufferCapacity:  4,
-		BankPostBufferCapacity: 4,
-		DirectoryWidth:         4,
-		BankWidth:              4,
-		Bottom:                 mem.AddressMapper{InterleavingSize: 4096},
+		Freq:                  1 * timing.GHz,
+		NumReqPerCycle:        4,
+		Log2BlockSize:         6,
+		BankLatency:           20,
+		NumWays:               4,
+		MaxNumConcurrentTrans: 16,
+		NumBanks:              1,
+		NumMSHREntries:        4,
+		NumSets:               16,
+		DirLatency:            2,
+		WritePolicyType:       "write-around",
+		DirectoryWidth:        4,
+		BankWidth:             4,
+		Bottom:                mem.AddressMapper{InterleavingSize: 4096},
 	}
 }
 
@@ -44,7 +40,7 @@ func (s *state) Initialize(c *Comp) {
 
 	bankBufs := make([]queueing.Buffer[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankBufs[i] = queueing.MakeBuffer[int](spec.BankBufferCapacity)
+		bankBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
 	bankPipelines := make([]queueing.Pipeline[int], spec.NumBanks)
@@ -56,25 +52,25 @@ func (s *state) Initialize(c *Comp) {
 
 	bankPostBufs := make([]queueing.Buffer[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankPostBufs[i] = queueing.MakeBuffer[int](spec.BankPostBufferCapacity)
+		bankPostBufs[i] = queueing.MakeBuffer[int](spec.BankWidth)
 	}
 
 	initial := state{
-		DirBuf: queueing.MakeBuffer[int](spec.DirBufferCapacity),
+		DirBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankBufs: bankBufs,
 		DirPipeline: queueing.MakePipeline[int](
 			spec.DirectoryWidth,
 			spec.DirLatency),
 
-		DirPostBuf: queueing.MakeBuffer[int](spec.DirPostBufferCapacity),
+		DirPostBuf: queueing.MakeBuffer[int](spec.DirectoryWidth),
 
 		BankPipelines: bankPipelines,
 		BankPostBufs:  bankPostBufs,
 	}
 
 	cache.DirectoryReset(
-		&initial.DirectoryState, spec.NumSets, spec.WayAssociativity,
+		&initial.DirectoryState, spec.NumSets, spec.NumWays,
 		spec.blockSize())
 
 	*s = initial
@@ -96,22 +92,17 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
-	if spec.NumSets <= 0 || spec.WayAssociativity <= 0 || spec.Log2BlockSize >= 63 {
+	if spec.NumSets <= 0 || spec.NumWays <= 0 || spec.Log2BlockSize >= 63 {
 		return fmt.Errorf("cache geometry must have positive sets and ways and a block exponent below 63")
 	}
-	if uint64(spec.NumSets) > (^uint64(0)>>spec.Log2BlockSize)/uint64(spec.WayAssociativity) {
+	if uint64(spec.NumSets) > (^uint64(0)>>spec.Log2BlockSize)/uint64(spec.NumWays) {
 		return fmt.Errorf("cache byte size overflows uint64")
 	}
 	if spec.NumBanks <= 0 || spec.NumReqPerCycle <= 0 || spec.BankLatency < 0 || spec.DirLatency < 0 {
 		return fmt.Errorf("cache banks and request width must be positive and latencies nonnegative")
 	}
-	if spec.DirBufferCapacity <= 0 ||
-		spec.BankBufferCapacity <= 0 ||
-		spec.DirPostBufferCapacity <= 0 ||
-		spec.BankPostBufferCapacity <= 0 ||
-		spec.DirectoryWidth <= 0 ||
-		spec.BankWidth <= 0 {
-		return fmt.Errorf("cache pipeline widths and buffer capacities must be positive")
+	if spec.DirectoryWidth <= 0 || spec.BankWidth <= 0 {
+		return fmt.Errorf("pipeline widths must be positive")
 	}
 
 	return spec.Bottom.Validate()

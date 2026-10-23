@@ -283,7 +283,7 @@ func (m *tlbMiddleware) handleTranslationMiss(item pipelineTLBReqState) bool {
 	next := &m.comp.State
 	spec := m.comp.Spec
 
-	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
+	if mshrIsFull(next.MSHREntries, spec.NumMSHREntries) {
 		return false
 	}
 
@@ -387,7 +387,7 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 
 	next := &m.comp.State
 	var idx int
-	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.MSHRSize, request.PID, request.VAddr)
+	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.NumMSHREntries, request.PID, request.VAddr)
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, item)
 	next.MSHREntries[idx].HasReqToBottom = true
 	next.MSHREntries[idx].ReqToBottom = fetchBottom

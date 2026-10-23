@@ -327,7 +327,7 @@ func (d *directory) writethroughPartialWriteMiss(
 
 	next := &d.cache.comp.State
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntries) {
 		return false
 	}
 

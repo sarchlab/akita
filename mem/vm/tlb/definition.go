@@ -10,14 +10,13 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq:                 1 * timing.GHz,
-		NumReqPerCycle:       4,
-		OutputBufferCapacity: 4,
-		NumSets:              1,
-		NumWays:              32,
-		Log2PageSize:         12,
-		MSHRSize:             4,
-		Latency:              4,
+		Freq:           1 * timing.GHz,
+		NumReqPerCycle: 4,
+		NumSets:        1,
+		NumWays:        32,
+		Log2PageSize:   12,
+		NumMSHREntries: 4,
+		Latency:        4,
 	}
 }
 
@@ -35,7 +34,7 @@ func (s *state) Initialize(c *Comp) {
 			spec.NumReqPerCycle,
 			spec.Latency),
 
-		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](spec.OutputBufferCapacity),
+		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](spec.NumReqPerCycle),
 	}
 }
 
@@ -47,8 +46,8 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
-	if spec.NumReqPerCycle <= 0 || spec.OutputBufferCapacity <= 0 {
-		return fmt.Errorf("TLB processing width and output buffer capacity must be positive")
+	if spec.NumReqPerCycle <= 0 {
+		return fmt.Errorf("TLB processing width must be positive")
 	}
 	return spec.Bottom.Validate()
 }

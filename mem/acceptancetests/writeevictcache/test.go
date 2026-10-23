@@ -100,8 +100,8 @@ func buildEnvironment(
 	cacheSpec := writethrough.DefaultSpec()
 	cacheSpec.WritePolicyType = "write-evict"
 	cacheSpec.Log2BlockSize = 6
-	cacheSpec.NumMSHREntry = 4
-	cacheSpec.WayAssociativity = 8
+	cacheSpec.NumMSHREntries = 4
+	cacheSpec.NumWays = 8
 	cacheSpec.NumSets = 8 // 4 KiB, eight ways, 64-byte lines
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
