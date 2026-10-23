@@ -1376,7 +1376,9 @@ migration is deferred until after the Akita v5 release and is not part of this P
   `ConnectDevice(switchID, ports, DeviceConfig{Name: ..., DeviceEndParam: ..., SwitchEndParam: ...})`.
   `DeviceConfig` replaces `DeviceToSwitchLinkParameter`.
 - PCIe/NVLink `PlugInDevice` becomes `ConnectDevice`; NVLink `AddPCIeSwitch`
-  becomes `AddSwitch`. `ConnectDevicesWithNVLink(a,b)` no longer takes a count.
+  becomes `AddSwitch`. PCIe `AddSwitch(parent)` creates and connects a child;
+  NVLink `AddSwitch()` creates an unconnected switch, connected separately with
+  `ConnectSwitchesWithPCIeLink`. `ConnectDevicesWithNVLink(a,b)` no longer takes a count.
 - Delete `LinkParameter` and `LinkParam`: links are ideal. No per-link frequency,
   stage count, cycles-per-stage, pipeline width, or `IsIdeal` option remains.
 - Replace bandwidth/version setters with explicit flit size and input/output
@@ -1399,15 +1401,18 @@ migration is deferred until after the Akita v5 release and is not part of this P
   `WayAssociativity` to `NumWays`, and both caches' `NumMSHREntry` and TLB's
   `MSHRSize` to `NumMSHREntries`. Corresponding JSON names are `num_ways` and
   `num_mshr_entries`; these are pre-v5 schema changes.
-- Configure cache `DirectoryWidth` and `BankWidth` explicitly. Old writeback
-  width one became two pipeline lanes; preserve that with `DirectoryWidth: 2,
-  BankWidth: 2`. Request-stage queues use `NumReqPerCycle`; directory and bank
+- Configure cache `DirectoryWidth` and `BankWidth` explicitly. To preserve the
+  old pipeline widths, set both to `max(2, NumReqPerCycle)` for writeback and
+  `NumReqPerCycle` for writethrough. Their defaults are two and four respectively
+  and no longer follow changes to `NumReqPerCycle`. Request-stage queues use
+  `NumReqPerCycle`; directory and bank
   output queues use their respective pipeline widths. Remove internal queue
   capacity fields. The default writeback directory output queue changes from
   one to two entries. Architectural `WriteBufferCapacity` and `NumMSHREntries`
   remain configurable.
-- TLB output queue capacity equals `NumReqPerCycle` (default four); remove
-  `OutputBufferCapacity` from intermediate pre-v5 configurations.
+- Writeback `NumBanks` must be positive; zero or negative values are no longer
+  treated as one bank.
+- TLB output queue capacity continues to equal `NumReqPerCycle` (default four).
 
 Old checkpoints must be rebuilt after these Spec and topology changes. Default
 geometry and widths are preserved, but queue sizing and NoC forwarding can
