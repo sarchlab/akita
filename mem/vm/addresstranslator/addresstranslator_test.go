@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -170,7 +170,7 @@ func TestAddressTranslator(t *testing.T) {
 			require.Len(t, updatedState.Transactions, 1)
 
 			sent, _ := translationPort.RetrieveOutgoing()
-			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationReq{}}, sent)
+			require.IsType(t, messaging.Msg{Payload: addrtransprotocol.Req{}}, sent)
 			transReq := sent
 			require.Equal(t, transReq.ID, updatedState.Transactions[0].TranslationReqID)
 		})
@@ -199,14 +199,14 @@ func TestAddressTranslator(t *testing.T) {
 		setup3 := func(t *testing.T) {
 			t.Helper()
 
-			transReq1 = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			transReq1 = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
 				ID: sim.NewID(),
 			}
 
-			transReq2 = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			transReq2 = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
@@ -241,7 +241,7 @@ func TestAddressTranslator(t *testing.T) {
 				TrafficBytes: 12,
 			}
 
-			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+			translationRsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
@@ -286,7 +286,7 @@ func TestAddressTranslator(t *testing.T) {
 				TrafficBytes: 12,
 			}
 
-			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+			translationRsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
@@ -345,7 +345,7 @@ func TestAddressTranslator(t *testing.T) {
 				TrafficBytes: len(data) + 12,
 			}
 
-			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+			translationRsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,

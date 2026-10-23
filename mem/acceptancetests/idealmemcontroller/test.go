@@ -60,7 +60,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp
 	agent.BindPort("Mem", ports.Build())
 
 	dramSpec := idealmemcontroller.DefaultSpec()
-	dramSpec.Width = 1
+	dramSpec.NumReqPerCycle = 1
 	dramSpec.Latency = 100
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(s).

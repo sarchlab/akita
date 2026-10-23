@@ -96,7 +96,7 @@ func TestCacheMilestones(t *testing.T) {
 		rec         *milestoneRecorder
 	)
 
-	buildCache := func(policy string) {
+	buildCache := func(policy WritePolicy) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, true)
 		connection = direct.NewConnection("Conn", sim, timing.GHz)
@@ -121,7 +121,7 @@ func TestCacheMilestones(t *testing.T) {
 		addressToPortMapper := dram.Ports.Top.AsRemote()
 
 		spec := DefaultSpec()
-		spec.WritePolicyType = policy
+		spec.WritePolicy = policy
 
 		spec.Bottom.Destinations = []messaging.RemotePort{addressToPortMapper}
 		c = modeling.MakeBuilder[*Comp](spec).

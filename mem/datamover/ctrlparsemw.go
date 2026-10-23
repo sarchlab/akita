@@ -16,7 +16,7 @@ type ctrlParseMW struct {
 }
 
 // topPort is the workload-request port the data mover listens on for
-// datamoverprotocol.DataMoveReq messages. (It was historically named "Control" but
+// datamoverprotocol.Req messages. (It was historically named "Control" but
 // that name is now reserved for the uniform control protocol.)
 func (m *ctrlParseMW) topPort() messaging.Port {
 	return m.comp.Ports.Top
@@ -55,11 +55,19 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	if !ok {
 		return false
 	}
-	_, ok = reqI.Payload.(datamoverprotocol.DataMoveReq)
+	_, ok = reqI.Payload.(datamoverprotocol.Req)
 	req := reqI
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI.Payload))
 	}
+
+	spec := m.comp.Spec
+
+	srcByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.Req).SrcSide)
+	addressMustBeAligned(req.Payload.(datamoverprotocol.Req).SrcAddress, srcByteGranularity)
+
+	dstByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.Req).DstSide)
+	addressMustBeAligned(req.Payload.(datamoverprotocol.Req).DstAddress, dstByteGranularity)
 
 	// The slot is free and this request is being admitted. Attribute the
 	// at-head admission wait to the buffer task (which the port closes at
@@ -68,16 +76,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 	m.topPort().RetrieveIncoming()
 
-	spec := m.comp.Spec
-
-	srcByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.DataMoveReq).SrcSide)
-	addressMustBeAligned(req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress, srcByteGranularity)
-
-	dstByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.DataMoveReq).DstSide)
-	addressMustBeAligned(req.Payload.(datamoverprotocol.DataMoveReq).DstAddress, dstByteGranularity)
-
-	state.SrcSide = string(req.Payload.(datamoverprotocol.DataMoveReq).SrcSide)
-	state.DstSide = string(req.Payload.(datamoverprotocol.DataMoveReq).DstSide)
+	state.SrcSide = req.Payload.(datamoverprotocol.Req).SrcSide
+	state.DstSide = req.Payload.(datamoverprotocol.Req).DstSide
 	state.SrcByteGranularity = srcByteGranularity
 	state.DstByteGranularity = dstByteGranularity
 
@@ -86,13 +86,13 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		ReqID:         req.ID,
 		ReqSrc:        req.Src,
 		ReqDst:        req.Dst,
-		SrcAddress:    req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress,
-		DstAddress:    req.Payload.(datamoverprotocol.DataMoveReq).DstAddress,
-		ByteSize:      req.Payload.(datamoverprotocol.DataMoveReq).ByteSize,
-		SrcSide:       string(req.Payload.(datamoverprotocol.DataMoveReq).SrcSide),
-		DstSide:       string(req.Payload.(datamoverprotocol.DataMoveReq).DstSide),
-		NextReadAddr:  req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress,
-		NextWriteAddr: req.Payload.(datamoverprotocol.DataMoveReq).DstAddress,
+		SrcAddress:    req.Payload.(datamoverprotocol.Req).SrcAddress,
+		DstAddress:    req.Payload.(datamoverprotocol.Req).DstAddress,
+		ByteSize:      req.Payload.(datamoverprotocol.Req).ByteSize,
+		SrcSide:       req.Payload.(datamoverprotocol.Req).SrcSide,
+		DstSide:       req.Payload.(datamoverprotocol.Req).DstSide,
+		NextReadAddr:  req.Payload.(datamoverprotocol.Req).SrcAddress,
+		NextWriteAddr: req.Payload.(datamoverprotocol.Req).DstAddress,
 		PendingRead:   make(map[uint64]pendingReadState),
 		PendingWrite:  make(map[uint64]pendingWriteState),
 	}
@@ -130,7 +130,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 	rsp := messaging.Msg{ID: m.comp.NewID(),
 		Src:   trans.ReqDst,
 		Dst:   trans.ReqSrc,
-		RspTo: trans.ReqID, Payload: datamoverprotocol.DataMoveRsp{}}
+		RspTo: trans.ReqID, Payload: datamoverprotocol.Rsp{}}
 
 	if !m.topPort().CanSend() {
 		return false

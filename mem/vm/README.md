@@ -50,14 +50,14 @@ Address translation uses a request/response protocol:
 
 ```go
 // Request: virtual → physical translation
-type TranslationReq struct {
+type Req struct {
     VAddr    uint64
     PID      PID
     DeviceID uint64
 }
 
 // Response: carries the resolved Page
-type TranslationRsp struct {
+type Rsp struct {
     Page Page
 }
 ```
@@ -79,7 +79,7 @@ Application (virtual address)
        │                    ▼ (miss)
        │                MMU / GMMU ──► PageTable
        │                    │
-       │◄───────────────────┘ (TranslationRsp with Page)
+       │◄───────────────────┘ (Rsp with Page)
        │
        ▼
   Physical memory access

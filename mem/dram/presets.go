@@ -8,7 +8,8 @@ import (
 func DDR4Spec() Spec {
 	return Spec{
 		Freq:                 1200 * timing.MHz,
-		Protocol:             int(protoDDR4),
+		Protocol:             ProtocolDDR4,
+		PagePolicy:           PagePolicyClose,
 		BurstLength:          8,
 		NumBankGroup:         4,
 		NumBank:              4,
@@ -51,7 +52,8 @@ func DDR4Spec() Spec {
 func DDR5Spec() Spec {
 	return Spec{
 		Freq:                 2400 * timing.MHz,
-		Protocol:             int(protoDDR5),
+		Protocol:             ProtocolDDR5,
+		PagePolicy:           PagePolicyClose,
 		BurstLength:          16,
 		NumBankGroup:         8,
 		NumBank:              4,
@@ -94,7 +96,8 @@ func DDR5Spec() Spec {
 func HBM2Spec() Spec {
 	return Spec{
 		Freq:                 1000 * timing.MHz,
-		Protocol:             int(protoHBM2),
+		Protocol:             ProtocolHBM2,
+		PagePolicy:           PagePolicyClose,
 		BurstLength:          4,
 		NumBankGroup:         4,
 		NumBank:              4,
@@ -136,7 +139,8 @@ func HBM2Spec() Spec {
 func HBM3Spec() Spec {
 	return Spec{
 		Freq:                 3200 * timing.MHz,
-		Protocol:             int(protoHBM3),
+		Protocol:             ProtocolHBM3,
+		PagePolicy:           PagePolicyClose,
 		BurstLength:          8,
 		NumBankGroup:         4,
 		NumBank:              4,
@@ -178,7 +182,8 @@ func HBM3Spec() Spec {
 func GDDR6Spec() Spec {
 	return Spec{
 		Freq:                 1750 * timing.MHz,
-		Protocol:             int(protoGDDR6),
+		Protocol:             ProtocolGDDR6,
+		PagePolicy:           PagePolicyClose,
 		BurstLength:          16,
 		NumBankGroup:         4,
 		NumBank:              4,

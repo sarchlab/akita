@@ -36,11 +36,11 @@ func (s *lateResources) initialize() error {
 }
 func topologyParameters() (DeviceConfig, SwitchToSwitchLinkParameter) {
 	end := LinkEndSwitchParameter{
-		NumInputChannel:  1,
-		NumOutputChannel: 1,
-		Latency:          2}
-	return DeviceConfig{DeviceEndParam: LinkEndDeviceParameter{NumInputChannel: 1,
-			NumOutputChannel: 1},
+		InputWidth:  1,
+		OutputWidth: 1,
+		Latency:     2}
+	return DeviceConfig{DeviceEndParam: LinkEndDeviceParameter{InputWidth: 1,
+			OutputWidth: 1},
 			SwitchEndParam: end},
 		SwitchToSwitchLinkParameter{LeftEndParam: end, RightEndParam: end}
 }
@@ -247,8 +247,8 @@ func TestSwitchUsesCalculatedAsymmetricBufferSizes(t *testing.T) {
 	c := MakeBuilder().WithSimulation(s).Build("Network")
 	a, b := c.AddSwitch(SwitchConfig{}), c.AddSwitch(SwitchConfig{})
 	_, sp := topologyParameters()
-	sp.LeftEndParam.NumInputChannel = 3
-	sp.LeftEndParam.NumOutputChannel = 1
+	sp.LeftEndParam.InputWidth = 3
+	sp.LeftEndParam.OutputWidth = 1
 
 	c.ConnectSwitches(a, b, sp)
 	require.NoError(t, s.Initialize())

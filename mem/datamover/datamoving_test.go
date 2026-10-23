@@ -37,7 +37,7 @@ func TestDataMover(t *testing.T) {
 
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
-		memSpec.Width = 1
+		memSpec.NumReqPerCycle = 1
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
@@ -82,7 +82,7 @@ func TestDataMover(t *testing.T) {
 		}
 		outsideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 0,
@@ -100,7 +100,7 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value0, present0 := srcPort.RetrieveIncoming()
 		require.True(t, present0)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value0)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value0)
 	})
 
 	t.Run("should move data when SrcAddress is beyond BufferSize", func(t *testing.T) {
@@ -116,7 +116,7 @@ func TestDataMover(t *testing.T) {
 		}
 		outsideStorage.Write(4096, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 4096,
 			SrcSide:    "outside",
 			DstAddress: 8192,
@@ -134,7 +134,7 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, data, insideStorage.Read(8192, 2048))
 		value1, present1 := srcPort.RetrieveIncoming()
 		require.True(t, present1)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value1)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value1)
 	})
 
 	t.Run("should move data inside to outside", func(t *testing.T) {
@@ -146,7 +146,7 @@ func TestDataMover(t *testing.T) {
 		}
 		insideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "inside",
 			DstAddress: 0,
@@ -164,7 +164,7 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value2, present2 := srcPort.RetrieveIncoming()
 		require.True(t, present2)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value2)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value2)
 	})
 
 	t.Run("should move on difference addresses", func(t *testing.T) {
@@ -176,7 +176,7 @@ func TestDataMover(t *testing.T) {
 		}
 		insideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "inside",
 			DstAddress: 4096,
@@ -194,7 +194,7 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, data, outsideStorage.Read(4096, 4096))
 		value3, present3 := srcPort.RetrieveIncoming()
 		require.True(t, present3)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value3)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value3)
 	})
 
 	t.Run("should move partial data", func(t *testing.T) {
@@ -206,7 +206,7 @@ func TestDataMover(t *testing.T) {
 		}
 		outsideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 512,
@@ -225,13 +225,13 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, expected, insideStorage.Read(512, 512))
 		value4, present4 := srcPort.RetrieveIncoming()
 		require.True(t, present4)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value4)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value4)
 	})
 
 	t.Run("should handle zero-size transfers", func(t *testing.T) {
 		setup1(t)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "inside",
 			DstAddress: 0,
@@ -256,7 +256,7 @@ func TestDataMover(t *testing.T) {
 		}
 		insideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "inside",
 			DstAddress: 512,
@@ -275,6 +275,6 @@ func TestDataMover(t *testing.T) {
 		require.Equal(t, expected, insideStorage.Read(0, 1024))
 		value5, present5 := srcPort.RetrieveIncoming()
 		require.True(t, present5)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value5)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value5)
 	})
 }

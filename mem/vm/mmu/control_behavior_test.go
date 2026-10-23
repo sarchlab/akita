@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -21,7 +21,7 @@ import (
 //
 // The MMU resolves a translation against its in-process page table without a
 // downstream round-trip, so a walk for a MAPPED page is self-completing: it
-// produces a vmprotocol.TranslationRsp on the Top port and removes itself from
+// produces a addrtransprotocol.Rsp on the Top port and removes itself from
 // WalkingTranslations. The tests below rely on that by inserting mapped pages,
 // keeping the walk entirely local.
 func TestMMUControlBehavior(t *testing.T) {
@@ -70,7 +70,7 @@ func TestMMUControlBehavior(t *testing.T) {
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 0},
@@ -131,7 +131,7 @@ func TestMMUControlBehavior(t *testing.T) {
 				if !ok {
 					break
 				}
-				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					completed++
 				}
 			}

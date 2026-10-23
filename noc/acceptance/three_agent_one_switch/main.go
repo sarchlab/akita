@@ -69,11 +69,11 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 			agent.AgentPorts,
 			nc.DeviceConfig{
 				DeviceEndParam: nc.LinkEndDeviceParameter{
-					NumInputChannel:  4,
-					NumOutputChannel: 4,
+					InputWidth:  4,
+					OutputWidth: 4,
 				},
-				SwitchEndParam: nc.LinkEndSwitchParameter{NumInputChannel: 4,
-					NumOutputChannel: 4,
+				SwitchEndParam: nc.LinkEndSwitchParameter{InputWidth: 4,
+					OutputWidth: 4,
 				},
 			})
 	}

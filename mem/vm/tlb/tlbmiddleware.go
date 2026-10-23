@@ -2,7 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -199,7 +199,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	page := mshrEntry.Page
 	req := mshrEntry.Requests[0]
 	reqMsg := req.Msg
-	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+	rspToTop := messaging.Msg{Payload: addrtransprotocol.Rsp{
 		Page: page,
 	},
 		ID:    m.comp.NewID(),
@@ -232,7 +232,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 
 func (m *tlbMiddleware) lookup(item pipelineTLBReqState) bool {
 	msg := item.Msg
-	request := msg.Payload.(vmprotocol.TranslationReq)
+	request := msg.Payload.(addrtransprotocol.Req)
 
 	spec := m.comp.Spec
 	next := &m.comp.State
@@ -314,7 +314,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	page vm.Page,
 ) bool {
 	msg := item.Msg
-	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 		Page: page,
 	},
 		ID:    m.comp.NewID(),
@@ -340,7 +340,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	item pipelineTLBReqState,
 ) bool {
 	msg := item.Msg
-	request := msg.Payload.(vmprotocol.TranslationReq)
+	request := msg.Payload.(addrtransprotocol.Req)
 
 	next := &m.comp.State
 	idx, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr)
@@ -359,11 +359,11 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 
 func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 	msg := item.Msg
-	request := msg.Payload.(vmprotocol.TranslationReq)
+	request := msg.Payload.(addrtransprotocol.Req)
 
 	spec := m.comp.Spec
 
-	fetchBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	fetchBottom := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      request.PID,
 		VAddr:    request.VAddr,
 		DeviceID: request.DeviceID},
@@ -408,7 +408,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	item := itemI
 	spec := m.comp.Spec
-	page := item.Payload.(vmprotocol.TranslationRsp).Page
+	page := item.Payload.(addrtransprotocol.Rsp).Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
 	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {

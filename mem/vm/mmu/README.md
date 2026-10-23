@@ -2,7 +2,7 @@
 
 Package `mmu` provides a memory management unit for the Akita simulation
 framework. It is the CPU-side terminus of the virtual-memory subsystem:
-it performs page-table walks to resolve `vmprotocol.TranslationReq` messages.
+it performs page-table walks to resolve `addrtransprotocol.Req` messages.
 
 ## How It Works
 
@@ -16,19 +16,19 @@ Invalidate and Flush are answered as unsupported.
 
 ### Translation — page-table walks
 
-1. **parseFromTop** — Accepts a `vmprotocol.TranslationReq` from the `Top` port (up to
-   `MaxRequestsInFlight` may be walking at once) and starts a walk with a
+1. **parseFromTop** — Accepts a `addrtransprotocol.Req` from the `Top` port (up to
+   `MaxInFlightTranslations` may be walking at once) and starts a walk with a
    countdown of `Latency` cycles.
 2. **walkPageTable** — Each tick decrements every walk's countdown. When a walk
    completes it looks up the page in the shared `vm.PageTable`:
    - If the page is missing and `AutoPageAllocation` is set, a new page is
      created and inserted (otherwise it panics).
-   - A `vmprotocol.TranslationRsp` is then sent back on `Top`.
+   - A `addrtransprotocol.Rsp` is then sent back on `Top`.
 
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, walk `Latency`,
-  `MaxRequestsInFlight`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
+  `MaxInFlightTranslations`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
   sizes are not part of the spec; the system builder chooses them when it
   creates the port instances.
 - `State` — mutable runtime data: the control state, the in-flight walks, and
@@ -78,6 +78,6 @@ buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
-- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
+- **Top**: accepts `addrtransprotocol.Req`, returns `addrtransprotocol.Rsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset), returns
   `memcontrolprotocol.Rsp`.

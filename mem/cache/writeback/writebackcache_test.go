@@ -109,7 +109,7 @@ func buildStageTestComp(setupSim1 *akitasim.Simulation, spec Spec, res Resources
 // backed by storage, and returns its Top port.
 func buildIdealDRAM(sim *testsim.Simulation, storage *mem.Storage) messaging.Port {
 	dramSpec := idealmemcontroller.DefaultSpec()
-	dramSpec.Width = 1
+	dramSpec.NumReqPerCycle = 1
 	dramSpec.Latency = 200
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(sim).

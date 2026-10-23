@@ -304,7 +304,7 @@ func TestPredefinedSpecs(t *testing.T) {
 		require.Equal(t, 4, spec.NumBank)
 		require.Equal(t, 1, spec.NumRank)
 		require.Equal(t, 64, spec.BusWidth)
-		require.Equal(t, int(protoDDR4), spec.Protocol)
+		require.Equal(t, ProtocolDDR4, spec.Protocol)
 	})
 
 	t.Run("should build with DDR5 spec", func(t *testing.T) {
@@ -317,7 +317,7 @@ func TestPredefinedSpecs(t *testing.T) {
 		require.Equal(t, 8, spec.NumBankGroup)
 		require.Equal(t, 4, spec.NumBank)
 		require.Equal(t, 32, spec.BusWidth)
-		require.Equal(t, int(protoDDR5), spec.Protocol)
+		require.Equal(t, ProtocolDDR5, spec.Protocol)
 	})
 
 	t.Run("should build with HBM2 spec", func(t *testing.T) {
@@ -331,7 +331,7 @@ func TestPredefinedSpecs(t *testing.T) {
 		require.Equal(t, 4, spec.NumBank)
 		require.Equal(t, 128, spec.BusWidth)
 		require.Equal(t, 128, spec.DeviceWidth)
-		require.Equal(t, int(protoHBM2), spec.Protocol)
+		require.Equal(t, ProtocolHBM2, spec.Protocol)
 	})
 
 	t.Run("should build with HBM3 spec", func(t *testing.T) {
@@ -344,7 +344,7 @@ func TestPredefinedSpecs(t *testing.T) {
 		require.Equal(t, 4, spec.NumBankGroup)
 		require.Equal(t, 64, spec.BusWidth)
 		require.Equal(t, 64, spec.DeviceWidth)
-		require.Equal(t, int(protoHBM3), spec.Protocol)
+		require.Equal(t, ProtocolHBM3, spec.Protocol)
 	})
 
 	t.Run("should build with GDDR6 spec", func(t *testing.T) {
@@ -358,7 +358,7 @@ func TestPredefinedSpecs(t *testing.T) {
 		require.Equal(t, 4, spec.NumBank)
 		require.Equal(t, 32, spec.BusWidth)
 		require.Equal(t, 32, spec.DeviceWidth)
-		require.Equal(t, int(protoGDDR6), spec.Protocol)
+		require.Equal(t, ProtocolGDDR6, spec.Protocol)
 	})
 
 	t.Run("should preserve DDR4 timing parameters", func(t *testing.T) {
@@ -386,69 +386,48 @@ func TestPredefinedSpecs(t *testing.T) {
 }
 
 func TestProtocolEnums(t *testing.T) {
-	t.Run("should have new protocol values after HMC", func(t *testing.T) {
-		require.Greater(t, int(protoDDR5), int(protoHMC))
-		require.Greater(t, int(protoHBM3), int(protoDDR5))
-		require.Greater(t, int(protoLPDDR5), int(protoHBM3))
-		require.Greater(t, int(protoHBM3E), int(protoLPDDR5))
-	})
-
 	t.Run("should recognize HBM3 as HBM", func(t *testing.T) {
-		require.True(t, protoHBM3.isHBM())
+		require.True(t, ProtocolHBM3.isHBM())
 	})
 
 	t.Run("should recognize HBM3E as HBM", func(t *testing.T) {
-		require.True(t, protoHBM3E.isHBM())
+		require.True(t, ProtocolHBM3E.isHBM())
 	})
 
 	t.Run("should recognize HBM2 as HBM", func(t *testing.T) {
-		require.True(t, protoHBM2.isHBM())
+		require.True(t, ProtocolHBM2.isHBM())
 	})
 
 	t.Run("should recognize HBM as HBM", func(t *testing.T) {
-		require.True(t, protoHBM.isHBM())
+		require.True(t, ProtocolHBM.isHBM())
 	})
 
 	t.Run("should not recognize DDR4 as HBM", func(t *testing.T) {
-		require.False(t, protoDDR4.isHBM())
+		require.False(t, ProtocolDDR4.isHBM())
 	})
 
 	t.Run("should not recognize DDR5 as HBM", func(t *testing.T) {
-		require.False(t, protoDDR5.isHBM())
+		require.False(t, ProtocolDDR5.isHBM())
 	})
 
 	t.Run("should recognize GDDR6 as GDDR", func(t *testing.T) {
-		require.True(t, protoGDDR6.isGDDR())
+		require.True(t, ProtocolGDDR6.isGDDR())
 	})
 
 	t.Run("should recognize GDDR5 as GDDR", func(t *testing.T) {
-		require.True(t, protoGDDR5.isGDDR())
+		require.True(t, ProtocolGDDR5.isGDDR())
 	})
 
 	t.Run("should recognize GDDR5X as GDDR", func(t *testing.T) {
-		require.True(t, protoGDDR5X.isGDDR())
+		require.True(t, ProtocolGDDR5X.isGDDR())
 	})
 
 	t.Run("should not recognize DDR4 as GDDR", func(t *testing.T) {
-		require.False(t, protoDDR4.isGDDR())
+		require.False(t, ProtocolDDR4.isGDDR())
 	})
 
 	t.Run("should not recognize HBM3 as GDDR", func(t *testing.T) {
-		require.False(t, protoHBM3.isGDDR())
-	})
-
-	t.Run("should have all original protocols in correct order", func(t *testing.T) {
-		require.Equal(t, 0, int(protoDDR3))
-		require.Equal(t, 1, int(protoDDR4))
-		require.Equal(t, 2, int(protoGDDR5))
-		require.Equal(t, 3, int(protoGDDR5X))
-		require.Equal(t, 4, int(protoGDDR6))
-		require.Equal(t, 5, int(protoLPDDR))
-		require.Equal(t, 6, int(protoLPDDR3))
-		require.Equal(t, 7, int(protoLPDDR4))
-		require.Equal(t, 8, int(protoHBM))
-		require.Equal(t, 9, int(protoHBM2))
-		require.Equal(t, 10, int(protoHMC))
+		require.False(t, ProtocolHBM3.isGDDR())
 	})
 }
 

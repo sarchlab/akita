@@ -52,7 +52,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 		spec.NumSets = 512
-		spec.MaxNumConcurrentTrans = 16
+		spec.MaxInFlightRequests = 16
 
 		spec.Bottom.Destinations = []messaging.RemotePort{messaging.RemotePort("LowerCache")}
 		comp = modeling.MakeBuilder[*Comp](spec).

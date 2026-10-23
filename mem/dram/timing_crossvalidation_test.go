@@ -80,16 +80,16 @@ type expectedTimings struct {
 }
 
 func computeBurstCycle(spec Spec) int {
-	protocol := protocol(spec.Protocol)
+	protocol := spec.Protocol
 
 	burstCycle := spec.BurstLength / 2
 
 	switch protocol {
-	case protoGDDR5:
+	case ProtocolGDDR5:
 		burstCycle = spec.BurstLength / 4
-	case protoGDDR5X:
+	case ProtocolGDDR5X:
 		burstCycle = spec.BurstLength / 8
-	case protoGDDR6:
+	case ProtocolGDDR6:
 		burstCycle = spec.BurstLength / 16
 	}
 
@@ -146,7 +146,7 @@ func computeWriteTimings(
 func computeActivateTimings(spec Spec, tRC int) (
 	actToRead, actToWrite, actToAct, actToActL, actToActS, actToPre int,
 ) {
-	protocol := protocol(spec.Protocol)
+	protocol := spec.Protocol
 
 	actToRead = spec.TRCD - spec.TAL
 	actToWrite = spec.TRCD - spec.TAL

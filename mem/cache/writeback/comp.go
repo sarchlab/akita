@@ -33,13 +33,13 @@ type Spec struct {
 	NumWays        int         `json:"num_ways"`
 
 	// NumBanks is the number of banks and must be positive.
-	NumBanks            int `json:"num_banks"`
-	NumMSHREntries      int `json:"num_mshr_entries"`
-	NumSets             int `json:"num_sets"`
-	DirLatency          int `json:"dir_latency"`
-	WriteBufferCapacity int `json:"write_buffer_capacity"`
-	MaxInflightFetch    int `json:"max_inflight_fetch"`
-	MaxInflightEviction int `json:"max_inflight_eviction"`
+	NumBanks             int `json:"num_banks"`
+	NumMSHREntries       int `json:"num_mshr_entries"`
+	NumSets              int `json:"num_sets"`
+	DirLatency           int `json:"dir_latency"`
+	WriteBufferCapacity  int `json:"write_buffer_capacity"`
+	MaxInFlightFetches   int `json:"max_in_flight_fetches"`
+	MaxInFlightEvictions int `json:"max_in_flight_evictions"`
 	// Pipeline widths are entries per cycle. Internal output queues hold one
 	// cycle of their pipeline width; other stage queues use NumReqPerCycle.
 	DirectoryWidth int `json:"directory_width"`

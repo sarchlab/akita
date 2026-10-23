@@ -164,15 +164,15 @@ func (c *Connector) switchParameter() networkconnector.SwitchToSwitchLinkParamet
 
 func (c *Connector) switchEnd(latency int) networkconnector.LinkEndSwitchParameter {
 	return networkconnector.LinkEndSwitchParameter{
-		NumInputChannel:  c.inputWidth,
-		NumOutputChannel: c.outputWidth,
-		Latency:          latency,
+		InputWidth:  c.inputWidth,
+		OutputWidth: c.outputWidth,
+		Latency:     latency,
 	}
 }
 
 func (c *Connector) deviceEnd() networkconnector.LinkEndDeviceParameter {
 	return networkconnector.LinkEndDeviceParameter{
-		NumInputChannel:  c.inputWidth,
-		NumOutputChannel: c.outputWidth,
+		InputWidth:  c.inputWidth,
+		OutputWidth: c.outputWidth,
 	}
 }

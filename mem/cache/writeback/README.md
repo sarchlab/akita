@@ -61,8 +61,8 @@ type Spec struct {
     NumMSHREntries        int         // MSHR capacity
     NumSets             int         // Number of sets in the directory
     WriteBufferCapacity int         // Max lines in the write buffer
-    MaxInflightFetch    int         // Concurrent fetches to lower memory
-    MaxInflightEviction int         // Concurrent evictions to lower memory
+    MaxInFlightFetches    int         // Concurrent fetches to lower memory
+    MaxInFlightEvictions int         // Concurrent evictions to lower memory
 
     // Routing is read directly from Spec.
     Bottom mem.AddressMapper // destinations, interleaving, optional range/fallback

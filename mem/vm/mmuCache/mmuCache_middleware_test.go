@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -66,7 +66,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 	t.Run("should send full latency on miss", func(t *testing.T) {
 		setup1(t)
 
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x2000,
 			DeviceID: 3},
@@ -82,15 +82,15 @@ func TestMMUCacheMiddleware(t *testing.T) {
 		require.True(t, madeProgress)
 
 		sent, _ := bottomPort.RetrieveOutgoing()
-		_, ok := sent.Payload.(vmprotocol.TranslationReq)
+		_, ok := sent.Payload.(addrtransprotocol.Req)
 		sentReq := sent
 		require.True(t, ok)
-		require.Equal(t, uint64(200), sentReq.Payload.(vmprotocol.TranslationReq).TransLatency)
+		require.Equal(t, uint64(200), sentReq.Payload.(addrtransprotocol.Req).TransLatency)
 		require.Equal(t, messaging.RemotePort("LowModule"), sentReq.Dst)
 		require.Equal(t, bottomPort.AsRemote(), sentReq.Src)
-		require.Equal(t, vm.PID(1), sentReq.Payload.(vmprotocol.TranslationReq).PID)
-		require.Equal(t, uint64(0x2000), sentReq.Payload.(vmprotocol.TranslationReq).VAddr)
-		require.Equal(t, uint64(3), sentReq.Payload.(vmprotocol.TranslationReq).DeviceID)
+		require.Equal(t, vm.PID(1), sentReq.Payload.(addrtransprotocol.Req).PID)
+		require.Equal(t, uint64(0x2000), sentReq.Payload.(addrtransprotocol.Req).VAddr)
+		require.Equal(t, uint64(3), sentReq.Payload.(addrtransprotocol.Req).DeviceID)
 		_, present0 := topPort.PeekIncoming()
 		require.False(t, present0)
 	})
@@ -98,7 +98,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 	t.Run("should reduce latency on upper-level hit", func(t *testing.T) {
 		setup1(t)
 
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x3000,
 			DeviceID: 2},
@@ -109,12 +109,12 @@ func TestMMUCacheMiddleware(t *testing.T) {
 
 		// Compute seg and wayID for level 1
 		spec := comp.Spec
-		seg := segForLevelSpec(spec, 1, req.Payload.(vmprotocol.TranslationReq).VAddr)
+		seg := segForLevelSpec(spec, 1, req.Payload.(addrtransprotocol.Req).VAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
 		// Update the set in state
 		next := &comp.State
-		setUpdate(&next.Table[1], wayID, req.Payload.(vmprotocol.TranslationReq).PID, seg)
+		setUpdate(&next.Table[1], wayID, req.Payload.(addrtransprotocol.Req).PID, seg)
 
 		topPort.Deliver(req)
 
@@ -123,10 +123,10 @@ func TestMMUCacheMiddleware(t *testing.T) {
 		require.True(t, madeProgress)
 
 		sent, _ := bottomPort.RetrieveOutgoing()
-		_, ok := sent.Payload.(vmprotocol.TranslationReq)
+		_, ok := sent.Payload.(addrtransprotocol.Req)
 		sentReq := sent
 		require.True(t, ok)
-		require.Equal(t, uint64(100), sentReq.Payload.(vmprotocol.TranslationReq).TransLatency)
+		require.Equal(t, uint64(100), sentReq.Payload.(addrtransprotocol.Req).TransLatency)
 	})
 
 	t.Run("should forward response and update cache", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestMMUCacheMiddleware(t *testing.T) {
 			PAddr: 0x5000,
 			Valid: true,
 		}
-		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: page,
 		},
 			ID:    sim.NewID(),
@@ -159,12 +159,12 @@ func TestMMUCacheMiddleware(t *testing.T) {
 		require.True(t, madeProgress)
 
 		sent, _ := topPort.RetrieveOutgoing()
-		_, ok := sent.Payload.(vmprotocol.TranslationRsp)
+		_, ok := sent.Payload.(addrtransprotocol.Rsp)
 		sentRsp := sent
 		require.True(t, ok)
 		require.Equal(t, messaging.RemotePort("UpModule"), sentRsp.Dst)
 		require.Equal(t, topPort.AsRemote(), sentRsp.Src)
-		require.Equal(t, page, sentRsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, page, sentRsp.Payload.(addrtransprotocol.Rsp).Page)
 
 		for level := 0; level < spec.NumLevels; level++ {
 			seg := segForLevelSpec(spec, level, page.VAddr)

@@ -60,7 +60,7 @@ func TestIdealMemoryController(t *testing.T) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
 		spec := DefaultSpec()
-		spec.Width = 1
+		spec.NumReqPerCycle = 1
 		spec.Latency = 10
 
 		memController = modeling.MakeBuilder[*Comp](spec).
@@ -285,7 +285,7 @@ func TestIdealMemoryController(t *testing.T) {
 
 		spec := memController.Spec
 		require.Equal(t, 10, spec.Latency)
-		require.Equal(t, 1, spec.Width)
+		require.Equal(t, 1, spec.NumReqPerCycle)
 	})
 
 	t.Run("should use State for current state", func(t *testing.T) {

@@ -475,13 +475,13 @@ func (wb *writeBufferStage) writeBufferFull() bool {
 func (wb *writeBufferStage) tooManyInflightFetches() bool {
 	next := &wb.cache.comp.State
 	spec := wb.cache.comp.Spec
-	return len(next.InflightFetchIndices) >= spec.MaxInflightFetch
+	return len(next.InflightFetchIndices) >= spec.MaxInFlightFetches
 }
 
 func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 	next := &wb.cache.comp.State
 	spec := wb.cache.comp.Spec
-	return len(next.InflightEvictionIndices) >= spec.MaxInflightEviction
+	return len(next.InflightEvictionIndices) >= spec.MaxInFlightEvictions
 }
 
 func (wb *writeBufferStage) Reset() {

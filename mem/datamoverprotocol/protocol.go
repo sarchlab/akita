@@ -12,27 +12,32 @@ import "github.com/sarchlab/akita/v5/sim/messaging"
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []any{DataMoveReq{}}},
+			Sends: []any{Req{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []any{DataMoveRsp{}}},
+			Sends: []any{Rsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
 )
 
-// DataMovePort is the port name that either serves as a source or destination.
+// Side identifies the source or destination side of a data move.
 // It can be either inside or outside.
-type DataMovePort string
+type Side string
 
-// DataMoveRsp is sent when a data move operation completes.
-type DataMoveRsp struct {
+const (
+	SideInside  Side = "inside"
+	SideOutside Side = "outside"
+)
+
+// Rsp is sent when a data move operation completes.
+type Rsp struct {
 }
 
-// DataMoveReq is a data move request.
-type DataMoveReq struct {
+// Req is a data move request.
+type Req struct {
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
-	SrcSide    DataMovePort
-	DstSide    DataMovePort
+	SrcSide    Side
+	DstSide    Side
 }

@@ -218,7 +218,7 @@ func buildSim() (*sim.Simulation, *driver) {
 	s := sim.MakeBuilder().Build()
 
 	dramSpec := idealmemcontroller.DefaultSpec()
-	dramSpec.Width = 4
+	dramSpec.NumReqPerCycle = 4
 	dramSpec.Latency = 10
 	dram := modeling.MakeBuilder[*idealmemcontroller.Comp](dramSpec).
 		WithSimulation(s).

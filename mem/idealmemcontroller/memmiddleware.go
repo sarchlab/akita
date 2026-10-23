@@ -35,7 +35,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 	spec := m.comp.Spec
 
-	for i := 0; i < spec.Width; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		msgI, ok := m.topPort().RetrieveIncoming()
 		if !ok {
 			break

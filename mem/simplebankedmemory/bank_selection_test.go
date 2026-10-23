@@ -56,10 +56,10 @@ func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 		spec := DefaultSpec()
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
-		spec.BankAddrConvKind = "interleaving"
-		spec.BankAddrInterleavingSize = interleave
-		spec.BankAddrTotalNumOfElements = numElements
-		spec.BankAddrCurrentElementIndex = elementIndex
+		spec.BankAddressConversion.Kind = ConversionInterleaving
+		spec.BankAddressConversion.InterleavingSize = interleave
+		spec.BankAddressConversion.NumElements = numElements
+		spec.BankAddressConversion.ElementIndex = elementIndex
 		return spec
 	}
 
@@ -127,10 +127,10 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 		spec.StageLatency = 2
 		spec.BankSelectorLog2InterleaveSize = 6
 		// Strip the 128 B/4-way controller interleave for bank selection.
-		spec.BankAddrConvKind = "interleaving"
-		spec.BankAddrInterleavingSize = 128
-		spec.BankAddrTotalNumOfElements = 4
-		spec.BankAddrCurrentElementIndex = 1
+		spec.BankAddressConversion.Kind = ConversionInterleaving
+		spec.BankAddressConversion.InterleavingSize = 128
+		spec.BankAddressConversion.NumElements = 4
+		spec.BankAddressConversion.ElementIndex = 1
 
 		memComp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).

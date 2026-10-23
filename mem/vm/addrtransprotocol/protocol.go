@@ -1,7 +1,7 @@
-// Package vmprotocol defines the address translation protocol: the message
+// Package addrtransprotocol defines the address translation protocol: the message
 // types exchanged between translation requesters (TLBs, address translators)
 // and responders (TLBs, MMUs), and the protocol roles ports bind to.
-package vmprotocol
+package addrtransprotocol
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -15,23 +15,23 @@ import (
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []any{TranslationReq{}}},
+			Sends: []any{Req{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []any{TranslationRsp{}}},
+			Sends: []any{Rsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
 )
 
-// TranslationReq is a translation request.
-type TranslationReq struct {
+// Req is a translation request.
+type Req struct {
 	VAddr        uint64
 	PID          vm.PID
 	DeviceID     uint64
 	TransLatency uint64
 }
 
-// TranslationRsp is a translation response carrying the physical address.
-type TranslationRsp struct {
+// Rsp is a translation response carrying the physical address.
+type Rsp struct {
 	Page vm.Page
 }

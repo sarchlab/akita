@@ -8,7 +8,8 @@ import (
 func DefaultSpec() Spec {
 	return Spec{
 		Freq:                 1600 * timing.MHz,
-		Protocol:             int(protoDDR3),
+		Protocol:             ProtocolDDR3,
+		PagePolicy:           PagePolicyClose,
 		TAL:                  0,
 		TCL:                  11,
 		TCWL:                 8,

@@ -15,8 +15,8 @@ func TestNamedSwitchAndCalculatedPortQueues(t *testing.T) {
 	a := c.AddSwitch(SwitchConfig{Name: "Named", RoutingTable: table})
 	b := c.AddSwitch(SwitchConfig{})
 	_, sp := topologyParameters()
-	sp.LeftEndParam.NumInputChannel = 3
-	sp.LeftEndParam.NumOutputChannel = 2
+	sp.LeftEndParam.InputWidth = 3
+	sp.LeftEndParam.OutputWidth = 2
 
 	c.ConnectSwitches(a, b, sp)
 	require.NoError(t, s.Initialize())

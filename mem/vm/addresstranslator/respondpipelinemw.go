@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -70,7 +70,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.Spec
-	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(vmprotocol.TranslationRsp).Page,
+	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(addrtransprotocol.Rsp).Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Spec.Bottom)
 
@@ -83,7 +83,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
-	nextTrans.Page = rsp.Payload.(vmprotocol.TranslationRsp).Page
+	nextTrans.Page = rsp.Payload.(addrtransprotocol.Rsp).Page
 
 	reqToBot := buildReqToBottom(reqState, translatedReq)
 	reqToBot.SendTaskID = sendTaskID

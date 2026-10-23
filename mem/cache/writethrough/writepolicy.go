@@ -33,7 +33,7 @@ func writeTransIsReady(trans *transactionState) bool {
 }
 
 // handleWriteHit dispatches to the correct write-hit handler based on
-// the Spec.WritePolicyType.
+// the Spec.WritePolicy.
 func (d *directory) handleWriteHit(
 	trans *transactionState,
 	setID, wayID int,
@@ -41,11 +41,11 @@ func (d *directory) handleWriteHit(
 ) bool {
 	policy := d.cache.comp.Spec.writePolicy()
 	switch policy {
-	case "write-around":
+	case WritePolicyWriteAround:
 		return d.writearoundWriteHit(trans, setID, wayID, postCoalesceIdx)
-	case "write-evict":
+	case WritePolicyWriteEvict:
 		return d.writeevictWriteHit(trans, setID, wayID, postCoalesceIdx)
-	case "write-through":
+	case WritePolicyWriteThrough:
 		return d.writethroughWriteHit(trans, setID, wayID, postCoalesceIdx)
 	default:
 		panic("unknown write policy type: " + policy)
@@ -53,18 +53,18 @@ func (d *directory) handleWriteHit(
 }
 
 // handleWriteMiss dispatches to the correct write-miss handler based on
-// the Spec.WritePolicyType.
+// the Spec.WritePolicy.
 func (d *directory) handleWriteMiss(
 	trans *transactionState,
 	postCoalesceIdx int,
 ) bool {
 	policy := d.cache.comp.Spec.writePolicy()
 	switch policy {
-	case "write-around":
+	case WritePolicyWriteAround:
 		return d.writearoundWriteMiss(trans, postCoalesceIdx)
-	case "write-evict":
+	case WritePolicyWriteEvict:
 		return d.writeevictWriteMiss(trans, postCoalesceIdx)
-	case "write-through":
+	case WritePolicyWriteThrough:
 		return d.writethroughWriteMiss(trans, postCoalesceIdx)
 	default:
 		panic("unknown write policy type: " + policy)

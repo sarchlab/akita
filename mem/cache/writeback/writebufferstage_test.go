@@ -48,8 +48,8 @@ func TestWriteBufferStage(t *testing.T) {
 
 		spec := stageTestSpec()
 		spec.WriteBufferCapacity = 16
-		spec.MaxInflightFetch = 4
-		spec.MaxInflightEviction = 4
+		spec.MaxInFlightFetches = 4
+		spec.MaxInFlightEvictions = 4
 		spec.Bottom.Destinations = []messaging.RemotePort{"DRAM"}
 		sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 		comp := buildStageTestComp(sim, spec,

@@ -9,12 +9,12 @@ import (
 
 // Spec contains immutable configuration for the GMMU.
 type Spec struct {
-	Freq                timing.Freq          `json:"freq"`
-	DeviceID            uint64               `json:"device_id"`
-	Log2PageSize        uint64               `json:"log2_page_size"`
-	Latency             int                  `json:"latency"`
-	MaxRequestsInFlight int                  `json:"max_requests_in_flight"`
-	Bottom              messaging.RemotePort `json:"bottom"`
+	Freq                    timing.Freq          `json:"freq"`
+	DeviceID                uint64               `json:"device_id"`
+	Log2PageSize            uint64               `json:"log2_page_size"`
+	Latency                 int                  `json:"latency"`
+	MaxInFlightTranslations int                  `json:"max_in_flight_translations"`
+	Bottom                  messaging.RemotePort `json:"bottom"`
 }
 
 // pageState captures vm.Page fields in a serializable form.
@@ -112,10 +112,10 @@ type Resources struct {
 // Ports holds the GMMU's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
 
 	// Bottom sends translation requests for remote pages to the Bottom.
-	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.requester"`
 
 	// Control receives enable, pause, drain, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`

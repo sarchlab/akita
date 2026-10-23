@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -77,7 +77,7 @@ func TestGMMU(t *testing.T) {
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 0},
@@ -103,7 +103,7 @@ func TestGMMU(t *testing.T) {
 			setup1(t)
 
 			require.Equal(t, 1*timing.GHz, gmmuComp.Spec.Freq)
-			require.Equal(t, 16, gmmuComp.Spec.MaxRequestsInFlight)
+			require.Equal(t, 16, gmmuComp.Spec.MaxInFlightTranslations)
 			require.Equal(t, pageTable, mw.pageTable)
 			require.Equal(t, uint64(0), gmmuComp.Spec.DeviceID)
 		})
@@ -145,8 +145,8 @@ func TestGMMU(t *testing.T) {
 			rspI, _ := topPort.RetrieveOutgoing()
 			require.NotNil(t, rspI)
 			rsp := rspI
-			require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
-			require.Equal(t, vm.PID(1), rsp.Payload.(vmprotocol.TranslationRsp).Page.PID)
+			require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
+			require.Equal(t, vm.PID(1), rsp.Payload.(addrtransprotocol.Rsp).Page.PID)
 		})
 
 		t.Run("should send request remotely", func(t *testing.T) {
@@ -173,7 +173,7 @@ func TestGMMU(t *testing.T) {
 			require.NotNil(t, reqI)
 			req := reqI
 			require.Equal(t, lowModulePort, req.Dst)
-			require.Equal(t, uint64(0x10000000), req.Payload.(vmprotocol.TranslationReq).VAddr)
+			require.Equal(t, uint64(0x10000000), req.Payload.(addrtransprotocol.Req).VAddr)
 		})
 
 		t.Run("should return response from remote page table", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestGMMU(t *testing.T) {
 			sentReqToBottom := reqI
 
 			// Deliver the response from the bottom (remote page table).
-			rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+			rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 				Page: page,
 			},
 				ID:    sim.NewID(),
@@ -218,8 +218,8 @@ func TestGMMU(t *testing.T) {
 			rspToTopI, _ := topPort.RetrieveOutgoing()
 			require.NotNil(t, rspToTopI)
 			rspToTop := rspToTopI
-			require.Equal(t, page, rspToTop.Payload.(vmprotocol.TranslationRsp).Page)
-			require.Equal(t, vm.PID(1), rspToTop.Payload.(vmprotocol.TranslationRsp).Page.PID)
+			require.Equal(t, page, rspToTop.Payload.(addrtransprotocol.Rsp).Page)
+			require.Equal(t, vm.PID(1), rspToTop.Payload.(addrtransprotocol.Rsp).Page.PID)
 		})
 	})
 }

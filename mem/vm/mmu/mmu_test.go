@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -93,7 +93,7 @@ func TestMMU(t *testing.T) {
 		t.Run("should process translation request", func(t *testing.T) {
 			setup1(t)
 
-			translationReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			translationReq := messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100000100,
 				DeviceID: 0},
@@ -181,8 +181,8 @@ func TestMMU(t *testing.T) {
 			require.Len(t, next.WalkingTranslations, 0)
 
 			rsp, _ := topPort.RetrieveOutgoing()
-			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
-			require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+			require.IsType(t, messaging.Msg{Payload: addrtransprotocol.Rsp{}}, rsp)
+			require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 		})
 
 		t.Run("should stall if cannot send to top", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestMMU(t *testing.T) {
 			}
 			pageTable.Insert(page)
 
-			dummy := messaging.Msg{ID: sim.NewID(), Payload: vmprotocol.TranslationRsp{},
+			dummy := messaging.Msg{ID: sim.NewID(), Payload: addrtransprotocol.Rsp{},
 				Src: topPort.AsRemote(),
 				Dst: messaging.RemotePort("Agent.Top"),
 			}
@@ -282,7 +282,7 @@ func TestMMUIntegration(t *testing.T) {
 		}
 		pageTable.Insert(page)
 
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 0},
@@ -302,7 +302,7 @@ func TestMMUIntegration(t *testing.T) {
 		rspI, _ := topPort.RetrieveOutgoing()
 		require.NotNil(t, rspI)
 		rsp := rspI
-		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 		require.Equal(t, req.ID, rsp.RspTo)
 	})
 }

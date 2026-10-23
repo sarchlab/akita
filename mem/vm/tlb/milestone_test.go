@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -161,7 +161,7 @@ func TestTLBMilestones(t *testing.T) {
 	}
 
 	makeReq := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 1},
@@ -290,7 +290,7 @@ func TestTLBMilestones(t *testing.T) {
 		// only afterwards — not during the req_out.
 		fetchValue, _ := bottomPort.RetrieveOutgoing()
 		fetch := fetchValue
-		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
 		},
 			ID:    sim.NewID(),

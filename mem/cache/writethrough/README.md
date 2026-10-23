@@ -19,7 +19,7 @@ Top ──► intake ──► directory(+MSHR) ──► bank(s) ──► resp
 ```
 
 1. **intake** — Accepts requests from `Top` (up to `NumReqPerCycle`/tick,
-   capped by `MaxNumConcurrentTrans`), creates a transaction, and pushes it into
+   capped by `MaxInFlightRequests`), creates a transaction, and pushes it into
    the directory buffer.
 2. **directory** — After a `DirLatency`-cycle pipeline, looks the line up in the
    shared `cache.DirectoryState` and `cache.MSHRState`. Read hits go to a bank;
@@ -37,7 +37,7 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 
 ## Write Policies
 
-| `WritePolicyType` | On a write hit | On a write miss |
+| `WritePolicy` | On a write hit | On a write miss |
 |---|---|---|
 | `write-around` | Write line locally and write through to `Bottom`. | Write straight through to `Bottom`; line is not allocated. |
 | `write-evict` | Write through to `Bottom` and invalidate the local line. | Write through to `Bottom`; line is not allocated. |
@@ -47,10 +47,10 @@ handles the commands on the `Control` port (see [Ports](#ports)).
 
 - **Spec** — immutable config: `Freq`, `Log2BlockSize`, `NumWays`,
   `NumSets`, `NumBanks`, `NumMSHREntries`, `NumReqPerCycle`,
-  `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`, `WritePolicyType`, and
+  `MaxInFlightRequests`, `BankLatency`, `DirLatency`, `WritePolicy`, and
   the address-mapper fields. `NumSets` specifies the directory geometry;
   `Spec.ByteSize()` reports its byte capacity. An empty
-  `WritePolicyType` means `write-around`.
+  `WritePolicy` means `write-around`.
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
   stages, the pause and drain flags, and the in-progress control command.
@@ -73,7 +73,7 @@ Configuration is supplied as a whole through `WithSpec` (start from
 
 ```go
 spec := writethrough.DefaultSpec()
-spec.WritePolicyType = "write-through"
+spec.WritePolicy = "write-through"
 spec.NumSets = 512 // 256 KiB with eight ways and 64-byte lines
 spec.NumWays = 8
 spec.Bottom.Destinations = []messaging.RemotePort{"DRAM.Top"}

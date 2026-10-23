@@ -13,25 +13,25 @@ The GMMU is configured with a `DeviceID` and is driven by two middlewares
 
 ### walkMW — top→page-table path
 
-1. **parseFromTop** — Accepts a `vmprotocol.TranslationReq` from the `Top` port (up to
-   `MaxRequestsInFlight` in flight) and starts a walk with a `Latency`-cycle
+1. **parseFromTop** — Accepts a `addrtransprotocol.Req` from the `Top` port (up to
+   `MaxInFlightTranslations` in flight) and starts a walk with a `Latency`-cycle
    countdown.
 2. **walkPageTable** — Each tick decrements every walk. On completion it looks up
    the page in the shared `vm.PageTable`:
    - If `page.DeviceID == DeviceID` (local), it finalizes the walk and returns a
-     `vmprotocol.TranslationRsp` on `Top`.
-   - Otherwise it forwards a `vmprotocol.TranslationReq` on the `Bottom` port to the
+     `addrtransprotocol.Rsp` on `Top`.
+   - Otherwise it forwards a `addrtransprotocol.Req` on the `Bottom` port to the
      configured `Bottom`, remembering the transaction by request ID.
 
 ### respondMW — bottom→top path
 
-Reads `vmprotocol.TranslationRsp` messages arriving on `Bottom`, matches them to the
-remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `Top`.
+Reads `addrtransprotocol.Rsp` messages arriving on `Bottom`, matches them to the
+remembered remote request, and relays a `addrtransprotocol.Rsp` back up on `Top`.
 
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `DeviceID`, `Log2PageSize`, walk
-  `Latency`, `MaxRequestsInFlight`, and the `Bottom` remote port.
+  `Latency`, `MaxInFlightTranslations`, and the `Bottom` remote port.
 - `State` — mutable runtime data: in-flight walks, the map of remote memory
   requests awaiting responses, and per-device page-access tracking.
 - `Resources` — shared wiring; holds the `vm.PageTable`, which is required.
@@ -93,8 +93,8 @@ buffer sizes, and calls `component.BindPort("Field", port)` after Build.
 After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
-- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
-- **Bottom**: forwards `vmprotocol.TranslationReq` for remote pages, receives
-  `vmprotocol.TranslationRsp`.
+- **Top**: accepts `addrtransprotocol.Req`, returns `addrtransprotocol.Rsp`.
+- **Bottom**: forwards `addrtransprotocol.Req` for remote pages, receives
+  `addrtransprotocol.Rsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / pause / drain / reset),
   returns `memcontrolprotocol.Rsp`.

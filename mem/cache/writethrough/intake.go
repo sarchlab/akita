@@ -30,7 +30,7 @@ func (s *intake) Tick() bool {
 		next.AdmissionMsgID = msg.ID
 		next.WaitingForDir = false
 	}
-	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
+	if s.countActive(next) >= s.cache.comp.Spec.MaxInFlightRequests {
 		return false
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -71,7 +71,7 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 	}
 
 	makeTranslationReq := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 1},
@@ -96,10 +96,10 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 	// makeBottomRsp fabricates the low module's response to a forwarded
 	// lookup, so the test can let an outstanding walk complete.
 	makeBottomRsp := func(fwd messaging.Msg) messaging.Msg {
-		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: vm.Page{
-				PID:   fwd.Payload.(vmprotocol.TranslationReq).PID,
-				VAddr: fwd.Payload.(vmprotocol.TranslationReq).VAddr,
+				PID:   fwd.Payload.(addrtransprotocol.Req).PID,
+				VAddr: fwd.Payload.(addrtransprotocol.Req).VAddr,
 				PAddr: 0x5000, Valid: true,
 			},
 		},
@@ -138,7 +138,7 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 				if !ok {
 					break
 				}
-				if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 					forwarded = append(forwarded, out)
 				}
 			}
@@ -186,7 +186,7 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 				if !ok {
 					break
 				}
-				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					upResponses++
 				}
 			}
@@ -222,7 +222,7 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 		for i := 0; i < 64 && !gotFwd; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
-				_, gotFwd = out.Payload.(vmprotocol.TranslationReq)
+				_, gotFwd = out.Payload.(addrtransprotocol.Req)
 				fwd = out
 			}
 		}

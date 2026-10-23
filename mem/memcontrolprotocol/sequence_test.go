@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
@@ -161,7 +161,7 @@ func resolveTranslation(
 	for i := 0; i < 64 && !botFound; i++ {
 		tick()
 		if out, ok := bottom.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 				botReq = out
 
 				botFound = true
@@ -172,7 +172,7 @@ func resolveTranslation(
 		t.Fatalf("TLB did not forward a miss for %#x to Bottom", vAddr)
 	}
 
-	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: vm.Page{
+	rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}},
 		ID:    newIDFor(bottom),
@@ -186,7 +186,7 @@ func resolveTranslation(
 	for range 64 {
 		tick()
 		if out, ok := top.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 				return
 			}
 		}
@@ -210,12 +210,12 @@ func lookupMisses(
 	for range 64 {
 		tick()
 		if out, ok := bottom.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 				return true
 			}
 		}
 		if out, ok := top.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 				return false
 			}
 		}
@@ -297,7 +297,7 @@ func makeTransReq(
 	vAddr uint64,
 	pid vm.PID,
 ) messaging.Msg {
-	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	req := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      pid,
 		VAddr:    vAddr,
 		DeviceID: 1},

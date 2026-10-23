@@ -10,7 +10,7 @@ import (
 	_ "github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/memprotocol"
-	_ "github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	_ "github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"golang.org/x/tools/go/packages"

@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -79,7 +79,7 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 			Src: messaging.RemotePort("Requester"),
 		}
 
-		topMsg := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		topMsg := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1},
@@ -90,7 +90,7 @@ func TestMMUCacheCtrlMiddleware(t *testing.T) {
 
 		topPort.Deliver(topMsg)
 
-		bottomMsg := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		bottomMsg := messaging.Msg{Payload: addrtransprotocol.Rsp{
 			Page: vm.Page{},
 		},
 			ID:    sim.NewID(),

@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -50,7 +50,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// lookup, creates an MSHR entry and forwards a bottom fetch (opening the
 	// shadow req_out). The bottom fetch is never answered, so the miss stays in
 	// flight.
-	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+	req := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:      1,
 		VAddr:    0x1000,
 		DeviceID: 1},
@@ -67,7 +67,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
 		modelingtest.Tick(tlbComp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
-			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 				bottomSent = true
 			}
 		}

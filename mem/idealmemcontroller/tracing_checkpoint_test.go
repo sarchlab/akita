@@ -42,7 +42,7 @@ func buildTracingCheckpoint(t *testing.T, enabled bool, rec *checkpointTrace) (*
 		s.Terminate()
 	})
 	spec := DefaultSpec()
-	spec.Latency, spec.Width = 5, 1
+	spec.Latency, spec.NumReqPerCycle = 5, 1
 	c := modeling.MakeBuilder[*Comp](spec).WithSimulation(s).WithResources(Resources{
 		Storage: mem.MakeStorageBuilder().WithCapacity(1024).WithSimulation(s).Build("Storage"),
 	}).Build("Memory")

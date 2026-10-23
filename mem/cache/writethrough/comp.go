@@ -10,26 +10,34 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
+type WritePolicy string
+
+const (
+	WritePolicyWriteAround  WritePolicy = "write-around"
+	WritePolicyWriteEvict   WritePolicy = "write-evict"
+	WritePolicyWriteThrough WritePolicy = "write-through"
+)
+
 // Spec contains immutable configuration for the writethrough.
 type Spec struct {
 	// Lower memory routing configuration.
 	Bottom mem.AddressMapper `json:"bottom"`
 
-	Freq                  timing.Freq `json:"freq"`
-	NumReqPerCycle        int         `json:"num_req_per_cycle"`
-	Log2BlockSize         uint64      `json:"log2_block_size"`
-	BankLatency           int         `json:"bank_latency"`
-	NumWays               int         `json:"num_ways"`
-	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
-	NumBanks              int         `json:"num_banks"`
-	NumMSHREntries        int         `json:"num_mshr_entries"`
-	NumSets               int         `json:"num_sets"`
-	DirLatency            int         `json:"dir_latency"`
+	Freq                timing.Freq `json:"freq"`
+	NumReqPerCycle      int         `json:"num_req_per_cycle"`
+	Log2BlockSize       uint64      `json:"log2_block_size"`
+	BankLatency         int         `json:"bank_latency"`
+	NumWays             int         `json:"num_ways"`
+	MaxInFlightRequests int         `json:"max_in_flight_requests"`
+	NumBanks            int         `json:"num_banks"`
+	NumMSHREntries      int         `json:"num_mshr_entries"`
+	NumSets             int         `json:"num_sets"`
+	DirLatency          int         `json:"dir_latency"`
 
-	// WritePolicyType selects the write-policy strategy.
+	// WritePolicy selects the write-policy strategy.
 	// Valid values: "write-around" (default, also used when empty),
 	// "write-evict", "write-through".
-	WritePolicyType string `json:"write_policy_type"`
+	WritePolicy WritePolicy `json:"write_policy"`
 	// Pipeline widths are entries per cycle. Internal output queues hold one
 	// cycle of their pipeline width; other stage queues use NumReqPerCycle.
 	DirectoryWidth int `json:"directory_width"`
@@ -47,14 +55,14 @@ func (s Spec) ByteSize() uint64 {
 	return uint64(s.NumSets) * uint64(s.NumWays) * (uint64(1) << s.Log2BlockSize)
 }
 
-// writePolicy returns the write policy, WritePolicyType, or "write-around" if
+// writePolicy returns the write policy, WritePolicy, or "write-around" if
 // it is empty.
-func (s Spec) writePolicy() string {
-	if s.WritePolicyType == "" {
-		return "write-around"
+func (s Spec) writePolicy() WritePolicy {
+	if s.WritePolicy == "" {
+		return WritePolicyWriteAround
 	}
 
-	return s.WritePolicyType
+	return s.WritePolicy
 }
 
 // Ports holds the writethrough's ports.

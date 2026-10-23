@@ -62,11 +62,7 @@ type Spec struct {
     // Optional bank-selection address conversion (bank selection only;
     // storage is always global). Empty kind = identity. See "Bank selection
     // across interleaved controllers" below.
-    BankAddrConvKind            string
-    BankAddrInterleavingSize    uint64
-    BankAddrTotalNumOfElements  int
-    BankAddrCurrentElementIndex int
-    BankAddrOffset              uint64
+    BankAddressConversion BankAddressConversion
 }
 ```
 
@@ -149,7 +145,7 @@ example, 16 controllers interleaved at 128 B feeding 16-bank memories with a
 64 B bank stride reach only 2 of the 16 banks per controller — an ~8× bandwidth
 loss.
 
-Fix it with the **bank-selection conversion**: set the `BankAddrConv*` fields to
+Fix it with the **bank-selection conversion**: set the `BankAddressConversion` fields to
 strip the inter-controller interleaving, so bank selection runs on a contiguous
 **controller-local** address and stripes finely across all banks. Storage stays
 global (these fields never affect storage):
@@ -161,17 +157,17 @@ spec.BankSelectorLog2InterleaveSize = 6 // 64 B bank stride
 
 // This controller is element i of 16, interleaved at 128 B. Strip that
 // interleaving for bank selection only.
-spec.BankAddrConvKind = "interleaving"
-spec.BankAddrInterleavingSize = 128
-spec.BankAddrTotalNumOfElements = 16
-spec.BankAddrCurrentElementIndex = i
+spec.BankAddressConversion.Kind = simplebankedmemory.ConversionInterleaving
+spec.BankAddressConversion.InterleavingSize = 128
+spec.BankAddressConversion.NumElements = 16
+spec.BankAddressConversion.ElementIndex = i
 ```
 
 Now consecutive controller-local cache lines land on consecutive banks: all 16
 banks are used, with full 64 B-granular striping (e.g. element-i lines that were
 the two halves of a 128 B block now hit different banks). Only needed when this
 memory is one of several interleaved controllers; a standalone memory leaves
-`BankAddrConvKind` empty and selects banks on the request address directly. Use
+`BankAddressConversion.Kind` empty and selects banks on the request address directly. Use
 `mem/dram` if you need detailed bank/row timing.
 
 ## Ports

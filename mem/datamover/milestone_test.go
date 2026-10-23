@@ -94,7 +94,7 @@ func TestDataMoverMilestones(t *testing.T) {
 
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
-		memSpec.Width = 1
+		memSpec.NumReqPerCycle = 1
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
@@ -150,7 +150,7 @@ func TestDataMoverMilestones(t *testing.T) {
 		}
 		outsideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 0,
@@ -169,7 +169,7 @@ func TestDataMoverMilestones(t *testing.T) {
 		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value0, present0 := srcPort.RetrieveIncoming()
 		require.True(t, present0)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value0)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value0)
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
 		bufID := rec.taskID(tasks.KindIncomingBuffer)
@@ -204,7 +204,7 @@ func TestDataMoverMilestones(t *testing.T) {
 		}
 		outsideStorage.Write(0, data)
 
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 0,
@@ -224,7 +224,7 @@ func TestDataMoverMilestones(t *testing.T) {
 		require.Equal(t, data, insideStorage.Read(0, 4096))
 		value1, present1 := srcPort.RetrieveIncoming()
 		require.True(t, present1)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value1)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value1)
 
 		reqInID := rec.taskID("req_in")
 		require.NotZero(t, reqInID)
@@ -258,7 +258,7 @@ func TestDataMoverMilestones(t *testing.T) {
 		outsideStorage.Write(0, data)
 
 		makeMove := func() messaging.Msg {
-			req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			req := messaging.Msg{Payload: datamoverprotocol.Req{
 				SrcAddress: 0,
 				SrcSide:    "outside",
 				DstAddress: 0,
@@ -286,10 +286,10 @@ func TestDataMoverMilestones(t *testing.T) {
 		// Both transactions completed: two responses come back to the source.
 		value2, present2 := srcPort.RetrieveIncoming()
 		require.True(t, present2)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value2)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value2)
 		value3, present3 := srcPort.RetrieveIncoming()
 		require.True(t, present3)
-		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}, value3)
+		require.IsType(t, messaging.Msg{Payload: datamoverprotocol.Rsp{}}, value3)
 
 		// Two req_in tasks opened and both were closed (one per request), so the
 		// second request was processed, not dropped.

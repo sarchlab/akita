@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -69,7 +69,7 @@ func TestTLB(t *testing.T) {
 	t.Run("should insert req into pipeline when topPort has req", func(t *testing.T) {
 		setup1(t)
 
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    uint64(0x100),
 			DeviceID: 1},
@@ -104,7 +104,7 @@ func TestTLB(t *testing.T) {
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
 
-			req = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			req = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    uint64(0x100),
 				DeviceID: 1},
@@ -121,7 +121,7 @@ func TestTLB(t *testing.T) {
 
 			require.True(t, madeProgress)
 			rsp, _ := topPort.RetrieveOutgoing()
-			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
+			require.IsType(t, messaging.Msg{Payload: addrtransprotocol.Rsp{}}, rsp)
 		})
 	})
 
@@ -144,7 +144,7 @@ func TestTLB(t *testing.T) {
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
 
-			req = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			req = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
@@ -164,11 +164,11 @@ func TestTLB(t *testing.T) {
 			require.Equal(t, true, mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100)))
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationReq{}}, sent)
+			require.IsType(t, messaging.Msg{Payload: addrtransprotocol.Req{}}, sent)
 			sentMsg := sent
-			require.Equal(t, uint64(0x100), sentMsg.Payload.(vmprotocol.TranslationReq).VAddr)
-			require.Equal(t, vm.PID(1), sentMsg.Payload.(vmprotocol.TranslationReq).PID)
-			require.Equal(t, uint64(1), sentMsg.Payload.(vmprotocol.TranslationReq).DeviceID)
+			require.Equal(t, uint64(0x100), sentMsg.Payload.(addrtransprotocol.Req).VAddr)
+			require.Equal(t, vm.PID(1), sentMsg.Payload.(addrtransprotocol.Req).PID)
+			require.Equal(t, uint64(1), sentMsg.Payload.(addrtransprotocol.Req).DeviceID)
 			require.Equal(t, remotePort, sentMsg.Dst)
 		})
 	})
@@ -184,7 +184,7 @@ func TestTLB(t *testing.T) {
 		setup4 := func(t *testing.T) {
 			t.Helper()
 
-			req = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			req = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
@@ -192,7 +192,7 @@ func TestTLB(t *testing.T) {
 				Src: messaging.RemotePort("Agent"),
 			}
 
-			fetchBottom = messaging.Msg{Payload: vmprotocol.TranslationReq{
+			fetchBottom = messaging.Msg{Payload: addrtransprotocol.Req{
 				PID:      1,
 				VAddr:    0x100,
 				DeviceID: 1},
@@ -205,7 +205,7 @@ func TestTLB(t *testing.T) {
 				PAddr: 0x200,
 				Valid: true,
 			}
-			rsp = messaging.Msg{Payload: vmprotocol.TranslationRsp{
+			rsp = messaging.Msg{Payload: addrtransprotocol.Rsp{
 				Page: page,
 			},
 				ID:    sim.NewID(),
@@ -286,7 +286,7 @@ func TestTLB(t *testing.T) {
 			require.False(t, nextState.HasRespondingMSHR)
 
 			rsp, _ := topPort.RetrieveOutgoing()
-			require.IsType(t, messaging.Msg{Payload: vmprotocol.TranslationRsp{}}, rsp)
+			require.IsType(t, messaging.Msg{Payload: addrtransprotocol.Rsp{}}, rsp)
 		})
 	})
 
@@ -586,7 +586,7 @@ func TestTLBIntegration(t *testing.T) {
 		// lowModule answers every translation request with the page.
 		lowModule.onDeliver = func(msg messaging.Msg) {
 			translationReq := msg
-			rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
+			rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{Page: page},
 				ID:    sim.NewID(),
 				Src:   lowModule.port.AsRemote(),
 				Dst:   translationReq.Src,
@@ -600,7 +600,7 @@ func TestTLBIntegration(t *testing.T) {
 	t.Run("should do tlb miss", func(t *testing.T) {
 		setup5(t)
 
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1},
@@ -614,14 +614,14 @@ func TestTLBIntegration(t *testing.T) {
 		require.NoError(t, engine.Run())
 
 		rsp := agent.lastDelivered
-		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 	})
 
 	t.Run("should have faster hit than miss", func(t *testing.T) {
 		setup5(t)
 
 		time1 := engine.CurrentTime()
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1},
@@ -635,11 +635,11 @@ func TestTLBIntegration(t *testing.T) {
 		require.NoError(t, engine.Run())
 
 		rsp := agent.lastDelivered
-		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 
 		time2 := engine.CurrentTime()
 
-		req2 := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req2 := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1},
@@ -653,7 +653,7 @@ func TestTLBIntegration(t *testing.T) {
 		require.NoError(t, engine.Run())
 
 		rsp = agent.lastDelivered
-		require.Equal(t, page, rsp.Payload.(vmprotocol.TranslationRsp).Page)
+		require.Equal(t, page, rsp.Payload.(addrtransprotocol.Rsp).Page)
 
 		time3 := engine.CurrentTime()
 

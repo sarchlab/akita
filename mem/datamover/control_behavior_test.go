@@ -69,7 +69,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 	// makeMove builds a 64-byte outside->inside transfer, the minimal move
 	// (one read on Outside, one write on Inside).
 	makeMove := func() messaging.Msg {
-		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+		req := messaging.Msg{Payload: datamoverprotocol.Req{
 			SrcAddress: 0,
 			SrcSide:    "outside",
 			DstAddress: 0,
@@ -182,7 +182,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 				}
 			}
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.Payload.(datamoverprotocol.DataMoveRsp); ok {
+				if _, ok := out.Payload.(datamoverprotocol.Rsp); ok {
 					moveDone = true
 				}
 			}
@@ -248,7 +248,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		for i := 0; i < 256 && !gotDrainRsp; i++ {
 			modelingtest.Tick(dataMover)
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.Payload.(datamoverprotocol.DataMoveRsp); ok {
+				if _, ok := out.Payload.(datamoverprotocol.Rsp); ok {
 					moveDone = true
 				}
 			}
@@ -319,7 +319,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 				}
 			}
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.Payload.(datamoverprotocol.DataMoveRsp); ok {
+				if _, ok := out.Payload.(datamoverprotocol.Rsp); ok {
 					moveDone = true
 				}
 			}

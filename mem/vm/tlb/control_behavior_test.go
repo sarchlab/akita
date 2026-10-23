@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -21,7 +21,7 @@ import (
 //
 // The TLB is downstream-dependent: a lookup miss creates an MSHR entry and
 // forwards a request out the "Bottom" port; the request does not complete
-// until a matching vmprotocol.TranslationRsp is fed back on "Bottom". The Drain test
+// until a matching addrtransprotocol.Rsp is fed back on "Bottom". The Drain test
 // below drives real completion through that handshake.
 func TestTLBControlBehavior(t *testing.T) {
 	var (
@@ -58,7 +58,7 @@ func TestTLBControlBehavior(t *testing.T) {
 	}
 
 	makeLookup := func(vAddr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		req := messaging.Msg{Payload: addrtransprotocol.Req{
 			PID:      1,
 			VAddr:    vAddr,
 			DeviceID: 1},
@@ -80,19 +80,19 @@ func TestTLBControlBehavior(t *testing.T) {
 		return req
 	}
 
-	// makeBottomRsp builds the vmprotocol.TranslationRsp that retires the MSHR entry
+	// makeBottomRsp builds the addrtransprotocol.Rsp that retires the MSHR entry
 	// for the forwarded bottom request. parseBottom matches the response to an
 	// MSHR entry by the resolved page's PID/VAddr, so those must equal the
 	// request's PID/VAddr; RspTo is set to the forwarded request's ID to mirror
 	// the real downstream handshake.
 	makeBottomRsp := func(req messaging.Msg) messaging.Msg {
 		page := vm.Page{
-			PID:   req.Payload.(vmprotocol.TranslationReq).PID,
-			VAddr: req.Payload.(vmprotocol.TranslationReq).VAddr,
-			PAddr: req.Payload.(vmprotocol.TranslationReq).VAddr + 0x10000,
+			PID:   req.Payload.(addrtransprotocol.Req).PID,
+			VAddr: req.Payload.(addrtransprotocol.Req).VAddr,
+			PAddr: req.Payload.(addrtransprotocol.Req).VAddr + 0x10000,
 			Valid: true,
 		}
-		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
+		rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{Page: page},
 			ID:    sim.NewID(),
 			Src:   remotePort,
 			Dst:   bottomPort.AsRemote(),
@@ -183,7 +183,7 @@ func TestTLBControlBehavior(t *testing.T) {
 				if !ok {
 					break
 				}
-				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					completed++
 				}
 			}
@@ -219,7 +219,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		for i := 0; i < 64 && !got; i++ {
 			modelingtest.Tick(tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
-				_, got = out.Payload.(vmprotocol.TranslationReq)
+				_, got = out.Payload.(addrtransprotocol.Req)
 				bottomReq = out
 			}
 		}
@@ -282,7 +282,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		for i := 0; i < 64 && !gotA; i++ {
 			modelingtest.Tick(tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
-				_, gotA = out.Payload.(vmprotocol.TranslationReq)
+				_, gotA = out.Payload.(addrtransprotocol.Req)
 				reqA = out
 			}
 		}
@@ -311,7 +311,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		for i := 0; i < 64 && !gotB; i++ {
 			modelingtest.Tick(tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
-				_, gotB = out.Payload.(vmprotocol.TranslationReq)
+				_, gotB = out.Payload.(addrtransprotocol.Req)
 				reqB = out
 			}
 		}
@@ -328,8 +328,8 @@ func TestTLBControlBehavior(t *testing.T) {
 		}
 		require.True(t, mshrIsEntryPresent(
 			tlbComp.State.MSHREntries,
-			reqB.Payload.(vmprotocol.TranslationReq).PID,
-			reqB.Payload.(vmprotocol.TranslationReq).VAddr))
+			reqB.Payload.(addrtransprotocol.Req).PID,
+			reqB.Payload.(addrtransprotocol.Req).VAddr))
 
 		// The legitimate response (for request B) is accepted and answered.
 		bottomPort.Deliver(makeBottomRsp(reqB))
@@ -337,7 +337,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		for i := 0; i < 64 && !answered; i++ {
 			modelingtest.Tick(tlbComp)
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					answered = true
 				}
 			}

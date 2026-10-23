@@ -20,6 +20,10 @@ func DefaultSpec() Spec {
 
 func (s *state) Initialize(c *Comp) {
 	name, spec := c.Name(), c.Spec
+	if spec.StageLatency < 0 {
+		panic("simplebankedmemory: StageLatency must be nonnegative")
+	}
+	spec.BankAddressConversion.validate()
 
 	*s = state{
 		Banks: buildInitialBanks(name, spec),

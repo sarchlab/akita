@@ -101,8 +101,8 @@ type dataMoverTransactionState struct {
 	SrcAddress    uint64                       `json:"src_address"`
 	DstAddress    uint64                       `json:"dst_address"`
 	ByteSize      uint64                       `json:"byte_size"`
-	SrcSide       string                       `json:"src_side"`
-	DstSide       string                       `json:"dst_side"`
+	SrcSide       datamoverprotocol.Side       `json:"src_side"`
+	DstSide       datamoverprotocol.Side       `json:"dst_side"`
 	NextReadAddr  uint64                       `json:"next_read_addr"`
 	NextWriteAddr uint64                       `json:"next_write_addr"`
 	PendingRead   map[uint64]pendingReadState  `json:"pending_read"`
@@ -119,8 +119,8 @@ type state struct {
 	Buffer             bufferState               `json:"buffer"`
 	SrcByteGranularity uint64                    `json:"src_byte_granularity"`
 	DstByteGranularity uint64                    `json:"dst_byte_granularity"`
-	SrcSide            string                    `json:"src_side"`
-	DstSide            string                    `json:"dst_side"`
+	SrcSide            datamoverprotocol.Side    `json:"src_side"`
+	DstSide            datamoverprotocol.Side    `json:"dst_side"`
 }
 
 // Comp is the data mover component.
@@ -200,11 +200,11 @@ func bufferMoveOffsetForwardTo(bs *bufferState, newOffset uint64) {
 }
 
 // resolveByteGranularity returns the byte granularity for a given port side.
-func resolveByteGranularity(spec Spec, side datamoverprotocol.DataMovePort) uint64 {
+func resolveByteGranularity(spec Spec, side datamoverprotocol.Side) uint64 {
 	switch side {
-	case "inside":
+	case datamoverprotocol.SideInside:
 		return spec.InsideByteGranularity
-	case "outside":
+	case datamoverprotocol.SideOutside:
 		return spec.OutsideByteGranularity
 	default:
 		log.Panicf("can't process port side %s", side)
