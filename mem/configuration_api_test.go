@@ -2,6 +2,7 @@ package mem_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
@@ -71,49 +72,46 @@ func TestRenamedProtocolCheckpointPayloads(t *testing.T) {
 }
 
 func TestNegativeSpecLatenciesRejected(t *testing.T) {
-	cases := map[string]func(){
-		"ideal": func() {
+	cases := []struct {
+		name       string
+		initialize func()
+		want       any
+	}{
+		{name: "ideal", initialize: func() {
 			c := &idealmemcontroller.Comp{}
 			c.Spec = idealmemcontroller.DefaultSpec()
 			c.Spec.Latency = -1
 			c.Middlewares.Initialize(c)
-		},
-		"mmu": func() { c := &mmu.Comp{}; c.Spec = mmu.DefaultSpec(); c.Spec.Latency = -1; c.Middlewares.Initialize(c) },
-		"gmmu": func() {
+		}, want: "idealmemcontroller: Latency must be nonnegative"},
+		{name: "mmu", initialize: func() { c := &mmu.Comp{}; c.Spec = mmu.DefaultSpec(); c.Spec.Latency = -1; c.Middlewares.Initialize(c) }, want: "vm/mmu: Latency must be nonnegative"},
+		{name: "gmmu", initialize: func() {
 			c := &gmmu.Comp{}
 			c.Spec = gmmu.DefaultSpec()
 			c.Spec.Latency = -1
 			c.Middlewares.Initialize(c)
-		},
-		"mmuCache": func() {
+		}, want: "vm/gmmu: Latency must be nonnegative"},
+		{name: "mmuCache", initialize: func() {
 			c := &mmuCache.Comp{}
 			c.Spec = mmuCache.DefaultSpec()
 			c.Spec.LatencyPerLevel = -1
 			c.State.Initialize(c)
-		},
-		"tlb": func() { c := &tlb.Comp{}; c.Spec = tlb.DefaultSpec(); c.Spec.Latency = -1; c.State.Initialize(c) },
-		"banked": func() {
+		}, want: "vm/mmuCache: LatencyPerLevel must be nonnegative"},
+		{name: "tlb", initialize: func() { c := &tlb.Comp{}; c.Spec = tlb.DefaultSpec(); c.Spec.Latency = -1; c.State.Initialize(c) }, want: errors.New(": TLB latency must be nonnegative")},
+		{name: "banked", initialize: func() {
 			c := &simplebankedmemory.Comp{}
 			c.Spec = simplebankedmemory.DefaultSpec()
 			c.Spec.StageLatency = -1
 			c.State.Initialize(c)
-		},
-		"dram": func() { c := &dram.Comp{}; c.Spec = dram.DefaultSpec(); c.Spec.TCL = -1; c.Middlewares.Initialize(c) },
+		}, want: "simplebankedmemory: StageLatency must be nonnegative"},
+		{name: "dram", initialize: func() { c := &dram.Comp{}; c.Spec = dram.DefaultSpec(); c.Spec.TCL = -1; c.Middlewares.Initialize(c) }, want: "dram: timing parameters must be nonnegative"},
 	}
-	for name, initialize := range cases {
-		t.Run(name, func(t *testing.T) {
-			if name == "tlb" {
-				require.PanicsWithError(t, ": TLB latency must be nonnegative", initialize)
-				return
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err, ok := tc.want.(error); ok {
+				require.PanicsWithError(t, err.Error(), tc.initialize)
+			} else {
+				require.PanicsWithValue(t, tc.want, tc.initialize)
 			}
-			require.PanicsWithValue(t, map[string]any{
-				"ideal":    "idealmemcontroller: Latency must be nonnegative",
-				"mmu":      "vm/mmu: Latency must be nonnegative",
-				"gmmu":     "vm/gmmu: Latency must be nonnegative",
-				"mmuCache": "vm/mmuCache: LatencyPerLevel must be nonnegative",
-				"banked":   "simplebankedmemory: StageLatency must be nonnegative",
-				"dram":     "dram: timing parameters must be nonnegative",
-			}[name], initialize)
 		})
 	}
 }
