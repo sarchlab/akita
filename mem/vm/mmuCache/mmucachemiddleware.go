@@ -145,8 +145,6 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	res := m.comp.Resources
-
 	reqToBottom := messaging.Msg{Payload: addrtransprotocol.Req{
 		PID:          req.Payload.(addrtransprotocol.Req).PID,
 		VAddr:        req.Payload.(addrtransprotocol.Req).VAddr,
@@ -154,7 +152,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		TransLatency: latency},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
-		Dst: res.LowModulePort,
+		Dst: m.comp.Spec.LowModule,
 	}
 
 	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
@@ -217,14 +215,12 @@ func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 
 	m.updateCacheLevels(rsp)
 
-	res := m.comp.Resources
-
 	rspToTop := messaging.Msg{Payload: addrtransprotocol.Rsp{
 		Page: rsp.Payload.(addrtransprotocol.Rsp).Page,
 	},
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),
-		Dst:   res.UpModulePort,
+		Dst:   m.comp.Spec.UpModule,
 		RspTo: rsp.RspTo,
 	}
 

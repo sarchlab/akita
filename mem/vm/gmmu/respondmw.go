@@ -84,7 +84,7 @@ func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),
 		Dst:   reqTransaction.ReqSrc,
-		RspTo: rsp.ID,
+		RspTo: reqTransaction.ReqID,
 	}
 
 	m.topPort().Send(rspToTop)

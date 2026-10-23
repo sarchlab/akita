@@ -187,7 +187,8 @@ func TestGMMU(t *testing.T) {
 			}
 			pageTable.Insert(page)
 
-			topPort.Deliver(makeTranslationReq(0x10000000))
+			originalReq := makeTranslationReq(0x10000000)
+			topPort.Deliver(originalReq)
 
 			// Tick 1: parseFromTop adds translation to state.
 			modelingtest.Tick(gmmuComp)
@@ -218,6 +219,9 @@ func TestGMMU(t *testing.T) {
 			rspToTopI, _ := topPort.RetrieveOutgoing()
 			require.NotNil(t, rspToTopI)
 			rspToTop := rspToTopI
+			require.Equal(t, originalReq.ID, rspToTop.RspTo)
+			t.Logf("upstream RspTo=%d matches original request %d; downstream response ID=%d",
+				rspToTop.RspTo, originalReq.ID, rsp.ID)
 			require.Equal(t, page, rspToTop.Payload.(addrtransprotocol.Rsp).Page)
 			require.Equal(t, vm.PID(1), rspToTop.Payload.(addrtransprotocol.Rsp).Page.PID)
 		})

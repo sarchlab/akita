@@ -17,6 +17,11 @@ type Spec struct {
 	Log2PageSize    uint64      `json:"log2_page_size"`
 	NumReqPerCycle  int         `json:"num_req_per_cycle"`
 	LatencyPerLevel int         `json:"latency_per_level"`
+
+	// LowModule is the downstream translation provider address.
+	LowModule messaging.RemotePort `json:"low_module"`
+	// UpModule is the upstream translation response destination.
+	UpModule messaging.RemotePort `json:"up_module"`
 }
 
 // Ports holds the mmuCache's ports.
@@ -41,12 +46,8 @@ type middlewares struct {
 	Cache *mmuCacheMiddleware
 }
 
-// Resources holds the external wiring referenced by the mmuCache: the remote
-// ports it forwards translation requests to and responses back from.
-type Resources struct {
-	LowModulePort messaging.RemotePort `json:"low_module_port"`
-	UpModulePort  messaging.RemotePort `json:"up_module_port"`
-}
+// Resources is empty; peer addresses are configured in Spec.
+type Resources struct{}
 
 const (
 	mmuCacheStateEnable = "enable"
