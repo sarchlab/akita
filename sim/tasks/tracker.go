@@ -8,10 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-type subscription struct {
-	observer Observer
-	owners   map[string]bool
-}
 type entry struct {
 	task      Task
 	owner     string
@@ -25,15 +21,15 @@ type entry struct {
 // must still support the concurrency contract so storage can be sharded later.
 // Construct a Tracker with NewTracker; its zero value is not ready for use.
 type Tracker struct {
-	clock         timing.TimeTeller
-	newID         func() uint64
-	owns          func(naming.Named) bool
-	mu            sync.Mutex
-	subscriptions []subscription
-	unscoped      []int            // indexes of subscriptions without scopes
-	byScope       map[string][]int // scope name -> subscription indexes, ascending
-	open          map[uint64]*entry
-	parents       requestParents
+	clock     timing.TimeTeller
+	newID     func() uint64
+	owns      func(naming.Named) bool
+	mu        sync.Mutex
+	observers []Observer       // one per subscription, in subscription order
+	unscoped  []int            // indexes into observers of subscriptions without scopes
+	byScope   map[string][]int // scope name -> indexes into observers, ascending
+	open      map[uint64]*entry
+	parents   requestParents
 }
 
 // NewTracker creates a service using the simulation's clock, ID allocator, and
@@ -65,8 +61,8 @@ func (t *Tracker) Subscribe(o Observer, scopes ...naming.Named) {
 		}
 		scope[named.Name()] = true
 	}
-	index := len(t.subscriptions)
-	t.subscriptions = append(t.subscriptions, subscription{observer: o, owners: scope})
+	index := len(t.observers)
+	t.observers = append(t.observers, o)
 	if len(scope) == 0 {
 		t.unscoped = append(t.unscoped, index)
 		return
@@ -136,7 +132,7 @@ func (t *Tracker) notify(e *entry, callback func(Observer)) {
 	}
 	if len(lists[0]) == 0 && len(lists[2]) == 0 {
 		for _, index := range lists[1] {
-			callback(t.subscriptions[index].observer)
+			callback(t.observers[index])
 		}
 		return
 	}
@@ -155,7 +151,7 @@ func (t *Tracker) notify(e *entry, callback func(Observer)) {
 				lists[i] = lists[i][1:]
 			}
 		}
-		callback(t.subscriptions[next].observer)
+		callback(t.observers[next])
 	}
 }
 
