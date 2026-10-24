@@ -46,13 +46,11 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 		spec.Log2PageSize = 12
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
+		spec.LowModule = messaging.RemotePort("LowModule")
+		spec.UpModule = messaging.RemotePort("UpModule")
 
 		comp = modeling.MakeBuilder[*Comp](spec).
 			WithSimulation(sim).
-			WithResources(Resources{
-				LowModulePort: messaging.RemotePort("LowModule"),
-				UpModulePort:  messaging.RemotePort("UpModule"),
-			}).
 			Build("MMUCache")
 		compPorts := defaultPorts(sim, "MMUCache")
 		comp.BindPort("Top", compPorts.Top)

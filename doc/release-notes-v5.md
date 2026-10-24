@@ -51,6 +51,11 @@ the NoC builders. These remain positive flits-per-cycle limits with unchanged
 queue sizing. Update struct literals and field accesses; no aliases remain.
 The topology checkpoint fingerprint changes, so rebuild old NoC checkpoints.
 
+`mmuCache.Resources.LowModulePort` and `UpModulePort` move to `Spec.LowModule`
+and `Spec.UpModule` (JSON keys `low_module` and `up_module`). `Resources` is now
+empty. These peer addresses participate in checkpoint compatibility; rebuild
+old mmuCache checkpoints. Routing behavior is unchanged.
+
 The standalone ticking scheduler, ID generator, source archive helpers, Daisen
 server library/assets, monitoring assets, and acceptance/test helpers are now
 internal. The Daisen command and component-level scheduling remain supported.

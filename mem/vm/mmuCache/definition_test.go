@@ -1,6 +1,7 @@
 package mmuCache
 
 import (
+	"bytes"
 	"testing"
 
 	akitasim "github.com/sarchlab/akita/v5/sim"
@@ -33,4 +34,42 @@ func TestBuildRequiresBlocks(t *testing.T) {
 			panic(err)
 		}
 	})
+}
+
+func TestCheckpointIncludesPeerAddresses(t *testing.T) {
+	build := func(spec Spec) *Comp {
+		s := akitasim.MakeBuilder().Build()
+		t.Cleanup(func() { require.NoError(t, s.Terminate()) })
+		c := modeling.MakeBuilder[*Comp](spec).WithSimulation(s).Build("MMUCache")
+		ports := defaultPorts(s, "MMUCache")
+		c.BindPort("Top", ports.Top)
+		c.BindPort("Bottom", ports.Bottom)
+		c.BindPort("Control", ports.Control)
+		(&noopConn{}).BindPort(ports.Top)
+		(&noopConn{}).BindPort(ports.Bottom)
+		(&noopConn{}).BindPort(ports.Control)
+		require.NoError(t, s.Initialize())
+		return c
+	}
+
+	spec := DefaultSpec()
+	spec.LowModule = "MMU.Top"
+	spec.UpModule = "TLB.Bottom"
+	var saved bytes.Buffer
+	require.NoError(t, build(spec).SaveCheckpoint(&saved))
+	require.NoError(t, build(spec).LoadCheckpoint(bytes.NewReader(saved.Bytes())))
+
+	for _, peer := range []string{"LowModule", "UpModule"} {
+		t.Run(peer, func(t *testing.T) {
+			changed := spec
+			if peer == "LowModule" {
+				changed.LowModule = "OtherMMU.Top"
+			} else {
+				changed.UpModule = "OtherTLB.Bottom"
+			}
+			err := build(changed).LoadCheckpoint(bytes.NewReader(saved.Bytes()))
+			require.ErrorContains(t, err, "spec hash mismatch")
+			t.Logf("changing %s rejects the saved checkpoint", peer)
+		})
+	}
 }

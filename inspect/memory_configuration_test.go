@@ -39,3 +39,20 @@ func TestMemoryConfigurationSchema(t *testing.T) {
 	require.Equal(t, []string{"interleaving"}, conversion.Fields[0].Choices)
 	t.Log("inspector exposes DRAM/write-policy choices, five flat conversion fields, and addrtransprotocol roles")
 }
+
+func TestMMUCachePeerAddressesInSpec(t *testing.T) {
+	definitions, errs := inspect.Inspect(inspect.Options{Dir: ".."}, "./mem/vm/mmuCache")
+	require.Empty(t, errs)
+	require.Len(t, definitions, 1)
+	definition := definitions[0]
+	require.Empty(t, definition.Resources)
+	fields := map[string]schema.Field{}
+	for _, field := range definition.Spec {
+		fields[field.Name] = field
+	}
+	require.Equal(t, "low_module", fields["LowModule"].JSONName)
+	require.Equal(t, "up_module", fields["UpModule"].JSONName)
+	require.NotContains(t, fields, "LowModulePort")
+	require.NotContains(t, fields, "UpModulePort")
+	t.Log("inspector exposes low_module and up_module in Spec with no Resources fields")
+}
