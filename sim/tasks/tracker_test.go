@@ -538,3 +538,70 @@ func TestLateSubscribersCountFullIntervals(t *testing.T) {
 }
 
 func (o *owner) BindPort(slot string, p messaging.Port) { p.BindOwner(o, o.Name()+"."+slot) }
+
+type orderObserver struct {
+	tasks.NopObserver
+	id  int
+	log *[]int
+}
+
+func (o *orderObserver) TaskStarted(tasks.Task) { *o.log = append(*o.log, o.id) }
+
+func TestNotificationOrderAndDeduplication(t *testing.T) {
+	tr := newTestSimulation()
+	o := newOwner("Owner", tr)
+	p := port(o)
+	other := newOwner("Other", tr)
+	var log []int
+	subscribe := func(id int, scopes ...naming.Named) {
+		tr.Subscribe(&orderObserver{id: id, log: &log}, scopes...)
+	}
+	var typedPort messaging.Port = p
+	subscribe(0)
+	subscribe(1, o)
+	subscribe(2, typedPort)
+	subscribe(3, typedPort, o) // names both the port and its component
+	subscribe(4)
+	subscribe(5, other)
+
+	p.Deliver(messaging.Msg{ID: o.NewID()})
+	require.Equal(t, []int{0, 1, 2, 3, 4}, log, "port task: subscription order, each once")
+
+	log = nil
+	tr.StartTask(o, tasks.StartInfo{Kind: "work", What: "component"})
+	require.Equal(t, []int{0, 1, 3, 4}, log, "component task: component-scoped and unscoped subscriptions")
+
+	log = nil
+	tr.StartTask(other, tasks.StartInfo{Kind: "work", What: "other"})
+	require.Equal(t, []int{0, 4, 5}, log, "other owner: only its own scoped subscription")
+}
+
+type countObserver struct {
+	tasks.NopObserver
+	n int
+}
+
+func (o *countObserver) TaskStarted(tasks.Task) { o.n++ }
+
+// BenchmarkScopedSubscriptions measures one task start and end while many
+// subscriptions are scoped to other owners, as when a simulator attaches one
+// tracer per component. The cost should not grow with the subscription count.
+func BenchmarkScopedSubscriptions(b *testing.B) {
+	for _, n := range []int{1, 100, 1000, 3000} {
+		b.Run(fmt.Sprintf("subscriptions=%d", n), func(b *testing.B) {
+			tr := newTestSimulation()
+			owners := make([]*owner, n)
+			for i := range owners {
+				owners[i] = newOwner(fmt.Sprintf("Component[%d]", i), tr)
+				tr.Subscribe(&countObserver{}, owners[i])
+			}
+			o := owners[0]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				id := tr.StartTask(o, tasks.StartInfo{Kind: "work", What: "bench"})
+				tr.EndTask(id)
+			}
+		})
+	}
+}

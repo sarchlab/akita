@@ -30,6 +30,8 @@ type Tracker struct {
 	owns          func(naming.Named) bool
 	mu            sync.Mutex
 	subscriptions []subscription
+	unscoped      []int            // indexes of subscriptions without scopes
+	byScope       map[string][]int // scope name -> subscription indexes, ascending
 	open          map[uint64]*entry
 	parents       requestParents
 }
@@ -42,7 +44,8 @@ func NewTracker(clock timing.TimeTeller, newID func() uint64, owns func(naming.N
 	if clock == nil || newID == nil || owns == nil {
 		panic("tasks: simulation services are required")
 	}
-	return &Tracker{clock: clock, newID: newID, owns: owns, open: make(map[uint64]*entry)}
+	return &Tracker{clock: clock, newID: newID, owns: owns,
+		open: make(map[uint64]*entry), byScope: make(map[string][]int)}
 }
 
 // Subscribe registers an observer for future events, including the complete end
@@ -62,7 +65,15 @@ func (t *Tracker) Subscribe(o Observer, scopes ...naming.Named) {
 		}
 		scope[named.Name()] = true
 	}
+	index := len(t.subscriptions)
 	t.subscriptions = append(t.subscriptions, subscription{observer: o, owners: scope})
+	if len(scope) == 0 {
+		t.unscoped = append(t.unscoped, index)
+		return
+	}
+	for name := range scope {
+		t.byScope[name] = append(t.byScope[name], index)
+	}
 }
 
 func (t *Tracker) start(o Owner, info StartInfo) uint64 {
@@ -114,11 +125,37 @@ func (t *Tracker) milestone(m Milestone) {
 }
 
 // notify selects by the starting owner even when another component ends work.
+// It visits only the matching subscriptions, so its cost does not grow with the
+// number of subscriptions scoped to other owners. Matching subscriptions are
+// notified once each, in subscription order, even when one names both a port and
+// its component.
 func (t *Tracker) notify(e *entry, callback func(Observer)) {
-	for _, sub := range t.subscriptions {
-		if len(sub.owners) == 0 || sub.owners[e.owner] || sub.owners[e.component] {
-			callback(sub.observer)
+	lists := [3][]int{t.unscoped, t.byScope[e.owner]}
+	if e.component != "" && e.component != e.owner {
+		lists[2] = t.byScope[e.component]
+	}
+	if len(lists[0]) == 0 && len(lists[2]) == 0 {
+		for _, index := range lists[1] {
+			callback(t.subscriptions[index].observer)
 		}
+		return
+	}
+	for {
+		next := -1
+		for _, list := range lists {
+			if len(list) > 0 && (next < 0 || list[0] < next) {
+				next = list[0]
+			}
+		}
+		if next < 0 {
+			return
+		}
+		for i := range lists {
+			if len(lists[i]) > 0 && lists[i][0] == next {
+				lists[i] = lists[i][1:]
+			}
+		}
+		callback(t.subscriptions[next].observer)
 	}
 }
 
