@@ -116,8 +116,13 @@ It does not cover:
   unexported, and they may change in any release; read a component through
   its exported functions instead;
 - the tracing vocabulary: the task kinds, names, and tags a component emits;
-- checkpoint files. Only the same build of a simulator restores a checkpoint;
 - code under `examples/` and the acceptance test programs.
+
+Files that a simulation writes are not covered either. A checkpoint is
+restored only by the same build of the simulator that saved it. A recorded
+database (traces, topology, and the other tables Akita writes) is read only by
+the Daisen and monitoring tools of the same Akita version; its table layout may
+change in any release.
 
 ## Package organization
 
