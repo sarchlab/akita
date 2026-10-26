@@ -2,7 +2,7 @@ package sim
 
 import (
 	"database/sql"
-	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/sqlitepath"
@@ -20,14 +20,10 @@ func (f *fakeTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 }
 
 func TestMetaRecorderWritesExecInfo(t *testing.T) {
-	path := "test_meta_recorder"
-	dbFile := path + ".sqlite3"
-
-	os.Remove(dbFile)
-	defer os.Remove(dbFile)
+	dbFile := filepath.Join(t.TempDir(), "meta.sqlite3")
 
 	clock := &fakeTimeTeller{now: 10}
-	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
+	recorder := datarecording.NewDataRecorder(dbFile)
 	metaRecorder := newMetaRecorder(recorder, clock)
 
 	values := readExecInfo(t, dbFile)

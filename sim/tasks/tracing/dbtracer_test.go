@@ -1,8 +1,7 @@
 package tracing
 
 import (
-	"os"
-
+	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
@@ -26,34 +25,24 @@ func (subject *testTimeTeller) SetCurrentTime(time timing.VTimeInPicoSec) {
 
 func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 	var (
-		timeTeller   *testTimeTeller
-		dataRecorder datarecording.DataRecorder
-		tracer       *DBTracer
-		dbPath       string
+		timeTeller *testTimeTeller
+		tracer     *DBTracer
 	)
 
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
 		timeTeller = &testTimeTeller{}
-		dbPath = "test_trace_milestone"
-		os.Remove(dbPath + ".sqlite3")
-		dataRecorder = datarecording.NewDataRecorder(dbPath + ".sqlite3")
+		// The close is registered after TempDir, so it runs first and the
+		// recorder finishes writing before its directory is removed.
+		dataRecorder := datarecording.NewDataRecorder(
+			filepath.Join(t.TempDir(), "milestone.sqlite3"))
+		t.Cleanup(func() { dataRecorder.Close() })
 		tracer = NewDBTracer(timeTeller, dataRecorder)
-	}
-
-	cleanup2 := func(t *testing.T) {
-		t.Helper()
-
-		if dataRecorder != nil {
-			dataRecorder.Close()
-			os.Remove(dbPath + ".sqlite3")
-		}
 	}
 
 	t.Run("MilestoneAdded with same timestamp", func(t *testing.T) {
 		t.Run("should only record the first milestone when multiple milestones occur at the same time", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
 
 			tracer.StartTracing()
@@ -93,7 +82,6 @@ func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 		})
 
 		t.Run("should allow milestones for different tasks at the same time", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
 
 			tracer.StartTracing()
@@ -126,7 +114,6 @@ func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 		})
 
 		t.Run("should allow milestones for same task at different times", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
 
 			tracer.StartTracing()
@@ -158,7 +145,6 @@ func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 		})
 
 		t.Run("should still prevent identical milestones from being recorded twice", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
 
 			tracer.StartTracing()
@@ -179,7 +165,6 @@ func TestDBTracerTasksMilestoneDeduplication(t *testing.T) {
 		})
 
 		t.Run("should keep a repeated (kind, what) at different times", func(t *testing.T) {
-			t.Cleanup(func() { cleanup2(t) })
 			setup1(t)
 
 			tracer.StartTracing()
