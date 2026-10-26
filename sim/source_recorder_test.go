@@ -27,7 +27,7 @@ func readSourceRows(t *testing.T, db *sql.DB) (content, format map[string]string
 	content = map[string]string{}
 	format = map[string]string{}
 
-	rows, err := db.Query("SELECT Root, Format, Content FROM source")
+	rows, err := db.Query("SELECT Root, Format, Content FROM akita$source")
 	if err != nil {
 		t.Fatalf("query source table: %v", err)
 	}

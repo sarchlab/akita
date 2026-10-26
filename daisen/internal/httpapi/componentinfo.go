@@ -244,7 +244,7 @@ func (s *Server) calculateKindOccupancy(
 	// The (Location, Kind, StartTime, EndTime) covering index answers the scoped,
 	// kind-filtered interval scan without touching the trace table.
 	s.traceReader.ensureIndex(
-		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_akita$trace_loc_kind_times", metricCoveringIndex)
 
 	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, whatLikes, startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
@@ -369,7 +369,7 @@ func buildEmptyTimeValues(startTime, binDuration float64, numDots int) []TimeVal
 // and scans only the matching facet's rows from the index — turning a ~0.5s
 // subtree scan into ~0.02s. Built once (IF NOT EXISTS) on first metric query.
 const metricCoveringIndex = `
-CREATE INDEX IF NOT EXISTS idx_trace_loc_kind_times ON trace(Location, Kind, StartTime, EndTime)`
+CREATE INDEX IF NOT EXISTS idx_akita$trace_loc_kind_times ON akita$trace(Location, Kind, StartTime, EndTime)`
 
 func (s *Server) fillBinnedEventRate(
 	ctx context.Context,
@@ -381,15 +381,15 @@ func (s *Server) fillBinnedEventRate(
 	// Best-effort: ensure the covering index (a no-op once it exists; ignored on a
 	// read-only connection — the query then just runs slower against the table).
 	s.traceReader.ensureIndex(
-		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_akita$trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: match the named location OR anything nested under it, so a
 	// component name (e.g. "AT") aggregates its whole subtree while a leaf row
 	// matches only itself.
 	lo, hi := scopePrefixBounds(compName)
 	query := fmt.Sprintf(`
 		SELECT CAST(((%s - ?) / ?) AS INTEGER) AS Bin, COUNT(*)
-		FROM trace
-		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
+		FROM akita$trace
+		WHERE Location IN (SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND Kind = ? AND %s > ? AND %s < ?
 		GROUP BY Bin
 	`, timeColumn, timeColumn, timeColumn)
@@ -436,15 +436,15 @@ func (s *Server) fillBinnedAverageLatency(
 	startTime, endTime, binDuration float64,
 ) {
 	s.traceReader.ensureIndex(
-		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_akita$trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: aggregate the named location's whole subtree (a leaf still
 	// matches only itself).
 	lo, hi := scopePrefixBounds(compName)
 	query := `
 		SELECT CAST(((EndTime - ?) / ?) AS INTEGER) AS Bin,
 			AVG(EndTime - StartTime)
-		FROM trace
-		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
+		FROM akita$trace
+		WHERE Location IN (SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND Kind = 'req_in' AND EndTime > ? AND EndTime < ?
 		GROUP BY Bin
 	`

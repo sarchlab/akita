@@ -48,8 +48,8 @@ func (r *SQLiteTraceReader) TopBlockingResources(
 
 	// Covering index over the columns this aggregation reads, so it scans only the
 	// hardware_resource entries in (What, TaskID) order instead of the whole table.
-	r.ensureIndex(ctx, "Building index idx_milestone_Kind_What",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
+	r.ensureIndex(ctx, "Building index idx_akita$milestone_Kind_What",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_Kind_What ON akita$milestone(Kind, What, TaskID)")
 
 	id := r.activity.Begin("query", "Ranking top blocking resources", scopeLabel(scope))
 	defer r.activity.End(id)
@@ -89,7 +89,7 @@ func (r *SQLiteTraceReader) queryTopBlocking(
 	if scope == "" {
 		return r.QueryContext(ctx, `
 			SELECT What, COUNT(*) AS cnt, COUNT(DISTINCT TaskID) AS tasks
-			FROM milestone
+			FROM akita$milestone
 			WHERE Kind = 'hardware_resource'
 			GROUP BY What
 			ORDER BY cnt DESC
@@ -97,18 +97,18 @@ func (r *SQLiteTraceReader) queryTopBlocking(
 	}
 
 	// Scoped: the location index prunes to the subtree's tasks before joining their
-	// milestones. (idx_trace_loc_time_id is shared with the timeline charts.)
-	r.ensureIndex(ctx, "Building index idx_trace_loc_time_id",
-		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
-			`ON trace(Location, StartTime, EndTime, ID)`)
+	// milestones. (idx_akita$trace_loc_time_id is shared with the timeline charts.)
+	r.ensureIndex(ctx, "Building index idx_akita$trace_loc_time_id",
+		`CREATE INDEX IF NOT EXISTS idx_akita$trace_loc_time_id `+
+			`ON akita$trace(Location, StartTime, EndTime, ID)`)
 	lo, hi := scopePrefixBounds(scope)
 	return r.QueryContext(ctx, `
 		WITH scope_locs AS (
-			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+			SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
 		)
 		SELECT m.What AS what, COUNT(*) AS cnt, COUNT(DISTINCT m.TaskID) AS tasks
-		FROM trace t
-		JOIN milestone m ON m.TaskID = t.ID
+		FROM akita$trace t
+		JOIN akita$milestone m ON m.TaskID = t.ID
 		WHERE t.Location IN (SELECT ID FROM scope_locs) AND m.Kind = 'hardware_resource'
 		GROUP BY m.What
 		ORDER BY cnt DESC

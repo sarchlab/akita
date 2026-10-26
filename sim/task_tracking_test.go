@@ -49,7 +49,7 @@ func TestDisabledTrackingCreatesNoTraceTables(t *testing.T) {
 	defer db.Close()
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
-		WHERE type = 'table' AND name IN ('trace', 'milestone', 'tag', 'daisen$segments')`).Scan(&count))
+		WHERE type = 'table' AND name IN ('akita$trace', 'akita$milestone', 'akita$tag', 'akita$segments')`).Scan(&count))
 	require.Zero(t, count)
 	t.Log("Tracking disabled: Terminate succeeded and SQLite contains no task, milestone, tag, or segment tables")
 }
@@ -78,7 +78,7 @@ func TestExplicitTrackingSupportsManualRecording(t *testing.T) {
 	var location string
 	var start, end float64
 	require.NoError(t, db.QueryRow(`SELECT l.Locale, t.StartTime, t.EndTime
-		FROM trace t JOIN location l ON t.Location = l.ID
+		FROM akita$trace t JOIN akita$location l ON t.Location = l.ID
 		WHERE t.ID = ? AND t.What = 'manual'`, id).Scan(&location, &start, &end))
 	require.Equal(t, "Agent.req_in", location)
 	require.Equal(t, float64(10), start)

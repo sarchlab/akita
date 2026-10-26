@@ -83,7 +83,7 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 
 	specs := readComponentSpecs(t, dbFile)
 	if len(specs) != 2 {
-		t.Fatalf("expected 2 component_spec rows, got %d", len(specs))
+		t.Fatalf("expected 2 akita$component_spec rows, got %d", len(specs))
 	}
 
 	l1 := specs["L1"]
@@ -151,7 +151,7 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 
 func readComponentSpecs(t *testing.T, dbFile string) map[string]componentSpecEntry {
 	t.Helper()
-	rows, err := openRecordingDB(t, dbFile).Query("SELECT Name, Type, Spec FROM component_spec")
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Name, Type, Spec FROM akita$component_spec")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func readComponentSpecs(t *testing.T, dbFile string) map[string]componentSpecEnt
 
 func readPorts(t *testing.T, dbFile string) []portEntry {
 	t.Helper()
-	rows, err := openRecordingDB(t, dbFile).Query("SELECT Port, Component, Connection FROM port")
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Port, Component, Connection FROM akita$port")
 	if err != nil {
 		t.Fatal(err)
 	}

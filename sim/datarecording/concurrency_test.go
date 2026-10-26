@@ -74,9 +74,9 @@ func insertConcurrentRecords(recorder DataRecorder, firstID, count int) {
 func assertConcurrentRecords(t *testing.T, db *sql.DB, expected int) {
 	t.Helper()
 	rows, err := db.Query(`
-		SELECT records.ID, location.Locale FROM (
+		SELECT records.ID, loc.Locale FROM (
 			SELECT ID, Location FROM first UNION ALL SELECT ID, Location FROM second
-		) AS records LEFT JOIN location ON records.Location = location.ID`)
+		) AS records LEFT JOIN akita$location loc ON records.Location = loc.ID`)
 	if err != nil {
 		t.Fatal(err)
 	}

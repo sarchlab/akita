@@ -1,7 +1,7 @@
 // Types for the main-page overview widgets, mirroring the Go structs served by
 // /api/sim_info and /api/topology.
 
-/** One key/value row of the simulation's exec_info table. */
+/** One key/value row of the simulation's akita$exec_info table. */
 export interface SimInfoEntry {
   property: string;
   value: string;

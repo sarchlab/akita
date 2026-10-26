@@ -27,7 +27,7 @@ type ComponentResidency struct {
 // reads, so the grouped SUM is answered straight from the index without touching
 // the (multi-million-row) trace table — about 30x faster on a large trace.
 const residencyIndex = `
-CREATE INDEX IF NOT EXISTS idx_trace_loc_times ON trace(Location, StartTime, EndTime)`
+CREATE INDEX IF NOT EXISTS idx_akita$trace_loc_times ON akita$trace(Location, StartTime, EndTime)`
 
 // residencyQuery sums task time per location and rolls it up to the component
 // scope — the first dotted segment of the location name (e.g. "AT.Bottom.incoming"
@@ -46,10 +46,10 @@ SELECT
     SUM(g.task_time) AS task_time
 FROM (
     SELECT Location, SUM(EndTime - StartTime) AS task_time
-    FROM trace
+    FROM akita$trace
     GROUP BY Location
 ) g
-JOIN location loc ON g.Location = loc.ID
+JOIN akita$location loc ON g.Location = loc.ID
 GROUP BY component
 ORDER BY task_time DESC`
 
@@ -65,8 +65,8 @@ SELECT
         ELSE loc.Locale
     END AS component,
     GROUP_CONCAT(DISTINCT lk.Kind) AS kinds
-FROM (SELECT DISTINCT Location, Kind FROM trace) lk
-JOIN location loc ON lk.Location = loc.ID
+FROM (SELECT DISTINCT Location, Kind FROM akita$trace) lk
+JOIN akita$location loc ON lk.Location = loc.ID
 GROUP BY component`
 
 // componentKinds returns, per component scope, the set of distinct task kinds
@@ -108,7 +108,7 @@ func (r *SQLiteTraceReader) ComponentsByResidency(ctx context.Context) []Compone
 	// to IF NOT EXISTS). Ignored on a read-only connection — the query then just
 	// runs against the table, slower but correct. The first build on a large trace
 	// can take minutes, so register it as a DB activity for the frontend.
-	r.ensureIndex(ctx, "Building index idx_trace_loc_times", residencyIndex)
+	r.ensureIndex(ctx, "Building index idx_akita$trace_loc_times", residencyIndex)
 
 	qID := r.activity.Begin("query",
 		"Ranking components by residency", "SUM(EndTime-StartTime) GROUP BY Location")

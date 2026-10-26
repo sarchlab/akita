@@ -32,7 +32,7 @@ func gzTarBase64(t *testing.T, files map[string][]byte) string {
 
 func TestOpenTraceSource(t *testing.T) {
 	db := makeSourceDB(t)
-	if _, err := db.Exec("CREATE TABLE source (Root, Format, Content)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE akita$source (Root, Format, Content)"); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
 	content := gzTarBase64(t, map[string][]byte{
@@ -40,7 +40,7 @@ func TestOpenTraceSource(t *testing.T) {
 		"b/c.go": []byte("package c\n"),
 	})
 	if _, err := db.Exec(
-		"INSERT INTO source (Root, Format, Content) VALUES (?, ?, ?)",
+		"INSERT INTO akita$source (Root, Format, Content) VALUES (?, ?, ?)",
 		"example.com/m", "tar.gz;base64", content,
 	); err != nil {
 		t.Fatalf("insert: %v", err)
@@ -71,12 +71,12 @@ func TestOpenTraceSource(t *testing.T) {
 
 func TestOpenTraceSourceToleratesEmptyRoot(t *testing.T) {
 	db := makeSourceDB(t)
-	if _, err := db.Exec("CREATE TABLE source (Root, Format, Content)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE akita$source (Root, Format, Content)"); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
 	content := gzTarBase64(t, map[string][]byte{"foo.go": []byte("package foo\n")})
 	if _, err := db.Exec(
-		"INSERT INTO source (Root, Format, Content) VALUES (?, ?, ?)",
+		"INSERT INTO akita$source (Root, Format, Content) VALUES (?, ?, ?)",
 		"", "tar.gz;base64", content, // empty root must not crash the walk
 	); err != nil {
 		t.Fatalf("insert: %v", err)

@@ -11,7 +11,7 @@ import (
 )
 
 // sourceTableName is the trace table holding recorded source archives.
-const sourceTableName = "source"
+const sourceTableName = "akita$source"
 
 // sourceArchiveFormat documents how the Content column is encoded: base64 text
 // wrapping a gzip-compressed tar. The data recorder stores scalar struct fields

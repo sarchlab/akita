@@ -19,7 +19,7 @@ func newTestTraceReader(t *testing.T) *SQLiteTraceReader {
 
 	// Location is stored as an interned integer id that references the shared
 	// location table, matching what DBTracer writes.
-	_, err := reader.Exec(`CREATE TABLE trace (
+	_, err := reader.Exec(`CREATE TABLE akita$trace (
 		ID INTEGER,
 		ParentID INTEGER,
 		Kind TEXT,
@@ -32,7 +32,7 @@ func newTestTraceReader(t *testing.T) *SQLiteTraceReader {
 		t.Fatalf("create trace table: %v", err)
 	}
 
-	_, err = reader.Exec(`CREATE TABLE location (
+	_, err = reader.Exec(`CREATE TABLE akita$location (
 		ID INTEGER,
 		Locale TEXT
 	)`)
@@ -42,7 +42,7 @@ func newTestTraceReader(t *testing.T) *SQLiteTraceReader {
 
 	// The milestone table no longer stores Location; it is inherited from the
 	// owning task.
-	_, err = reader.Exec(`CREATE TABLE milestone (
+	_, err = reader.Exec(`CREATE TABLE akita$milestone (
 		ID INTEGER,
 		TaskID INTEGER,
 		Time REAL,
@@ -60,13 +60,13 @@ func insertTraceRows(t *testing.T, reader *SQLiteTraceReader) {
 	t.Helper()
 
 	// Intern the component names: A=1, B=2, P=3, C=4.
-	_, err := reader.Exec(`INSERT INTO location (ID, Locale)
+	_, err := reader.Exec(`INSERT INTO akita$location (ID, Locale)
 		VALUES (1, 'A'), (2, 'B'), (3, 'P'), (4, 'C')`)
 	if err != nil {
 		t.Fatalf("insert location rows: %v", err)
 	}
 
-	_, err = reader.Exec(`INSERT INTO trace
+	_, err = reader.Exec(`INSERT INTO akita$trace
 		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
 		VALUES
 		(1, 0, 'req_in', 'Req1', 1, 10, 20),
@@ -81,7 +81,7 @@ func insertTraceRows(t *testing.T, reader *SQLiteTraceReader) {
 		t.Fatalf("insert trace rows: %v", err)
 	}
 
-	_, err = reader.Exec(`INSERT INTO milestone
+	_, err = reader.Exec(`INSERT INTO akita$milestone
 		(ID, TaskID, Time, Kind, What)
 		VALUES
 		(1, 1, 12, 'queued', 'Queued')`)
@@ -126,10 +126,10 @@ func TestComponentInfoAggregatesSubtree(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'C.in'), (11, 'C.out'), (12, 'Cousin.in')`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (10, 'C.in'), (11, 'C.out'), (12, 'Cousin.in')`)
 	// C.in: 2 req_in, C.out: 1 req_in (all start in bin 0). Cousin.in: 2 — a
 	// differently-prefixed sibling that scope "C" must NOT pull in.
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in', 'R', 10, 1, 5),
 		(2, 0, 'req_in', 'R', 10, 2, 6),
 		(3, 0, 'req_in', 'R', 11, 3, 7),
@@ -168,11 +168,11 @@ func TestBufferOccupancyFromPortTasks(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'D.Top.incoming'), (11, 'D.req_out')`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (10, 'D.Top.incoming'), (11, 'D.req_out')`)
 	// Buffered requests/responses in the incoming buffer, using both the short
 	// ("*Req"/"*Rsp") and the long ("*Request"/"*Response") message-type naming, plus
 	// one outgoing request still awaiting its response.
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(200, 0, 'incoming_buffer', 'ReadReq',          10, 0, 15),
 		(201, 0, 'incoming_buffer', 'DataReadyRsp',     10, 5, 20),
 		(203, 0, 'incoming_buffer', 'DataMoveRequest',  10, 0, 5),
@@ -210,8 +210,8 @@ func TestListTaskIntervalsLeanFetch(t *testing.T) {
 	// only tasks that overlap [0, 20)).
 	var want int
 	row := reader.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM trace
-			WHERE Location = (SELECT ID FROM location WHERE Locale = 'A')
+		`SELECT COUNT(*) FROM akita$trace
+			WHERE Location = (SELECT ID FROM akita$location WHERE Locale = 'A')
 				AND EndTime > 0 AND StartTime < 20`)
 	if err := row.Scan(&want); err != nil {
 		t.Fatalf("count: %v", err)

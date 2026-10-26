@@ -338,6 +338,8 @@ func assertSlicePageValues(
 	}
 }
 
+// TestExecutionInfoReadsExecInfoTable checks that the monitor reads Akita's
+// akita$exec_info table and ignores an application table named exec_info.
 func TestExecutionInfoReadsExecInfoTable(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "trace.sqlite3")
@@ -347,15 +349,15 @@ func TestExecutionInfoReadsExecInfoTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE exec_info (Property TEXT, Value TEXT)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec(`INSERT INTO exec_info (Property, Value) VALUES (?, ?)`,
-		"Command", "akita")
-	if err != nil {
-		t.Fatal(err)
+	for _, stmt := range []string{
+		`CREATE TABLE akita$exec_info (Property TEXT, Value TEXT)`,
+		`INSERT INTO akita$exec_info (Property, Value) VALUES ('Command', 'akita')`,
+		`CREATE TABLE exec_info (Property TEXT, Value TEXT)`,
+		`INSERT INTO exec_info (Property, Value) VALUES ('Command', 'application')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if err := db.Close(); err != nil {

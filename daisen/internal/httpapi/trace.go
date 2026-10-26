@@ -193,7 +193,7 @@ type SQLiteTraceReader struct {
 }
 
 var (
-	indexNameRe    = regexp.MustCompile(`(?i)CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)`)
+	indexNameRe    = regexp.MustCompile(`(?i)CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w$]+)`)
 	naturalChunkRe = regexp.MustCompile(`\d+|\D+`)
 )
 
@@ -337,7 +337,7 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 
 	// The shared location table holds exactly the set of component names used
 	// in the trace, each interned once.
-	rows, err := r.QueryContext(ctx, "SELECT Locale FROM location")
+	rows, err := r.QueryContext(ctx, "SELECT Locale FROM akita$location")
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil
@@ -395,12 +395,12 @@ var (
 // access pattern actually uses, once per trace.
 func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query TaskQuery) {
 	if query.ID != 0 {
-		r.ensureIndex(ctx, "Building index idx_trace_ID",
-			"CREATE INDEX IF NOT EXISTS idx_trace_ID ON trace(ID)")
+		r.ensureIndex(ctx, "Building index idx_akita$trace_ID",
+			"CREATE INDEX IF NOT EXISTS idx_akita$trace_ID ON akita$trace(ID)")
 	}
 	if query.ParentID != 0 {
-		r.ensureIndex(ctx, "Building index idx_trace_ParentID",
-			"CREATE INDEX IF NOT EXISTS idx_trace_ParentID ON trace(ParentID)")
+		r.ensureIndex(ctx, "Building index idx_akita$trace_ParentID",
+			"CREATE INDEX IF NOT EXISTS idx_akita$trace_ParentID ON akita$trace(ParentID)")
 	}
 
 	// Only the startup range probe — a global Kind lookup with NO time range — builds
@@ -411,9 +411,9 @@ func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query Ta
 	if query.Kind != "" && !query.EnableTimeRange && query.Scope == "" && query.Where == "" &&
 		query.ID == 0 && query.ParentID == 0 && safeKindPattern.MatchString(query.Kind) {
 		ident := kindIdentReplace.Replace(query.Kind)
-		r.ensureIndex(ctx, "Building partial index idx_trace_kind_"+ident,
+		r.ensureIndex(ctx, "Building partial index idx_akita$trace_kind_"+ident,
 			fmt.Sprintf(
-				"CREATE INDEX IF NOT EXISTS idx_trace_kind_%s ON trace(Kind) WHERE Kind = '%s'",
+				"CREATE INDEX IF NOT EXISTS idx_akita$trace_kind_%s ON akita$trace(Kind) WHERE Kind = '%s'",
 				ident, query.Kind))
 	}
 }
@@ -469,8 +469,8 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 ) []Task {
 	q := `
 		SELECT StartTime, EndTime
-		FROM trace
-		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
+		FROM akita$trace
+		WHERE Location IN (SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND EndTime > ? AND StartTime < ?`
 
 	lo, hi := scopePrefixBounds(location)
@@ -538,7 +538,7 @@ func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool
 		return timeRange, true
 	}
 
-	row := r.QueryRowContext(ctx, "SELECT MIN(StartTime), MAX(EndTime) FROM trace")
+	row := r.QueryRowContext(ctx, "SELECT MIN(StartTime), MAX(EndTime) FROM akita$trace")
 
 	var startTime, endTime sql.NullFloat64
 	err := row.Scan(&startTime, &endTime)
@@ -562,7 +562,7 @@ func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool
 func (r *SQLiteTraceReader) execInfoTimeRange(ctx context.Context) (TraceTimeRange, bool) {
 	rows, err := r.QueryContext(ctx, `
 		SELECT Property, Value
-		FROM exec_info
+		FROM akita$exec_info
 		WHERE Property IN ('Start Virtual Time', 'End Virtual Time')
 	`)
 	if err != nil {
@@ -627,8 +627,8 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(ctx context.Context, tasks []
 
 	// Built by the reader (the sim no longer indexes milestones). A composite
 	// (TaskID, Time) serves both the TaskID IN-filter and the ORDER BY TaskID,Time.
-	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
+	r.ensureIndex(ctx, "Building index idx_akita$milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_TaskID_Time ON akita$milestone(TaskID, Time)")
 
 	// Build a map for quick task lookup
 	taskMap := make(map[uint64]*Task)
@@ -663,7 +663,7 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(ctx context.Context, taskMap map[
 	// table no longer stores it; we read the remaining columns only.
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, Kind, What
-		FROM milestone
+		FROM akita$milestone
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
@@ -717,8 +717,8 @@ func (r *SQLiteTraceReader) loadTagsForTasks(ctx context.Context, tasks []Task) 
 	}
 
 	// Built by the reader (the sim no longer indexes tags).
-	r.ensureIndex(ctx, "Building index idx_tag_TaskID_Time",
-		"CREATE INDEX IF NOT EXISTS idx_tag_TaskID_Time ON tag(TaskID, Time)")
+	r.ensureIndex(ctx, "Building index idx_akita$tag_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$tag_TaskID_Time ON akita$tag(TaskID, Time)")
 
 	taskMap := make(map[uint64]*Task)
 	taskIDs := make([]uint64, 0, len(tasks))
@@ -747,7 +747,7 @@ func (r *SQLiteTraceReader) loadTagBatch(ctx context.Context, taskMap map[uint64
 
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, What
-		FROM tag
+		FROM akita$tag
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
@@ -824,8 +824,8 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any)
 			loc.Locale,
 			t.StartTime,
 			t.EndTime
-		FROM trace t
-		JOIN location loc ON t.Location = loc.ID
+		FROM akita$trace t
+		JOIN akita$location loc ON t.Location = loc.ID
 	`
 
 	sqlStr, args := r.addQueryConditionsToQueryStr(sqlStr, query)
@@ -886,7 +886,7 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		// (see the Scope branch for why the joined-Locale filter is avoided).
 		// Parameterized, which also drops the value out of the SQL text.
 		sqlStr += `
-			AND t.Location IN (SELECT ID FROM location WHERE Locale = ?)
+			AND t.Location IN (SELECT ID FROM akita$location WHERE Locale = ?)
 		`
 		args = append(args, query.Where)
 	}
@@ -909,7 +909,7 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		lo, hi := scopePrefixBounds(query.Scope)
 		sqlStr += `
 			AND t.Location IN (
-				SELECT ID FROM location
+				SELECT ID FROM akita$location
 				WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
 			)
 		`
@@ -947,9 +947,9 @@ type SegmentsResponse struct {
 	Segments []Segment `json:"segments"`
 }
 
-// hasSegmentsTable checks if the daisen$segments table exists in the database
+// hasSegmentsTable checks if the akita$segments table exists in the database
 func (r *SQLiteTraceReader) hasSegmentsTable(ctx context.Context) bool {
-	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='daisen$segments'`
+	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='akita$segments'`
 	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
 		return false
@@ -959,7 +959,7 @@ func (r *SQLiteTraceReader) hasSegmentsTable(ctx context.Context) bool {
 	return rows.Next()
 }
 
-// ListSegments returns all segments from the daisen$segments table
+// ListSegments returns all segments from the akita$segments table
 func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 	response := SegmentsResponse{
 		Enabled:  false,
@@ -972,7 +972,7 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 
 	response.Enabled = true
 
-	query := `SELECT StartTime, EndTime FROM "daisen$segments" ORDER BY StartTime`
+	query := `SELECT StartTime, EndTime FROM akita$segments ORDER BY StartTime`
 	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
 		return response

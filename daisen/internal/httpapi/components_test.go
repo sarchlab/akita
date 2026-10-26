@@ -12,16 +12,16 @@ func TestComponentsByResidencyRanksByTaskTime(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location VALUES (1, 'A'), (2, 'B')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location VALUES (1, 'A'), (2, 'B')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
 	// A: one 30-long task. B: two tasks, 40 + 90 = 130 -> B ranks first by total
 	// in-flight task time.
-	exec(`INSERT INTO trace VALUES (1, 0, 'req_in', 'R', 1, 0, 30)`)
-	exec(`INSERT INTO trace VALUES (2, 0, 'req_in', 'R', 2, 0, 40)`)
-	exec(`INSERT INTO trace VALUES (3, 0, 'req_in', 'R', 2, 10, 100)`)
+	exec(`INSERT INTO akita$trace VALUES (1, 0, 'req_in', 'R', 1, 0, 30)`)
+	exec(`INSERT INTO akita$trace VALUES (2, 0, 'req_in', 'R', 2, 0, 40)`)
+	exec(`INSERT INTO akita$trace VALUES (3, 0, 'req_in', 'R', 2, 10, 100)`)
 
 	ranked := reader.ComponentsByResidency(context.Background())
 	if len(ranked) != 2 {
@@ -42,16 +42,16 @@ func TestComponentsByResidencyAggregatesToScope(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
 	// Two facets of one component (AT) and one facet of another (L1Cache).
-	exec(`INSERT INTO location VALUES (1, 'AT.req_in'), (2, 'AT.req_out'), (3, 'L1Cache.bank')`)
-	exec(`CREATE TABLE trace (
+	exec(`INSERT INTO akita$location VALUES (1, 'AT.req_in'), (2, 'AT.req_out'), (3, 'L1Cache.bank')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
 	// AT facets: 30 + 40 = 70. L1Cache: 90 -> L1Cache ranks first by scope total.
-	exec(`INSERT INTO trace VALUES (1, 0, 'req_in', 'R', 1, 0, 30)`)
-	exec(`INSERT INTO trace VALUES (2, 0, 'req_out', 'R', 2, 0, 40)`)
-	exec(`INSERT INTO trace VALUES (3, 0, 'task', 'R', 3, 10, 100)`)
+	exec(`INSERT INTO akita$trace VALUES (1, 0, 'req_in', 'R', 1, 0, 30)`)
+	exec(`INSERT INTO akita$trace VALUES (2, 0, 'req_out', 'R', 2, 0, 40)`)
+	exec(`INSERT INTO akita$trace VALUES (3, 0, 'task', 'R', 3, 10, 100)`)
 
 	ranked := reader.ComponentsByResidency(context.Background())
 	if len(ranked) != 2 {

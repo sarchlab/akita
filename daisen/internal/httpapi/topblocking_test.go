@@ -21,18 +21,18 @@ func seedBlockingTrace(t *testing.T) *SQLiteTraceReader {
 			t.Fatalf("exec %q: %v", query, err)
 		}
 	}
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`INSERT INTO location VALUES (1, 'DRAM'), (2, 'Cache')`)
-	exec(`INSERT INTO trace VALUES
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`CREATE TABLE akita$milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`INSERT INTO akita$location VALUES (1, 'DRAM'), (2, 'Cache')`)
+	exec(`INSERT INTO akita$trace VALUES
 		(1, 0, 'req_in', 'R', 1, 0, 100),
 		(2, 0, 'req_in', 'R', 1, 0, 100),
 		(3, 0, 'req_in', 'R', 2, 0, 100),
 		(4, 0, 'req_in', 'R', 1, 0, 100)`)
-	exec(`INSERT INTO milestone VALUES
+	exec(`INSERT INTO akita$milestone VALUES
 		(10, 1, 20, 'hardware_resource', 'bankA'),
 		(11, 1, 60, 'hardware_resource', 'bankA'),
 		(12, 1, 50, 'data', 'arrived'),

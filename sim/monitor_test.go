@@ -143,7 +143,7 @@ func TestHeadlessSimulationPreservesTracing(t *testing.T) {
 	}
 	defer db.Close()
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM trace WHERE What = 'headless'").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM akita$trace WHERE What = 'headless'").Scan(&count)
 	if err != nil || count != 1 {
 		t.Fatalf("headless recording: count=%d, err=%v", count, err)
 	}
