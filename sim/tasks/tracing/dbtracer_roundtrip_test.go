@@ -1,7 +1,6 @@
 package tracing
 
 import (
-	"os"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/idgen"
@@ -53,12 +52,8 @@ func TestDBTracerLocationRoundTrip(t *testing.T) {
 func writeRoundTripTrace(t *testing.T) string {
 	t.Helper()
 
-	dbName := "roundtrip_loc_test"
-	dbFile := dbName + ".sqlite3"
-	os.Remove(dbFile)
-	t.Cleanup(func() { os.Remove(dbFile) })
-
-	recorder := datarecording.NewDataRecorder(dbName + ".sqlite3")
+	dbFile := filepath.Join(t.TempDir(), "roundtrip.sqlite3")
+	recorder := datarecording.NewDataRecorder(dbFile)
 	domain := &roundTripDomain{
 		HookableBase: &hooking.HookableBase{},
 		name:         "GPU[0].L1Cache",

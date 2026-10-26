@@ -1,7 +1,7 @@
 package sim
 
 import (
-	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
@@ -64,12 +64,8 @@ func newOwnedPort(name string, owner *portOwner, conn messaging.Connection) mess
 }
 
 func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
-	path := "test_topology_recorder_specs"
-	dbFile := path + ".sqlite3"
-	os.Remove(dbFile)
-	defer os.Remove(dbFile)
-
-	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
+	dbFile := filepath.Join(t.TempDir(), "specs.sqlite3")
+	recorder := datarecording.NewDataRecorder(dbFile)
 	r := newTopologyRecorder(recorder)
 
 	components := []Component{
@@ -101,12 +97,8 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 }
 
 func TestTopologyRecorderRecordsPorts(t *testing.T) {
-	path := "test_topology_recorder_ports"
-	dbFile := path + ".sqlite3"
-	os.Remove(dbFile)
-	defer os.Remove(dbFile)
-
-	recorder := datarecording.NewDataRecorder(path + ".sqlite3")
+	dbFile := filepath.Join(t.TempDir(), "ports.sqlite3")
+	recorder := datarecording.NewDataRecorder(dbFile)
 	r := newTopologyRecorder(recorder)
 
 	connA := &namedConnection{name: "ConnA"}

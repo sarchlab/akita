@@ -233,18 +233,20 @@ func TestSimulation(t *testing.T) {
 
 			if customSim != nil {
 				customSim.Terminate()
-				os.Remove("test_custom_output.sqlite3")
 				customSim = nil
 			}
 		}
 
 		t.Run("should allow custom output file to be set", func(t *testing.T) {
+			// TempDir comes before the cleanups, so the simulation is
+			// terminated before the recording's directory is removed.
+			path := filepath.Join(t.TempDir(), "custom_output.sqlite3")
 			t.Cleanup(func() { cleanup2(t) })
 			t.Cleanup(func() { cleanup3(t) })
 			setup1(t)
 
 			builder := MakeBuilder().
-				WithOutputPath("test_custom_output" + ".sqlite3")
+				WithOutputPath(path)
 			customSim = builder.Build()
 
 			require.NotNil(t, customSim)
