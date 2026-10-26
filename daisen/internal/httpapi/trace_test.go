@@ -21,12 +21,12 @@ func TestInitReadOnlyReadsNonWALTrace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open writer: %v", err)
 	}
-	if _, err := writeDB.Exec(`CREATE TABLE trace (
+	if _, err := writeDB.Exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location TEXT, StartTime REAL, EndTime REAL)`); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	if _, err := writeDB.Exec(`INSERT INTO trace
+	if _, err := writeDB.Exec(`INSERT INTO akita$trace
 		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
 		VALUES (1, 0, 'req_in', 'ReadReq', 'DRAM', 1000, 9000)`); err != nil {
 		t.Fatalf("insert: %v", err)
@@ -54,7 +54,7 @@ func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 	reader.Init()
 	defer reader.Close()
 
-	_, err := reader.Exec(`CREATE TABLE trace (
+	_, err := reader.Exec(`CREATE TABLE akita$trace (
 		ID INTEGER,
 		ParentID INTEGER,
 		Kind TEXT,
@@ -67,7 +67,7 @@ func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 		t.Fatalf("create trace table: %v", err)
 	}
 
-	_, err = reader.Exec(`INSERT INTO trace
+	_, err = reader.Exec(`INSERT INTO akita$trace
 		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
 		VALUES
 		(1, 0, 'req_in', 'ReadReq', 'DRAM', 2000, 6000),
@@ -97,19 +97,19 @@ func TestSQLiteTraceReaderMergesTagsAndMilestonesIntoSteps(t *testing.T) {
 		}
 	}
 
-	// Location is interned: trace.Location holds an id into the location table.
-	exec(`CREATE TABLE trace (
+	// Location is interned: akita$trace.Location holds an id into akita$location.
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`CREATE TABLE milestone (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`CREATE TABLE akita$milestone (
 		ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`CREATE TABLE tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
+	exec(`CREATE TABLE akita$tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
 
-	exec(`INSERT INTO trace VALUES (1, 0, 'req_in', 'ReadReq', 1, 2000, 6000)`)
-	exec(`INSERT INTO location VALUES (1, 'DRAM')`)
-	exec(`INSERT INTO milestone VALUES (10, 1, 5000, 'data', 'arrived')`)
-	exec(`INSERT INTO tag VALUES (20, 1, 3000, 'read-hit')`)
+	exec(`INSERT INTO akita$trace VALUES (1, 0, 'req_in', 'ReadReq', 1, 2000, 6000)`)
+	exec(`INSERT INTO akita$location VALUES (1, 'DRAM')`)
+	exec(`INSERT INTO akita$milestone VALUES (10, 1, 5000, 'data', 'arrived')`)
+	exec(`INSERT INTO akita$tag VALUES (20, 1, 3000, 'read-hit')`)
 
 	tasks := reader.ListTasks(context.Background(),
 		TaskQuery{ID: 1, EnableMilestones: true})
@@ -146,7 +146,7 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 	reader.Init()
 	defer reader.Close()
 
-	_, err := reader.Exec(`CREATE TABLE trace (
+	_, err := reader.Exec(`CREATE TABLE akita$trace (
 		ID INTEGER,
 		ParentID INTEGER,
 		Kind TEXT,
@@ -159,7 +159,7 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 		t.Fatalf("create trace table: %v", err)
 	}
 
-	_, err = reader.Exec(`INSERT INTO trace
+	_, err = reader.Exec(`INSERT INTO akita$trace
 		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
 		VALUES
 		(1, 0, 'req_in', 'ReadReq', 'DRAM', 2000, 6000)`)
@@ -167,17 +167,17 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 		t.Fatalf("insert trace rows: %v", err)
 	}
 
-	_, err = reader.Exec(`CREATE TABLE exec_info (Property TEXT, Value TEXT)`)
+	_, err = reader.Exec(`CREATE TABLE akita$exec_info (Property TEXT, Value TEXT)`)
 	if err != nil {
-		t.Fatalf("create exec_info table: %v", err)
+		t.Fatalf("create akita$exec_info table: %v", err)
 	}
 
-	_, err = reader.Exec(`INSERT INTO exec_info (Property, Value)
+	_, err = reader.Exec(`INSERT INTO akita$exec_info (Property, Value)
 		VALUES
 		('Start Virtual Time', '0'),
 		('End Virtual Time', '9000')`)
 	if err != nil {
-		t.Fatalf("insert exec_info rows: %v", err)
+		t.Fatalf("insert akita$exec_info rows: %v", err)
 	}
 
 	timeRange, ok := reader.TimeRange(context.Background())
@@ -207,16 +207,16 @@ func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES
 		(1, 'ROB'), (2, 'ROB.req_in'), (3, 'ROBOT.x')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE milestone (
+	exec(`CREATE TABLE akita$milestone (
 		ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`CREATE TABLE tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`CREATE TABLE akita$tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'k', 'a', 1, 0, 10),
 		(2, 0, 'k', 'b', 2, 0, 10),
 		(3, 0, 'k', 'c', 3, 0, 10),
@@ -271,15 +271,15 @@ func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'L')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE milestone (
+	exec(`CREATE TABLE akita$milestone (
 		ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`CREATE TABLE tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`CREATE TABLE akita$tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'p', 'a', 1, 0, 10),
 		(2, 0, 'p', 'b', 1, 0, 10),
 		(10, 1, 'c', 'a', 1, 0, 5),
@@ -324,12 +324,12 @@ func TestListTasksTreatsKindAsBoundValue(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'L')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'read', 'a', 1, 0, 10),
 		(2, 0, 'write', 'b', 1, 0, 10)`)
 

@@ -10,7 +10,7 @@ import (
 
 // componentSpecTableName holds one row per component: its name, the Go type of
 // its spec, and the spec serialized as JSON.
-const componentSpecTableName = "component_spec"
+const componentSpecTableName = "akita$component_spec"
 
 // portTableName holds one row per registered port: the component that owns it
 // and the connection it is plugged into (empty when the port is unconnected).
@@ -18,9 +18,9 @@ const componentSpecTableName = "component_spec"
 // component, including unconnected control/debug ports. The connection graph is
 // the subset with a non-empty Connection: ports sharing a Connection are that
 // connection's endpoints (a connection may join more than two ports).
-const portTableName = "port"
+const portTableName = "akita$port"
 
-// componentSpecEntry is one row of the component_spec table. Spec is the
+// componentSpecEntry is one row of the akita$component_spec table. Spec is the
 // JSON-encoded spec, or empty when the component exposes no spec or the spec
 // does not serialize.
 type componentSpecEntry struct {
@@ -29,7 +29,7 @@ type componentSpecEntry struct {
 	Spec string
 }
 
-// portEntry is one row of the port table. Connection is empty for an
+// portEntry is one row of the akita$port table. Connection is empty for an
 // unconnected port.
 type portEntry struct {
 	Component  string

@@ -21,13 +21,13 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES
 		(1, 'ROB.req_in'), (2, 'ROB.req_out'), (3, 'ROBOT.x')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in',  'ReadReq', 1, 0, 10),
 		(2, 0, 'req_out', 'ReadReq', 2, 0, 10),
 		(3, 0, 'misc',    'Other',   3, 0, 10)`)
@@ -62,13 +62,13 @@ func TestLocationTimelineMatchesOnlyExactLocation(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES
 		(1, 'ROB'), (2, 'ROB.req_in'), (3, 'ROB.req_out'), (4, 'ROBOT.x')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'inst',    'VALU',    1, 0, 10),
 		(2, 0, 'req_in',  'ReadReq', 2, 0, 10),
 		(3, 0, 'req_out', 'ReadReq', 3, 0, 10),
@@ -103,13 +103,13 @@ func TestCountTasksInScope(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES
 		(1, 'ROB.req_in'), (2, 'ROB.req_out'), (3, 'ROBOT.x')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in',  'ReadReq', 1, 0, 10),
 		(2, 0, 'req_out', 'ReadReq', 2, 5, 20),
 		(3, 0, 'misc',    'Other',   3, 0, 10)`)
@@ -151,13 +151,13 @@ func TestComponentTimelineGroupByKind(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L1.bank')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'L1.bank')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
 	// Two req_in tasks differing only in What, plus one req_out.
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in',  'ReadReq',  1, 0, 10),
 		(2, 0, 'req_in',  'WriteReq', 1, 0, 10),
 		(3, 0, 'req_out', 'ReadReq',  1, 0, 10)`)
@@ -196,15 +196,15 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'ROB')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'ROB')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
 	// Over [0,20) with 2 bins (each 10 wide):
 	//   A [0,10) ends exactly on the bin-0/bin-1 boundary -> active in bin 0 only.
 	//   B [0,20) spans the whole range                    -> active in bins 0 and 1.
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
 
@@ -249,18 +249,18 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'ROB.req_in'), (2, 'ROBOT.x')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'ROB.req_in'), (2, 'ROBOT.x')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 20),
 		(2, 0, 'misc',   'Other',   2, 0, 20)`)
-	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`CREATE TABLE akita$milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
 	// Task 1 (in scope): blocked on "queue" until t=10, then on "data" until t=20.
 	// Task 2 (sibling ROBOT.x): must be excluded from scope "ROB".
-	exec(`INSERT INTO milestone (ID, TaskID, Time, Kind, What) VALUES
+	exec(`INSERT INTO akita$milestone (ID, TaskID, Time, Kind, What) VALUES
 		(1, 1, 10, 'queue', ''),
 		(2, 1, 20, 'data',  ''),
 		(3, 2, 10, 'queue', '')`)
@@ -298,16 +298,16 @@ func TestBlockingReasonOccupancyGroupsByKindWhat(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'ROB.req_in')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'ROB.req_in')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
-	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`CREATE TABLE akita$milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
 	// Two hardware_resource blocks on different resources within the same kind.
-	exec(`INSERT INTO milestone (ID, TaskID, Time, Kind, What) VALUES
+	exec(`INSERT INTO akita$milestone (ID, TaskID, Time, Kind, What) VALUES
 		(1, 1, 10, 'hardware_resource', 'bankA'),
 		(2, 1, 20, 'hardware_resource', 'bankB')`)
 
@@ -333,12 +333,12 @@ func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'TLB.req_in'), (2, 'tlb.req_in')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location (ID, Locale) VALUES (1, 'TLB.req_in'), (2, 'tlb.req_in')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+	exec(`INSERT INTO akita$trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 2, 0, 10)`)
 

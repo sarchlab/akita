@@ -42,7 +42,7 @@ func Example() {
 	defer db.Close()
 	var task Task
 	err = db.QueryRow(`SELECT t.ID, t.Name, l.Locale FROM test_table t
-   JOIN location l ON t.Place = l.ID`).Scan(&task.ID, &task.Name, &task.Place)
+   JOIN akita$location l ON t.Place = l.ID`).Scan(&task.ID, &task.Name, &task.Place)
 	if err != nil {
 		panic(err)
 	}

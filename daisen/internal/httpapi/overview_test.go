@@ -27,10 +27,10 @@ func TestListExecInfo(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE exec_info (Property TEXT, Value TEXT)`)
-	exec(`INSERT INTO exec_info VALUES ('Command', './sim -trace')`)
-	exec(`INSERT INTO exec_info VALUES ('Start Virtual Time', '0')`)
-	exec(`INSERT INTO exec_info VALUES ('End Virtual Time', '6943000')`)
+	exec(`CREATE TABLE akita$exec_info (Property TEXT, Value TEXT)`)
+	exec(`INSERT INTO akita$exec_info VALUES ('Command', './sim -trace')`)
+	exec(`INSERT INTO akita$exec_info VALUES ('Start Virtual Time', '0')`)
+	exec(`INSERT INTO akita$exec_info VALUES ('End Virtual Time', '6943000')`)
 
 	entries := reader.ListExecInfo(context.Background())
 	if len(entries) != 3 {
@@ -61,12 +61,12 @@ func TestReadTopology(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE component_spec (Name TEXT, Type TEXT, Spec TEXT)`)
-	exec(`INSERT INTO component_spec VALUES ('L1', 'cache.Spec', '{"freq":1000}')`)
-	exec(`INSERT INTO component_spec VALUES ('Agent', '', '')`)
-	exec(`CREATE TABLE port (Component TEXT, Port TEXT, Connection TEXT)`)
-	exec(`INSERT INTO port VALUES ('L1', 'L1.Top', 'ConnA')`)
-	exec(`INSERT INTO port VALUES ('L1', 'L1.Ctrl', '')`)
+	exec(`CREATE TABLE akita$component_spec (Name TEXT, Type TEXT, Spec TEXT)`)
+	exec(`INSERT INTO akita$component_spec VALUES ('L1', 'cache.Spec', '{"freq":1000}')`)
+	exec(`INSERT INTO akita$component_spec VALUES ('Agent', '', '')`)
+	exec(`CREATE TABLE akita$port (Component TEXT, Port TEXT, Connection TEXT)`)
+	exec(`INSERT INTO akita$port VALUES ('L1', 'L1.Top', 'ConnA')`)
+	exec(`INSERT INTO akita$port VALUES ('L1', 'L1.Ctrl', '')`)
 
 	topo := reader.ReadTopology(context.Background())
 
@@ -123,10 +123,10 @@ func TestHTTPTopologyServesJSON(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE component_spec (Name TEXT, Type TEXT, Spec TEXT)`)
-	exec(`INSERT INTO component_spec VALUES ('L1', 'cache.Spec', '{"freq":1000}')`)
-	exec(`CREATE TABLE port (Component TEXT, Port TEXT, Connection TEXT)`)
-	exec(`INSERT INTO port VALUES ('L1', 'L1.Top', 'ConnA')`)
+	exec(`CREATE TABLE akita$component_spec (Name TEXT, Type TEXT, Spec TEXT)`)
+	exec(`INSERT INTO akita$component_spec VALUES ('L1', 'cache.Spec', '{"freq":1000}')`)
+	exec(`CREATE TABLE akita$port (Component TEXT, Port TEXT, Connection TEXT)`)
+	exec(`INSERT INTO akita$port VALUES ('L1', 'L1.Top', 'ConnA')`)
 
 	s := &Server{traceReader: reader}
 	rec := httptest.NewRecorder()
@@ -164,11 +164,11 @@ func TestHTTPTopologyServesJSON(t *testing.T) {
 func TestHTTPSimInfoServesJSON(t *testing.T) {
 	reader := newTestReader(t)
 	if _, err := reader.Exec(
-		`CREATE TABLE exec_info (Property TEXT, Value TEXT)`); err != nil {
+		`CREATE TABLE akita$exec_info (Property TEXT, Value TEXT)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reader.Exec(
-		`INSERT INTO exec_info VALUES ('Command', './sim')`); err != nil {
+		`INSERT INTO akita$exec_info VALUES ('Command', './sim')`); err != nil {
 		t.Fatal(err)
 	}
 

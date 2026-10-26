@@ -183,6 +183,19 @@ loading, and termination. A complete checkpoint excludes engine startup.
 subsequent execution and checkpoint operations. There is no recorder exit hook;
 callers close independently constructed recorders themselves.
 
+## Namespaced recording tables
+
+Every table Akita writes into a recording now carries the `akita$` prefix:
+`akita$trace`, `akita$milestone`, `akita$tag`, `akita$segments` (formerly
+`daisen$segments`), `akita$component_spec`, `akita$port`, `akita$source`,
+`akita$exec_info`, and `akita$location`. Column names are unchanged. Tables an
+application writes through `s.DataRecorder()` may now use generic names such as
+`trace` or `location`; avoid the `akita$` prefix. `CreateTable` panics with a
+message naming the table when the recording already has one with that name,
+ignoring ASCII case as SQLite does. Update custom SQL to the new names. Daisen
+reads only the new names, so recordings from earlier versions do not open in
+this Daisen.
+
 ## Middleware and construction guards
 
 Use `event.Middleware.Handle(timing.Event)` for event components and
@@ -275,7 +288,7 @@ coverage checks remain strict.
 Recording started mid-run drops earlier tags and milestones of tasks already
 in flight. When such a task ends during recording, its original parent and full
 interval are recorded without replaying its history. Open-task snapshots remain
-deferred. Daisen's stored task/parent schema is unchanged, and its frontend ID
+deferred. Daisen's stored task/parent columns are unchanged, and its frontend ID
 types are numeric. Statistical observers count the full interval of each received
 end, including time before subscription or restore. BusyTimeTracer uses interval
 union and no longer exposes `TerminateAllTasks`.

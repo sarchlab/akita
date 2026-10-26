@@ -157,11 +157,11 @@ const exactScanTaskCap = 200_000
 
 func locationIDSelect(location string, exact bool) (string, []any) {
 	if exact {
-		return "SELECT ID FROM location WHERE Locale = ?", []any{location}
+		return "SELECT ID FROM akita$location WHERE Locale = ?", []any{location}
 	}
 
 	lo, hi := scopePrefixBounds(location)
-	return "SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)", []any{location, lo, hi}
+	return "SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)", []any{location, lo, hi}
 }
 
 // countTasksInLocation counts tasks overlapping [start, end) in either a
@@ -174,7 +174,7 @@ func (r *SQLiteTraceReader) countTasksInLocation(
 	locSelect, args := locationIDSelect(location, exact)
 	sqlStr := `
 		WITH scope_locs AS (` + locSelect + `)
-		SELECT COUNT(*) FROM trace t
+		SELECT COUNT(*) FROM akita$trace t
 		WHERE t.Location IN (SELECT ID FROM scope_locs)
 			AND t.EndTime > ? AND t.StartTime < ?`
 	args = append(args, start, end)
@@ -257,9 +257,9 @@ func (r *SQLiteTraceReader) componentTimeline( //nolint:funlen // one cohesive o
 	// 76M trace rows. Built single-flight so it persists (see ensureIndex).
 	r.ensureIndex(
 		ctx,
-		"Building index idx_trace_loc_time_kind_what",
-		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_kind_what `+
-			`ON trace(Location, StartTime, EndTime, Kind, What)`,
+		"Building index idx_akita$trace_loc_time_kind_what",
+		`CREATE INDEX IF NOT EXISTS idx_akita$trace_loc_time_kind_what `+
+			`ON akita$trace(Location, StartTime, EndTime, Kind, What)`,
 	)
 
 	// Guard the exact scan: a dense scope can be deterministically missed by the
@@ -294,7 +294,7 @@ func (r *SQLiteTraceReader) componentTimeline( //nolint:funlen // one cohesive o
 				END AS bin,
 				` + keyExpr + ` AS k,
 				d.delta AS delta
-			FROM trace t
+			FROM akita$trace t
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
 			WHERE t.Location IN (SELECT ID FROM scope_locs)
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
@@ -358,9 +358,9 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 	// join is index-only (no per-task table lookup just to read t.ID for the join).
 	r.ensureIndex(
 		ctx,
-		"Building index idx_trace_loc_time_id",
-		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
-			`ON trace(Location, StartTime, EndTime, ID)`,
+		"Building index idx_akita$trace_loc_time_id",
+		`CREATE INDEX IF NOT EXISTS idx_akita$trace_loc_time_id `+
+			`ON akita$trace(Location, StartTime, EndTime, ID)`,
 	)
 
 	// The milestone side of the join (m.TaskID = t.ID, windowed by Time). The sim
@@ -370,8 +370,8 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 	// one build across both paths).
 	r.ensureIndex(
 		ctx,
-		"Building index idx_milestone_TaskID_Time",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)",
+		"Building index idx_akita$milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_TaskID_Time ON akita$milestone(TaskID, Time)",
 	)
 
 	// Guard the exact scan (see ComponentTimeline): the trace×milestone join is
@@ -384,13 +384,13 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 	}
 
 	// Resolve the scope's location IDs first (the location table is tiny), then pull
-	// only the trace rows at those locations via idx_trace_Location and their
+	// only the trace rows at those locations via idx_akita$trace_loc_time_id and their
 	// milestones by TaskID. ivals is MATERIALIZED so the window runs over just the
 	// scope's milestones — without the hint SQLite scans every milestone in TaskID
 	// order to satisfy the window's PARTITION and probes the trace table 13M times.
 	sqlStr := `
 		WITH scope_locs AS (
-			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+			SELECT ID FROM akita$location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -400,8 +400,8 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 					t.StartTime
 				) AS lo,
 				m.Time AS hi
-			FROM trace t
-			JOIN milestone m ON m.TaskID = t.ID
+			FROM akita$trace t
+			JOIN akita$milestone m ON m.TaskID = t.ID
 			WHERE t.Location IN (SELECT ID FROM scope_locs)
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
 		),

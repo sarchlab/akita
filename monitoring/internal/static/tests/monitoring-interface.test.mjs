@@ -213,7 +213,7 @@ test("monitoring page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /\/api\/execution\/info/);
   assert.match(progressPage, /ExecutionInfoEntry/);
   assert.match(progressPage, /Execution Info/);
-  assert.match(progressPage, /Recorded in exec_info/);
+  assert.doesNotMatch(progressPage, /exec_info/);
   assert.match(progressPage, /Tracing/);
   assert.match(progressPage, /Start Tracing/);
   assert.match(progressPage, /Stop Tracing/);

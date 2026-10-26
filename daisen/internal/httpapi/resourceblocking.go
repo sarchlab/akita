@@ -48,23 +48,23 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 		return resp
 	}
 
-	r.ensureIndex(ctx, "Building index idx_milestone_Kind_What",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
-	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
+	r.ensureIndex(ctx, "Building index idx_akita$milestone_Kind_What",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_Kind_What ON akita$milestone(Kind, What, TaskID)")
+	r.ensureIndex(ctx, "Building index idx_akita$milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_TaskID_Time ON akita$milestone(TaskID, Time)")
 	// Covering index so a task's time span is read from the index, not fetched from
 	// the 76M-row trace table per task — otherwise finding which of a resource's
 	// tasks overlap the window costs one random row fetch each (seconds).
-	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
-		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
+	r.ensureIndex(ctx, "Building index idx_akita$trace_ID_time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$trace_ID_time ON akita$trace(ID, StartTime, EndTime)")
 
 	// Whole-trace count (index-only), for context.
 	_ = r.QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT m.TaskID)
-		FROM milestone m
-		JOIN trace t ON t.ID = m.TaskID
+		FROM akita$milestone m
+		JOIN akita$trace t ON t.ID = m.TaskID
 		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)`,
+			AND t.Location NOT IN (SELECT ID FROM akita$location WHERE Locale = ?)`,
 		what, what).Scan(&resp.TotalAll)
 	// Windowed count: tasks blocked on the resource that overlap the view range —
 	// this is what the density-vs-gantt choice keys on, so a deep zoom into a sparse
@@ -73,11 +73,11 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	_ = r.QueryRowContext(ctx, `
 		WITH bx AS (
 			SELECT DISTINCT m.TaskID
-			FROM milestone m
-			JOIN trace t ON t.ID = m.TaskID
+			FROM akita$milestone m
+			JOIN akita$trace t ON t.ID = m.TaskID
 			WHERE m.Kind = 'hardware_resource' AND m.What = ?
 				AND t.EndTime > ? AND t.StartTime < ?
-				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+				AND t.Location NOT IN (SELECT ID FROM akita$location WHERE Locale = ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -89,8 +89,8 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 				) AS lo,
 				m.Time AS hi
 			FROM bx
-			JOIN trace t ON t.ID = bx.TaskID
-			JOIN milestone m ON m.TaskID = t.ID
+			JOIN akita$trace t ON t.ID = bx.TaskID
+			JOIN akita$milestone m ON m.TaskID = t.ID
 		)
 		SELECT COUNT(DISTINCT TaskID)
 		FROM ivals
@@ -117,11 +117,11 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	sqlStr := `
 		WITH bx AS (
 			SELECT DISTINCT m.TaskID
-			FROM milestone m
-			JOIN trace t ON t.ID = m.TaskID
+			FROM akita$milestone m
+			JOIN akita$trace t ON t.ID = m.TaskID
 			WHERE m.Kind = 'hardware_resource' AND m.What = ?
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
-				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+				AND t.Location NOT IN (SELECT ID FROM akita$location WHERE Locale = ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -132,8 +132,8 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 				) AS lo,
 				m.Time AS hi
 			FROM bx
-			JOIN trace t ON t.ID = bx.TaskID
-			JOIN milestone m ON m.TaskID = t.ID
+			JOIN akita$trace t ON t.ID = bx.TaskID
+			JOIN akita$milestone m ON m.TaskID = t.ID
 			WHERE 1 = 1` + sampleFilter + `
 		),
 		events AS (
@@ -181,19 +181,19 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 	if what == "" || limit < 1 {
 		return []Task{}
 	}
-	r.ensureIndex(ctx, "Building index idx_milestone_Kind_What",
-		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
-	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
-		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
+	r.ensureIndex(ctx, "Building index idx_akita$milestone_Kind_What",
+		"CREATE INDEX IF NOT EXISTS idx_akita$milestone_Kind_What ON akita$milestone(Kind, What, TaskID)")
+	r.ensureIndex(ctx, "Building index idx_akita$trace_ID_time",
+		"CREATE INDEX IF NOT EXISTS idx_akita$trace_ID_time ON akita$trace(ID, StartTime, EndTime)")
 
 	rows, err := r.QueryContext(ctx, `
 		WITH bx AS (
 			SELECT DISTINCT m.TaskID
-			FROM milestone m
-			JOIN trace t ON t.ID = m.TaskID
+			FROM akita$milestone m
+			JOIN akita$trace t ON t.ID = m.TaskID
 			WHERE m.Kind = 'hardware_resource' AND m.What = ?
 				AND t.EndTime > ? AND t.StartTime < ?
-				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+				AND t.Location NOT IN (SELECT ID FROM akita$location WHERE Locale = ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -205,8 +205,8 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 				) AS lo,
 				m.Time AS hi
 			FROM bx
-			JOIN trace t ON t.ID = bx.TaskID
-			JOIN milestone m ON m.TaskID = t.ID
+			JOIN akita$trace t ON t.ID = bx.TaskID
+			JOIN akita$milestone m ON m.TaskID = t.ID
 		)
 		SELECT DISTINCT TaskID
 		FROM ivals

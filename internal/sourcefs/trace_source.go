@@ -12,7 +12,7 @@ import (
 
 // traceSourceTable is the trace table that holds recorded source archives,
 // written by the simulation source recorder.
-const traceSourceTable = "source"
+const traceSourceTable = "akita$source"
 
 // Source is the simulator source recorded in a trace, exposed as a read-only
 // file tree. Paths are "<root>/<file>" so multiple recorded roots (e.g. Akita
@@ -66,8 +66,8 @@ func NewSource(fsys fs.FS, roots []string) (*Source, error) {
 	return &Source{fsys: fsys, Roots: rs, Files: files}, nil
 }
 
-// OpenTraceSource reads the recorded `source` table from a trace database and
-// returns it as a read-only file tree. A missing or empty table is not an
+// OpenTraceSource reads the recorded `akita$source` table from a trace database
+// and returns it as a read-only file tree. A missing or empty table is not an
 // error — it returns an empty Source — so traces recorded before source
 // recording existed (or with it disabled) are handled gracefully.
 func OpenTraceSource(db *sql.DB) (*Source, error) {

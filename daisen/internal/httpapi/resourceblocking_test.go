@@ -21,13 +21,13 @@ func TestResourceBlockingOccupancy(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location VALUES (1, 'L1'), (2, 'R1')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location VALUES (1, 'L1'), (2, 'R1')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`INSERT INTO trace VALUES
+	exec(`CREATE TABLE akita$milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`INSERT INTO akita$trace VALUES
 		(1, 0, 'req_in', 'R', 1, 0, 20),
 		(2, 0, 'req_in', 'R', 1, 0, 20),
 		(3, 0, 'req_in', 'R', 1, 0, 20),
@@ -35,7 +35,7 @@ func TestResourceBlockingOccupancy(t *testing.T) {
 	// Task 1: blocked on R1 over [0,10]. Task 2: a prior milestone at 5, then R1 at
 	// 15 → blocked on R1 over [5,15]. Task 3: blocked on R2 (must be excluded).
 	// Task 4 is located at R1 itself, so it is resource usage, not a wait.
-	exec(`INSERT INTO milestone VALUES
+	exec(`INSERT INTO akita$milestone VALUES
 		(1, 1, 10, 'hardware_resource', 'R1'),
 		(2, 2, 5,  'data',              'x'),
 		(3, 2, 15, 'hardware_resource', 'R1'),
@@ -68,18 +68,18 @@ func TestTasksBlockingOn(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
-	exec(`INSERT INTO location VALUES (1, 'L1'), (2, 'L2'), (3, 'R1')`)
-	exec(`CREATE TABLE trace (
+	exec(`CREATE TABLE akita$location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO akita$location VALUES (1, 'L1'), (2, 'L2'), (3, 'R1')`)
+	exec(`CREATE TABLE akita$trace (
 		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
 		Location INTEGER, StartTime REAL, EndTime REAL)`)
-	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
-	exec(`INSERT INTO trace VALUES
+	exec(`CREATE TABLE akita$milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`INSERT INTO akita$trace VALUES
 		(1, 0, 'req_in', 'A', 1, 0, 100),
 		(2, 0, 'req_in', 'B', 1, 0, 100),
 		(3, 0, 'req_in', 'C', 2, 0, 100),
 		(4, 0, 'inst',   'D', 3, 0, 100)`)
-	exec(`INSERT INTO milestone VALUES
+	exec(`INSERT INTO akita$milestone VALUES
 		(1, 1, 10, 'hardware_resource', 'R1'),
 		(2, 2, 20, 'hardware_resource', 'R1'),
 		(3, 3, 30, 'hardware_resource', 'R2'),

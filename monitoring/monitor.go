@@ -1058,7 +1058,7 @@ func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(`SELECT Property, Value FROM exec_info ORDER BY rowid`)
+	rows, err := db.Query(`SELECT Property, Value FROM akita$exec_info ORDER BY rowid`)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such table") {
 			return []executionInfoEntry{}, nil

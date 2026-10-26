@@ -86,8 +86,8 @@ func writeRoundTripTrace(t *testing.T) string {
 	return dbFile
 }
 
-// assertTaskLocation checks that trace.Location (an interned id) joins back to
-// the task's single-kind location and that the task times round-trip.
+// assertTaskLocation checks that akita$trace.Location (an interned id) joins
+// back to the task's single-kind location and that the task times round-trip.
 func assertTaskLocation(t *testing.T, db *sql.DB) {
 	t.Helper()
 
@@ -96,7 +96,7 @@ func assertTaskLocation(t *testing.T, db *sql.DB) {
 	var start, end float64
 	err := db.QueryRow(`
 		SELECT t.ID, loc.Locale, t.StartTime, t.EndTime
-		FROM trace t JOIN location loc ON t.Location = loc.ID
+		FROM akita$trace t JOIN akita$location loc ON t.Location = loc.ID
 		WHERE t.ID = 1`).Scan(&id, &location, &start, &end)
 	if err != nil {
 		t.Fatalf("query trace: %v", err)
@@ -115,7 +115,7 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	var locCount int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM location`).Scan(&locCount); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM akita$location`).Scan(&locCount); err != nil {
 		t.Fatalf("count location: %v", err)
 	}
 	if locCount != 1 {
@@ -123,7 +123,7 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	}
 
 	var mWhat string
-	if err := db.QueryRow(`SELECT What FROM milestone WHERE TaskID = 1`).Scan(&mWhat); err != nil {
+	if err := db.QueryRow(`SELECT What FROM akita$milestone WHERE TaskID = 1`).Scan(&mWhat); err != nil {
 		t.Fatalf("query milestone: %v", err)
 	}
 	if mWhat != "queued" {
@@ -131,7 +131,7 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	}
 
 	var tagWhat string
-	if err := db.QueryRow(`SELECT What FROM tag WHERE TaskID = 1`).Scan(&tagWhat); err != nil {
+	if err := db.QueryRow(`SELECT What FROM akita$tag WHERE TaskID = 1`).Scan(&tagWhat); err != nil {
 		t.Fatalf("query tag: %v", err)
 	}
 	if tagWhat != "read-hit" {
@@ -172,7 +172,7 @@ func TestDBRecordsCompleteEndWithoutStartOrHistory(t *testing.T) {
 	defer db.Close()
 	var parent uint64
 	var start, end float64
-	row := db.QueryRow("SELECT ParentID, StartTime, EndTime FROM trace WHERE ID=10")
+	row := db.QueryRow("SELECT ParentID, StartTime, EndTime FROM akita$trace WHERE ID=10")
 	if err := row.Scan(&parent, &start, &end); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestDBRecordsCompleteEndWithoutStartOrHistory(t *testing.T) {
 		t.Fatalf("incomplete end record: %d %v %v", parent, start, end)
 	}
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM milestone").Scan(&count); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM akita$milestone").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {

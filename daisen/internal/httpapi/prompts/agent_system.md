@@ -15,7 +15,7 @@ query before making any quantitative claim.
 ## The trace data model
 
 A **task** is one unit of work a component performed over an interval of simulated
-time, recorded as a row in the `trace` table with these fields:
+time, recorded as a row in the `akita$trace` table with these fields:
 
 - **`ID`** — the task's unique identifier.
 - **`ParentID`** — the `ID` of the task that caused this one; this is the link that
@@ -36,7 +36,7 @@ Tasks form a **tree** through `ParentID`: each task points at the task that spaw
 it, so a task's children are the sub-work it triggered, and a root task has no parent
 (`ParentID` 0). Two other kinds of record hang off a task by its `ID`: **tags** —
 categorical labels such as `read-hit` or `miss`, added while the task runs and stored
-in the `tag` table — and **milestones** (below).
+in the `akita$tag` table — and **milestones** (below).
 
 ### `req_out` and `req_in` — a message's two halves
 
@@ -68,7 +68,7 @@ start — is time the task spent **blocked on that reason**, named by the milest
 `translation`, `subtask`, or `work` — the last marking a span of active work rather
 than a block). So at any instant a task is blocked on the reason of its
 *next* milestone; after its last milestone it is running, not blocked. Milestones
-live in the `milestone` table (`TaskID`, `Time`, `Kind`); not every task records
+live in the `akita$milestone` table (`TaskID`, `Time`, `Kind`); not every task records
 them.
 
 ## Visualizations

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { SimInfoEntry } from "../types/overview";
 import { useRenderReady } from "./useRenderReady";
 
-/** Fetches the simulation's exec_info key/value rows from /api/sim_info. */
+/** Fetches the simulation's akita$exec_info key/value rows from /api/sim_info. */
 export function useSimInfo() {
   const [data, setData] = useState<SimInfoEntry[] | null>(null);
   const [loading, setLoading] = useState(true);

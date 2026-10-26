@@ -27,7 +27,7 @@ defer recorder.Close()
 The argument is the exact path: no extension is appended. Existing files are
 rejected without modification. An empty path chooses a unique SQLite filename.
 Simulation-level metadata
-such as `exec_info` is recorded by the `sim` package, not by the generic
+such as `akita$exec_info` is recorded by the `sim` package, not by the generic
 data recorder.
 
 ### Defining Tables
@@ -47,6 +47,13 @@ type MyEntry struct {
 recorder.CreateTable("my_results", MyEntry{})
 ```
 
+`CreateTable` panics if the recording already has a table with that name.
+Like SQLite, it ignores ASCII case, so `Results` and `results` collide.
+Tables that Akita writes into a simulation's recording, such as
+`akita$trace` and `akita$exec_info`, carry the `akita$` prefix. Applications
+may use any other name, including generic ones like `trace`; avoid the
+`akita$` prefix.
+
 #### Struct Tags
 
 | Tag | Effect |
@@ -54,7 +61,7 @@ recorder.CreateTable("my_results", MyEntry{})
 | `akita_data:"unique"` | Creates a unique index on this column |
 | `akita_data:"index"` | Creates a non-unique index |
 | `akita_data:"ignore"` | Field is not stored |
-| `akita_data:"location"` | String auto-mapped to integer ID via a `location` table |
+| `akita_data:"location"` | String auto-mapped to integer ID via the `akita$location` table |
 
 Only primitive types are allowed as fields (bool, int/uint variants, float,
 complex, string).
@@ -79,5 +86,6 @@ Use SQLite directly for custom analysis. The generic reader and existing-DB
 writer constructor have been removed. Daisen retains its specialized trace
 reader as an internal implementation detail.
 
-Fields tagged `akita_data:"location"` store IDs into the `location` table;
-join the recorded column to `location.ID` to retrieve `location.Locale`.
+Fields tagged `akita_data:"location"` store IDs into the `akita$location`
+table; join the recorded column to `akita$location.ID` to retrieve
+`akita$location.Locale`.

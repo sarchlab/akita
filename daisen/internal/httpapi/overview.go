@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-// SimInfoEntry is one key/value row of the exec_info table (e.g. "Command",
+// SimInfoEntry is one key/value row of the akita$exec_info table (e.g. "Command",
 // "Start Virtual Time"). The frontend renders these on the main page's
 // simulation-info widget.
 type SimInfoEntry struct {
@@ -15,12 +15,12 @@ type SimInfoEntry struct {
 	Value    string `json:"value"`
 }
 
-// ListExecInfo returns the exec_info rows in recorded order. A trace without an
-// exec_info table yields an empty slice rather than an error.
+// ListExecInfo returns the akita$exec_info rows in recorded order. A trace
+// without that table yields an empty slice rather than an error.
 func (r *SQLiteTraceReader) ListExecInfo(ctx context.Context) []SimInfoEntry {
 	entries := []SimInfoEntry{}
 
-	rows, err := r.QueryContext(ctx, "SELECT Property, Value FROM exec_info")
+	rows, err := r.QueryContext(ctx, "SELECT Property, Value FROM akita$exec_info")
 	if err != nil {
 		return entries
 	}
@@ -34,7 +34,7 @@ func (r *SQLiteTraceReader) ListExecInfo(ctx context.Context) []SimInfoEntry {
 		entries = append(entries, e)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("exec_info query: %v", err)
+		log.Printf("akita$exec_info query: %v", err)
 	}
 
 	return entries
@@ -74,9 +74,9 @@ type Topology struct {
 	Ports      []TopologyPort      `json:"ports"`
 }
 
-// ReadTopology reads the component_spec and port tables. Missing tables (a trace
-// recorded before topology recording existed) yield empty slices, so the
-// frontend can render an empty state instead of failing.
+// ReadTopology reads the akita$component_spec and akita$port tables. Missing
+// tables (a trace recorded before topology recording existed) yield empty
+// slices, so the frontend can render an empty state instead of failing.
 func (r *SQLiteTraceReader) ReadTopology(ctx context.Context) Topology {
 	return Topology{
 		Components: r.listComponentSpecs(ctx),
@@ -89,7 +89,7 @@ func (r *SQLiteTraceReader) listComponentSpecs(
 ) []TopologyComponent {
 	components := []TopologyComponent{}
 
-	rows, err := r.QueryContext(ctx, "SELECT Name, Type, Spec FROM component_spec")
+	rows, err := r.QueryContext(ctx, "SELECT Name, Type, Spec FROM akita$component_spec")
 	if err != nil {
 		return components
 	}
@@ -112,7 +112,7 @@ func (r *SQLiteTraceReader) listComponentSpecs(
 		components = append(components, c)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("component_spec query: %v", err)
+		log.Printf("akita$component_spec query: %v", err)
 	}
 
 	return components
@@ -121,7 +121,7 @@ func (r *SQLiteTraceReader) listComponentSpecs(
 func (r *SQLiteTraceReader) listPorts(ctx context.Context) []TopologyPort {
 	ports := []TopologyPort{}
 
-	rows, err := r.QueryContext(ctx, "SELECT Component, Port, Connection FROM port")
+	rows, err := r.QueryContext(ctx, "SELECT Component, Port, Connection FROM akita$port")
 	if err != nil {
 		return ports
 	}
@@ -135,7 +135,7 @@ func (r *SQLiteTraceReader) listPorts(ctx context.Context) []TopologyPort {
 		ports = append(ports, p)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("port query: %v", err)
+		log.Printf("akita$port query: %v", err)
 	}
 
 	return ports

@@ -65,7 +65,7 @@ func openRecordingDB(t *testing.T, path string) *sql.DB {
 
 func readExecInfo(t *testing.T, dbFile string) map[string]string {
 	t.Helper()
-	rows, err := openRecordingDB(t, dbFile).Query("SELECT Property, Value FROM exec_info")
+	rows, err := openRecordingDB(t, dbFile).Query("SELECT Property, Value FROM akita$exec_info")
 	if err != nil {
 		t.Fatal(err)
 	}

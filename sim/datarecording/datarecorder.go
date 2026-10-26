@@ -20,7 +20,9 @@ import (
 // The SQLite implementation supports concurrent CreateTable, InsertData,
 // and Flush calls. Stop producers before calling Close.
 type DataRecorder interface {
-	// CreateTable creates a new table with given filename
+	// CreateTable creates a new table whose columns are the fields of
+	// sampleEntry. It panics if the recording already has a table with that
+	// name; like SQLite, the comparison ignores ASCII case.
 	CreateTable(tableName string, sampleEntry any)
 
 	// InsertData writes an entry into a table that already exists.
@@ -46,6 +48,10 @@ func NewDataRecorder(path string) DataRecorder {
 
 	return w
 }
+
+// locationTableName is the dictionary that interns akita_data:"location"
+// columns. The akita$ prefix keeps it apart from application tables.
+const locationTableName = "akita$location"
 
 // Feed to location table when inserting data
 type location struct {
@@ -170,6 +176,8 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.mustNotHaveTable(tableName)
+
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
@@ -183,7 +191,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.mustExecute(createTableSQL)
 
 	hasLocTag := t.checkLocationTag(sampleEntry)
-	_, exists := t.tables["location"]
+	_, exists := t.tables[locationTableName]
 
 	if !exists && hasLocTag {
 		t.createLocationTable()
@@ -196,6 +204,44 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.tables[tableName] = tableInfo
 
 	t.prepareStatement(tableName, sampleEntry)
+}
+
+// mustNotHaveTable panics if the recording already has a table with the given
+// name. The recorder always starts a fresh file, so its own table map is the
+// complete list.
+func (t *sqliteWriter) mustNotHaveTable(tableName string) {
+	for existing := range t.tables {
+		if sameIdentifier(existing, tableName) {
+			panic(fmt.Sprintf(
+				"datarecording: table %q already exists in this recording",
+				existing))
+		}
+	}
+}
+
+// sameIdentifier reports whether SQLite treats a and b as the same identifier.
+// SQLite folds ASCII letters only, so "Trace" matches "trace" while "CAFÉ" and
+// "café" stay distinct.
+func sameIdentifier(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := 0; i < len(a); i++ {
+		if asciiLower(a[i]) != asciiLower(b[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func asciiLower(c byte) byte {
+	if 'A' <= c && c <= 'Z' {
+		return c + 'a' - 'A'
+	}
+
+	return c
 }
 
 func (t *sqliteWriter) checkLocationTag(entry any) bool {
@@ -230,7 +276,7 @@ func (t *sqliteWriter) createLocationTable() {
 	fieldNames := t.getFieldNames(sampleLoc)
 	fields := strings.Join(fieldNames, ", \n\t")
 
-	createTableSQL := `CREATE TABLE ` + "location" +
+	createTableSQL := `CREATE TABLE ` + locationTableName +
 		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
 
@@ -238,9 +284,9 @@ func (t *sqliteWriter) createLocationTable() {
 		structType: reflect.TypeOf(sampleLoc),
 		entries:    []any{},
 	}
-	t.tables["location"] = tableInfo
+	t.tables[locationTableName] = tableInfo
 
-	t.prepareStatement("location", sampleLoc)
+	t.prepareStatement(locationTableName, sampleLoc)
 }
 
 func (t *sqliteWriter) prepareStatement(table string, task any) {
@@ -294,11 +340,11 @@ func (t *sqliteWriter) createIndexesForTable(
 			case "index":
 				t.createIndex(tableName, field.Name, false)
 			}
-			// A "location" tag only interns the column into the shared location
-			// table; it is intentionally not indexed here. The interned-id column
-			// is filtered only alongside columns the reader covers with its own
-			// (Location-led) indexes, so a standalone index on it is dead weight —
-			// the reader builds whatever it actually needs.
+			// A "location" tag only interns the column into the shared
+			// akita$location table; it is intentionally not indexed here. The
+			// interned-id column is filtered only alongside columns the reader
+			// covers with its own (Location-led) indexes, so a standalone index
+			// on it is dead weight — the reader builds whatever it actually needs.
 		}
 	}
 }
@@ -359,14 +405,14 @@ func (t *sqliteWriter) flushLocked() {
 			continue
 		}
 
-		if tableName == "location" {
+		if tableName == locationTableName {
 			continue
 		}
 
 		t.insertTableEntries(tx, table)
 	}
 
-	if locations, ok := t.tables["location"]; ok {
+	if locations, ok := t.tables[locationTableName]; ok {
 		t.insertTableEntries(tx, locations)
 	}
 
@@ -443,7 +489,7 @@ func (t *sqliteWriter) getLocationID(
 		t.locationInfo[loc] = id
 
 		newLocation := location{id, loc}
-		locTable := t.tables["location"]
+		locTable := t.tables[locationTableName]
 		locTable.entries = append(locTable.entries, newLocation)
 		t.entryCount += 1
 	}
@@ -481,10 +527,10 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 // until now.
 func (t *sqliteWriter) buildIndexes() {
 	for tableName, tbl := range t.tables {
-		if tableName == "location" {
+		if tableName == locationTableName {
 			// The interned-id dictionary key: unique so a reader can resolve an
 			// id back to its string with an indexed lookup.
-			t.createIndex("location", "ID", true)
+			t.createIndex(locationTableName, "ID", true)
 			continue
 		}
 

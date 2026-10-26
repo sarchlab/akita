@@ -318,10 +318,7 @@ export default function ProgressPage() {
 
         <section className="rounded border bg-white p-4">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold">Execution Info</div>
-              <div className="mt-1 text-xs text-muted-foreground">Recorded in exec_info</div>
-            </div>
+            <div className="text-sm font-semibold">Execution Info</div>
             <div className="font-mono text-xs text-muted-foreground">{executionInfo.length} entries</div>
           </div>
           {executionInfo.length ? (

@@ -359,10 +359,12 @@ const (
 const dataQueryDescription = `Run a single read-only SQL query (SELECT or WITH only) over the Akita trace
 and get the rows back as CSV.
 
-Schema:
-- trace(ID, ParentID, Kind, What, Location, StartTime, EndTime) — one row per task/event. Location is an interned id.
-- location(ID, Locale) — Locale is the human-readable component name; join trace.Location = location.ID.
-- milestone(...) — sub-events attached to tasks (may be absent in some traces).
+Schema (Akita's tables carry the akita$ prefix; write it as part of the name, e.g. FROM akita$trace):
+- akita$trace(ID, ParentID, Kind, What, Location, StartTime, EndTime) — one row per task/event.
+  Location is an interned id.
+- akita$location(ID, Locale) — Locale is the human-readable component name;
+  join akita$trace.Location = akita$location.ID.
+- akita$milestone(...) — sub-events attached to tasks (may be absent in some traces).
 
 Notes: times are raw trace values; results are capped at 1000 rows. Prefer aggregates
 (COUNT, AVG, MIN, MAX, GROUP BY) over dumping rows.`

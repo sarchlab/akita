@@ -10,13 +10,13 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Table names for tracing data.
-// TODO(v5): Rename to "daisen$tasks" and "daisen$milestones" for clearer namespacing.
+// Table names for tracing data. The akita$ prefix keeps them apart from the
+// tables an application writes into the same recording.
 const (
-	traceTableName     = "trace"
-	milestoneTableName = "milestone"
-	tagTableName       = "tag"
-	segmentTableName   = "daisen$segments"
+	traceTableName     = "akita$trace"
+	milestoneTableName = "akita$milestone"
+	tagTableName       = "akita$tag"
+	segmentTableName   = "akita$segments"
 )
 
 type runningTask struct {
@@ -31,10 +31,10 @@ type runningTask struct {
 // filtered alongside Location (served by the reader's Location-led covering
 // indexes) or not at all. The reader builds exactly the few indexes its queries
 // use, on demand. Location keeps its tag because it drives string interning into
-// the shared location table, not just an index.
+// the shared akita$location table, not just an index.
 
 // taskTableEntry is the table structure for storing task information.
-// All tasks are stored in a single "trace" table.
+// All tasks are stored in a single akita$trace table.
 type taskTableEntry struct {
 	ID        uint64  `json:"id"`
 	ParentID  uint64  `json:"parent_id"`
@@ -46,7 +46,7 @@ type taskTableEntry struct {
 }
 
 // milestoneTableEntry is the table structure for storing milestone information.
-// All milestones are stored in a single "milestone" table. A milestone's
+// All milestones are stored in a single akita$milestone table. A milestone's
 // location is inherited from its owning task (joined via TaskID), so it is not
 // stored here.
 type milestoneTableEntry struct {
@@ -58,7 +58,7 @@ type milestoneTableEntry struct {
 }
 
 // tagTableEntry is the table structure for storing task tag information. All
-// tags are stored in a single "tag" table. Location is inherited from the
+// tags are stored in a single akita$tag table. Location is inherited from the
 // owning task.
 type tagTableEntry struct {
 	ID     uint64  `json:"id"`

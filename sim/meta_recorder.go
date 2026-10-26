@@ -16,9 +16,11 @@ type simulationInfo struct {
 	Value    string
 }
 
-// metaRecorder records simulation-level metadata into exec_info.
+// execInfoTableName holds simulation-level metadata as property/value rows.
+const execInfoTableName = "akita$exec_info"
+
+// metaRecorder records simulation-level metadata into akita$exec_info.
 type metaRecorder struct {
-	tableName  string
 	recorder   datarecording.DataRecorder
 	timeTeller timing.TimeTeller
 	ended      bool
@@ -29,11 +31,10 @@ func newMetaRecorder(
 	timeTeller timing.TimeTeller,
 ) *metaRecorder {
 	r := &metaRecorder{
-		tableName:  "exec_info",
 		recorder:   recorder,
 		timeTeller: timeTeller,
 	}
-	r.recorder.CreateTable(r.tableName, simulationInfo{})
+	r.recorder.CreateTable(execInfoTableName, simulationInfo{})
 	r.Start()
 	return r
 }
@@ -76,7 +77,7 @@ func (r *metaRecorder) End() {
 }
 
 func (r *metaRecorder) insertEntry(property, value string) {
-	r.recorder.InsertData(r.tableName, simulationInfo{
+	r.recorder.InsertData(execInfoTableName, simulationInfo{
 		Property: property,
 		Value:    value,
 	})

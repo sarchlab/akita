@@ -18,10 +18,10 @@ import (
 func seedAgentTrace(t *testing.T, reader *SQLiteTraceReader) {
 	t.Helper()
 	stmts := []string{
-		`INSERT INTO location (ID, Locale) VALUES (1, 'L2Cache'), (2, 'L1Cache')`,
-		`INSERT INTO trace VALUES (1,0,'read','req',1,0,10)`,
-		`INSERT INTO trace VALUES (2,0,'read','req',1,10,25)`,
-		`INSERT INTO trace VALUES (3,0,'write','req',2,5,8)`,
+		`INSERT INTO akita$location (ID, Locale) VALUES (1, 'L2Cache'), (2, 'L1Cache')`,
+		`INSERT INTO akita$trace VALUES (1,0,'read','req',1,0,10)`,
+		`INSERT INTO akita$trace VALUES (2,0,'read','req',1,10,25)`,
+		`INSERT INTO akita$trace VALUES (3,0,'write','req',2,5,8)`,
 	}
 	for _, s := range stmts {
 		if _, err := reader.Exec(s); err != nil {
@@ -33,13 +33,13 @@ func seedAgentTrace(t *testing.T, reader *SQLiteTraceReader) {
 func TestSanitizeReadonlySQL(t *testing.T) {
 	rejected := []string{
 		"",
-		"DELETE FROM trace",
-		"DROP TABLE trace",
-		"INSERT INTO trace VALUES (1)",
+		"DELETE FROM akita$trace",
+		"DROP TABLE akita$trace",
+		"INSERT INTO akita$trace VALUES (1)",
 		"UPDATE trace SET Kind='x'",
 		"PRAGMA table_info(trace)",
 		"ATTACH DATABASE 'x' AS y",
-		"SELECT 1; DROP TABLE trace",
+		"SELECT 1; DROP TABLE akita$trace",
 	}
 	for _, q := range rejected {
 		if _, err := sanitizeReadonlySQL(q, 100); err == nil {
@@ -47,13 +47,13 @@ func TestSanitizeReadonlySQL(t *testing.T) {
 		}
 	}
 
-	if got, err := sanitizeReadonlySQL("SELECT * FROM trace", 100); err != nil {
+	if got, err := sanitizeReadonlySQL("SELECT * FROM akita$trace", 100); err != nil {
 		t.Errorf("plain SELECT rejected: %v", err)
 	} else if !strings.Contains(strings.ToUpper(got), "LIMIT 100") {
 		t.Errorf("expected injected LIMIT, got %q", got)
 	}
 
-	got, _ := sanitizeReadonlySQL("SELECT * FROM trace LIMIT 5", 100)
+	got, _ := sanitizeReadonlySQL("SELECT * FROM akita$trace LIMIT 5", 100)
 	if strings.Count(strings.ToUpper(got), "LIMIT") != 1 {
 		t.Errorf("must not double-inject LIMIT: %q", got)
 	}
@@ -68,7 +68,7 @@ func TestRunDataQuery(t *testing.T) {
 	seedAgentTrace(t, reader)
 
 	out, err := runDataQuery(context.Background(), reader,
-		"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location = loc.ID "+
+		"SELECT loc.Locale, COUNT(*) AS n FROM akita$trace t JOIN akita$location loc ON t.Location = loc.ID "+
 			"GROUP BY loc.Locale ORDER BY loc.Locale")
 	if err != nil {
 		t.Fatalf("data_query: %v", err)
@@ -78,7 +78,7 @@ func TestRunDataQuery(t *testing.T) {
 	}
 
 	// A write must be refused before reaching the DB.
-	if _, err := runDataQuery(context.Background(), reader, "DELETE FROM trace"); err == nil {
+	if _, err := runDataQuery(context.Background(), reader, "DELETE FROM akita$trace"); err == nil {
 		t.Error("expected DELETE to be rejected")
 	}
 }
@@ -220,18 +220,18 @@ func TestRunDataQueryRejectsCTEWrite(t *testing.T) {
 	seedAgentTrace(t, reader)
 
 	var before int
-	if err := reader.QueryRow("SELECT COUNT(*) FROM trace").Scan(&before); err != nil {
+	if err := reader.QueryRow("SELECT COUNT(*) FROM akita$trace").Scan(&before); err != nil {
 		t.Fatalf("count before: %v", err)
 	}
 
 	// Starts with WITH, so it slips past the prefix filter, but it is a DELETE.
 	if _, err := runDataQuery(context.Background(), reader,
-		"WITH x AS (SELECT 1) DELETE FROM trace RETURNING ID"); err == nil {
+		"WITH x AS (SELECT 1) DELETE FROM akita$trace RETURNING ID"); err == nil {
 		t.Error("expected CTE-wrapped DELETE to be rejected")
 	}
 
 	var after int
-	if err := reader.QueryRow("SELECT COUNT(*) FROM trace").Scan(&after); err != nil {
+	if err := reader.QueryRow("SELECT COUNT(*) FROM akita$trace").Scan(&after); err != nil {
 		t.Fatalf("count after: %v", err)
 	}
 	if after != before {
@@ -239,7 +239,7 @@ func TestRunDataQueryRejectsCTEWrite(t *testing.T) {
 	}
 
 	// A normal read still works after the read-only guard reset the connection.
-	if _, err := runDataQuery(context.Background(), reader, "SELECT COUNT(*) FROM trace"); err != nil {
+	if _, err := runDataQuery(context.Background(), reader, "SELECT COUNT(*) FROM akita$trace"); err != nil {
 		t.Errorf("read query after guard failed: %v", err)
 	}
 }
@@ -292,8 +292,8 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant",`+
 				`"content":"Let me check the per-component task counts.",`+
 				`"tool_calls":[{"id":"c1","type":"function","function":{"name":"data_query",`+
-				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t `+
-				`JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
+				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM akita$trace t `+
+				`JOIN akita$location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
 			return
 		}
 		// Second turn: the conversation now carries the tool result.
@@ -365,8 +365,8 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 		if calls == 1 {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
 				`{"id":"c1","type":"function","function":{"name":"data_query",`+
-				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t `+
-				`JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
+				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM akita$trace t `+
+				`JOIN akita$location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
 			return
 		}
 		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"L2Cache handled 2 tasks."}}]}`)

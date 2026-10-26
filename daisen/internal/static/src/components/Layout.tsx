@@ -9,8 +9,9 @@ import { useSimInfo } from "../hooks/useSimInfo";
 export default function Layout() {
   useRenderReadyOnNavigation();
   const [chatOpen, setChatOpen] = useState(false);
-  // The command that produced this trace (from the exec_info table), shown as a
-  // subtitle under the brand so it is always clear which run is being viewed.
+  // The command that produced this trace (from the akita$exec_info table),
+  // shown as a subtitle under the brand so it is always clear which run is
+  // being viewed.
   const { data: simInfo } = useSimInfo();
   const command = simInfo?.find((entry) => entry.property === "Command")?.value;
 

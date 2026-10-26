@@ -45,11 +45,12 @@ its start and end occurred outside that window. Earlier tags and milestones
 are not recovered. While recording is off, DBTracer retains only event buffers
 for work already selected by a recording window.
 
-The unchanged SQLite schema uses `trace`, `milestone`, `tag`, and
-`daisen$segments`. Task locations are interned in `location`. Tags/milestones
-inherit location through their TaskID join. Milestone deduplication keeps the
-first milestone at each timestamp for a task; the same kind/what at a later
-time remains visible. IDs and parent IDs are numeric in Daisen.
+The SQLite schema uses `akita$trace`, `akita$milestone`, `akita$tag`, and
+`akita$segments`; the columns are unchanged. Task locations are interned in
+`akita$location`. Tags/milestones inherit location through their TaskID join.
+Milestone deduplication keeps the first milestone at each timestamp for a task;
+the same kind/what at a later time remains visible. IDs and parent IDs are
+numeric in Daisen.
 
 ## Task conventions
 
@@ -104,7 +105,7 @@ is on, or the named pipeline stage); a **port** disambiguates by *direction*
 (incoming vs outgoing buffer). This holds for every task: `tracker.StartTask` derives the
 location from the Kind (see `singleKindLocation`) when a caller leaves `Location`
 empty, ports append the buffer direction, and all of these strings are
-interned into the trace's `location` table.
+interned into the trace's `akita$location` table.
 
 When you add a new task Kind to a component or port that already emits another
 kind, qualify its location the same way — never let two kinds share one location.

@@ -71,8 +71,9 @@ func (s *Simulation) Engine() timing.Engine {
 }
 
 // DataRecorder returns the data recorder used in the simulation. A simulator
-// can write its own tables into the same recording. It is nil unless recording
-// was explicitly enabled during construction.
+// can write its own tables into the same recording. Akita's own tables use the
+// akita$ prefix, and CreateTable panics on a name the recording already has.
+// It is nil unless recording was explicitly enabled during construction.
 func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
