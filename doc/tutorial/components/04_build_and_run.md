@@ -111,7 +111,9 @@ component with no ports, so without it the engine has no events to fire and
 `Run` returns immediately. Once a tick fires, the middleware returns `true`
 and the component schedules its next tick automatically — you only call
 `TickLater` once to start it (and again later if the component went idle
-and now has work to do).
+and now has work to do). For work due at a later time, `TickAt(t)` schedules
+a tick at the first clock edge at or after `t`; the component keeps that work
+in State and asks again on each tick for the earliest work left.
 
 ## Pausing from Another Goroutine
 
@@ -208,7 +210,8 @@ those cycles map to simulated time.
   the type.
 - **Progress drives the loop.** Return `true` from `Handle` to tick again
   next cycle; return `false` to stop. Outside events (`TickLater`, incoming
-  messages) can wake an idle component back up.
+  messages) can wake an idle component back up, and `TickAt` wakes it at a
+  later time it asked for.
 - **Middlewares hold only references.** Data that changes belongs in State;
   external objects, like the random source, come in through Resources.
 

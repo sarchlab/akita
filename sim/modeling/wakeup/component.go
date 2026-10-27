@@ -37,8 +37,7 @@ type Component[S, T, R, P, M any] struct {
 	pipeline []Middleware
 
 	// handling makes the instance handle one event at a time: the parallel
-	// engine runs the events of one time concurrently, and a superseded
-	// wakeup can fall at the same time as a later one.
+	// engine runs the events of one time concurrently.
 	handling sync.Mutex
 }
 

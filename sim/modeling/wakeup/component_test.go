@@ -20,6 +20,10 @@ type Spec struct {
 type State struct {
 	Work  int                     `json:"work"`
 	Woken []timing.VTimeInPicoSec `json:"woken"`
+
+	// WakeAgainAt, when set, is a time the component asks to wake at on every
+	// earlier wakeup, as for work due then.
+	WakeAgainAt timing.VTimeInPicoSec `json:"wake_again_at"`
 }
 
 type Ports struct {
@@ -40,6 +44,10 @@ type workMW struct {
 
 func (m *workMW) Handle(e timing.Event) bool {
 	m.comp.State.Woken = append(m.comp.State.Woken, e.Time())
+
+	if again := m.comp.State.WakeAgainAt; again > e.Time() {
+		m.comp.WakeAt(again)
+	}
 
 	if m.comp.State.Work == 0 {
 		return false
@@ -109,6 +117,40 @@ func TestWakeAtWakesAtThatTime(t *testing.T) {
 	run(t, sim)
 
 	want := []timing.VTimeInPicoSec{100, 200}
+	if !reflect.DeepEqual(c.State.Woken, want) {
+		t.Errorf("woken at %v, want %v", c.State.Woken, want)
+	}
+}
+
+// TestASupersededWakeupIsNotDuplicated covers a pending wakeup that an
+// earlier one superseded: when the earlier wakeup asks for it again, the
+// component still wakes once at that time.
+func TestASupersededWakeupIsNotDuplicated(t *testing.T) {
+	sim := newSim()
+	c := build(sim, Spec{})
+	c.State.WakeAgainAt = 300
+
+	c.WakeAt(300)
+	c.WakeAt(100)
+	run(t, sim)
+
+	want := []timing.VTimeInPicoSec{100, 300}
+	if !reflect.DeepEqual(c.State.Woken, want) {
+		t.Errorf("woken at %v, want %v", c.State.Woken, want)
+	}
+}
+
+// TestWakeAtDuringAWakeupIsNotLost shows that the wakeup being handled does
+// not swallow a request it makes for a later time.
+func TestWakeAtDuringAWakeupIsNotLost(t *testing.T) {
+	sim := newSim()
+	c := build(sim, Spec{})
+	c.State.WakeAgainAt = 300
+
+	c.WakeAt(100)
+	run(t, sim)
+
+	want := []timing.VTimeInPicoSec{100, 300}
 	if !reflect.DeepEqual(c.State.Woken, want) {
 		t.Errorf("woken at %v, want %v", c.State.Woken, want)
 	}

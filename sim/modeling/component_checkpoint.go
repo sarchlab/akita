@@ -16,26 +16,19 @@ import (
 // directly — alongside the engine's matching event — so load is a single pass
 // with no post-load reconciliation against the queue.
 type componentCheckpoint struct {
-	SpecHash          string                      `json:"spec_hash"`
-	State             json.RawMessage             `json:"state"`
-	PendingEventGuard pendingEventGuardCheckpoint `json:"pending_event_guard"`
+	SpecHash          string                  `json:"spec_hash"`
+	State             json.RawMessage         `json:"state"`
+	PendingEventGuard []timing.VTimeInPicoSec `json:"pending_event_guard"`
 }
 
-// pendingEventGuardCheckpoint is the serialized pending-event guard: whether an event
-// is pending and at what time.
-type pendingEventGuardCheckpoint struct {
-	Scheduled bool                  `json:"scheduled"`
-	At        timing.VTimeInPicoSec `json:"at"`
-}
-
-// PendingEventGuard records whether the component's own tick or wakeup is
-// pending and when, so restore does not schedule a duplicate.
+// PendingEventGuard records the times of the component's own pending ticks or
+// wakeups, so restore does not schedule a duplicate.
 type PendingEventGuard interface {
-	// Snapshot returns the guard: whether an event is pending and at what time.
-	Snapshot() (at timing.VTimeInPicoSec, scheduled bool)
+	// Snapshot returns the guard: the times of the pending events.
+	Snapshot() []timing.VTimeInPicoSec
 
 	// Restore sets the guard from a checkpoint.
-	Restore(at timing.VTimeInPicoSec, scheduled bool)
+	Restore(pending []timing.VTimeInPicoSec)
 }
 
 // WriteCheckpoint writes a component's spec hash, State, and pending-event guard
@@ -54,8 +47,7 @@ func WriteCheckpoint[S, T any](
 		State:    data,
 	}
 	if guard != nil {
-		at, scheduled := guard.Snapshot()
-		dto.PendingEventGuard = pendingEventGuardCheckpoint{Scheduled: scheduled, At: at}
+		dto.PendingEventGuard = guard.Snapshot()
 	}
 
 	return json.NewEncoder(w).Encode(dto)
@@ -84,7 +76,7 @@ func ReadCheckpoint[S, T any](
 	*state = restored
 
 	if guard != nil {
-		guard.Restore(dto.PendingEventGuard.At, dto.PendingEventGuard.Scheduled)
+		guard.Restore(dto.PendingEventGuard)
 	}
 
 	return nil

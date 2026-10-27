@@ -82,7 +82,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	if err := modeling.WriteCheckpoint(&buf, ckptSpec{}, ckptState{}, src); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
-	if !strings.Contains(buf.String(), `"pending_event_guard":{"scheduled":true,"at":1000}`) {
+	if !strings.Contains(buf.String(), `"pending_event_guard":[1000]`) {
 		t.Fatalf("checkpoint is missing the pending-event guard: %s", buf.String())
 	}
 

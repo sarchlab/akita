@@ -720,6 +720,40 @@ func TestTickSchedulerGuardRestore(t *testing.T) {
 	})
 }
 
+func TestTickSchedulerRestoresAFutureTick(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+	const tickTime = timing.VTimeInPicoSec(5000)
+
+	// Checkpoint with a tick pending several cycles ahead.
+	srcSim, srcC := buildTickCountSim()
+	defer func() {
+		srcSim.Terminate()
+		os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
+	}()
+	srcC.TickAt(tickTime)
+	require.NoError(t, srcSim.SaveCheckpoint(path))
+
+	dstSim, dstC := buildTickCountSim()
+	defer func() {
+		dstSim.Terminate()
+		os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
+	}()
+	require.NoError(t, dstSim.LoadCheckpoint(path))
+
+	// The restored guard knows the future tick is pending, so asking for it
+	// again schedules nothing, while a tick next cycle is still scheduled.
+	dstC.TickAt(tickTime)
+	dstC.TickLater()
+
+	engine := dstSim.Engine().(*timing.SerialEngine)
+	require.NoError(t, engine.Run())
+
+	// The next-cycle tick and the restored tick fired, the latter at the
+	// saved time. A duplicate would make three ticks.
+	require.Equal(t, 2, dstC.State.Ticks)
+	require.Equal(t, tickTime, engine.CurrentTime())
+}
+
 type wakeSpec struct {
 	Tag int `json:"tag"`
 }

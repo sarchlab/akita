@@ -80,7 +80,7 @@ under the parallel engine. Middlewares ignore events they do not handle.
 
 | Model | Events that arrive | Example |
 |---|---|---|
-| `modeling/ticking` | a `ticking.Event` every cycle while any middleware makes progress; port activity restarts ticking | `mem/rob` |
+| `modeling/ticking` | a `ticking.Event` every cycle while any middleware makes progress; port activity, `TickLater`, or a later time it asked for (`TickAt`) restarts ticking | `mem/rob` |
 | `modeling/wakeup` | a data-less `wakeup.Event` on port activity or at a time the component asked for (`WakeAt`); it runs again at once while any middleware makes progress | `examples/ping` |
 | `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events, with their data, that the component schedules for itself | the `modeling/event` example |
 
@@ -108,7 +108,8 @@ Each package doc shows how to declare and build a component of its model.
   Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
   what they save the guard through. Tick scheduling is shared internally
   with direct connections; standalone schedulers are not a public extension point.
-  Component-level scheduling methods such as `TickLater()` remain public.
+  Component-level scheduling methods such as `TickLater()` and `TickAt(t)`
+  remain public.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.

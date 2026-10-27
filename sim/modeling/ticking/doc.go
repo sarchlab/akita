@@ -23,6 +23,18 @@
 // does not schedule events of its own: a component that needs events with
 // data at times it chooses is written in the event model (modeling/event).
 //
+// # Ticks at a later time
+//
+// TickLater asks for a tick at the next cycle; TickAt asks for one at the
+// first clock edge at or after a given time, for work that becomes due while
+// the component may be idle, such as a fixed-latency stage or a predicted
+// completion. A request at or after a pending tick does nothing, and no edge
+// ticks twice. The tick carries no data, so the work lives in State, for
+// example as a list sorted by due time: the component calls TickAt when it
+// adds an entry, and each tick handles the entries that are due and calls
+// TickAt again for the earliest one left. Do not hold the engine or register
+// extra event handlers for timed work.
+//
 // # Five structs
 //
 // A ticking component type is defined by five structs, all declared in the
