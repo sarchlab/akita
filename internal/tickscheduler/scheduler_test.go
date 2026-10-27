@@ -82,19 +82,28 @@ func TestTickAtAlignsToTheFirstEdgeAtOrAfterTheTime(t *testing.T) {
 	engine.now = 14500
 	ts.TickAt(3000) // in the past: the current cycle
 
-	wantScheduled(t, engine, 13000, 15000)
+	wantScheduled(t, engine, 13000, 14000, 15000)
 }
 
-func TestTickAtDeduplicatesAgainstPendingTicks(t *testing.T) {
+func TestTickAtDeduplicatesOnlyOnTheSameEdge(t *testing.T) {
 	ts, engine := newTestScheduler(false)
 
 	ts.TickAt(15000)
-	ts.TickAt(16000) // later than a pending tick: dropped
-	ts.TickAt(15000) // on the pending edge: dropped
+	ts.TickAt(16000) // later than a pending tick: scheduled
+	ts.TickAt(15000) // on a pending edge: dropped
 	ts.TickAt(14500) // the same edge: dropped
 	ts.TickAt(13000) // earlier: scheduled
 
-	wantScheduled(t, engine, 15000, 13000)
+	wantScheduled(t, engine, 15000, 16000, 13000)
+}
+
+func TestTickAtIsKeptWhileANextCycleTickIsPending(t *testing.T) {
+	ts, engine := newTestScheduler(false)
+
+	ts.TickLater()
+	ts.TickAt(20000)
+
+	wantScheduled(t, engine, 11000, 20000)
 }
 
 func TestTickLaterAndTickNowAreNotHeldBackByAFutureTick(t *testing.T) {

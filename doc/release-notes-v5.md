@@ -390,17 +390,23 @@ state and is rejected with a diagnostic during construction.
 
 ## Ticks at a later time (#585)
 
-`ticking.Component.TickAt(t)` schedules a tick at the first clock edge at or
-after `t`, unless a tick is already pending at or before that edge. A ticking
-component that must do work at a later time keeps the work in State, calls
-`TickAt` when it adds it, and on each tick handles the work that is due and
-asks again for the earliest work left. It no longer needs to hold the engine
-or register extra event handlers for timed work; doing so is now against the
+`ticking.Component.TickAt(t)` makes sure the component ticks at the first
+clock edge at or after `t`; only a tick already pending on that edge serves
+the request. A ticking component that must do work at a later time keeps the
+work in State, calls `TickAt` with its due time when it adds it, and on each
+tick handles the work that is due. It no longer needs to hold the engine or
+register extra event handlers for timed work; doing so is now against the
 architecture rules. `TickLater` behaves as `TickAt` of the next edge.
 
+`wakeup.Component.WakeAt(t)` now has the same contract: it always produces a
+wakeup at `t`, and only an undelivered wakeup already pending at `t` serves
+the request. Previously a wakeup pending earlier than `t` absorbed it, and the
+middleware had to ask again when it woke; asking again still works and
+schedules nothing extra.
+
 Tick and wakeup schedulers now remember every pending event instead of only
-the earliest one. A tick superseded by an earlier one is no longer scheduled a
-second time on the same edge, and a later tick or wakeup requested while the
+the earliest one. No edge ticks twice, at most one undelivered wakeup is
+pending for a given time, and a later tick or wakeup requested while the
 current one is handled is no longer dropped. `TickNow` and `TickLater` are no
 longer held back by a tick pending further in the future.
 

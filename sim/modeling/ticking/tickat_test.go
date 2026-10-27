@@ -19,11 +19,13 @@ type timerSpec struct {
 }
 
 // timerState holds the work due at later times, as TickAt asks: Due is sorted
-// by time, and AddOnTick is work a tick adds, standing for work that arrives
-// while the component is ticking.
+// by time, and AddOnTick is work the first tick adds, standing for work that
+// arrives while the component is ticking. With ReAsk, every tick also asks
+// again for the earliest work left, which a component may do but need not.
 type timerState struct {
 	Due       []timing.VTimeInPicoSec `json:"due"`
 	AddOnTick []timing.VTimeInPicoSec `json:"add_on_tick"`
+	ReAsk     bool                    `json:"re_ask"`
 	Ticks     []timing.VTimeInPicoSec `json:"ticks"`
 	Done      []timing.VTimeInPicoSec `json:"done"`
 }
@@ -37,9 +39,9 @@ type timerMWs struct {
 type timerComp = ticking.Component[
 	timerSpec, timerState, modeling.None, timerPorts, timerMWs]
 
-// timerMW handles the work that is due, adds the work of AddOnTick, and asks
-// for a tick at the earliest work left. It never makes progress, so only the
-// ticks the component asks for fire.
+// timerMW handles the work that is due and adds the work of AddOnTick, asking
+// for a tick at the due time of each entry it adds. It never makes progress,
+// so only the ticks the component asks for fire.
 type timerMW struct {
 	comp *timerComp
 }
@@ -54,13 +56,12 @@ func (m *timerMW) Handle(e timing.Event) bool {
 		s.Due = s.Due[1:]
 	}
 
-	if len(s.AddOnTick) > 0 {
-		s.Due = append(s.Due, s.AddOnTick...)
-		slices.Sort(s.Due)
-		s.AddOnTick = nil
+	for _, d := range s.AddOnTick {
+		addWork(m.comp, d)
 	}
+	s.AddOnTick = nil
 
-	if len(s.Due) > 0 {
+	if s.ReAsk && len(s.Due) > 0 {
 		m.comp.TickAt(s.Due[0])
 	}
 
@@ -145,6 +146,20 @@ func TestTickAtTicksAtTheFirstEdgeAtOrAfterTheTime(t *testing.T) {
 	wantTicks(t, c, []timing.VTimeInPicoSec{5000}, []timing.VTimeInPicoSec{4500})
 }
 
+// TestTickAtWhileATickLaterIsPending shows that a far-future request is not
+// absorbed by a pending next-cycle tick.
+func TestTickAtWhileATickLaterIsPending(t *testing.T) {
+	sim := newSim()
+	c := newTimerSim(t, sim)
+
+	c.TickLater()
+	addWork(c, 10000)
+
+	run(t, sim)
+
+	wantTicks(t, c, []timing.VTimeInPicoSec{1000, 10000}, []timing.VTimeInPicoSec{10000})
+}
+
 // TestTickLaterWhileATickAtIsPending shows that an earlier wakeup is not held
 // back by a pending far-future tick, and that the far-future tick still fires.
 func TestTickLaterWhileATickAtIsPending(t *testing.T) {
@@ -159,12 +174,12 @@ func TestTickLaterWhileATickAtIsPending(t *testing.T) {
 	wantTicks(t, c, []timing.VTimeInPicoSec{1000, 10000}, []timing.VTimeInPicoSec{10000})
 }
 
-// TestASupersededTickIsNotDuplicated is the case where an earlier tick
-// supersedes a pending one and then asks for it again: the component must
-// still tick once on that edge.
-func TestASupersededTickIsNotDuplicated(t *testing.T) {
+// TestARepeatedTickAtIsNotDuplicated is the case where an earlier tick asks
+// again for a pending one: the component must still tick once on that edge.
+func TestARepeatedTickAtIsNotDuplicated(t *testing.T) {
 	sim := newSim()
 	c := newTimerSim(t, sim)
+	c.State.ReAsk = true
 
 	addWork(c, 5000)
 	scheduleCall(sim, "Poke", 1500, c.TickLater) // ticks at 2000, which asks for 5000 again
@@ -174,18 +189,21 @@ func TestASupersededTickIsNotDuplicated(t *testing.T) {
 	wantTicks(t, c, []timing.VTimeInPicoSec{2000, 5000}, []timing.VTimeInPicoSec{5000})
 }
 
-// TestTickAtDuringATickIsNotLost shows that the tick being handled does not
-// swallow a request it makes for a later edge.
+// TestTickAtDuringATickIsNotLost shows that requests made once during a tick
+// all fire: neither the tick being handled nor an earlier pending request
+// absorbs a later one, and no later tick asks again.
 func TestTickAtDuringATickIsNotLost(t *testing.T) {
 	sim := newSim()
 	c := newTimerSim(t, sim)
 
-	c.State.AddOnTick = []timing.VTimeInPicoSec{7000}
+	c.State.AddOnTick = []timing.VTimeInPicoSec{7000, 4000}
 	c.TickLater()
 
 	run(t, sim)
 
-	wantTicks(t, c, []timing.VTimeInPicoSec{1000, 7000}, []timing.VTimeInPicoSec{7000})
+	wantTicks(t, c,
+		[]timing.VTimeInPicoSec{1000, 4000, 7000},
+		[]timing.VTimeInPicoSec{4000, 7000})
 }
 
 // TestTimedWorkIsSerializedUnderTheParallelEngine wakes components from many

@@ -23,8 +23,7 @@ func init() {
 
 // scheduler schedules the wakeup events of a handler. Its dedup guard
 // remembers the time of every wakeup it scheduled that has not been
-// delivered, so asking for a wakeup at or after the earliest one schedules
-// nothing, and at most one undelivered wakeup is pending for a given time.
+// delivered, so at most one undelivered wakeup is pending for a given time.
 // Another wakeup at the same time may be asked for after delivery.
 type scheduler struct {
 	lock       sync.Mutex
@@ -41,17 +40,18 @@ func newScheduler(handlerID string, sim modeling.Simulation) *scheduler {
 	return &scheduler{handlerID: handlerID, simulation: sim}
 }
 
-// WakeAt schedules a wakeup at time t, unless one is already pending at or
-// before t.
+// WakeAt makes sure a wakeup is pending at time t. It schedules nothing only
+// when an undelivered wakeup is already pending at t.
 func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if len(s.pending) > 0 && s.pending[0] <= t {
+	i, found := slices.BinarySearch(s.pending, t)
+	if found {
 		return
 	}
 
-	s.pending = slices.Insert(s.pending, 0, t)
+	s.pending = slices.Insert(s.pending, i, t)
 
 	s.simulation.Engine().Schedule(Event{
 		EventBase: timing.MakeEventBase(s.simulation.NewID(), t, s.handlerID),

@@ -105,9 +105,9 @@ for _, sp := range state.ScheduledPings {
 }
 ```
 
-`WakeAt(t)` asks the engine to wake the component at simulated time `t`.
-Asking for a wakeup at or after one already pending does nothing, so a
-middleware asks again, each time it wakes, for the work still waiting.
+`WakeAt(t)` makes sure the component wakes at simulated time `t`. A wakeup
+already pending at `t` serves the request, so asking again, each time the
+component wakes, for the work still waiting schedules nothing extra.
 
 Responses use the same trick: a ping schedules its response two seconds
 later, with no tick counter.

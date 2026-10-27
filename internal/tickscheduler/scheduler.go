@@ -39,8 +39,7 @@ type Scheduler struct {
 	// pending holds, in ascending order, the edges of the scheduled ticks at
 	// or after the current time. A tick at the current time may already have
 	// fired; it still counts for a request on the current edge, so a cycle
-	// ticks at most once, but not for a request on a later edge, since a tick
-	// that has fired asks for nothing more.
+	// ticks at most once.
 	pending []timing.VTimeInPicoSec
 }
 
@@ -90,8 +89,7 @@ func (t *Scheduler) TickNow() {
 	t.schedule(t.freq.ThisTick(now))
 }
 
-// TickLater schedules a tick at the cycle after the current time, unless one
-// is already pending at that edge.
+// TickLater makes sure a tick is pending at the cycle after the current time.
 func (t *Scheduler) TickLater() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -100,13 +98,13 @@ func (t *Scheduler) TickLater() {
 	t.tickAt(now, t.freq.NextTick(now))
 }
 
-// TickAt schedules a tick at the first clock edge at or after time at, unless
-// a tick is already pending at or before that edge. A time in the past asks
-// for the current cycle.
+// TickAt makes sure a tick is pending at the first clock edge at or after time
+// at; a time in the past asks for the current cycle. It schedules nothing
+// only when a tick is already pending on that edge.
 //
 // The tick carries no data. A component keeps the work due at a later time
-// in its State, calls TickAt when it adds the work, and, on each tick,
-// handles the work that is due and asks again for the earliest work left.
+// in its State, calls TickAt with the due time when it adds the work, and
+// handles the work that is due on each tick.
 func (t *Scheduler) TickAt(at timing.VTimeInPicoSec) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -115,21 +113,13 @@ func (t *Scheduler) TickAt(at timing.VTimeInPicoSec) {
 	t.tickAt(now, t.freq.ThisTick(max(at, now)))
 }
 
-// tickAt schedules a tick at edge, which is not before now, unless a tick is
-// pending at edge or at an edge after now and before edge. Such an earlier
-// tick will fire and the component asks again, while a tick at now may be the
-// one being handled.
+// tickAt schedules a tick at edge, which is not before now, unless one is
+// already pending there.
 func (t *Scheduler) tickAt(now, edge timing.VTimeInPicoSec) {
 	t.prune(now)
 
-	for _, p := range t.pending {
-		if p > edge {
-			break
-		}
-
-		if p == edge || p > now {
-			return
-		}
+	if _, found := slices.BinarySearch(t.pending, edge); found {
+		return
 	}
 
 	t.schedule(edge)
