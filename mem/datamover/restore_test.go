@@ -41,7 +41,8 @@ func dataTransferOf(t *testing.T, comp *Comp) *dataTransferMW {
 	return comp.Middlewares.DataTransfer
 }
 
-// TestRestoreRoutingSpec rejects changed destinations and restores identical wiring.
+// TestRestoreRoutingSpec loads into changed destinations (best effort) and
+// restores identical wiring.
 func TestRestoreRoutingSpec(t *testing.T) {
 	saved := buildWithMappers("Inside.Top", "Outside.Top")
 	var checkpoint bytes.Buffer
@@ -50,8 +51,8 @@ func TestRestoreRoutingSpec(t *testing.T) {
 	}
 	original := append([]byte(nil), checkpoint.Bytes()...)
 	changed := buildWithMappers("OtherInside.Top", "Outside.Top")
-	if err := changed.LoadCheckpoint(&checkpoint); err == nil {
-		t.Fatal("accepted changed routing Spec")
+	if err := changed.LoadCheckpoint(&checkpoint); err != nil {
+		t.Fatal(err)
 	}
 	rebuilt := buildWithMappers("Inside.Top", "Outside.Top")
 	if err := rebuilt.LoadCheckpoint(bytes.NewReader(original)); err != nil {

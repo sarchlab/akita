@@ -49,7 +49,6 @@ rejects disconnected networks, unreachable destinations, and routing loops, and
 copies routes for runtime use. Changing source tables after initialization does
 not change runtime routing. Endpoint/switch implementation packages are internal.
 
-A network-owned checkpoint record fingerprints wiring, binding order, queue
-settings, and computed routes. Runtime switch queues are checkpointed separately.
+Routes are rebuilt by setup and are not checkpointed; runtime switch queues are.
 Reusing a builder creates independent networks. No explicit finalization or reset
 method exists. Wire ports and non-ideal links remain unsupported.

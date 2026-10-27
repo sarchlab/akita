@@ -158,9 +158,9 @@ shared resources, the event queue, the engine time, and the ID-generator
 counter). The archive holds one payload per entity; these files are the
 inventory (there is no manifest). Loading validates the saved and rebuilt entity
 sets, except for the optional task-tracker payload described below, and each
-entity validates its payload, including component Spec hashes. No build identity
-is stored or compared. Callers must ensure simulator code and saved state remain
-compatible; successful decoding does not guarantee unchanged semantics.
+entity decodes its payload. No build identity, version or Spec hash is stored
+or compared: a checkpoint restores exactly in the same executable, and loading
+it into a different build or configuration is best effort.
 
 Saving and loading reject active `Run` or `SerialEngine.RunUntil` calls, including
 paused execution and calls through `s.Engine()`. The whole checkpoint operation

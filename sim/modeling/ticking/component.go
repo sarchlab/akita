@@ -82,18 +82,16 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 	c.ticks.TickLater()
 }
 
-// SaveCheckpoint writes the instance's spec hash, State, and tick-scheduler
-// guard.
+// SaveCheckpoint writes the instance's State and tick-scheduler guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.WriteCheckpoint(w, c.Spec, c.State, c.ticks)
+	return modeling.WriteCheckpoint(w, c.State, c.ticks)
 }
 
-// LoadCheckpoint restores the State and tick-scheduler guard after verifying
-// that the saved spec hash matches this instance's.
+// LoadCheckpoint restores the State and tick-scheduler guard (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.ReadCheckpoint(r, c.Spec, &c.State, c.ticks)
+	return modeling.ReadCheckpoint(r, &c.State, c.ticks)
 }
 
 // Name returns the instance name given to Build.

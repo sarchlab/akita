@@ -118,8 +118,9 @@ It does not cover:
 - the tracing vocabulary: the task kinds, names, and tags a component emits;
 - code under `examples/` and the acceptance test programs.
 
-Files that a simulation writes are not covered either. A checkpoint is
-restored only by the same build of the simulator that saved it. A recorded
+Files that a simulation writes are not covered either. A checkpoint restores
+exactly in the same executable on the same platform; loading it after a code or
+configuration change is best effort. A recorded
 database (traces, topology, and the other tables Akita writes) is read only by
 the Daisen and monitoring tools of the same Akita version; its table layout may
 change in any release.

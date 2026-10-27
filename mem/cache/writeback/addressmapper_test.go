@@ -71,8 +71,10 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 	}
 }
 
-// TestRestoreRejectsChangedRouting confirms destinations participate in the Spec hash.
-func TestRestoreRejectsChangedRouting(t *testing.T) {
+// TestRestoreUsesRebuiltRouting confirms that restore is best effort: a
+// checkpoint loads into a component with changed routing, which follows the
+// rebuilt Spec, and an identical rebuild restores the saved routing.
+func TestRestoreUsesRebuiltRouting(t *testing.T) {
 	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"OldMemory.Top"}
 	saved := buildWired(Resources{}, spec)
@@ -83,8 +85,11 @@ func TestRestoreRejectsChangedRouting(t *testing.T) {
 	original := append([]byte(nil), checkpoint.Bytes()...)
 	spec.Bottom.Destinations = []messaging.RemotePort{"NewMemory.Top"}
 	rebuilt := buildWired(Resources{}, spec)
-	if err := rebuilt.LoadCheckpoint(&checkpoint); err == nil {
-		t.Fatal("accepted a different routing Spec")
+	if err := rebuilt.LoadCheckpoint(&checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if got := rebuilt.Middlewares.Pipeline.findPort(0); got != "NewMemory.Top" {
+		t.Fatalf("rebuilt destination = %s", got)
 	}
 	spec.Bottom.Destinations = []messaging.RemotePort{"OldMemory.Top"}
 	same := buildWired(Resources{}, spec)

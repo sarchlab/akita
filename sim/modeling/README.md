@@ -105,7 +105,7 @@ Each package doc shows how to declare and build a component of its model.
   hookable, the handler of its events, and the owner of its ports
   (`messaging.PortOwner`).
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
-  Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
+  State and the dedup guard of its scheduler. A `Scheduler` is
   what they save the guard through. Tick scheduling is shared internally
   with direct connections; standalone schedulers are not a public extension point.
   Component-level scheduling methods such as `TickLater()` and `TickAt(t)`

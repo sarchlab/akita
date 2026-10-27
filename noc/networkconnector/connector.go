@@ -60,7 +60,6 @@ type Connector struct {
 	switches        []*switchNode
 	devices         []*deviceNode
 	connectionCount int
-	connections     []connectionRecord
 	routes          map[string]frozenRoutes
 }
 
@@ -94,7 +93,7 @@ func (b Builder) Build(name string) *Connector {
 		name: name, simulation: b.simulation,
 		defaultFreq: b.freq, flitSize: b.flitSize, router: b.router,
 	}
-	b.simulation.RegisterResource(&networkCheckpoint{
+	b.simulation.RegisterResource(&networkSetup{
 		Member: assembly.NewMember(b.simulation, c.initializeRoutes, nil), c: c,
 	})
 	return c
@@ -234,7 +233,6 @@ func (c *Connector) connectPorts(
 
 	conn.BindPort(left)
 	conn.BindPort(right)
-	c.connections = append(c.connections, connectionRecord{conn.Name(), left.AsRemote(), right.AsRemote()})
 
 	return conn
 }

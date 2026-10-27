@@ -105,7 +105,7 @@ nonempty `Fallback`; addresses outside the range go to that fallback. Setting
 an unbounded single destination.
 
 See the [migration guide](../doc/tutorial/migration.md#construction-binding-and-initialization)
-for the removed concrete mapper types and checkpoint compatibility changes.
+for the removed concrete mapper types.
 
 ## Sub-Packages
 
