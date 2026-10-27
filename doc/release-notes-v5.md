@@ -311,9 +311,10 @@ implementations; the old names are removed.
 - `ticking.TickEvent` → `ticking.Event`.
 - `ticking.MakeTickEvent(id, handlerID, time)` →
   `ticking.MakeEvent(id, time, handlerID)`, matching `timing.MakeEventBase`.
-- `modeling.Scheduler` → `modeling.PendingEventGuard`. Its `Snapshot` and
-  `Restore` methods are unchanged; it records whether the component's own tick
-  or wakeup is pending and when, so restore does not schedule a duplicate.
+- `modeling.Scheduler` → `modeling.PendingEventGuard`. It records the times of
+  the component's own pending ticks or wakeups, so restore does not schedule a
+  duplicate; see [Ticks at a later time](#ticks-at-a-later-time-585) for its
+  current `Snapshot` and `Restore` signatures.
 - Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
 - Concrete `*vm.PageTable` exposes `Log2PageSize()` instead of
   `GetLog2PageSize()`; both MMU and GMMU validate it.
@@ -326,7 +327,7 @@ implementations; the old names are removed.
 Simulation behavior and the event field keys `time` and `handler_id` are
 unchanged. Tick checkpoint type tags now use `tickscheduler.Event`, derived from the
 internal Go type; `ticking.Event` remains a public alias. The component checkpoint guard is named `pending_event_guard` instead
-of `scheduler`, with `scheduled` and `at` fields. Saved checkpoints from before
+of `scheduler`; it is now a list of pending times (see below). Saved checkpoints from before
 this cleanup are not supported; no legacy type-tag alias or schema migration
 is provided.
 
@@ -386,3 +387,31 @@ Framework lifecycle builders require a simulation created by `sim.MakeBuilder`,
 or a wrapper embedding `*sim.Simulation` to retain its private lifecycle state.
 Forwarding only the exported `modeling.Simulation` methods does not supply that
 state and is rejected with a diagnostic during construction.
+
+## Ticks at a later time (#585)
+
+`ticking.Component.TickAt(t)` makes sure the component ticks at the first
+clock edge at or after `t`; only a tick already pending on that edge serves
+the request. A ticking component that must do work at a later time keeps the
+work in State, calls `TickAt` with its due time when it adds it, and on each
+tick handles the work that is due. It no longer needs to hold the engine or
+register extra event handlers for timed work; doing so is now against the
+architecture rules. `TickLater` behaves as `TickAt` of the next edge.
+
+`wakeup.Component.WakeAt(t)` now has the same contract: it always produces a
+wakeup at `t`, and only an undelivered wakeup already pending at `t` serves
+the request. Previously a wakeup pending earlier than `t` absorbed it, and the
+middleware had to ask again when it woke; asking again still works and
+schedules nothing extra.
+
+Tick and wakeup schedulers now remember every pending event instead of only
+the earliest one. No edge ticks twice, at most one undelivered wakeup is
+pending for a given time, and a later tick or wakeup requested while the
+current one is handled is no longer dropped. `TickNow` and `TickLater` are no
+longer held back by a tick pending further in the future.
+
+`modeling.PendingEventGuard` now has `Snapshot() []timing.VTimeInPicoSec` and
+`Restore([]timing.VTimeInPicoSec)`, and the component checkpoint stores
+`pending_event_guard` as a list of times, for example
+`"pending_event_guard":[1000]`. Checkpoints saved by v5.0.0-rc.2 or earlier
+cannot be loaded; rebuild them.

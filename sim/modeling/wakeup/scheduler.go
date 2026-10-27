@@ -1,6 +1,7 @@
 package wakeup
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -21,15 +22,16 @@ func init() {
 }
 
 // scheduler schedules the wakeup events of a handler. Its dedup guard
-// remembers the earliest pending wakeup, so asking for a wakeup at or after it
-// schedules nothing.
+// remembers the time of every wakeup it scheduled that has not been
+// delivered, so at most one undelivered wakeup is pending for a given time.
+// Another wakeup at the same time may be asked for after delivery.
 type scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
 	simulation modeling.Simulation
 
-	at        timing.VTimeInPicoSec
-	scheduled bool
+	// pending holds the times of the undelivered wakeups in ascending order.
+	pending []timing.VTimeInPicoSec
 }
 
 // newScheduler creates a scheduler for the wakeup events of the handler with
@@ -38,18 +40,18 @@ func newScheduler(handlerID string, sim modeling.Simulation) *scheduler {
 	return &scheduler{handlerID: handlerID, simulation: sim}
 }
 
-// WakeAt schedules a wakeup at time t, unless one is already pending at or
-// before t.
+// WakeAt makes sure a wakeup is pending at time t. It schedules nothing only
+// when an undelivered wakeup is already pending at t.
 func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.scheduled && s.at <= t {
+	i, found := slices.BinarySearch(s.pending, t)
+	if found {
 		return
 	}
 
-	s.at = t
-	s.scheduled = true
+	s.pending = slices.Insert(s.pending, i, t)
 
 	s.simulation.Engine().Schedule(Event{
 		EventBase: timing.MakeEventBase(s.simulation.NewID(), t, s.handlerID),
@@ -61,33 +63,36 @@ func (s *scheduler) WakeNow() {
 	s.WakeAt(s.simulation.Engine().CurrentTime())
 }
 
-// Woke clears the guard once the pending wakeup is delivered. The component
-// calls it when it handles an Event at time t.
+// Woke forgets the wakeups at or before t once the one at t is delivered, so
+// a wakeup can be asked for again at the same time. The component calls it
+// when it handles an Event at time t.
 func (s *scheduler) Woke(t timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.scheduled && s.at <= t {
-		s.scheduled = false
+	i, found := slices.BinarySearch(s.pending, t)
+	if found {
+		i++
 	}
+
+	s.pending = slices.Delete(s.pending, 0, i)
 }
 
-// Snapshot returns the scheduler's dedup guard: whether a wakeup is pending
-// and at what time. A component checkpoint saves it.
-func (s *scheduler) Snapshot() (timing.VTimeInPicoSec, bool) {
+// Snapshot returns the scheduler's dedup guard: the times of the undelivered
+// wakeups. A component checkpoint saves it.
+func (s *scheduler) Snapshot() []timing.VTimeInPicoSec {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.at, s.scheduled
+	return slices.Clone(s.pending)
 }
 
 // Restore sets the scheduler's dedup guard from a checkpoint. The engine
-// restores the matching wakeup event separately. Only checkpoint loading
+// restores the matching wakeup events separately. Only checkpoint loading
 // should call it.
-func (s *scheduler) Restore(at timing.VTimeInPicoSec, scheduled bool) {
+func (s *scheduler) Restore(pending []timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.at = at
-	s.scheduled = scheduled
+	s.pending = slices.Sorted(slices.Values(pending))
 }

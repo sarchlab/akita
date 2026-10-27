@@ -63,6 +63,15 @@ func (c *Component[S, T, R, P, M]) TickLater() {
 	c.ticks.TickLater()
 }
 
+// TickAt makes sure the instance ticks at the first clock edge at or after
+// time at, for work that becomes due then; a tick already pending on that
+// edge serves the request. The tick carries no data: the instance keeps the
+// work in its State, calls TickAt with the due time when it adds the work,
+// and handles the work that is due on each tick.
+func (c *Component[S, T, R, P, M]) TickAt(at timing.VTimeInPicoSec) {
+	c.ticks.TickAt(at)
+}
+
 // NotifyRecv wakes the instance when a port receives a message.
 func (c *Component[S, T, R, P, M]) NotifyRecv(_ messaging.Port) {
 	c.ticks.TickLater()

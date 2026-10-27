@@ -65,6 +65,16 @@ There are no validator or creator registration callbacks. Spec and Resources are
 supplied through the builder; Ports are bound by the system builder. Initializers
 must not change Spec, Resources, Ports, or another component's State.
 
+A ticking component that must do work at a later time, while it may otherwise
+be idle, stores that work in State and calls `TickAt` with its due time when it
+adds the work; each tick handles the work that is due. `TickAt` and `WakeAt`
+always produce a tick or wakeup at the requested edge or time. It must not
+hold the engine or register extra event handlers: the tick stays its only entry
+point, so the work is checkpointed and inspected with State and is handled
+under the component's lock. A tick scheduler never schedules two ticks on the
+same edge. A wakeup scheduler keeps at most one undelivered wakeup pending for
+a given time; another wakeup at the same time may be asked for after delivery.
+
 ## Builders and packages
 
 With methods belong only to value Builders and return an updated Builder. A Build

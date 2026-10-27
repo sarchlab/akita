@@ -37,8 +37,7 @@ type Component[S, T, R, P, M any] struct {
 	pipeline []Middleware
 
 	// handling makes the instance handle one event at a time: the parallel
-	// engine runs the events of one time concurrently, and a superseded
-	// wakeup can fall at the same time as a later one.
+	// engine runs the events of one time concurrently.
 	handling sync.Mutex
 }
 
@@ -60,9 +59,10 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	}
 }
 
-// WakeAt wakes the instance at time t, for work that becomes ready then.
-// Asking for a wakeup at or after one already pending does nothing, so a
-// middleware asks again, when it wakes, for the work still waiting.
+// WakeAt makes sure the instance wakes at time t, for work that becomes ready
+// then; a wakeup already pending at t serves the request. The instance keeps
+// the work in its State, calls WakeAt with the ready time when it adds the
+// work, and handles the work that is ready on each wakeup.
 func (c *Component[S, T, R, P, M]) WakeAt(t timing.VTimeInPicoSec) {
 	c.wakeups.WakeAt(t)
 }

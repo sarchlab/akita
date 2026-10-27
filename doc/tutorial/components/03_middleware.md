@@ -78,7 +78,9 @@ A few things to notice:
   cycle. Return `false` when it did nothing, either because there was no
   work or because it was blocked (for example, an outgoing port was full).
   When no middleware made progress, the component goes idle until something
-  wakes it, such as an incoming message or a `TickLater`. Here the walker
+  wakes it, such as an incoming message, a `TickLater` (a tick next cycle),
+  or a `TickAt` (a tick at a later time, for work the component keeps in
+  State until it is due). Here the walker
   makes progress on every step, so it returns `true` until it reaches the
   wall and then returns `false`. When every component is idle, the engine's
   event queue empties and `Run` returns.
