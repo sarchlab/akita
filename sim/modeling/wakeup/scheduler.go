@@ -24,7 +24,8 @@ func init() {
 // scheduler schedules the wakeup events of a handler. Its dedup guard
 // remembers the time of every wakeup it scheduled that has not been
 // delivered, so asking for a wakeup at or after the earliest one schedules
-// nothing, and it never schedules two wakeups at the same time.
+// nothing, and at most one undelivered wakeup is pending for a given time.
+// Another wakeup at the same time may be asked for after delivery.
 type scheduler struct {
 	lock       sync.Mutex
 	handlerID  string

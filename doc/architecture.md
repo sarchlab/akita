@@ -71,7 +71,8 @@ each tick handles the work that is due and asks again for the rest. It must not
 hold the engine or register extra event handlers: the tick stays its only entry
 point, so the work is checkpointed and inspected with State and is handled
 under the component's lock. A tick scheduler never schedules two ticks on the
-same edge, and a wakeup scheduler never two wakeups at the same time.
+same edge. A wakeup scheduler keeps at most one undelivered wakeup pending for
+a given time; another wakeup at the same time may be asked for after delivery.
 
 ## Builders and packages
 
