@@ -34,8 +34,7 @@ future release. Switch processing and buffering still constrain throughput.
 Builders use value receivers and `Build(name)` creates an independent network.
 All assembly must finish before `simulation.Initialize()`. Initialization computes
 and validates routes, freezes them, and initializes component state. There is no
-connector finalization call. Network wiring, port order, queue settings, and
-computed routes participate in checkpoint compatibility checks.
+connector finalization call.
 
 | Builder option | Meaning |
 | --- | --- |

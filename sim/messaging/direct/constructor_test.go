@@ -47,8 +47,10 @@ func TestNewConnectionCheckpointFrequency(t *testing.T) {
 	}
 
 	different := NewConnection("Different", s, timing.GHz)
-	if err := different.LoadCheckpoint(bytes.NewReader(saved.Bytes())); err == nil {
-		t.Fatal("checkpoint with a different frequency was accepted")
+	if err := different.LoadCheckpoint(bytes.NewReader(saved.Bytes())); err != nil {
+		t.Fatalf("best-effort restore into a different frequency failed: %v", err)
 	}
-	t.Log("matching frequency restores the cursor; changed frequency is rejected")
+	if different.State.NextPortID != 3 {
+		t.Fatalf("restored cursor = %d, want 3", different.State.NextPortID)
+	}
 }

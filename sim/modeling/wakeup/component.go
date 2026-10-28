@@ -77,17 +77,16 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 	c.wakeups.WakeNow()
 }
 
-// SaveCheckpoint writes the instance's spec hash, State, and wakeup guard.
+// SaveCheckpoint writes the instance's State and wakeup guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.WriteCheckpoint(w, c.Spec, c.State, c.wakeups)
+	return modeling.WriteCheckpoint(w, c.State, c.wakeups)
 }
 
-// LoadCheckpoint restores the State and wakeup guard after verifying that the
-// saved spec hash matches this instance's.
+// LoadCheckpoint restores the State and wakeup guard (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.ReadCheckpoint(r, c.Spec, &c.State, c.wakeups)
+	return modeling.ReadCheckpoint(r, &c.State, c.wakeups)
 }
 
 // Name returns the instance name given to Build.

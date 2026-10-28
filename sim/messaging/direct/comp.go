@@ -153,14 +153,12 @@ func (c *Connection) forwardMany(port messaging.Port) bool {
 	return madeProgress
 }
 
-// SaveCheckpoint writes the connection's spec hash, State, and tick-scheduler
-// guard.
+// SaveCheckpoint writes the connection's State and tick-scheduler guard.
 func (c *Connection) SaveCheckpoint(w io.Writer) error {
-	return modeling.WriteCheckpoint(w, c.spec, c.State, c.ticks)
+	return modeling.WriteCheckpoint(w, c.State, c.ticks)
 }
 
-// LoadCheckpoint restores the State and tick-scheduler guard after verifying
-// that the saved spec hash matches this connection's.
+// LoadCheckpoint restores the State and tick-scheduler guard (best effort).
 func (c *Connection) LoadCheckpoint(r io.Reader) error {
-	return modeling.ReadCheckpoint(r, c.spec, &c.State, c.ticks)
+	return modeling.ReadCheckpoint(r, &c.State, c.ticks)
 }

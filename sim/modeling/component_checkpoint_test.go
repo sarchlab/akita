@@ -2,9 +2,6 @@ package modeling_test
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -17,10 +14,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-type ckptSpec struct {
-	Latency int `json:"latency"`
-}
-
 type ckptState struct {
 	Count int      `json:"count"`
 	Names []string `json:"names"`
@@ -30,12 +23,12 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	src := ckptState{Count: 42, Names: []string{"a", "b"}}
 
 	var buf bytes.Buffer
-	if err := modeling.WriteCheckpoint(&buf, ckptSpec{Latency: 7}, src, nil); err != nil {
+	if err := modeling.WriteCheckpoint(&buf, src, nil); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
 
 	var dst ckptState
-	if err := modeling.ReadCheckpoint(&buf, ckptSpec{Latency: 7}, &dst, nil); err != nil {
+	if err := modeling.ReadCheckpoint(&buf, &dst, nil); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
 	}
 
@@ -44,19 +37,6 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	}
 	if strings.Join(dst.Names, ",") != "a,b" {
 		t.Fatalf("State.Names = %v, want [a b]", dst.Names)
-	}
-}
-
-func TestCheckpointSpecMismatch(t *testing.T) {
-	var buf bytes.Buffer
-	if err := modeling.WriteCheckpoint(&buf, ckptSpec{Latency: 7}, ckptState{Count: 1}, nil); err != nil {
-		t.Fatalf("WriteCheckpoint: %v", err)
-	}
-
-	var dst ckptState
-	err := modeling.ReadCheckpoint(&buf, ckptSpec{Latency: 9}, &dst, nil)
-	if err == nil || !strings.Contains(err.Error(), "spec hash mismatch") {
-		t.Fatalf("expected spec hash mismatch, got %v", err)
 	}
 }
 
@@ -79,7 +59,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	src.TickLater()
 
 	var buf bytes.Buffer
-	if err := modeling.WriteCheckpoint(&buf, ckptSpec{}, ckptState{}, src); err != nil {
+	if err := modeling.WriteCheckpoint(&buf, ckptState{}, src); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
 	if !strings.Contains(buf.String(), `"pending_event_guard":[1000]`) {
@@ -89,7 +69,7 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	handled := 0
 	dst, engine := newScheduler(handlerFunc(func(timing.Event) { handled++ }))
 	var state ckptState
-	if err := modeling.ReadCheckpoint(&buf, ckptSpec{}, &state, dst); err != nil {
+	if err := modeling.ReadCheckpoint(&buf, &state, dst); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
 	}
 
@@ -122,12 +102,12 @@ func TestCheckpointPreservesStateBuffer(t *testing.T) {
 	src.Items.Push(8)
 
 	var buf bytes.Buffer
-	if err := modeling.WriteCheckpoint(&buf, ckptSpec{}, src, nil); err != nil {
+	if err := modeling.WriteCheckpoint(&buf, src, nil); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
 
 	dst := bufState{Items: queueing.MakeBuffer[int](8)}
-	if err := modeling.ReadCheckpoint(&buf, ckptSpec{}, &dst, nil); err != nil {
+	if err := modeling.ReadCheckpoint(&buf, &dst, nil); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
 	}
 
@@ -137,39 +117,6 @@ func TestCheckpointPreservesStateBuffer(t *testing.T) {
 	for _, want := range []int{7, 8} {
 		if got, _ := dst.Items.Pop(); got != want {
 			t.Fatalf("Pop = %d, want %d", got, want)
-		}
-	}
-}
-
-func TestCheckpointExcludedSpecFieldRejectedBeforeRebuild(t *testing.T) {
-	type spec struct {
-		Visible int `json:"visible"`
-		Hidden  int `json:"-"`
-	}
-	saved, rebuilt := spec{Visible: 1, Hidden: 2}, spec{Visible: 1, Hidden: 3}
-	var buf bytes.Buffer
-	// Reproduce the old archive: both configurations had identical JSON hashes.
-	if err := modeling.WriteCheckpoint(&buf, saved, ckptState{}, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	var archive struct {
-		SpecHash string `json:"spec_hash"`
-	}
-	if err := json.Unmarshal(buf.Bytes(), &archive); err != nil {
-		t.Fatal(err)
-	}
-	rebuiltJSON, err := json.Marshal(rebuilt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hash := sha256.Sum256(rebuiltJSON)
-	if archive.SpecHash != hex.EncodeToString(hash[:]) {
-		t.Fatal("expected the old hash to ignore the changed Hidden field")
-	}
-	for _, cfg := range []spec{saved, rebuilt} {
-		if err := modeling.ValidateSpec(cfg); err == nil || !strings.Contains(err.Error(), "spec.Hidden") {
-			t.Fatalf("configuration must fail validation before save/load: %v", err)
 		}
 	}
 }

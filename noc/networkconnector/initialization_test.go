@@ -72,7 +72,6 @@ func TestAutomaticInitializationFreezesRoutesAndAssembly(t *testing.T) {
 			c.ConnectSwitches(a, b, sp)
 			require.Nil(t, c.switches[a].Routes())
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)
-			_ = (&networkCheckpoint{c: c}).record()
 			require.Zero(t, router.calls)
 			require.Len(t, c.switches[a].sw.Ports.Links, 2)
 			for _, sw := range c.switches {
@@ -121,6 +120,13 @@ func (r alternateRouter) EstablishRoute(nodes []Node) {
 }
 func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, reverseDevices bool) *sim.Simulation {
 	t.Helper()
+	s, _ := checkpointNetworkWithConnector(t, router, reverse, latency, reverseDevices)
+	return s
+}
+func checkpointNetworkWithConnector(
+	t *testing.T, router Router, reverse bool, latency int, reverseDevices bool,
+) (*sim.Simulation, *Connector) {
+	t.Helper()
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).WithRouter(router).Build("Network")
 	for range 4 {
@@ -143,9 +149,9 @@ func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, r
 		c.ConnectSwitches(a, cycle[(i+1)%4], sp)
 	}
 	require.NoError(t, s.Initialize())
-	return s
+	return s, c
 }
-func TestCheckpointRejectsChangedNetworkIdentity(t *testing.T) {
+func TestCheckpointRestoresNetwork(t *testing.T) {
 	baseline := checkpointNetwork(t, alternateRouter{}, false, 2, false)
 	path := filepath.Join(t.TempDir(), "network.tar.gz")
 	require.NoError(t, baseline.SaveCheckpoint(path))
@@ -153,25 +159,23 @@ func TestCheckpointRejectsChangedNetworkIdentity(t *testing.T) {
 	require.NoError(t, same.LoadCheckpoint(path))
 	renamedPolicy := checkpointNetwork(t, FloydWarshallRouter{}, false, 2, false)
 	require.NoError(t, renamedPolicy.LoadCheckpoint(path))
-	for _, tc := range []struct {
-		name           string
-		router         Router
-		reverse        bool
-		latency        int
-		reverseDevices bool
-	}{
-		{"rewired-ports", alternateRouter{}, true, 2, false},
-		{"computed-routes", alternateRouter{alternate: true}, false, 2, false},
-		{"switch-port-latency", alternateRouter{}, false, 3, false},
-		{"device-order", alternateRouter{}, false, 2, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rebuilt := checkpointNetwork(t, tc.router, tc.reverse, tc.latency, tc.reverseDevices)
-			err := rebuilt.LoadCheckpoint(path)
-			require.ErrorContains(t, err, "spec hash mismatch")
-			t.Logf("Checkpoint rejected %s: %v", tc.name, err)
-		})
-	}
+}
+
+// TestCheckpointLoadsIntoChangedRoutes shows that restore is best effort: a
+// network rebuilt with different routes loads the checkpoint and keeps the
+// rebuilt routes, which are not saved or compared.
+func TestCheckpointLoadsIntoChangedRoutes(t *testing.T) {
+	baseline, saved := checkpointNetworkWithConnector(t, alternateRouter{}, false, 2, false)
+	path := filepath.Join(t.TempDir(), "network.tar.gz")
+	require.NoError(t, baseline.SaveCheckpoint(path))
+	before := saved.switches[0].Routes().FindPort("Target.Port")
+
+	rebuilt, c := checkpointNetworkWithConnector(t, alternateRouter{alternate: true}, false, 2, false)
+	after := c.switches[0].Routes().FindPort("Target.Port")
+	require.NotEqual(t, before, after, "the rebuilt network must compute a different route")
+
+	require.NoError(t, rebuilt.LoadCheckpoint(path))
+	require.Equal(t, after, c.switches[0].Routes().FindPort("Target.Port"))
 }
 
 type loopRouter struct{}

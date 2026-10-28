@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/sarchlab/akita/v5/internal/assembly"
-	"github.com/sarchlab/akita/v5/noc/internal/switches"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 )
@@ -14,11 +13,6 @@ import (
 type frozenRoutes map[messaging.RemotePort]messaging.RemotePort
 
 func (r frozenRoutes) FindPort(dst messaging.RemotePort) messaging.RemotePort { return r[dst] }
-
-type connectionRecord struct {
-	Name        string
-	Left, Right messaging.RemotePort
-}
 
 func (c *Connector) initializeRoutes() error {
 	c.routes = nil
@@ -90,59 +84,21 @@ func (c *Connector) validatePath(
 	return nil
 }
 
-// Validation computes routes before any component initializes its runtime state.
-type networkCheckpoint struct {
+// networkSetup computes routes during simulation initialization, before any
+// component initializes its runtime state. Routes are rebuilt by setup, so the
+// checkpoint payload is empty and nothing about the topology is compared on load.
+type networkSetup struct {
 	assembly.Member
 	c *Connector
 }
 
-func (n *networkCheckpoint) Name() string { return n.c.name + ".Topology" }
+func (n *networkSetup) Name() string { return n.c.name + ".Topology" }
 
-type switchRecord struct {
-	Name   string
-	Ports  []messaging.RemotePort
-	Links  []switches.Link
-	Ends   []LinkEndSwitchParameter
-	Routes frozenRoutes
+func (n *networkSetup) SaveCheckpoint(w io.Writer) error {
+	return modeling.WriteCheckpoint(w, struct{}{}, nil)
 }
-type deviceRecord struct {
-	Name      string
-	Ports     []messaging.RemotePort
-	Parameter DeviceConfig
-}
-type networkRecord struct {
-	Switches    []switchRecord
-	Devices     []deviceRecord
-	Connections []connectionRecord
-}
-
-func (n *networkCheckpoint) record() networkRecord {
-	c := n.c
-	record := networkRecord{Connections: c.connections}
-	for _, sw := range c.switches {
-		item := switchRecord{Name: sw.name,
-			Links:  sw.Links(),
-			Ends:   sw.ends,
-			Routes: c.routes[sw.name]}
-		for _, p := range sw.sw.Ports.Links {
-			item.Ports = append(item.Ports, p.AsRemote())
-		}
-		record.Switches = append(record.Switches, item)
-	}
-	for _, device := range c.devices {
-		item := deviceRecord{Name: device.endPoint.Name(), Parameter: device.parameter}
-		for _, port := range device.ports {
-			item.Ports = append(item.Ports, port.AsRemote())
-		}
-		record.Devices = append(record.Devices, item)
-	}
-	return record
-}
-func (n *networkCheckpoint) SaveCheckpoint(w io.Writer) error {
-	return modeling.WriteCheckpoint(w, n.record(), struct{}{}, nil)
-}
-func (n *networkCheckpoint) LoadCheckpoint(r io.Reader) error {
-	return modeling.ReadCheckpoint(r, n.record(), &struct{}{}, nil)
+func (n *networkSetup) LoadCheckpoint(r io.Reader) error {
+	return modeling.ReadCheckpoint(r, &struct{}{}, nil)
 }
 
 func (c *Connector) validateConnectivity(nodes []Node) error {

@@ -95,18 +95,17 @@ func (c *Component[S, T, R, P, M]) Schedule(e timing.Event) {
 	c.engine.Schedule(e)
 }
 
-// SaveCheckpoint writes the instance's spec hash and State. Its pending
+// SaveCheckpoint writes the instance's State. Its pending
 // events are saved with the engine's event queue.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.WriteCheckpoint(w, c.Spec, c.State, nil)
+	return modeling.WriteCheckpoint(w, c.State, nil)
 }
 
-// LoadCheckpoint restores the State after verifying that the saved spec hash
-// matches this instance's.
+// LoadCheckpoint restores the State (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.ReadCheckpoint(r, c.Spec, &c.State, nil)
+	return modeling.ReadCheckpoint(r, &c.State, nil)
 }
 
 // Name returns the instance name given to Build.

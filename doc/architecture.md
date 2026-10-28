@@ -42,7 +42,7 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
   switch pipeline latency and admission/ejection widths retain their per-port meaning.
 - Middlewares implement behavior and may derive private lookup tables from Spec.
   Memory routing uses `Spec.Bottom.Find(address)` (or the corresponding port
-  name) directly. Spec participates in checkpoint compatibility checks.
+  name) directly.
 
 Expose default configurations and presets as functions that return an independent
 value on each call. Do not store defaults or presets in exported mutable package
@@ -124,14 +124,8 @@ Routes are computed from actual bound ports in network setup validation, which
 returns errors for unreachable destinations and routing loops before component
 initialization. Custom setup routers remain supported; `routing.Table` is a
 concrete type. Changing tables after Initialize is not supported.
-One topology resource per network fingerprints wiring, port/device binding order,
-link-end settings and computed routes for checkpoint compatibility.
-Type names are not part of this record. These fingerprints replace routing fields
-in internal NoC Specs; rebuild old checkpoints. Networks assembled directly without
-a connector must register their own topology record if they support checkpointing.
-The `one_to_one` acceptance program only exercises message delivery and does not
-support checkpointing, so it has no topology resource. Switch arbitration follows
-binding order. Runtime route changes require a future checkpointed-state design.
+Routes are rebuilt by setup and are not saved or compared in checkpoints.
+Switch arbitration follows binding order. Runtime route changes require a future checkpointed-state design.
 NoC connectors model ideal links only. Non-ideal transport options and bandwidth
 presets are absent; physical transport is deferred. NVLink uses fewest-hop
 routing. Custom setup routers remain supported. Physical transport latency is
@@ -179,3 +173,13 @@ Framework lifecycle builders require a simulation created by `sim.MakeBuilder`,
 or a wrapper embedding `*sim.Simulation` to retain its private lifecycle state.
 Forwarding only the exported `modeling.Simulation` methods does not supply that
 state and is rejected with a diagnostic during construction.
+
+## Checkpoints
+
+A checkpoint must restore exactly when it is loaded by the same executable on
+the same platform. Across executables, for example after a code or configuration
+change, loading is best effort: if it loads, it is used; otherwise loading
+reports an error. Breaking checkpoint compatibility is never a concern when
+changing code, and checkpoints carry no version or configuration-hash checks.
+Components save State (and their scheduler guard); Spec, Resources and Ports
+are rebuilt by setup and are not serialized or compared.

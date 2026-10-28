@@ -95,7 +95,6 @@ that fallback. With `RangeHigh == 0`, no fallback is required.
 
 The former banked mapper panicked beyond its last bank; the unified mapper wraps
 across destinations. To bound a mapping, configure the range and fallback.
-Routing participates in the Spec hash; rebuild checkpoints after this API migration.
 
 Endpoints and switches moved from
 `noc/networking/switching/{endpoint,switches}` to
@@ -114,9 +113,7 @@ device ports; repeated mesh `AddTile` calls retain their merge behavior.
 Internal endpoint device ports bind to `DeviceConnection(ep)` in arbitration
 order. Supply the endpoint peer in Resources; its address and switch routes are
 read from bound ports at Initialize. Internal switch routing/link fields and endpoint `Devices` and
-`DefaultSwitchDst` are removed from Spec. One topology resource per network now
-validates checkpoint compatibility, including device order, so old checkpoints
-must be rebuilt. The endpoint remains pass-through, preserving message sources
+`DefaultSwitchDst` are removed from Spec. The endpoint remains pass-through, preserving message sources
 and hop count. Mesh internal port indices follow assembly order; runtime
 arbitration follows binding order and can change contention timing compared with
 v4. Runtime route mutation and non-ideal transport are not introduced by this change.
@@ -1030,8 +1027,7 @@ rules. The inspector exports record fields and literal defaults in its schema.
 | Runtime data | State | Queues and in-flight transactions |
 | Shared live objects | Resources | Storage and page tables |
 
-Build copies every Spec slice, including scalar slices inside records. Do not mutate the instance's Spec afterward; it is
-included in checkpoint compatibility checks. Fill remote addresses with planned
+Build copies every Spec slice, including scalar slices inside records. Do not mutate the instance's Spec afterward. Fill remote addresses with planned
 full names, or bind destination ports before calling `AsRemote()`.
 
 Memory middlewares route directly through the mapper value in Spec. Other

@@ -27,12 +27,12 @@ func TestCheckpointPreservesMessagePayloadTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	var checkpoint bytes.Buffer
-	if err := modeling.WriteCheckpoint(&checkpoint, struct{}{}, src, nil); err != nil {
+	if err := modeling.WriteCheckpoint(&checkpoint, src, nil); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("checkpoint with ordinary, nil, and nested payloads: %s", checkpoint.String())
 	var dst state
-	if err := modeling.ReadCheckpoint(&checkpoint, struct{}{}, &dst, nil); err != nil {
+	if err := modeling.ReadCheckpoint(&checkpoint, &dst, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(src, dst) {

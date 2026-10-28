@@ -178,8 +178,8 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	}
 
 	other := build(newSim(), Spec{Latency: 20})
-	if err := other.LoadCheckpoint(bytes.NewReader(buf.Bytes())); err == nil {
-		t.Errorf("LoadCheckpoint into a different Spec succeeded, want an error")
+	if err := other.LoadCheckpoint(bytes.NewReader(buf.Bytes())); err != nil {
+		t.Errorf("best-effort LoadCheckpoint into a different Spec failed: %v", err)
 	}
 }
 

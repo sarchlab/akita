@@ -49,12 +49,10 @@ helper are removed; the concrete `mem.InterleavingConverter` remains available.
 `NumInputChannel`/`NumOutputChannel` to `InputWidth`/`OutputWidth`, matching
 the NoC builders. These remain positive flits-per-cycle limits with unchanged
 queue sizing. Update struct literals and field accesses; no aliases remain.
-The topology checkpoint fingerprint changes, so rebuild old NoC checkpoints.
 
 `mmuCache.Resources.LowModulePort` and `UpModulePort` move to `Spec.LowModule`
 and `Spec.UpModule` (JSON keys `low_module` and `up_module`). `Resources` is now
-empty. These peer addresses participate in checkpoint compatibility; rebuild
-old mmuCache checkpoints. Routing behavior is unchanged.
+empty. Routing behavior is unchanged.
 
 The standalone ticking scheduler, ID generator, source archive helpers, Daisen
 server library/assets, monitoring assets, and acceptance/test helpers are now
@@ -156,7 +154,7 @@ or saving/loading checkpoints. Validation failures leave setup editable; once
 initializers begin, topology is frozen. Downstream simulators must migrate this
 call order. Domain configuration and builders remain a separate change.
 
-## Spec checkpoint integrity
+## Spec encoding
 
 Before: Spec fields could use `json:"-"` or be unexported; after: every Spec
 field must be exported and encoded. `json:",omitzero"` is also rejected on
@@ -173,8 +171,8 @@ Ticking Specs must declare `Freq timing.Freq` in runtime, inspector, and
 ## Checkpoint and termination lifecycle
 
 Use `s.SaveCheckpoint(path)` and `s.LoadCheckpoint(path)`. Checkpoints contain
-entity payloads without a build ID. Inventory, Spec hashes, and entity-specific
-validation remain; callers ensure code/state compatibility. Unregistered event
+entity payloads without a build ID or Spec hash. Loading is best effort across
+executables; the inventory and each payload must still decode. Unregistered event
 types now fail during save, before archive writing, rather than during restore.
 
 Active runs, including paused runs and direct engine calls, reject saving,
@@ -352,8 +350,7 @@ on assembly order. No public routing hook configures arbitration priority.
 Network-owned incoming and outgoing buffers now follow their respective
 processing widths, and forwarding supports multiple flits per output per cycle.
 The smaller PCIe/NVLink default queues can also change results. `routing.Table` is
-a concrete type; custom setup routers remain supported. Checkpoint fingerprints
-record computed routes rather than Go router/table type names.
+a concrete type; custom setup routers remain supported.
 
 ## Final extension contracts (#538)
 
@@ -415,3 +412,19 @@ longer held back by a tick pending further in the future.
 `pending_event_guard` as a list of times, for example
 `"pending_event_guard":[1000]`. Checkpoints saved by v5.0.0-rc.2 or earlier
 cannot be loaded; rebuild them.
+
+## Best-effort checkpoints
+
+A checkpoint must restore exactly in the same executable on the same platform.
+Across executables, for example after a code or configuration change, loading is
+best effort: if it decodes, it is used; otherwise loading reports an error.
+
+- Component checkpoints no longer store or compare a Spec hash. A component
+  loaded into a changed configuration keeps its rebuilt Spec and restores State.
+- `modeling.WriteCheckpoint` and `modeling.ReadCheckpoint` drop the Spec
+  argument: `WriteCheckpoint(w, state, guard)` and `ReadCheckpoint(r, &state, guard)`.
+- Network connectors no longer fingerprint wiring, binding order, link-end
+  settings or routes. The `<network>.Topology` entity remains, with an empty
+  payload, because it computes routes at Initialize.
+- Loading a checkpoint saved by an earlier release is best effort, like any
+  checkpoint from a different executable.

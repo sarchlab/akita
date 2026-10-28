@@ -36,7 +36,7 @@ func TestBuildRequiresBlocks(t *testing.T) {
 	})
 }
 
-func TestCheckpointIncludesPeerAddresses(t *testing.T) {
+func TestCheckpointLoadsWithChangedPeerAddresses(t *testing.T) {
 	build := func(spec Spec) *Comp {
 		s := akitasim.MakeBuilder().Build()
 		t.Cleanup(func() { require.NoError(t, s.Terminate()) })
@@ -67,9 +67,11 @@ func TestCheckpointIncludesPeerAddresses(t *testing.T) {
 			} else {
 				changed.UpModule = "OtherTLB.Bottom"
 			}
-			err := build(changed).LoadCheckpoint(bytes.NewReader(saved.Bytes()))
-			require.ErrorContains(t, err, "spec hash mismatch")
-			t.Logf("changing %s rejects the saved checkpoint", peer)
+			// Restore is best effort: a changed peer address does not reject
+			// the checkpoint, and the rebuilt Spec is used.
+			c := build(changed)
+			require.NoError(t, c.LoadCheckpoint(bytes.NewReader(saved.Bytes())))
+			require.Equal(t, changed, c.Spec)
 		})
 	}
 }
