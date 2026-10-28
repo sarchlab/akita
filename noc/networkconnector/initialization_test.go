@@ -120,6 +120,13 @@ func (r alternateRouter) EstablishRoute(nodes []Node) {
 }
 func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, reverseDevices bool) *sim.Simulation {
 	t.Helper()
+	s, _ := checkpointNetworkWithConnector(t, router, reverse, latency, reverseDevices)
+	return s
+}
+func checkpointNetworkWithConnector(
+	t *testing.T, router Router, reverse bool, latency int, reverseDevices bool,
+) (*sim.Simulation, *Connector) {
+	t.Helper()
 	s := sim.MakeBuilder().Build()
 	c := MakeBuilder().WithSimulation(s).WithRouter(router).Build("Network")
 	for range 4 {
@@ -142,7 +149,7 @@ func checkpointNetwork(t *testing.T, router Router, reverse bool, latency int, r
 		c.ConnectSwitches(a, cycle[(i+1)%4], sp)
 	}
 	require.NoError(t, s.Initialize())
-	return s
+	return s, c
 }
 func TestCheckpointRestoresNetwork(t *testing.T) {
 	baseline := checkpointNetwork(t, alternateRouter{}, false, 2, false)
@@ -152,6 +159,23 @@ func TestCheckpointRestoresNetwork(t *testing.T) {
 	require.NoError(t, same.LoadCheckpoint(path))
 	renamedPolicy := checkpointNetwork(t, FloydWarshallRouter{}, false, 2, false)
 	require.NoError(t, renamedPolicy.LoadCheckpoint(path))
+}
+
+// TestCheckpointLoadsIntoChangedRoutes shows that restore is best effort: a
+// network rebuilt with different routes loads the checkpoint and keeps the
+// rebuilt routes, which are not saved or compared.
+func TestCheckpointLoadsIntoChangedRoutes(t *testing.T) {
+	baseline, saved := checkpointNetworkWithConnector(t, alternateRouter{}, false, 2, false)
+	path := filepath.Join(t.TempDir(), "network.tar.gz")
+	require.NoError(t, baseline.SaveCheckpoint(path))
+	before := saved.switches[0].Routes().FindPort("Target.Port")
+
+	rebuilt, c := checkpointNetworkWithConnector(t, alternateRouter{alternate: true}, false, 2, false)
+	after := c.switches[0].Routes().FindPort("Target.Port")
+	require.NotEqual(t, before, after, "the rebuilt network must compute a different route")
+
+	require.NoError(t, rebuilt.LoadCheckpoint(path))
+	require.Equal(t, after, c.switches[0].Routes().FindPort("Target.Port"))
 }
 
 type loopRouter struct{}

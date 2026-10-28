@@ -426,4 +426,5 @@ best effort: if it decodes, it is used; otherwise loading reports an error.
 - Network connectors no longer fingerprint wiring, binding order, link-end
   settings or routes. The `<network>.Topology` entity remains, with an empty
   payload, because it computes routes at Initialize.
-- Checkpoints saved by v5.0.0-rc.3 or earlier cannot be loaded; rebuild them.
+- Loading a checkpoint saved by an earlier release is best effort, like any
+  checkpoint from a different executable.
