@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/blueprint"
+	workload "github.com/sarchlab/akita/v5/mem/acceptancetests/sharedl2vm/workload"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/stretchr/testify/require"
@@ -27,14 +27,15 @@ func TestBlueprintPreservesSimulation(t *testing.T) {
 			}
 			s := b.Build()
 			defer s.Terminate()
-			s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{Seed: 42, NumAccess: 100,
-				MaxAddress: 65536}, declarePlatform))
+			s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{MemoryCapacity: 4 * 1024 * 1024 * 1024},
+				declarePlatform))
 			require.NoError(t, s.Initialize())
-			setupPageTable(numAgents*65536, blueprint.Lookup[*vm.PageTable](s, "PageTable"))
+			work := workload.DefaultSpec()
+			work.Seed, work.ReadCount, work.WriteCount, work.AddressRange = 42, 100, 100, 65536
+			workload.New(work).Execute(s)
 			agents := make([]*memaccessagent.Comp, numAgents)
 			for i := range agents {
-				agents[i] = blueprint.Lookup[*memaccessagent.Comp](s, fmt.Sprintf("Chain[%d].Agent", i))
-				agents[i].TickLater()
+				agents[i] = s.Lookup(fmt.Sprintf("Chain[%d].Agent", i)).(*memaccessagent.Comp)
 			}
 			require.NoError(t, s.Run())
 			for _, a := range agents {

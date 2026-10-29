@@ -17,17 +17,13 @@ import (
 
 // Spec configures one chain. Parent-supplied addresses are already absolute.
 type Spec struct {
-	Seed          int64
-	NumAccess     int
-	MaxAddress    uint64
-	AddressOffset uint64
-	Memory        messaging.RemotePort
-	Translation   messaging.RemotePort
+	Memory      messaging.RemotePort
+	Translation messaging.RemotePort
 }
 
 // DefaultSpec returns an independent default configuration; the parent supplies destinations.
 func DefaultSpec() Spec {
-	return Spec{Seed: 1, NumAccess: 1000, MaxAddress: 16777216, AddressOffset: 0, Memory: "", Translation: ""}
+	return Spec{Memory: "", Translation: ""}
 }
 
 // Ports exposes the two links to the shared hierarchy.
@@ -38,9 +34,11 @@ type Ports struct {
 
 // Node declares the chain without creating runtime objects.
 func Node(spec Spec) *blueprint.DomainNode { return blueprint.NewDomain[Spec, Ports](spec, build) }
+
 func buffers() twowaybuffered.Spec {
 	return twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}
 }
+
 func build(spec Spec, bp *blueprint.Blueprint) {
 	cacheSpec := writethrough.DefaultSpec()
 	cacheSpec.WritePolicy = "write-through"
@@ -59,6 +57,7 @@ func build(spec Spec, bp *blueprint.Blueprint) {
 	tlbSpec.Bottom.Destinations = []messaging.RemotePort{spec.Translation}
 	bp.Add("L1TLB", blueprint.Comp[*tlb.Comp](tlbSpec).Port("Top", buffers()).Port("Bottom", buffers()).
 		Port("Control", buffers()))
+
 	atSpec := addresstranslator.DefaultSpec()
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
@@ -66,23 +65,23 @@ func build(spec Spec, bp *blueprint.Blueprint) {
 	atSpec.Translation.Destinations = []messaging.RemotePort{bp.PortRef("L1TLB.Top")}
 	bp.Add("AT", blueprint.Comp[*addresstranslator.Comp](atSpec).Port("Top", buffers()).Port("Bottom",
 		buffers()).Port("Translation", buffers()).Port("Control", buffers()))
+
 	robSpec := rob.DefaultSpec()
 	robSpec.NumReqPerCycle = 4
 	robSpec.Bottom = bp.PortRef("AT.Top")
 	bp.Add("ROB", blueprint.Comp[*rob.Comp](robSpec).Port("Top", buffers()).Port("Bottom", buffers()).
 		Port("Control", buffers()))
+
 	agentSpec := memaccessagent.DefaultSpec()
-	agentSpec.MaxAddress = spec.MaxAddress
-	agentSpec.AddressOffset = spec.AddressOffset
-	agentSpec.ReadLeft = spec.NumAccess
-	agentSpec.WriteLeft = spec.NumAccess
-	agentSpec.RandSeed = spec.Seed
+	agentSpec.ReadLeft, agentSpec.WriteLeft = 0, 0
 	agentSpec.LowModule = bp.PortRef("ROB.Top")
 	bp.Add("Agent", blueprint.Comp[*memaccessagent.Comp](agentSpec).Port("Mem", buffers()))
+
 	bp.Connect("ConnAgentROB", timing.GHz, bp.PortRef("Agent.Mem"), bp.PortRef("ROB.Top"))
 	bp.Connect("ConnROBAT", timing.GHz, bp.PortRef("ROB.Bottom"), bp.PortRef("AT.Top"))
 	bp.Connect("ConnATL1", timing.GHz, bp.PortRef("AT.Bottom"), bp.PortRef("L1Cache.Top"))
 	bp.Connect("ConnATTrans", timing.GHz, bp.PortRef("AT.Translation"), bp.PortRef("L1TLB.Top"))
+
 	bp.Expose("Memory", "L1Cache.Bottom")
 	bp.Expose("Translation", "L1TLB.Bottom")
 }

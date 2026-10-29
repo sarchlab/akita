@@ -23,7 +23,7 @@ type simulationContext = assembly.Context
 
 type Simulation struct {
 	blueprint          blueprint.Blueprint
-	blueprintObjects   map[string]any
+	exportedPorts      map[string]any
 	blueprintAttempted bool
 	simulationContext
 	// lifecycle serializes snapshots and cleanup. activeOperation spans callbacks
@@ -228,23 +228,29 @@ func (s *Simulation) Initialize() error {
 	s.activeOperation = "initialization"
 	s.lifecycle.Unlock()
 	defer s.finishOperation()
+	if s.blueprintAttempted {
+		panic("blueprint: initialization already attempted; rebuild simulation")
+	}
 	if !s.blueprint.Empty() {
-		if s.blueprintAttempted {
-			panic("blueprint: initialization already attempted; rebuild simulation")
-		}
 		s.blueprintAttempted = true
 		expanded, err := blueprint.Expand(&s.blueprint)
 		if err != nil {
 			panic(err)
 		}
-		s.blueprintObjects = expanded.Instantiate(s)
+		s.exportedPorts = expanded.Instantiate(s)
+		for name := range s.exportedPorts {
+			if _, exists := s.entityByName[name]; exists {
+				panic(fmt.Sprintf("blueprint: exported Ports name %q collides with runtime entity", name))
+			}
+		}
 	}
 	if err := s.setup().Initialize(); err != nil {
-		if !s.blueprint.Empty() {
+		if s.blueprintAttempted {
 			panic(err)
 		}
 		return err
 	}
+	s.blueprint = blueprint.Blueprint{}
 	if s.monitor != nil {
 		s.monitor.Start(s)
 		s.monitorStarted = true
@@ -315,14 +321,19 @@ func (s *Simulation) Add(name string, node blueprint.Node) string {
 	return s.blueprint.Add(name, node)
 }
 
-// BlueprintObject supplies typed blueprint.Lookup after successful initialization.
-func (s *Simulation) BlueprintObject(path string) any {
+// Lookup returns a runtime entity or a domain's exported Ports value by name.
+// Both manual and Blueprint assembly use the same runtime inventory. Call after
+// successful Initialize; a missing name or uninitialized simulation panics.
+// The caller asserts the concrete type required by its execution contract.
+func (s *Simulation) Lookup(name string) any {
 	if err := s.setup().Ready(); err != nil {
 		panic(err)
 	}
-	object, ok := s.blueprintObjects[path]
-	if !ok {
-		panic(fmt.Sprintf("blueprint: %s.Lookup: unknown path", path))
+	if index, ok := s.entityByName[name]; ok {
+		return s.entities[index]
 	}
-	return object
+	if ports, ok := s.exportedPorts[name]; ok {
+		return ports
+	}
+	panic(fmt.Sprintf("simulation: Lookup: unknown name %q", name))
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/blueprint"
+	workload "github.com/sarchlab/akita/v5/mem/internal/accessworkload"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -25,11 +26,13 @@ func TestBlueprintPreservesSimulation(t *testing.T) {
 			}
 			s := b.Build()
 			defer s.Terminate()
-			s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{Seed: 42, NumAccess: 100,
-				MaxAddress: 65536}, declarePlatform))
+			s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{MemoryCapacity: 4 * 1024 * 1024 * 1024},
+				declarePlatform))
 			require.NoError(t, s.Initialize())
-			a := blueprint.Lookup[*memaccessagent.Comp](s, "MemAccessAgent")
-			a.TickLater()
+			work := workload.DefaultSpec()
+			work.Seed, work.ReadCount, work.WriteCount, work.AddressRange = 42, 100, 100, 65536
+			workload.New(work).Execute(s)
+			a := s.Lookup("MemAccessAgent").(*memaccessagent.Comp)
 			require.NoError(t, s.Run())
 			require.Zero(t, a.State.ReadLeft)
 			require.Zero(t, a.State.WriteLeft)

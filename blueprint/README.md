@@ -12,11 +12,17 @@ s.Add("", platform.Node(platform.DefaultSpec()))
 if err := s.Initialize(); err != nil {
     panic(err)
 }
-agent := blueprint.Lookup[*agent.Comp](s, "Agent")
+agent := s.Lookup("Agent").(*agent.Comp)
 // Seed workload state only after initialization, then run.
 ```
 
 ## Components, resources, and domains
+
+Every node stores its own name, available through `Name()`. `Add(name, node)`
+snapshots a local name; `Expand` assigns absolute names to independent copies.
+Reusing a node never changes the original. `Nodes()` returns `[]Node`, without
+a separate name wrapper. The private `node()` marker seals the supported node
+kinds; `NewNetwork` remains the extension point for third-party connectors.
 
 `blueprint.Comp[*cache.Comp](spec)` retains the existing model builder's typed
 construction capability without invoking it. Configure every local port with
@@ -51,7 +57,7 @@ Ports contain only `messaging.Port` and `[]messaging.Port` fields. Each single
 port must be exposed; every group element must be exposed at contiguous indices
 from zero. Empty groups are allowed. `bp.Expose("Top", "Cache.Top")` maps a public
 slot to an inner relative path. Domains have no runtime State; after initialization,
-`blueprint.Lookup[domain.Ports](s, "Domain")` returns their actual exposed ports.
+`s.Lookup("Domain").(domain.Ports)` returns their actual exposed ports.
 The source inspector discovers these declarations without running domain code.
 
 ## References and ordering
@@ -87,6 +93,9 @@ or scheduling order preserve timing.
 
 `blueprint.Expand(bp)` returns an independent flat blueprint and an error. It
 creates no runtime objects. `Nodes()` returns detached copies for inspection.
+Domain hierarchy and aliases are temporary expansion data. The flat result keeps
+only the named exported Ports types and field-to-actual-port bindings; Initialize
+fills those values without traversing domains or following aliases.
 Invalid names, missing buffers, bad references, incomplete exposures, resource
 mismatches and cycles include the node path and field in their errors. Recursive
 domain expansion is limited to 256 levels to diagnose unbounded recursion.
@@ -107,6 +116,23 @@ capture live objects or perform construction when the declaration is created.
 Specs may define `Validate() error` for checks during Expand. Network declarations
 snapshot their settings and references, and expose detached read copies through
 `Configuration` and `PortReferences` so these cannot drift through later mutation.
+
+## Hardware and workload
+
+After Initialize, use the Simulation instance: `s.Lookup("Agent").(*agent.Comp)`.
+It reads the existing runtime inventory for both hand-built and Blueprint hardware,
+including resources, ports, and connections. Named exported domain Ports values
+are retained separately and cannot shadow runtime entity names. Missing names,
+uninitialized lookup, and caller type-assertion mismatches panic. Construction
+declarations are discarded after successful initialization.
+
+A workload owns input data and an `Execute(s *sim.Simulation)` method. It looks up
+the concrete hardware and calls that component's own load/start API. The contract
+is agreed names, types and operations, without a universal hardware start interface
+or execution-model registry. Input and RNG state used during execution belong in
+checkpointed State, never runtime mutations to Spec. Hardware still includes the
+agent/driver and resources. See the two runnable ping examples and tutorials for
+identical manual and Blueprint hardware with the same workload.
 
 ## Failure and compatibility
 

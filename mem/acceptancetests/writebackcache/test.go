@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/internal/accessworkload"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
@@ -25,21 +26,15 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-type platformSpec struct {
-	Seed       int64
-	NumAccess  int
-	MaxAddress uint64
-}
+type platformSpec struct{ MemoryCapacity uint64 }
 
 func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	agentSpec := memaccessagent.DefaultSpec()
-	agentSpec.MaxAddress = spec.MaxAddress
-	agentSpec.WriteLeft = spec.NumAccess
-	agentSpec.ReadLeft = spec.NumAccess
-	agentSpec.RandSeed = spec.Seed
+	agentSpec.ReadLeft, agentSpec.WriteLeft = 0, 0
 	agentSpec.LowModule = bp.PortRef("Cache.Top")
 	bp.Add("MemAccessAgent", blueprint.Comp[*memaccessagent.Comp](agentSpec).Port("Mem", bufferSpec()))
-	dramStorage := bp.Add("DRAMStorage", blueprint.Res(mem.StorageSpec{Capacity: 4 * mem.GB, UnitSize: 4 * mem.KB}))
+	dramStorage := bp.Add("DRAMStorage", blueprint.Res(mem.StorageSpec{Capacity: spec.MemoryCapacity,
+		UnitSize: 4 * mem.KB}))
 	bp.Add("DRAM", blueprint.Comp[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).Use("Storage",
 		dramStorage).Port("Top", bufferSpec()).Port("Control", bufferSpec()))
 	cacheSpec := writeback.DefaultSpec()
@@ -59,10 +54,12 @@ func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	bp.Connect("Conn", timing.GHz, bp.PortRef("MemAccessAgent.Mem"), bp.PortRef("Cache.Bottom"), bp.PortRef("Cache.Top"),
 		bp.PortRef("DRAM.Top"))
 }
+
 func bufferSpec() twowaybuffered.Spec {
 	return twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}
 }
-func buildEnvironment(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.Comp) {
+
+func buildEnvironment(seed int64) (*sim.Simulation, *memaccessagent.Comp) {
 	monitor := monitoring.MakeBuilder().Build()
 	b := sim.MakeBuilder().WithMonitor(monitor)
 	if *parallelFlag {
@@ -72,16 +69,20 @@ func buildEnvironment(seed int64) (*sim.Simulation, timing.Engine, *memaccessage
 		b = b.WithVisTracingOnStart()
 	}
 	s := b.Build()
-	s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{seed, *numAccessFlag,
-		*maxAddressFlag}, declarePlatform))
+	s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{MemoryCapacity: 4 * mem.GB}, declarePlatform))
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}
-	agent := blueprint.Lookup[*memaccessagent.Comp](s, "MemAccessAgent")
+	work := accessworkload.DefaultSpec()
+	work.Seed, work.ReadCount, work.WriteCount = seed, *numAccessFlag, *numAccessFlag
+	work.AddressRange = *maxAddressFlag
+	accessworkload.New(work).Execute(s)
+	agent := s.Lookup("MemAccessAgent").(*memaccessagent.Comp)
 	memaccessagent.SetProgressTrackers(agent, monitor.CreateProgressBar(agent.Name()+".Writes",
 		uint64(agent.State.WriteLeft)), monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)))
-	return s, s.Engine(), agent
+	return s, agent
 }
+
 func main() {
 	flag.Parse()
 	seed := *seedFlag
@@ -89,9 +90,8 @@ func main() {
 		seed = time.Now().UnixNano()
 	}
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
-	s, e, a := buildEnvironment(seed)
-	a.TickLater()
-	if err := e.Run(); err != nil {
+	s, a := buildEnvironment(seed)
+	if err := s.Run(); err != nil {
 		panic(err)
 	}
 	if len(a.State.PendingWriteReq) > 0 || len(a.State.PendingReadReq) > 0 {

@@ -11,10 +11,12 @@ import (
 )
 
 type entry struct {
-	name, scope string
-	node        Node
+	scope string
+	node  Node
 }
+
 type exposure struct{ field, target string }
+
 type domain struct {
 	name      string
 	portsType reflect.Type
@@ -28,8 +30,7 @@ type Blueprint struct {
 	entries  []entry
 	exposes  []exposure
 	expanded bool
-	domains  []domain
-	aliases  map[string]string
+	exports  []portExport
 }
 
 // Add snapshots a node and returns its absolute path. Only a root domain may
@@ -57,7 +58,9 @@ func (bp *Blueprint) Add(name string, n Node) string {
 	if n == nil || reflect.ValueOf(n).IsNil() {
 		failf(path, "node", "nil node")
 	}
-	bp.entries = append(bp.entries, entry{path, bp.scope, copyNode(n)})
+	snapshot := copyNode(n)
+	snapshot.setName(name)
+	bp.entries = append(bp.entries, entry{bp.scope, snapshot})
 	return path
 }
 
@@ -73,7 +76,7 @@ func (bp *Blueprint) PortRef(path string) messaging.RemotePort {
 
 // Connect declares a direct connection, preserving the supplied member order.
 func (bp *Blueprint) Connect(name string, freq timing.Freq, members ...messaging.RemotePort) {
-	bp.Add(name, &ConnectionNode{freq, members})
+	bp.Add(name, &ConnectionNode{Freq: freq, Members: members})
 }
 
 // Expose binds a domain's public Ports slot to an inner relative port path.
@@ -89,18 +92,19 @@ func (bp *Blueprint) Empty() bool { return len(bp.entries) == 0 }
 
 // Nodes returns a detached copy of the expanded (or declared) nodes in order.
 // Domains are absent from an expanded blueprint; networks remain declarations.
-func (bp *Blueprint) Nodes() []NamedNode {
-	out := make([]NamedNode, len(bp.entries))
+func (bp *Blueprint) Nodes() []Node {
+	out := make([]Node, len(bp.entries))
 	for i, e := range bp.entries {
-		out[i] = NamedNode{e.name, copyNode(e.node)}
+		out[i] = copyNode(e.node)
 	}
 	return out
 }
 
-// NamedNode pairs a node with its absolute path.
-type NamedNode struct {
-	Name string
-	Node Node
+// portExport is a flat named Ports value with fully resolved field bindings.
+type portExport struct {
+	name      string
+	portsType reflect.Type
+	bindings  []exposure
 }
 
 func join(scope, name string) string {
@@ -109,15 +113,18 @@ func join(scope, name string) string {
 	}
 	return scope + "." + name
 }
+
 func within(path, scope string) bool {
 	return scope == "" || path == scope || strings.HasPrefix(path, scope+".")
 }
+
 func failf(path, field, format string, args ...any) {
 	if path == "" {
 		path = "<root>"
 	}
 	panic(fmt.Errorf("blueprint: %s.%s: %s", path, field, fmt.Sprintf(format, args...)))
 }
+
 func checkName(path, field, name string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -126,12 +133,14 @@ func checkName(path, field, name string) {
 	}()
 	naming.MustBeValid(name)
 }
+
 func clone[T any](v T) T {
 	if !reflect.ValueOf(v).IsValid() {
 		return v
 	}
 	return cloneValue(reflect.ValueOf(v)).Interface().(T)
 }
+
 func cloneValue(v reflect.Value) reflect.Value {
 	if !v.IsValid() {
 		return v
@@ -172,6 +181,7 @@ func cloneValue(v reflect.Value) reflect.Value {
 	}
 	return v
 }
+
 func copyUses(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
@@ -179,6 +189,7 @@ func copyUses(in map[string]string) map[string]string {
 	}
 	return out
 }
+
 func copyNode(n Node) Node {
 	switch n := n.(type) {
 	case *ComponentNode:

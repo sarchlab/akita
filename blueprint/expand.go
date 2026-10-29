@@ -14,6 +14,13 @@ import (
 var portType = reflect.TypeFor[messaging.Port]()
 var remoteType = reflect.TypeFor[messaging.RemotePort]()
 
+// expansion owns temporary hierarchy and aliases; neither survives Expand.
+type expansion struct {
+	*Blueprint
+	domains []domain
+	aliases map[string]string
+}
+
 // Expand produces an independent flat declaration without constructing runtime
 // objects. Network declarations remain opaque to expansion. Invalid declarations
 // return path-qualified errors; Simulation.Initialize panics with those errors.
@@ -30,7 +37,8 @@ func Expand(bp *Blueprint) (out *Blueprint, err error) {
 	if bp.expanded {
 		failf("", "Expand", "already expanded")
 	}
-	out = &Blueprint{expanded: true, aliases: make(map[string]string)}
+	out = &Blueprint{expanded: true}
+	x := &expansion{Blueprint: out, aliases: make(map[string]string)}
 	names := make(map[string]bool)
 	var expand func([]entry, int)
 	expand = func(entries []entry, depth int) {
@@ -38,45 +46,47 @@ func Expand(bp *Blueprint) (out *Blueprint, err error) {
 			failf("", "domain", "recursive expansion exceeds 256 levels")
 		}
 		for _, e := range entries {
-			if names[e.name] {
-				failf(e.name, "name", "duplicate node")
-			}
-			names[e.name] = true
 			n := copyNode(e.node)
+			n.setName(join(e.scope, n.Name()))
+			e.node = n
+			if names[e.node.Name()] {
+				failf(e.node.Name(), "name", "duplicate node")
+			}
+			names[e.node.Name()] = true
 			d, ok := n.(*DomainNode)
 			if !ok {
-				out.entries = append(out.entries, entry{e.name, e.scope, n})
+				out.entries = append(out.entries, entry{e.scope, n})
 				continue
 			}
-			validateSpecType(e.name, d.Spec, d.specType)
+			validateSpecType(e.node.Name(), d.Spec, d.specType)
 			if err := modeling.ValidateSpec(d.Spec); err != nil {
-				failf(e.name, "Spec", "%v", err)
+				failf(e.node.Name(), "Spec", "%v", err)
 			}
-			child := &Blueprint{scope: e.name}
-			contextual(e.name, "domain", func() { d.expand(d.Spec, child) })
-			out.domains = append(out.domains, domain{e.name, d.portsType, child.exposes})
+			child := &Blueprint{scope: e.node.Name()}
+			contextual(e.node.Name(), "domain", func() { d.expand(d.Spec, child) })
+			x.domains = append(x.domains, domain{e.node.Name(), d.portsType, child.exposes})
 			expand(child.entries, depth+1)
 		}
 	}
 	expand(bp.entries, 0)
-	out.validate()
+	x.validate()
 	return out, nil
 }
 
-func (bp *Blueprint) validate() {
+func (bp *expansion) validate() {
 	resources := make(map[string]*ResourceNode)
 	names := make(map[string]bool)
 	for _, d := range bp.domains {
 		names[d.name] = true
 	}
 	for _, e := range bp.entries {
-		names[e.name] = true
+		names[e.node.Name()] = true
 		if n, ok := e.node.(*ResourceNode); ok {
 			if n.create == nil || n.resultType == nil {
-				failf(e.name, "Kind", "use Res to retain construction information")
+				failf(e.node.Name(), "Kind", "use Res to retain construction information")
 			}
-			validateSpecType(e.name, n.Spec, n.specType)
-			resources[e.name] = n
+			validateSpecType(e.node.Name(), n.Spec, n.specType)
+			resources[e.node.Name()] = n
 		}
 	}
 	ports := make(map[string]bool)
@@ -91,21 +101,21 @@ func (bp *Blueprint) validate() {
 func validateNode(e entry, resources map[string]*ResourceNode, names, ports map[string]bool) {
 	switch n := e.node.(type) {
 	case *ComponentNode:
-		validateComponent(e.name, n, names, ports)
-		validateUses(e.name, n.resourcesType, n.Uses, resources)
+		validateComponent(e.node.Name(), n, names, ports)
+		validateUses(e.node.Name(), n.resourcesType, n.Uses, resources)
 	case *ResourceNode:
-		validateUses(e.name, n.resourcesType, n.Uses, resources)
+		validateUses(e.node.Name(), n.resourcesType, n.Uses, resources)
 	case *ConnectionNode:
 		if n.Freq <= 0 {
-			failf(e.name, "Freq", "frequency must be positive")
+			failf(e.node.Name(), "Freq", "frequency must be positive")
 		}
 	case *NetworkNode:
 		if n.assemble == nil {
-			failf(e.name, "Kind", "use NewNetwork to retain construction information")
+			failf(e.node.Name(), "Kind", "use NewNetwork to retain construction information")
 		}
 		if v, ok := n.spec.(interface{ Validate() error }); ok {
 			if err := v.Validate(); err != nil {
-				failf(e.name, "Spec", "%v", err)
+				failf(e.node.Name(), "Spec", "%v", err)
 			}
 		}
 	}
@@ -138,7 +148,7 @@ func validateComponent(name string, n *ComponentNode, names, ports map[string]bo
 	}
 }
 
-func (bp *Blueprint) validateExposures(ports map[string]bool) {
+func (bp *expansion) validateExposures(ports map[string]bool) {
 	for _, d := range bp.domains {
 		exposed := make(map[string]string)
 		for _, x := range d.exposes {
@@ -159,22 +169,25 @@ func (bp *Blueprint) validateExposures(ports map[string]bool) {
 		}
 	}
 	for _, d := range bp.domains {
+		export := portExport{name: d.name, portsType: d.portsType}
 		for _, x := range d.exposes {
 			bp.checkBoundary(d.name, x.target, d.name, x.field)
-			bp.resolve(x.target, ports, make(map[string]bool), d.name, x.field)
+			actual := bp.resolve(x.target, ports, make(map[string]bool), d.name, x.field)
+			export.bindings = append(export.bindings, exposure{x.field, actual})
 		}
+		bp.exports = append(bp.exports, export)
 	}
 }
 
-func (bp *Blueprint) resolveReferences(ports map[string]bool) {
+func (bp *expansion) resolveReferences(ports map[string]bool) {
 	bound := make(map[string]string)
 	for _, e := range bp.entries {
 		resolve := func(ref messaging.RemotePort, field string) messaging.RemotePort {
 			if ref == messaging.Unconnected {
 				return ref
 			}
-			bp.checkBoundary(e.scope, string(ref), e.name, field)
-			return messaging.RemotePort(bp.resolve(string(ref), ports, make(map[string]bool), e.name, field))
+			bp.checkBoundary(e.scope, string(ref), e.node.Name(), field)
+			return messaging.RemotePort(bp.resolve(string(ref), ports, make(map[string]bool), e.node.Name(), field))
 		}
 		switch n := e.node.(type) {
 		case *ComponentNode:
@@ -182,10 +195,10 @@ func (bp *Blueprint) resolveReferences(ports map[string]bool) {
 		case *ResourceNode:
 			n.Spec = resolveSpec(n.Spec, resolve)
 		case *ConnectionNode:
-			n.Members = resolveMembers(n.Members, resolve, e.name, bound)
+			n.Members = resolveMembers(n.Members, resolve, e.node.Name(), bound)
 		case *NetworkNode:
 			n.spec = resolveSpec(n.spec, resolve)
-			n.members = resolveMembers(n.members, resolve, e.name, bound)
+			n.members = resolveMembers(n.members, resolve, e.node.Name(), bound)
 		}
 	}
 }
@@ -250,6 +263,7 @@ func portSlots(path string, t reflect.Type, configured map[string]string) []stri
 	}
 	return slots
 }
+
 func keys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -258,6 +272,7 @@ func keys[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
 func validateUses(path string, t reflect.Type, uses map[string]string, resources map[string]*ResourceNode) {
 	if t == nil || t.Kind() != reflect.Struct {
 		failf(path, "Resources", "must be a struct")
@@ -287,7 +302,8 @@ func validateUses(path string, t reflect.Type, uses map[string]string, resources
 		}
 	}
 }
-func (bp *Blueprint) checkBoundary(scope, target, path, field string) {
+
+func (bp *expansion) checkBoundary(scope, target, path, field string) {
 	// Entering a foreign domain is only allowed through its public alias.
 	for _, d := range bp.domains {
 		if d.name == "" || within(scope, d.name) || !within(target, d.name) {
@@ -310,7 +326,8 @@ func (bp *Blueprint) checkBoundary(scope, target, path, field string) {
 		}
 	}
 }
-func (bp *Blueprint) resolve(ref string, ports, seen map[string]bool, path, field string) string {
+
+func (bp *expansion) resolve(ref string, ports, seen map[string]bool, path, field string) string {
 	if seen[ref] {
 		failf(path, field, "expose alias cycle at %q", ref)
 	}
@@ -323,6 +340,7 @@ func (bp *Blueprint) resolve(ref string, ports, seen map[string]bool, path, fiel
 	}
 	return ref
 }
+
 func resolveSpec(spec any, resolve func(messaging.RemotePort, string) messaging.RemotePort) any {
 	value := cloneValue(reflect.ValueOf(spec))
 	var visit func(reflect.Value, string)
@@ -348,6 +366,7 @@ func resolveSpec(spec any, resolve func(messaging.RemotePort, string) messaging.
 	visit(value, "Spec")
 	return value.Interface()
 }
+
 func resolveMembers(in []messaging.RemotePort, resolve func(messaging.RemotePort,
 	string) messaging.RemotePort, path string, bound map[string]string) []messaging.RemotePort {
 	out := make([]messaging.RemotePort, len(in))
@@ -365,6 +384,7 @@ func resolveMembers(in []messaging.RemotePort, resolve func(messaging.RemotePort
 	}
 	return out
 }
+
 func (bp *Blueprint) resourceOrder(resources map[string]*ResourceNode) []string {
 	state := make(map[string]int)
 	var order []string
@@ -385,8 +405,8 @@ func (bp *Blueprint) resourceOrder(resources map[string]*ResourceNode) []string 
 		order = append(order, name)
 	}
 	for _, e := range bp.entries {
-		if _, ok := resources[e.name]; ok {
-			visit(e.name)
+		if _, ok := resources[e.node.Name()]; ok {
+			visit(e.node.Name())
 		}
 	}
 	return order

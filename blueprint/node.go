@@ -15,8 +15,22 @@ import (
 )
 
 // Node is an assembly declaration. Use the typed constructors to retain its
-// construction information; changing Kind never changes its Go type.
-type Node interface{ node() }
+// construction information; changing Kind never changes its Go type. The private
+// marker seals node kinds; NewNetwork still lets third-party connectors supply
+// their own assembly behavior.
+type Node interface {
+	node()
+	Name() string
+	setName(string)
+}
+
+// nodeName belongs to the declaration snapshot. Add assigns a local name;
+// Expand assigns an absolute name without changing the input node.
+type nodeName struct{ name string }
+
+func (n nodeName) Name() string { return n.name }
+
+func (n *nodeName) setName(name string) { n.name = name }
 
 // PortConfig explicitly configures both buffers of a component port.
 type PortConfig struct {
@@ -26,6 +40,7 @@ type PortConfig struct {
 
 // ComponentNode declares a component, its local ports, and shared resources.
 type ComponentNode struct {
+	nodeName
 	Kind                               string
 	Spec                               any
 	Ports                              []PortConfig
@@ -82,6 +97,7 @@ func (n *ComponentNode) Use(field, path string) *ComponentNode {
 // ResourceNode declares a named shared resource. Dependencies are constructed
 // first, in deterministic dependency order, and injected by Resources field.
 type ResourceNode struct {
+	nodeName
 	Kind                                string
 	Spec                                any
 	Uses                                map[string]string
@@ -119,6 +135,7 @@ func (n *ResourceNode) Use(field, path string) *ResourceNode {
 // DomainNode is a reusable declaration whose build function only adds nodes.
 // Its static Ports shape is filled with exposed inner ports after initialization.
 type DomainNode struct {
+	nodeName
 	Kind                string
 	Spec                any
 	specType, portsType reflect.Type
@@ -135,6 +152,7 @@ func NewDomain[S, P any](spec S, build func(S, *Blueprint)) *DomainNode {
 
 // ConnectionNode declares a direct connection. Member order is arbitration order.
 type ConnectionNode struct {
+	nodeName
 	Freq    timing.Freq
 	Members []messaging.RemotePort
 }
@@ -144,6 +162,7 @@ func (*ConnectionNode) node() {}
 // NetworkNode declares connector-owned topology. Expand retains this declaration;
 // internal switches and endpoints are created only during initialization.
 type NetworkNode struct {
+	nodeName
 	Kind     string
 	spec     any
 	members  []messaging.RemotePort

@@ -27,7 +27,8 @@ checkpoint/testing boundaries, not part of Engine or Simulation.
 
 A Simulation may instead own a `blueprint.Blueprint`, populated by `Simulation.Add`.
 Domains only declare nodes and exposures; they never create runtime objects.
-Nodes retain configuration and private deferred construction metadata. At
+Nodes retain their own names, configuration and private deferred construction
+metadata. Add snapshots local names; Expand assigns absolute names on copies. At
 `Initialize`, Expand resolves domains, names and exposed port aliases, validates
 references and explicit port buffers, and then instantiation builds resources,
 components and ports, connections and connector-owned networks before existing
@@ -43,7 +44,9 @@ element must be exposed; group indices are contiguous and empty groups are allow
 Cross-domain port references target exposed ports. Parent-supplied references are
 already absolute and pass through child Specs unchanged. Resource paths identify
 shared resources and dependencies globally, without port exposure boundaries.
-Build copies configuration; expansion is pure.
+Build copies configuration; expansion is pure. Domain hierarchy and aliases are
+used only during expansion. The flat result retains named exported Ports types
+and fully resolved field bindings, not domain trees.
 
 Blueprint ports explicitly configure both incoming and outgoing capacities.
 `messaging.Unconnected` is an intentionally absent destination, never a connection
@@ -56,6 +59,20 @@ initialization; it does not contain connector-specific dispatch. Mesh, PCIe and
 NVLink use the same mechanism. Expand retains network declarations without exposing
 internal switches or endpoints; existing connectors create those during
 initialization, then existing setup computes and validates routes.
+
+Runtime lookup belongs to the Simulation instance: `s.Lookup(name) any`. It reads
+the same entity inventory for manual and Blueprint hardware. Exported domain Ports
+values are separate named values and may not shadow runtime entity names. Lookup
+requires successful initialization; missing names and caller type mismatches panic.
+Successful initialization discards Blueprint construction data.
+
+Workloads own data and their own `Execute(*sim.Simulation)` method. They look up
+agreed hardware names/types and call package-specific operations to load/start
+execution after Initialize. Hardware includes drivers/agents and resources; input
+and active RNG/address state live in checkpointed State. Spec remains immutable.
+There is no universal StartWorkload interface or execution-model registry. The
+Spec/DefaultSpec/New convention does not imply current inspector workload support;
+JSON-to-Go generation and Yuzawa multi-kind imports remain separate work.
 
 `sim` depends on `blueprint`, which constructs concrete direct connections and
 two-way buffered ports. Tests in `direct`, `twowaybuffered`, and their dependencies

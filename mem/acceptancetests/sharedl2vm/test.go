@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/sharedl2vm/agentchain"
+	"github.com/sarchlab/akita/v5/mem/acceptancetests/sharedl2vm/workload"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
@@ -27,7 +28,6 @@ import (
 )
 
 const numAgents = 4
-const ptBase = uint64(0x100000)
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
 var numAccessFlag = flag.Int("num-access", 1000, "Number of accesses per agent")
@@ -36,20 +36,16 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 type agentChain struct{ agent *memaccessagent.Comp }
-type platformSpec struct {
-	Seed       int64
-	NumAccess  int
-	MaxAddress uint64
-}
 
-func agentStride() uint64             { return stride(*maxAddressFlag) }
-func stride(maxAddress uint64) uint64 { return (maxAddress + 3) / 4 * 4 }
+type platformSpec struct{ MemoryCapacity uint64 }
+
 func buffers() twowaybuffered.Spec {
 	return twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}
 }
+
 func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	memory := bp.Add("MemCtrlStorage",
-		blueprint.Res(mem.StorageSpec{Capacity: ptBase + numAgents*stride(spec.MaxAddress) + mem.MB,
+		blueprint.Res(mem.StorageSpec{Capacity: spec.MemoryCapacity,
 			UnitSize: 4 * mem.KB}))
 	mcSpec := idealmemcontroller.DefaultSpec()
 	mcSpec.NumReqPerCycle = 1
@@ -81,18 +77,15 @@ func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	tlbSpec.Bottom.Destinations = []messaging.RemotePort{bp.PortRef("IoMMU.Top")}
 	bp.Add("L2TLB", blueprint.Comp[*tlb.Comp](tlbSpec).Port("Top", buffers()).Port("Bottom", buffers()).
 		Port("Control", buffers()))
-	declareAgentChains(spec, bp)
+	declareAgentChains(bp)
 }
-func declareAgentChains(spec platformSpec, bp *blueprint.Blueprint) {
+
+func declareAgentChains(bp *blueprint.Blueprint) {
 	memoryPorts := []messaging.RemotePort{bp.PortRef("L2Cache.Top")}
 	translationPorts := []messaging.RemotePort{bp.PortRef("L2TLB.Top")}
 	for i := 0; i < numAgents; i++ {
 		name := fmt.Sprintf("Chain[%d]", i)
 		chainSpec := agentchain.DefaultSpec()
-		chainSpec.Seed = spec.Seed + int64(i)
-		chainSpec.NumAccess = spec.NumAccess
-		chainSpec.MaxAddress = spec.MaxAddress
-		chainSpec.AddressOffset = uint64(i) * stride(spec.MaxAddress)
 		chainSpec.Memory = bp.PortRef("L2Cache.Top")
 		chainSpec.Translation = bp.PortRef("L2TLB.Top")
 		bp.Add(name, agentchain.Node(chainSpec))
@@ -105,7 +98,7 @@ func declareAgentChains(spec platformSpec, bp *blueprint.Blueprint) {
 	bp.Connect("ConnL2TLBMMU", timing.GHz, bp.PortRef("L2TLB.Bottom"), bp.PortRef("IoMMU.Top"))
 }
 
-func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
+func setupTest(seed int64) (*sim.Simulation, []agentChain) {
 	monitor := monitoring.MakeBuilder().Build()
 	b := sim.MakeBuilder().WithMonitor(monitor)
 	if *parallelFlag {
@@ -115,30 +108,24 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
 		b = b.WithVisTracingOnStart()
 	}
 	s := b.Build()
-	s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{seed, *numAccessFlag,
-		*maxAddressFlag}, declarePlatform))
+	s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{MemoryCapacity: 4 * mem.GB}, declarePlatform))
 	if err := s.Initialize(); err != nil {
 		panic(err)
 	}
-	pt := blueprint.Lookup[*vm.PageTable](s, "PageTable")
-	setupPageTable(numAgents*agentStride(), pt)
+	work := workload.DefaultSpec()
+	work.Seed, work.ReadCount, work.WriteCount = seed, *numAccessFlag, *numAccessFlag
+	work.AddressRange = *maxAddressFlag
+	workload.New(work).Execute(s)
 	chains := make([]agentChain, numAgents)
 	for i := range chains {
-		a := blueprint.Lookup[*memaccessagent.Comp](s, fmt.Sprintf("Chain[%d].Agent", i))
+		a := s.Lookup(fmt.Sprintf("Chain[%d].Agent", i)).(*memaccessagent.Comp)
 		chains[i] = agentChain{a}
 		memaccessagent.SetProgressTrackers(a, monitor.CreateProgressBar(a.Name()+".Writes",
 			uint64(a.State.WriteLeft)), monitor.CreateProgressBar(a.Name()+".Reads", uint64(a.State.ReadLeft)))
 	}
-	return s, s.Engine(), chains
+	return s, chains
 }
-func setupPageTable(addressRange uint64, pt *vm.PageTable) {
-	const pageSize = uint64(4096)
-	numEntries := (addressRange-1)/pageSize + 1
-	for i := uint64(0); i < numEntries; i++ {
-		vAddr := i * pageSize
-		pt.Insert(vm.Page{PID: 1, VAddr: vAddr, PAddr: ptBase + vAddr, PageSize: pageSize, Valid: true})
-	}
-}
+
 func main() {
 	flag.Parse()
 	seed := *seedFlag
@@ -146,11 +133,8 @@ func main() {
 		seed = time.Now().UnixNano()
 	}
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
-	s, e, chains := setupTest(seed)
-	for _, c := range chains {
-		c.agent.TickLater()
-	}
-	if err := e.Run(); err != nil {
+	s, chains := setupTest(seed)
+	if err := s.Run(); err != nil {
 		panic(err)
 	}
 	for i, c := range chains {

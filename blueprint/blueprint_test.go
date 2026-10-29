@@ -21,10 +21,12 @@ type testSpec struct {
 	Label  string
 	Values []int
 }
+
 type testPorts struct {
 	Top   messaging.Port
 	Links []messaging.Port
 }
+
 type testComp = wakeup.Component[testSpec, modeling.None, modeling.None, testPorts, modeling.None]
 type resourceComp = wakeup.Component[testSpec, modeling.None, resourceUses, testPorts, modeling.None]
 type resourceUses struct{ Storage *mem.Storage }
@@ -32,6 +34,7 @@ type resourceUses struct{ Storage *mem.Storage }
 func portSpec() twowaybuffered.Spec {
 	return twowaybuffered.Spec{IncomingCapacity: 3, OutgoingCapacity: 7}
 }
+
 func comp(spec testSpec) *blueprint.ComponentNode {
 	return blueprint.Comp[*testComp](spec).Port("Top", portSpec())
 }
@@ -40,6 +43,7 @@ type domainSpec struct {
 	Peer  messaging.RemotePort
 	Count int
 }
+
 type domainPorts struct {
 	Top   messaging.Port
 	Links []messaging.Port
@@ -77,11 +81,11 @@ func TestCyclicDomainsAndIndependentCopies(t *testing.T) {
 			})
 			s.Add("", root)
 			require.NoError(t, s.Initialize())
-			a := blueprint.Lookup[*testComp](s, "A.Inner")
-			b := blueprint.Lookup[*testComp](s, "B.Inner")
+			a := s.Lookup("A.Inner").(*testComp)
+			b := s.Lookup("B.Inner").(*testComp)
 			require.Equal(t, b.Ports.Top.AsRemote(), a.Spec.Peer)
 			require.Equal(t, a.Ports.Top.AsRemote(), b.Spec.Peer)
-			ports := blueprint.Lookup[domainPorts](s, "A")
+			ports := s.Lookup("A").(domainPorts)
 			require.Same(t, a.Ports.Top, ports.Top)
 			require.Len(t, ports.Links, 17)
 			for i, p := range ports.Links {
@@ -119,9 +123,9 @@ func TestPortRefDomainRootAndAbsoluteSpecPassThrough(t *testing.T) {
 					bp.Add("External", comp(testSpec{Peer: bp.PortRef("D.Top")}))
 				}))
 			require.NoError(t, s.Initialize())
-			inner := blueprint.Lookup[*testComp](s, prefix+"D.D")
-			external := blueprint.Lookup[*testComp](s, prefix+"External")
-			client := blueprint.Lookup[*testComp](s, prefix+"D.Client")
+			inner := s.Lookup(prefix + "D.D").(*testComp)
+			external := s.Lookup(prefix + "External").(*testComp)
+			client := s.Lookup(prefix + "D.Client").(*testComp)
 			require.Equal(t, external.Ports.Top.AsRemote(), inner.Spec.Peer)
 			require.Equal(t, inner.Ports.Top.AsRemote(), external.Spec.Peer)
 			require.Equal(t, inner.Ports.Top.AsRemote(), client.Spec.Peer)
@@ -138,11 +142,11 @@ func TestExpandPureSnapshotsAndNestedAliases(t *testing.T) {
 	n.Spec = testSpec{Values: []int{10}}
 	x, err := blueprint.Expand(&bp)
 	require.NoError(t, err)
-	require.Equal(t, []int{1, 2}, x.Nodes()[0].Node.(*blueprint.ComponentNode).Spec.(testSpec).Values)
-	x.Nodes()[0].Node.(*blueprint.ComponentNode).Spec.(testSpec).Values[0] = 8
+	require.Equal(t, []int{1, 2}, x.Nodes()[0].(*blueprint.ComponentNode).Spec.(testSpec).Values)
+	x.Nodes()[0].(*blueprint.ComponentNode).Spec.(testSpec).Values[0] = 8
 	y, err := blueprint.Expand(&bp)
 	require.NoError(t, err)
-	require.Equal(t, []int{1, 2}, y.Nodes()[0].Node.(*blueprint.ComponentNode).Spec.(testSpec).Values)
+	require.Equal(t, []int{1, 2}, y.Nodes()[0].(*blueprint.ComponentNode).Spec.(testSpec).Values)
 	s := sim.MakeBuilder().Build()
 	defer s.Terminate()
 	s.Add("Outer", blueprint.NewDomain[modeling.None, domainPorts](modeling.None{}, func(_ modeling.None,
@@ -151,7 +155,7 @@ func TestExpandPureSnapshotsAndNestedAliases(t *testing.T) {
 		bp.Expose("Top", "Inner.Top")
 	}))
 	require.NoError(t, s.Initialize())
-	require.Equal(t, "Outer.Inner.Inner.Top", blueprint.Lookup[domainPorts](s, "Outer").Top.Name())
+	require.Equal(t, "Outer.Inner.Inner.Top", s.Lookup("Outer").(domainPorts).Top.Name())
 }
 
 func TestSharedResourceAndDomainIsolation(t *testing.T) {
@@ -167,9 +171,9 @@ func TestSharedResourceAndDomainIsolation(t *testing.T) {
 	s.Add("X", node)
 	s.Add("Y", node)
 	require.NoError(t, s.Initialize())
-	xa := blueprint.Lookup[*resourceComp](s, "X.A")
-	xb := blueprint.Lookup[*resourceComp](s, "X.B")
-	ya := blueprint.Lookup[*resourceComp](s, "Y.A")
+	xa := s.Lookup("X.A").(*resourceComp)
+	xb := s.Lookup("X.B").(*resourceComp)
+	ya := s.Lookup("Y.A").(*resourceComp)
 	require.Same(t, xa.Resources.Storage, xb.Resources.Storage)
 	require.NotSame(t, xa.Resources.Storage, ya.Resources.Storage)
 	xa.Resources.Storage.Write(0, []byte{42})
@@ -259,7 +263,7 @@ func TestInitializationPanicAndUnconnected(t *testing.T) {
 	defer s.Terminate()
 	s.Add("A", comp(testSpec{Peer: messaging.Unconnected}))
 	require.NoError(t, s.Initialize())
-	a := blueprint.Lookup[*testComp](s, "A")
+	a := s.Lookup("A").(*testComp)
 	require.PanicsWithValue(t, `twowaybuffered: sender "A.Top" cannot send to "<unconnected>"`,
 		func() { a.Ports.Top.Send(messaging.Msg{Dst: messaging.Unconnected}) })
 	bad := sim.MakeBuilder().Build()
@@ -267,7 +271,7 @@ func TestInitializationPanicAndUnconnected(t *testing.T) {
 	bad.Add("Broken", comp(testSpec{Peer: "Missing.Top"}))
 	require.Panics(t, func() { _ = bad.Initialize() })
 	require.Panics(t, func() { _ = bad.Initialize() })
-	require.Panics(t, func() { blueprint.Lookup[int](s, "A") })
+	require.Panics(t, func() { _ = s.Lookup("A").(int) })
 }
 
 func TestBoundaryChecksOriginalAliases(t *testing.T) {
@@ -280,18 +284,21 @@ func TestBoundaryChecksOriginalAliases(t *testing.T) {
 	bp.Add("External", comp(testSpec{Peer: bp.PortRef("D.Top")}))
 	x, err := blueprint.Expand(&bp)
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(string(x.Nodes()[0].Node.(*blueprint.ComponentNode).Spec.(testSpec).
+	require.True(t, strings.HasPrefix(string(x.Nodes()[0].(*blueprint.ComponentNode).Spec.(testSpec).
 		Peer), "External"))
 }
 
 type linkedSpec struct{ Tag string }
+
 type linkedResource struct {
 	name   string
 	parent *linkedResource
 }
+
 type linkedUses struct{ Parent *linkedResource }
 
 func (r *linkedResource) Name() string { return r.name }
+
 func (s linkedSpec) BuildResource(simulation modeling.Simulation, name string, uses linkedUses) *linkedResource {
 	r := &linkedResource{name, uses.Parent}
 	simulation.RegisterResource(r)
@@ -299,26 +306,29 @@ func (s linkedSpec) BuildResource(simulation modeling.Simulation, name string, u
 }
 
 type wrappedSpec struct{ Tag string }
+
 type wrappedResource struct {
 	name    string
 	storage *mem.Storage
 }
+
 type wrappedUses struct{ Storage *mem.Storage }
 
 func (r *wrappedResource) Name() string { return r.name }
+
 func (s wrappedSpec) BuildResource(simulation modeling.Simulation, name string, uses wrappedUses) *wrappedResource {
 	r := &wrappedResource{name, uses.Storage}
 	simulation.RegisterResource(r)
 	return r
 }
+
 func TestResourceDependenciesAndTypeDiagnostics(t *testing.T) {
 	s := sim.MakeBuilder().Build()
 	defer s.Terminate()
 	s.Add("Wrapper", blueprint.Res(wrappedSpec{Tag: "outer"}).Use("Storage", "Memory"))
 	s.Add("Memory", blueprint.Res(mem.StorageSpec{Capacity: 64, UnitSize: 16}))
 	require.NoError(t, s.Initialize())
-	require.Same(t, blueprint.Lookup[*mem.Storage](s, "Memory"), blueprint.Lookup[*wrappedResource](s,
-		"Wrapper").storage)
+	require.Same(t, s.Lookup("Memory").(*mem.Storage), s.Lookup("Wrapper").(*wrappedResource).storage)
 	var mismatch blueprint.Blueprint
 	mismatch.Add("Wrong", blueprint.Res(wrappedSpec{}).Use("Storage", "Other"))
 	mismatch.Add("Other", blueprint.Res(wrappedSpec{}).Use("Storage", "Other"))
@@ -343,8 +353,7 @@ func TestSamePrefixComponentAndDomainAlias(t *testing.T) {
 	}))
 	s.Add("Driver", comp(testSpec{Peer: "GPU.CommandProcessor"}))
 	require.NoError(t, s.Initialize())
-	require.Equal(t, messaging.RemotePort("GPU.CommandProcessor.Top"), blueprint.Lookup[*testComp](s,
-		"Driver").Spec.Peer)
+	require.Equal(t, messaging.RemotePort("GPU.CommandProcessor.Top"), s.Lookup("Driver").(*testComp).Spec.Peer)
 }
 
 func TestPortGroupConfigurationOrder(t *testing.T) {
@@ -356,7 +365,7 @@ func TestPortGroupConfigurationOrder(t *testing.T) {
 	}
 	s.Add("Group", n)
 	require.NoError(t, s.Initialize())
-	ports := blueprint.Lookup[*testComp](s, "Group").Ports.Links
+	ports := s.Lookup("Group").(*testComp).Ports.Links
 	require.Len(t, ports, 17)
 	for i, p := range ports {
 		require.Equal(t, fmt.Sprintf("Group.Links[%d]", i), p.Name())
@@ -397,6 +406,7 @@ func TestMalformedConstructionDescriptors(t *testing.T) {
 	_, err := blueprint.Expand(&bp)
 	require.ErrorContains(t, err, "Raw.Kind: use Res")
 }
+
 func TestAdditionalDeclarationDiagnostics(t *testing.T) {
 	cases := []struct {
 		name, want string
@@ -439,4 +449,58 @@ func TestAdditionalDeclarationDiagnostics(t *testing.T) {
 			require.ErrorContains(t, err, tt.want)
 		})
 	}
+}
+
+func TestNodeNamesBelongToIndependentSnapshots(t *testing.T) {
+	original := comp(testSpec{})
+	var localName string
+	domain := blueprint.NewDomain[modeling.None, modeling.None](modeling.None{}, func(_ modeling.None,
+		bp *blueprint.Blueprint) {
+		absolute := bp.Add("Child", original)
+		require.Contains(t, absolute, ".Child")
+		localName = bp.Nodes()[0].Name()
+	})
+	var bp blueprint.Blueprint
+	bp.Add("A", domain)
+	bp.Add("B", domain)
+	require.Empty(t, original.Name())
+	require.Empty(t, domain.Name())
+	require.Equal(t, "A", bp.Nodes()[0].Name())
+	expanded, err := blueprint.Expand(&bp)
+	require.NoError(t, err)
+	require.Equal(t, "Child", localName)
+	require.Equal(t, "A.Child", expanded.Nodes()[0].Name())
+	require.Equal(t, "B.Child", expanded.Nodes()[1].Name())
+	require.Empty(t, original.Name())
+	require.Equal(t, "A", bp.Nodes()[0].Name())
+}
+
+func TestSimulationLookupUsesRuntimeInventoryInBothAssemblyModes(t *testing.T) {
+	for _, declarative := range []bool{false, true} {
+		s := sim.MakeBuilder().Build()
+		defer s.Terminate()
+		require.Panics(t, func() { s.Lookup("Agent") })
+		if declarative {
+			s.Add("Agent", comp(testSpec{}))
+			s.Add("Memory", blueprint.Res(mem.StorageSpec{Capacity: 64, UnitSize: 16}))
+		} else {
+			c := modeling.MakeBuilder[*testComp](testSpec{}).WithSimulation(s).Build("Agent")
+			c.BindPort("Top", twowaybuffered.MakeBuilder().WithSimulation(s).WithSpec(portSpec()).Build())
+			mem.MakeStorageBuilder().WithSimulation(s).WithCapacity(64).WithUnitSize(16).Build("Memory")
+		}
+		require.NoError(t, s.Initialize())
+		c := s.Lookup("Agent").(*testComp)
+		require.Same(t, c.Ports.Top, s.Lookup("Agent.Top"))
+		require.IsType(t, &mem.Storage{}, s.Lookup("Memory"))
+		require.Same(t, s.Engine(), s.Lookup(s.Engine().(*timing.SerialEngine).Name()))
+		require.Panics(t, func() { s.Lookup("Absent") })
+	}
+}
+
+func TestDomainPortsCannotShadowRuntimeInventory(t *testing.T) {
+	s := sim.MakeBuilder().Build()
+	defer s.Terminate()
+	s.Add(s.Engine().(*timing.SerialEngine).Name(), blueprint.NewDomain[modeling.None, modeling.None](modeling.None{},
+		func(_ modeling.None, _ *blueprint.Blueprint) {}))
+	require.Panics(t, func() { _ = s.Initialize() })
 }

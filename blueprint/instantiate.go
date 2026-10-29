@@ -14,7 +14,8 @@ import (
 // Instantiate creates an expanded declaration in the supplied simulation.
 // Simulation.Initialize calls this before setup validation. It is an assembly
 // hook, not a replacement for Simulation.Initialize. Failures panic; discard the
-// simulation after any failure. The returned inventory includes domain Ports.
+// simulation after any failure. The returned map contains only named exported
+// Ports values; live entities are registered in the Simulation inventory.
 func (bp *Blueprint) Instantiate(s modeling.Simulation) map[string]any {
 	if !bp.expanded {
 		failf("", "Instantiate", "call Expand first")
@@ -23,7 +24,7 @@ func (bp *Blueprint) Instantiate(s modeling.Simulation) map[string]any {
 	resources := make(map[string]*ResourceNode)
 	for _, e := range bp.entries {
 		if n, ok := e.node.(*ResourceNode); ok {
-			resources[e.name] = n
+			resources[e.node.Name()] = n
 		}
 	}
 	for _, name := range bp.resourceOrder(resources) {
@@ -34,68 +35,60 @@ func (bp *Blueprint) Instantiate(s modeling.Simulation) map[string]any {
 	}
 	bp.instantiateComponents(s, objects)
 	bp.instantiateConnections(s, objects)
-	bp.instantiateDomainPorts(objects)
-	return objects
+	return bp.instantiateExportedPorts(objects)
 }
+
 func (bp *Blueprint) instantiateComponents(s modeling.Simulation, objects map[string]any) {
 	for _, e := range bp.entries {
 		n, ok := e.node.(*ComponentNode)
 		if !ok {
 			continue
 		}
-		contextual(e.name, "component", func() {
-			c := n.create(s, e.name, clone(n.Spec), inject(n.resourcesType, n.Uses, objects))
-			objects[e.name] = c
+		contextual(e.node.Name(), "component", func() {
+			c := n.create(s, e.node.Name(), clone(n.Spec), inject(n.resourcesType, n.Uses, objects))
+			objects[e.node.Name()] = c
 			for _, p := range n.Ports {
 				port := twowaybuffered.MakeBuilder().WithSimulation(s).WithSpec(p.Spec).Build()
 				c.BindPort(p.Slot, port)
-				objects[join(e.name, p.Slot)] = port
+				objects[join(e.node.Name(), p.Slot)] = port
 			}
 		})
 	}
 }
+
 func (bp *Blueprint) instantiateConnections(s modeling.Simulation, objects map[string]any) {
 	for _, e := range bp.entries {
-		contextual(e.name, "connection", func() {
+		contextual(e.node.Name(), "connection", func() {
 			switch n := e.node.(type) {
 			case *ConnectionNode:
-				c := direct.NewConnection(e.name, s, n.Freq)
+				c := direct.NewConnection(e.node.Name(), s, n.Freq)
 				for _, ref := range n.Members {
 					c.BindPort(objects[string(ref)].(messaging.Port))
 				}
-				objects[e.name] = c
+				objects[e.node.Name()] = c
 			case *NetworkNode:
 				ports := make([]messaging.Port, len(n.members))
 				for i, ref := range n.members {
 					ports[i] = objects[string(ref)].(messaging.Port)
 				}
-				n.assemble(clone(n.spec), s, e.name, ports)
+				n.assemble(clone(n.spec), s, e.node.Name(), ports)
 			}
 		})
 	}
 }
-func (bp *Blueprint) instantiateDomainPorts(objects map[string]any) {
-	for _, d := range bp.domains {
-		value := reflect.New(d.portsType).Elem()
-		exposed := make(map[string]string)
-		for _, x := range d.exposes {
-			exposed[x.field] = x.target
+
+func (bp *Blueprint) instantiateExportedPorts(objects map[string]any) map[string]any {
+	exports := make(map[string]any, len(bp.exports))
+	for _, export := range bp.exports {
+		value := reflect.New(export.portsType).Elem()
+		for _, binding := range export.bindings {
+			setPort(value, binding.field, objects[binding.target].(messaging.Port))
 		}
-		slots := portSlots(d.name, d.portsType, exposed)
-		for _, slot := range slots {
-			ref := join(d.name, slot)
-			for {
-				next, ok := bp.aliases[ref]
-				if !ok {
-					break
-				}
-				ref = next
-			}
-			setPort(value, slot, objects[ref].(messaging.Port))
-		}
-		objects[d.name] = value.Interface()
+		exports[export.name] = value.Interface()
 	}
+	return exports
 }
+
 func inject(t reflect.Type, uses map[string]string, objects map[string]any) reflect.Value {
 	v := reflect.New(t).Elem()
 	for i := range t.NumField() {
@@ -104,6 +97,7 @@ func inject(t reflect.Type, uses map[string]string, objects map[string]any) refl
 	}
 	return v
 }
+
 func setPort(v reflect.Value, slot string, p messaging.Port) {
 	bracket := strings.IndexByte(slot, '[')
 	if bracket < 0 {
@@ -120,15 +114,4 @@ func setPort(v reflect.Value, slot string, p messaging.Port) {
 		field.SetLen(index + 1)
 	}
 	field.Index(index).Set(reflect.ValueOf(p))
-}
-
-// Lookup returns a component, resource, port, or domain Ports value after
-// successful initialization. It panics for missing paths or mismatched types.
-func Lookup[T any](s interface{ BlueprintObject(string) any }, path string) T {
-	value := s.BlueprintObject(path)
-	typed, ok := value.(T)
-	if !ok {
-		failf(path, "Lookup", "got %T, expected %s", value, reflect.TypeFor[T]())
-	}
-	return typed
 }
