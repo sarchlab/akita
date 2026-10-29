@@ -37,6 +37,9 @@ func Expand(bp *Blueprint) (out *Blueprint, err error) {
 	if bp.expanded {
 		failf("", "Expand", "already expanded")
 	}
+	if len(bp.exposes) != 0 {
+		failf(bp.scope, "Expose", "requires a domain declaration")
+	}
 	out = &Blueprint{expanded: true}
 	x := &expansion{Blueprint: out, aliases: make(map[string]string)}
 	names := make(map[string]bool)

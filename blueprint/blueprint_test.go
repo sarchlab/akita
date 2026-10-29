@@ -504,3 +504,18 @@ func TestDomainPortsCannotShadowRuntimeInventory(t *testing.T) {
 		func(_ modeling.None, _ *blueprint.Blueprint) {}))
 	require.Panics(t, func() { _ = s.Initialize() })
 }
+
+func TestExposeRequiresDomainButAllowsEmptyRootDomain(t *testing.T) {
+	var bare blueprint.Blueprint
+	bare.Add("Inner", comp(testSpec{}))
+	bare.Expose("Top", "Inner.Top")
+	_, err := blueprint.Expand(&bare)
+	require.EqualError(t, err, "blueprint: <root>.Expose: requires a domain declaration")
+
+	s := sim.MakeBuilder().Build()
+	defer s.Terminate()
+	s.Add("", leaf(domainSpec{}))
+	require.NoError(t, s.Initialize())
+	ports := s.Lookup("").(domainPorts)
+	require.Same(t, s.Lookup("Inner.Top"), ports.Top)
+}
