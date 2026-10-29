@@ -17,10 +17,13 @@ var (
 		messaging.RoleDef{Name: "requester",
 			Sends: []any{Req{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []any{Rsp{}, PageFault{}}},
+			Sends: []any{Rsp{}}},
+		messaging.RoleDef{Name: "notifier",
+			Sends: []any{PageFault{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
+	Notifier  = Protocol.Role("notifier")
 )
 
 // Req is a translation request.
@@ -44,7 +47,7 @@ type Rsp struct {
 // PageFault notifies the agent that services faults (a driver) that the
 // translation of page VAddr of process PID, requested by device DeviceID,
 // faulted. Page is the mapping the walk found. A responder that faults sends
-// it from the same port as its responses; no answer is expected.
+// it from a notifier port; no answer is expected.
 type PageFault struct {
 	PID      vm.PID
 	VAddr    uint64

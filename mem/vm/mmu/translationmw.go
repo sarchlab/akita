@@ -130,7 +130,7 @@ func (m *translationMW) doPageWalkFault(walkingIndex int) bool {
 			Page:     walking.Page,
 		},
 		ID:  m.comp.NewID(),
-		Src: m.topPort().AsRemote(),
+		Src: m.comp.Ports.Notification.AsRemote(),
 		Dst: m.comp.Spec.FaultHandler,
 	})
 	state.NumFaults++
@@ -138,13 +138,15 @@ func (m *translationMW) doPageWalkFault(walkingIndex int) bool {
 	return true
 }
 
-// sendFaults sends the queued fault notifications.
+// sendFaults sends the queued fault notifications from the Notification
+// port.
 func (m *translationMW) sendFaults() bool {
 	state := &m.comp.State
 	madeProgress := false
 
-	for len(state.PendingFaults) > 0 && m.topPort().CanSend() {
-		m.topPort().Send(state.PendingFaults[0])
+	port := m.comp.Ports.Notification
+	for len(state.PendingFaults) > 0 && port.CanSend() {
+		port.Send(state.PendingFaults[0])
 		state.PendingFaults = state.PendingFaults[1:]
 		madeProgress = true
 	}

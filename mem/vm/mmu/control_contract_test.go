@@ -24,6 +24,7 @@ func TestControlContract(t *testing.T) {
 		compPorts := makePorts(sim, "MMU", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Control", compPorts.Control)
+		comp.BindPort("Notification", compPorts.Notification)
 
 		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Control} {
 			(&noopConn{}).BindPort(p)

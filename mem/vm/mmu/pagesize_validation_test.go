@@ -26,6 +26,7 @@ func TestPageSizeValidation(t *testing.T) {
 	ports := makePorts(sim, "", 4096)
 	mmu.BindPort("Top", ports.Top)
 	mmu.BindPort("Control", ports.Control)
+	mmu.BindPort("Notification", ports.Notification)
 	if mmu == nil {
 		t.Error("MMU creation should succeed with matching page sizes")
 	}
@@ -54,6 +55,7 @@ func TestPageSizeValidation(t *testing.T) {
 	badPorts := makePorts(sim, "", 4096)
 	bad.BindPort("Top", badPorts.Top)
 	bad.BindPort("Control", badPorts.Control)
+	bad.BindPort("Notification", badPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +79,7 @@ func TestPageTableRequired(t *testing.T) {
 	builtComponentPorts := makePorts(sim, "NoPageTable", 4096)
 	builtComponent.BindPort("Top", builtComponentPorts.Top)
 	builtComponent.BindPort("Control", builtComponentPorts.Control)
+	builtComponent.BindPort("Notification", builtComponentPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		t.Fatal(err)
 	}

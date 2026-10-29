@@ -210,6 +210,7 @@ func buildMMU(
 
 	ioMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
 	ioMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
+	ioMMU.BindPort("Notification", newPort(s, "IoMMU.Notification"))
 
 	return ioMMU
 }

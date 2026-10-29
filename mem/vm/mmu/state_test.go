@@ -27,6 +27,7 @@ func buildTestMMU(sim *testsim.Simulation, name string) *Comp {
 	compPorts := makePorts(sim, name, 4096)
 	comp.BindPort("Top", compPorts.Top)
 	comp.BindPort("Control", compPorts.Control)
+	comp.BindPort("Notification", compPorts.Notification)
 
 	return comp
 }

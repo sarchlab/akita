@@ -220,6 +220,7 @@ m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     Build("MMU")
 m.BindPort("Top", mmuPorts.Top)
 m.BindPort("Control", mmuPorts.Control)
+m.BindPort("Notification", mmuPorts.Notification)
 g := modeling.MakeBuilder[*gmmu.Comp](gmmu.DefaultSpec()).
     WithSimulation(sim).
     WithResources(gmmu.Resources{PageTable: pageTable}).
@@ -371,6 +372,7 @@ m := modeling.MakeBuilder[*mmu.Comp](mmu.DefaultSpec()).
     Build("MMU")
 m.BindPort("Top", mmuPorts.Top)
 m.BindPort("Control", mmuPorts.Control)
+m.BindPort("Notification", mmuPorts.Notification)
 // each TLB's port gets a hook that increments accesses
 ```
 

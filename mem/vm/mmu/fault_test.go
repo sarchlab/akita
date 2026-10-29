@@ -34,8 +34,10 @@ func buildFaultingMMU(
 	ports := makePorts(sim, "MMU", topBufSize)
 	mmuComp.BindPort("Top", ports.Top)
 	mmuComp.BindPort("Control", ports.Control)
+	mmuComp.BindPort("Notification", ports.Notification)
 	(&noopConn{}).BindPort(mmuComp.Ports.Top)
 	(&noopConn{}).BindPort(mmuComp.Ports.Control)
+	(&noopConn{}).BindPort(mmuComp.Ports.Notification)
 	require.NoError(t, sim.Initialize())
 
 	return mmuComp, pageTable
@@ -86,9 +88,9 @@ func TestMMUFaultsOnARemoteUnifiedPage(t *testing.T) {
 	require.Equal(t, messaging.RemotePort("L2TLB.Bottom"), msgs[0].Dst)
 	require.Empty(t, mmuComp.State.WalkingTranslations)
 
-	// The notification follows the response, from the same port.
+	// The notification follows the response, from the Notification port.
 	require.True(t, mmuComp.Middlewares.Translation.Handle(nil))
-	msgs = outgoing(mmuComp.Ports.Top)
+	msgs = outgoing(mmuComp.Ports.Notification)
 	require.Len(t, msgs, 1)
 	fault := msgs[0].Payload.(addrtransprotocol.PageFault)
 	require.Equal(t, messaging.RemotePort("Driver.PageMigration"), msgs[0].Dst)
