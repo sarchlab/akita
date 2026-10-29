@@ -38,7 +38,8 @@ type Ports struct {
 	// Translation sends translation requests to the translation providers.
 	Translation messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.requester"`
 
-	// Control receives enable, pause, drain, flush, and reset commands.
+	// Control receives enable, pause, drain, reset, hold, and release
+	// commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
@@ -102,6 +103,29 @@ type reqToBottomState struct {
 	ReqToBottomSrc  messaging.RemotePort `json:"req_to_bottom_src"`
 	ReqToBottomDst  messaging.RemotePort `json:"req_to_bottom_dst"`
 	ReqToBottomType string               `json:"req_to_bottom_type"`
+
+	// PID and VAddr locate the page of the access, so that a Hold of the
+	// page can wait for it.
+	PID   vm.PID `json:"pid"`
+	VAddr uint64 `json:"vaddr"`
+}
+
+// heldPageState is a page whose accesses wait. Held is set by a Hold and
+// Faulted by a fault response; a Release clears both.
+type heldPageState struct {
+	PID     vm.PID `json:"pid"`
+	VAddr   uint64 `json:"vaddr"`
+	Held    bool   `json:"held"`
+	Faulted bool   `json:"faulted"`
+}
+
+// pendingHoldState is a Hold that is not acknowledged yet: an access to one
+// of its pages, or a translation of one, is still in flight.
+type pendingHoldState struct {
+	ID     uint64               `json:"id"`
+	Src    messaging.RemotePort `json:"src"`
+	PID    vm.PID               `json:"pid"`
+	VAddrs []uint64             `json:"vaddrs"`
 }
 
 // state contains mutable runtime data for the AddressTranslator.
@@ -111,6 +135,21 @@ type state struct {
 	CurrentCmdSrc       messaging.RemotePort `json:"current_cmd_src"`
 	Transactions        []transactionState   `json:"transactions"`
 	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
+
+	// HeldPages are the pages whose accesses wait, PendingHolds the Holds
+	// not acknowledged yet. HeldReqs is the held list: the waiting accesses
+	// in arrival order. They use no transaction slot, so accesses to other
+	// pages keep flowing. ReplayReqs are the accesses that a Release let go,
+	// waiting to be sent for translation again.
+	HeldPages    []heldPageState    `json:"held_pages"`
+	PendingHolds []pendingHoldState `json:"pending_holds"`
+	HeldReqs     []incomingReqState `json:"held_reqs"`
+	ReplayReqs   []incomingReqState `json:"replay_reqs"`
+
+	// NumHeldReqs counts the accesses that ever waited, NumFaults the fault
+	// responses.
+	NumHeldReqs uint64 `json:"num_held_reqs"`
+	NumFaults   uint64 `json:"num_faults"`
 }
 
 // Helper functions
@@ -253,6 +292,45 @@ func buildReqToBottom(
 		ReqToBottomSrc:  translatedReq.Src,
 		ReqToBottomDst:  translatedReq.Dst,
 		ReqToBottomType: fmt.Sprintf("%T", translatedReq.Payload),
+		PID:             reqState.PID,
+		VAddr:           reqState.Address,
+	}
+}
+
+// findHeldPage returns the index of the held page that holds vAddr of
+// process pid, or -1.
+func findHeldPage(state *state, pid vm.PID, vAddr, log2PageSize uint64) int {
+	page := addrToPageID(vAddr, log2PageSize)
+
+	for i, p := range state.HeldPages {
+		if p.PID == pid && p.VAddr == page {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// isPageHeld reports whether the accesses to the page of vAddr must wait.
+func isPageHeld(state *state, pid vm.PID, vAddr, log2PageSize uint64) bool {
+	return findHeldPage(state, pid, vAddr, log2PageSize) >= 0
+}
+
+// holdPage marks the page of vAddr held (by a Hold) or faulted.
+func holdPage(state *state, pid vm.PID, vAddr, log2PageSize uint64, fault bool) {
+	i := findHeldPage(state, pid, vAddr, log2PageSize)
+	if i < 0 {
+		state.HeldPages = append(state.HeldPages, heldPageState{
+			PID:   pid,
+			VAddr: addrToPageID(vAddr, log2PageSize),
+		})
+		i = len(state.HeldPages) - 1
+	}
+
+	if fault {
+		state.HeldPages[i].Faulted = true
+	} else {
+		state.HeldPages[i].Held = true
 	}
 }
 

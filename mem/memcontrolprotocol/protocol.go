@@ -57,13 +57,30 @@ const (
 	// by Addresses and PID. Conditional verb (caches only). Ack is
 	// asynchronous (on writeback completion).
 	CmdFlush
+
+	// CmdHold stops the accesses to the pages at Addresses (page-aligned
+	// virtual addresses) of process PID: a new access to them waits, and
+	// so does an access whose translation arrives after the Hold. Other
+	// pages are not affected, and the component keeps processing control
+	// commands while a Hold waits. Legal in any state. Conditional verb
+	// (address translators). Ack is asynchronous: once no issued access to
+	// the pages is outstanding and no translation of them is in flight.
+	CmdHold
+
+	// CmdRelease sends the accesses that wait on the pages at Addresses of
+	// process PID for translation again, in the order they arrived. It
+	// ends a Hold of the pages and also releases the accesses that wait on
+	// a translation fault. Releasing a page that is not held is not an
+	// error. Legal in any state. Conditional verb (address translators).
+	// Ack is synchronous.
+	CmdRelease
 )
 
 // Req is the unified control request for all memory agents.
 type Req struct {
 	Command   Command
-	Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
-	PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
+	Addresses []uint64 // Invalidate / Flush filter (empty = all entries); Hold / Release pages.
+	PID       vm.PID   // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
 }
 
 // Rsp is the unified response to a Req.

@@ -104,6 +104,8 @@ func RunContract(
 		{memcontrolprotocol.CmdReset, "Reset"},
 		{memcontrolprotocol.CmdInvalidate, "Invalidate"},
 		{memcontrolprotocol.CmdFlush, "Flush"},
+		{memcontrolprotocol.CmdHold, "Hold"},
+		{memcontrolprotocol.CmdRelease, "Release"},
 	}
 
 	for _, v := range verbs {

@@ -17,7 +17,7 @@ var (
 		messaging.RoleDef{Name: "requester",
 			Sends: []any{Req{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []any{Rsp{}}},
+			Sends: []any{Rsp{}, PageFault{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -31,7 +31,23 @@ type Req struct {
 	TransLatency uint64
 }
 
-// Rsp is a translation response carrying the physical address.
+// Rsp is a translation response carrying the physical address. When Fault is
+// set, the translation faulted: Page is the current mapping, which the
+// requester must not use, and no TLB caches it. The requester holds the
+// access until it is released (memcontrolprotocol.CmdRelease) and then
+// translates it again.
 type Rsp struct {
-	Page vm.Page
+	Page  vm.Page
+	Fault bool
+}
+
+// PageFault notifies the agent that services faults (a driver) that the
+// translation of page VAddr of process PID, requested by device DeviceID,
+// faulted. Page is the mapping the walk found. A responder that faults sends
+// it from the same port as its responses; no answer is expected.
+type PageFault struct {
+	PID      vm.PID
+	VAddr    uint64
+	DeviceID uint64
+	Page     vm.Page
 }

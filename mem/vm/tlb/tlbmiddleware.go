@@ -200,7 +200,8 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	req := mshrEntry.Requests[0]
 	reqMsg := req.Msg
 	rspToTop := messaging.Msg{Payload: addrtransprotocol.Rsp{
-		Page: page,
+		Page:  page,
+		Fault: mshrEntry.Fault,
 	},
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),
@@ -408,7 +409,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	item := itemI
 	spec := m.comp.Spec
-	page := item.Payload.(addrtransprotocol.Rsp).Page
+	content := item.Payload.(addrtransprotocol.Rsp)
+	page := content.Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
 	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {
@@ -433,19 +435,24 @@ func (m *tlbMiddleware) parseBottom() bool {
 		})
 	}
 
-	setID := vAddrToSetID(page.VAddr, spec)
-	wayID, ok := setEvict(&next.Sets[setID])
+	// A fault response is forwarded to the requests but not filled: the
+	// requests translate again once the fault is serviced.
+	if !content.Fault {
+		setID := vAddrToSetID(page.VAddr, spec)
+		wayID, ok := setEvict(&next.Sets[setID])
 
-	if !ok {
-		panic("failed to evict")
+		if !ok {
+			panic("failed to evict")
+		}
+
+		setUpdate(&next.Sets[setID], wayID, page)
+		setVisit(&next.Sets[setID], wayID)
 	}
-
-	setUpdate(&next.Sets[setID], wayID, page)
-	setVisit(&next.Sets[setID], wayID)
 
 	next.HasRespondingMSHR = true
 	next.RespondingMSHRData = next.MSHREntries[mshrIdx]
 	next.RespondingMSHRData.Page = page
+	next.RespondingMSHRData.Fault = content.Fault
 
 	// Get reqToBottom for tracing before removing
 	sendTaskID := next.MSHREntries[mshrIdx].SendTaskID
