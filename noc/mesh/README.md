@@ -51,3 +51,19 @@ same rule. Device-facing ports remain caller-owned with their original sizes.
 Forwarding shares each output's width among contenders, limits each input to
 its input width, and rotates priority in binding order each cycle. Buffering is
 one cycle of capacity, not a guarantee of full throughput under contention.
+
+## Blueprint declaration
+
+```go
+spec := mesh.DefaultSpec()
+spec.Tiles = []mesh.Tile{
+    {X: 0, Ports: []messaging.RemotePort{bp.PortRef("CPU.Top")}},
+    {X: 1, Ports: []messaging.RemotePort{bp.PortRef("GPU.Top")}},
+}
+bp.Add("Mesh", mesh.Node(spec))
+```
+
+`Node` retains the declaration until `Simulation.Initialize`. Tile slice order
+and each tile's port order are the connector's attachment order. Repeated
+coordinates append devices to the same tile in that order. References can target
+exposed ports of child domains; expansion resolves those aliases before assembly.

@@ -64,3 +64,25 @@ same rule. Device-facing ports remain caller-owned with their original sizes.
 Forwarding shares each output's width among contenders, limits each input to
 its input width, and rotates priority in binding order each cycle. Buffering is
 one cycle of capacity, not a guarantee of full throughput under contention.
+
+## Blueprint declaration
+
+```go
+spec := nvlink.DefaultSpec()
+spec.RootPorts = []messaging.RemotePort{bp.PortRef("CPU.Top")}
+spec.NumSwitches = 1
+spec.PCIeLinks = []nvlink.Link{{A: 0, B: 1}}
+spec.Devices = []nvlink.Device{
+    {Switch: 1, Ports: []messaging.RemotePort{bp.PortRef("GPU[0].Top")}},
+    {Switch: 1, Ports: []messaging.RemotePort{bp.PortRef("GPU[1].Top")}},
+}
+spec.NVLinks = []nvlink.Link{{A: 1, B: 2}}
+bp.Add("Fabric", nvlink.Node(spec))
+```
+
+Switch index zero is the root; indices 1 through `NumSwitches` are added in order.
+Device index zero is the root device created from `RootPorts`; `Devices[i]` has
+index `i+1`. Thus an NVLink `{A: 0, B: 1}` links the root device to the first listed
+device. Construction adds the root, switches, PCIe links, devices, then NVLinks,
+with each list and port group preserving its declared order. The network is built
+only during `Simulation.Initialize`.

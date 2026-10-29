@@ -23,6 +23,68 @@ Initialize because it also constructs runtime state. `Simulation.Run()` checks r
 do not check it. RunUntil remains a concrete serial-engine API for deterministic
 checkpoint/testing boundaries, not part of Engine or Simulation.
 
+## Declarative assembly
+
+A Simulation may instead own a `blueprint.Blueprint`, populated by `Simulation.Add`.
+Domains only declare nodes and exposures; they never create runtime objects.
+Nodes retain their own names, configuration and private deferred construction
+metadata. Add snapshots local names; Expand assigns absolute names on copies. At
+`Initialize`, Expand resolves domains, names and exposed port aliases, validates
+references and explicit port buffers, and then instantiation builds resources,
+components and ports, connections and connector-owned networks before existing
+setup validation. Blueprint initialization failures panic; discard the simulation.
+There is no rollback or supported retry. The empty-blueprint hand-built lifecycle
+remains unchanged. Mixing manual and declarative assembly is outside the supported
+paradigm; do not introduce bridging mechanisms or special prohibition checks.
+
+Domains declare `Spec`, literal `DefaultSpec()`, static `Ports`, and a one-line
+`Node(spec)` returning `blueprint.NewDomain[Spec, Ports](spec, build)`. The inspector
+reads these declarations without executing them. Every single port and every group
+element must be exposed; group indices are contiguous and empty groups are allowed.
+Cross-domain port references target exposed ports. Parent-supplied references are
+already absolute and pass through child Specs unchanged. Resource paths identify
+shared resources and dependencies globally, without port exposure boundaries.
+Build copies configuration; expansion is pure. Domain hierarchy and aliases are
+used only during expansion. The flat result retains named exported Ports types
+and fully resolved field bindings, not domain trees.
+
+Blueprint ports explicitly configure both incoming and outgoing capacities.
+`messaging.Unconnected` is an intentionally absent destination, never a connection
+member; sending to it panics with the sender and address. No runtime kind registry
+or JSON loader is required. JSON-to-Go program generation is a separate follow-up.
+
+Network declarations use the public `blueprint.NewNetwork` extension contract.
+The core resolves ordered device references and invokes the connector callback at
+initialization; it does not contain connector-specific dispatch. Mesh, PCIe and
+NVLink use the same mechanism. Expand retains network declarations without exposing
+internal switches or endpoints; existing connectors create those during
+initialization, then existing setup computes and validates routes.
+
+Runtime lookup belongs to the Simulation instance: `s.Lookup(name) any`. It reads
+the same entity inventory for manual and Blueprint hardware. Exported domain Ports
+values are separate named values and may not shadow runtime entity names. Lookup
+requires successful initialization; missing names and caller type mismatches panic.
+Successful initialization discards Blueprint construction data.
+
+Workloads own data and their own `Execute(*sim.Simulation)` method. They look up
+agreed hardware names/types and call package-specific operations to load/start
+execution after Initialize. Hardware includes drivers/agents and resources; input
+and active RNG/address state live in checkpointed State. Spec remains immutable.
+There is no universal StartWorkload interface or execution-model registry. The
+Spec/DefaultSpec/New convention does not imply current inspector workload support;
+JSON-to-Go generation and Yuzawa multi-kind imports remain separate work.
+
+`sim` depends on `blueprint`, which constructs concrete direct connections and
+two-way buffered ports. Tests in `direct`, `twowaybuffered`, and their dependencies
+that use `sim` must use external test packages to avoid import cycles.
+
+Component-specific package builders only supply Spec and Resources to the model
+builder; checks and derived runtime state belong to Spec or setup initialization.
+Blueprint construction invokes the model builder directly. Any existing Build-time
+check must remain in that path for v5 compatibility while also covering Blueprint
+setup. Resource Specs implement typed `BuildResource` construction, with resource
+dependencies supplied through their typed Resources argument.
+
 ## Component ownership
 
 - Spec holds immutable configuration, including destination addresses and routing

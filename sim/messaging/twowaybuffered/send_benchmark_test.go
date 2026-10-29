@@ -1,4 +1,4 @@
-package twowaybuffered
+package twowaybuffered_test
 
 import (
 	"testing"
@@ -28,7 +28,7 @@ func BenchmarkSend(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		p.Send(msg)
-		p.outgoingBuf.Pop()
+		p.TestPopOutgoing()
 	}
 }
 
@@ -44,7 +44,7 @@ func BenchmarkSendParallel(b *testing.B) {
 		p.BindConnection(&benchmarkConnection{})
 		for pb.Next() {
 			p.Send(msg)
-			p.outgoingBuf.Pop()
+			p.TestPopOutgoing()
 		}
 	})
 }

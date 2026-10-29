@@ -194,3 +194,17 @@ cd tasktree && go run main.go
 All models share the five structs, the `Comp` alias, `DefaultSpec()`, and the port and
 message infrastructure; they differ only in which events reach the
 middlewares. See the "Component Models" section of `modeling/README.md`.
+
+## Hardware and workload tutorials
+
+`ping/example_test.go` assembles two wakeup agents with manual builders;
+`ping/blueprint_example_test.go` declares identical hardware with Blueprint.
+Both execute `ping/workload` after Initialize and assert the same printed output:
+
+```sh
+go test -run Example -v ./examples/ping
+```
+
+The tutorials explain the shared name/type contract and `s.Lookup`:
+[manual hardware](../doc/tutorial/configuration/01_manual_hardware.md) and
+[Blueprint hardware](../doc/tutorial/configuration/02_blueprint_hardware.md).

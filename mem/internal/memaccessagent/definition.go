@@ -19,6 +19,8 @@ func (s *State) Initialize(c *Comp) {
 	spec := c.Spec
 
 	*s = State{
+		MaxAddress:      spec.MaxAddress,
+		AddressOffset:   spec.AddressOffset,
 		WriteLeft:       spec.WriteLeft,
 		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),

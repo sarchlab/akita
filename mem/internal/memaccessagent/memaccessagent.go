@@ -12,7 +12,8 @@ import (
 
 var dumpLog = false
 
-// Spec contains the immutable configuration for the MemAccessAgent.
+// Spec contains hardware routing/frequency and legacy initial workload defaults.
+// New programs apply workload data with Start after initialization.
 type Spec struct {
 	LowModule  messaging.RemotePort `json:"low_module"`
 	Freq       timing.Freq          `json:"freq"`
@@ -46,6 +47,9 @@ type pendingRequest struct {
 
 // State contains the mutable runtime data for the MemAccessAgent.
 type State struct {
+	MaxAddress      uint64                    `json:"max_address"`
+	AddressOffset   uint64                    `json:"address_offset"`
+	Started         bool                      `json:"started"`
 	WriteLeft       int                       `json:"write_left"`
 	ReadLeft        int                       `json:"read_left"`
 	KnownMemValue   map[uint64][]uint32       `json:"known_mem_value"`

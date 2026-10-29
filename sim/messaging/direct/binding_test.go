@@ -1,4 +1,4 @@
-package direct
+package direct_test
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ func TestConnectionBindingIsOneTimeAndAtomic(t *testing.T) {
 	b := NewConnection("B", s, timing.GHz)
 	p := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	require.Panics(t, func() { a.BindPort(p) })
-	require.Empty(t, a.ports.ports)
+	require.Empty(t, a.TestPorts())
 	require.Nil(t, p.Connection())
 	require.Panics(t, func() { p.BindOwner((*bindingOwner)(nil), "P") })
 	require.Nil(t, p.Owner())
@@ -33,18 +33,18 @@ func TestConnectionBindingIsOneTimeAndAtomic(t *testing.T) {
 
 	require.Panics(t, func() { a.BindPort(p) })
 	require.Panics(t, func() { b.BindPort(p) })
-	require.Len(t, a.ports.ports, 1)
-	require.Empty(t, b.ports.ports)
+	require.Len(t, a.TestPorts(), 1)
+	require.Empty(t, b.TestPorts())
 	require.Same(t, a, p.Connection())
 	duplicate := twowaybuffered.MakeBuilder().WithSimulation(s).Build()
 	duplicate.BindOwner(&bindingOwner{}, "Owner.P")
 	require.Panics(t, func() { a.BindPort(duplicate) })
 	require.Nil(t, duplicate.Connection())
-	require.Len(t, a.ports.ports, 1)
+	require.Len(t, a.TestPorts(), 1)
 	require.NoError(t, s.Initialize())
 	require.Panics(t, func() { b.BindPort(duplicate) })
 	require.Nil(t, duplicate.Connection())
-	require.Empty(t, b.ports.ports)
+	require.Empty(t, b.TestPorts())
 	t.Log("Rejected unowned, nil, duplicate and late bindings " +
 		"without changing connection membership or port attachment")
 }

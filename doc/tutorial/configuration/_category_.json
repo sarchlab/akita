@@ -1,0 +1,8 @@
+{
+  "label": "Separate Hardware and Workload",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Build the same two-agent ping hardware manually and with Blueprint, then execute the same independent workload."
+  }
+}
