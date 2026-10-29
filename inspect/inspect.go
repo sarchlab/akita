@@ -1,5 +1,5 @@
-// Package inspect extracts akita definitions (components, and later other
-// kinds) from Go source without executing it, and emits them in the schema of
+// Package inspect extracts akita definitions (components and domains) from Go
+// source without executing it, and emits them in the schema of
 // package inspect/schema.
 //
 // A component package declares type Comp as an alias of an instantiated
@@ -14,6 +14,10 @@
 // Optional State and Middlewares Initialize methods must have pointer receivers,
 // accept *Comp, and return no value. Invalid declarations produce an error, not
 // an incomplete schema. The component's package identifies its type.
+//
+// Domains declare Spec, DefaultSpec, Ports, and a Node constructor directly
+// returning blueprint.NewDomain[Spec, Ports](spec, build). Their static Spec
+// and Ports shapes use the same schema rules as components; expansion is never run.
 //
 // The inspector loads packages with go/packages, which invokes the Go
 // toolchain on the target module but never runs package code. The

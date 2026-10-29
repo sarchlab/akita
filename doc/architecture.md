@@ -23,6 +23,46 @@ Initialize because it also constructs runtime state. `Simulation.Run()` checks r
 do not check it. RunUntil remains a concrete serial-engine API for deterministic
 checkpoint/testing boundaries, not part of Engine or Simulation.
 
+## Declarative assembly
+
+A Simulation may instead own a `blueprint.Blueprint`, populated by `Simulation.Add`.
+Domains only declare nodes and exposures; they never create runtime objects.
+Nodes retain configuration and private deferred construction metadata. At
+`Initialize`, Expand resolves domains, names and exposed port aliases, validates
+references and explicit port buffers, and then instantiation builds resources,
+components and ports, connections and connector-owned networks before existing
+setup validation. Blueprint initialization failures panic; discard the simulation.
+There is no rollback or supported retry. The empty-blueprint hand-built lifecycle
+remains unchanged. Mixing manual and declarative assembly is outside the supported
+paradigm; do not introduce bridging mechanisms or special prohibition checks.
+
+Domains declare `Spec`, literal `DefaultSpec()`, static `Ports`, and a one-line
+`Node(spec)` returning `blueprint.NewDomain[Spec, Ports](spec, build)`. The inspector
+reads these declarations without executing them. Every single port and every group
+element must be exposed; group indices are contiguous and empty groups are allowed.
+Cross-domain port references target exposed ports. Parent-supplied references are
+already absolute and pass through child Specs unchanged. Resource paths identify
+shared resources and dependencies. Build copies configuration; expansion is pure.
+
+Blueprint ports explicitly configure both incoming and outgoing capacities.
+`messaging.Unconnected` is an intentionally absent destination, never a connection
+member; sending to it panics with the sender and address. No runtime kind registry
+or JSON loader is required. JSON-to-Go program generation is a separate follow-up.
+
+Network declarations use the public `blueprint.NewNetwork` extension contract.
+The core resolves ordered device references and invokes the connector callback at
+initialization; it does not contain connector-specific dispatch. Mesh, PCIe and
+NVLink use the same mechanism. Expand retains network declarations without exposing
+internal switches or endpoints; existing connectors create those during
+initialization, then existing setup computes and validates routes.
+
+Component-specific package builders only supply Spec and Resources to the model
+builder; checks and derived runtime state belong to Spec or setup initialization.
+Blueprint construction invokes the model builder directly. Any existing Build-time
+check must remain in that path for v5 compatibility while also covering Blueprint
+setup. Resource Specs implement typed `BuildResource` construction, with resource
+dependencies supplied through their typed Resources argument.
+
 ## Component ownership
 
 - Spec holds immutable configuration, including destination addresses and routing

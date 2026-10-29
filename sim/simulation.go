@@ -3,6 +3,7 @@ package sim
 import (
 	"errors"
 	"fmt"
+	"github.com/sarchlab/akita/v5/blueprint"
 	"reflect"
 	"slices"
 	"sync"
@@ -21,6 +22,9 @@ import (
 type simulationContext = assembly.Context
 
 type Simulation struct {
+	blueprint          blueprint.Blueprint
+	blueprintObjects   map[string]any
+	blueprintAttempted bool
 	simulationContext
 	// lifecycle serializes snapshots and cleanup. activeOperation spans callbacks
 	// made by Initialize and Run, without holding the mutex during those callbacks.
@@ -224,7 +228,21 @@ func (s *Simulation) Initialize() error {
 	s.activeOperation = "initialization"
 	s.lifecycle.Unlock()
 	defer s.finishOperation()
+	if !s.blueprint.Empty() {
+		if s.blueprintAttempted {
+			panic("blueprint: initialization already attempted; rebuild simulation")
+		}
+		s.blueprintAttempted = true
+		expanded, err := blueprint.Expand(&s.blueprint)
+		if err != nil {
+			panic(err)
+		}
+		s.blueprintObjects = expanded.Instantiate(s)
+	}
 	if err := s.setup().Initialize(); err != nil {
+		if !s.blueprint.Empty() {
+			panic(err)
+		}
 		return err
 	}
 	if s.monitor != nil {
@@ -286,3 +304,25 @@ func (s *Simulation) ownsEntity(named naming.Named) bool {
 }
 
 var _ modeling.Simulation = (*Simulation)(nil)
+
+// Add declares a node for assembly at Initialize. Manual and blueprint assembly
+// are separate supported paradigms; mixing them is outside the contract.
+func (s *Simulation) Add(name string, node blueprint.Node) string {
+	s.setup().RequireSetup()
+	if s.blueprintAttempted {
+		panic("blueprint: initialization already attempted")
+	}
+	return s.blueprint.Add(name, node)
+}
+
+// BlueprintObject supplies typed blueprint.Lookup after successful initialization.
+func (s *Simulation) BlueprintObject(path string) any {
+	if err := s.setup().Ready(); err != nil {
+		panic(err)
+	}
+	object, ok := s.blueprintObjects[path]
+	if !ok {
+		panic(fmt.Sprintf("blueprint: %s.Lookup: unknown path", path))
+	}
+	return object
+}

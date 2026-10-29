@@ -13,6 +13,7 @@ const Version = 1
 // fields are simply absent for kinds that do not use them.
 const (
 	KindComponent = "component"
+	KindDomain    = "domain"
 )
 
 // Component models: how a component runs. Every component definition carries
@@ -53,7 +54,7 @@ type Definition struct {
 	Resources []Field `json:"resources,omitempty"`
 
 	// Ports describes the component's ports and port groups, the fields of
-	// its Ports struct in declaration order (component kind only).
+	// its Ports struct in declaration order (components and domains).
 	Ports []Port `json:"ports,omitempty"`
 
 	// Middlewares lists the component's middlewares in the order it runs them

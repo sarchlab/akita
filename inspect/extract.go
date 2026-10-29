@@ -24,12 +24,13 @@ var componentModels = map[string]string{
 func extractPackage(pkg *packages.Package, index pkgIndex) (schema.Definition, bool, error) {
 	obj := pkg.Types.Scope().Lookup("Comp")
 	if obj == nil {
-		return schema.Definition{}, false, nil
+		return extractDomainPackage(pkg, index)
 	}
 	typ := types.Unalias(obj.Type())
 	if pointer, ok := typ.(*types.Pointer); ok {
 		if componentModels[componentTypeName(pointer.Elem())] != "" {
-			return schema.Definition{}, false, posErrorf(pkg, obj.Pos(), "Comp must alias a component value type, not a pointer")
+			return schema.Definition{}, false, posErrorf(pkg, obj.Pos(),
+				"Comp must alias a component value type, not a pointer")
 		}
 	}
 	model := componentModels[componentTypeName(typ)]
@@ -78,7 +79,7 @@ func componentTypeName(typ types.Type) string {
 func defaultSpecLiteral(pkg *packages.Package, specType types.Type) (*ast.CompositeLit, error) {
 	obj := pkg.Types.Scope().Lookup("DefaultSpec")
 	if obj == nil {
-		return nil, posErrorf(pkg, pkg.Types.Scope().Lookup("Comp").Pos(), "component requires func DefaultSpec() Spec")
+		return nil, fmt.Errorf("%s: definition requires func DefaultSpec() Spec", pkg.PkgPath)
 	}
 	function, ok := obj.(*types.Func)
 	if !ok {

@@ -37,6 +37,9 @@ type WaitReason struct {
 // A RemotePort is a string that refers to another port.
 type RemotePort string
 
+// Unconnected explicitly marks an intentionally absent destination. Sending to it panics.
+const Unconnected RemotePort = "<unconnected>"
+
 // BufferView provides read-only observation of a live buffer. Implementations
 // synchronize observations with buffer operations and checkpoint restoration.
 // Separate Size and Capacity calls do not promise an atomic snapshot.
