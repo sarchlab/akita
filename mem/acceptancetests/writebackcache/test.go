@@ -39,7 +39,7 @@ func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	agentSpec.RandSeed = spec.Seed
 	agentSpec.LowModule = bp.PortRef("Cache.Top")
 	bp.Add("MemAccessAgent", blueprint.Comp[*memaccessagent.Comp](agentSpec).Port("Mem", bufferSpec()))
-	dramStorage := bp.Add("DRAM.Storage", blueprint.Res(mem.StorageSpec{Capacity: 4 * mem.GB, UnitSize: 4 * mem.KB}))
+	dramStorage := bp.Add("DRAMStorage", blueprint.Res(mem.StorageSpec{Capacity: 4 * mem.GB, UnitSize: 4 * mem.KB}))
 	bp.Add("DRAM", blueprint.Comp[*idealmemcontroller.Comp](idealmemcontroller.DefaultSpec()).Use("Storage",
 		dramStorage).Port("Top", bufferSpec()).Port("Control", bufferSpec()))
 	cacheSpec := writeback.DefaultSpec()
@@ -51,7 +51,7 @@ func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	cacheSpec.DirectoryWidth = 16
 	cacheSpec.BankWidth = 16
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{bp.PortRef("DRAM.Top")}
-	storage := bp.Add("Cache.Storage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
+	storage := bp.Add("CacheStorage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
 		UnitSize: 4 * mem.KB}))
 	bp.Add("Cache", blueprint.Comp[*writeback.Comp](cacheSpec).Use("Storage", storage).Port("Top",
 		bufferSpec()).Port("Bottom", bufferSpec()).Port("Control", bufferSpec()))

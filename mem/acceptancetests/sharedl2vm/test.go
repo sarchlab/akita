@@ -48,7 +48,7 @@ func buffers() twowaybuffered.Spec {
 	return twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}
 }
 func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
-	memory := bp.Add("MemCtrl.Storage",
+	memory := bp.Add("MemCtrlStorage",
 		blueprint.Res(mem.StorageSpec{Capacity: ptBase + numAgents*stride(spec.MaxAddress) + mem.MB,
 			UnitSize: 4 * mem.KB}))
 	mcSpec := idealmemcontroller.DefaultSpec()
@@ -62,7 +62,7 @@ func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
 	cacheSpec.DirectoryWidth = 2
 	cacheSpec.BankWidth = 2
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{bp.PortRef("MemCtrl.Top")}
-	storage := bp.Add("L2Cache.Storage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
+	storage := bp.Add("L2CacheStorage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
 		UnitSize: 4 * mem.KB}))
 	bp.Add("L2Cache", blueprint.Comp[*writeback.Comp](cacheSpec).Use("Storage", storage).Port("Top",
 		buffers()).Port("Bottom", buffers()).Port("Control", buffers()))

@@ -47,7 +47,7 @@ func build(spec Spec, bp *blueprint.Blueprint) {
 	cacheSpec.NumWays = 2
 	cacheSpec.NumSets = 32
 	cacheSpec.Bottom.Destinations = []messaging.RemotePort{spec.Memory}
-	storage := bp.Add("L1Cache.Storage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
+	storage := bp.Add("L1CacheStorage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
 		UnitSize: 4 * mem.KB}))
 	bp.Add("L1Cache", blueprint.Comp[*writethrough.Comp](cacheSpec).Use("Storage", storage).Port("Top",
 		buffers()).Port("Bottom", buffers()).Port("Control", buffers()))
