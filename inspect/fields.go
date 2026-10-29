@@ -10,9 +10,8 @@ import (
 	"strings"
 	"unicode"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 // unitByType maps fully-qualified named types to the semantic unit they

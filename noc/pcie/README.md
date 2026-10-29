@@ -52,3 +52,25 @@ same rule. Device-facing ports remain caller-owned with their original sizes.
 Forwarding shares each output's width among contenders, limits each input to
 its input width, and rotates priority in binding order each cycle. Buffering is
 one cycle of capacity, not a guarantee of full throughput under contention.
+
+## Blueprint declaration
+
+Inside a domain declaration, defer construction to `Simulation.Initialize`:
+
+```go
+spec := pcie.DefaultSpec()
+spec.RootPorts = []messaging.RemotePort{bp.PortRef("CPU.Top")}
+spec.Switches = []pcie.Switch{{Parent: -1}, {Parent: 0}, {Parent: 1}}
+spec.Devices = []pcie.Device{
+    {Switch: 2, Ports: []messaging.RemotePort{bp.PortRef("GPU[0].Top")}},
+    {Switch: 2, Ports: []messaging.RemotePort{bp.PortRef("GPU[1].Top")}},
+}
+bp.Add("PCIe", pcie.Node(spec))
+```
+
+Switch zero is the root complex; every other switch names an earlier parent.
+Construction adds the root with `RootPorts`, then all switches in slice order,
+then one endpoint per `Devices` entry in slice order. Several devices may share a
+switch. A transit switch with no listed device gets no endpoint. Port order within
+each endpoint is preserved. This order defines binding and arbitration order;
+it does not reproduce arbitrary interleavings of manual connector calls.

@@ -26,7 +26,8 @@ Both capacities are required and positive. Groups use indexed slots such as
 
 `blueprint.Res(mem.StorageSpec{Capacity: 1024, UnitSize: 64})` declares a shared
 resource. `Blueprint.Add` returns its absolute path. `.Use("Storage", path)`
-links a component's Resources field to that declaration. Resource dependencies
+links a component's Resources field to that declaration. Resource paths are global
+absolute paths; port exposure boundaries do not restrict resource sharing. Resource dependencies
 use the same mechanism; they are type-checked and built before their consumers.
 Dependency cycles are errors. To declare a custom resource, its Spec implements
 `BuildResource(modeling.Simulation, string, Resources) *Resource`; use
@@ -42,7 +43,8 @@ func Node(spec Spec) *blueprint.DomainNode {
 }
 ```
 
-`build(spec, bp)` adds nodes. A nested `bp.Add("Child", child.Node(childSpec))`
+`build(spec, bp)` adds nodes. Each Add name is one path segment (for example,
+`Child[3]`); dotted paths are only used for references, not node names. A nested `bp.Add("Child", child.Node(childSpec))`
 retains an unexpanded child. Specs obey the same shape rules as component Specs;
 configuration slices are copied, including slices within flat records. Domain
 Ports contain only `messaging.Port` and `[]messaging.Port` fields. Each single
@@ -109,7 +111,8 @@ snapshot their settings and references, and expose detached read copies through
 ## Failure and compatibility
 
 Blueprint failures during `Simulation.Initialize` panic. Discard that Simulation;
-there is no rollback or supported retry after recovery. `Initialize() error` keeps
+there is no rollback or supported retry after recovery. Calling Initialize twice
+or adding nodes after initialization has been attempted also panics. `Initialize() error` keeps
 its existing signature, and an empty blueprint preserves the hand-built path.
 Manual and Blueprint assembly are separate supported paradigms; mixing them is
 outside the contract, without a dedicated prohibition mechanism.

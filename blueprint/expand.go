@@ -48,6 +48,7 @@ func Expand(bp *Blueprint) (out *Blueprint, err error) {
 				out.entries = append(out.entries, entry{e.name, e.scope, n})
 				continue
 			}
+			validateSpecType(e.name, d.Spec, d.specType)
 			if err := modeling.ValidateSpec(d.Spec); err != nil {
 				failf(e.name, "Spec", "%v", err)
 			}
@@ -74,6 +75,7 @@ func (bp *Blueprint) validate() {
 			if n.create == nil || n.resultType == nil {
 				failf(e.name, "Kind", "use Res to retain construction information")
 			}
+			validateSpecType(e.name, n.Spec, n.specType)
 			resources[e.name] = n
 		}
 	}
@@ -113,6 +115,7 @@ func validateComponent(name string, n *ComponentNode, names, ports map[string]bo
 	if n.create == nil {
 		failf(name, "Kind", "use Comp to retain construction information")
 	}
+	validateSpecType(name, n.Spec, n.specType)
 	if err := modeling.ValidateSpec(n.Spec); err != nil {
 		failf(name, "Spec", "%v", err)
 	}
@@ -387,4 +390,10 @@ func (bp *Blueprint) resourceOrder(resources map[string]*ResourceNode) []string 
 		}
 	}
 	return order
+}
+
+func validateSpecType(name string, spec any, expected reflect.Type) {
+	if reflect.TypeOf(spec) != expected {
+		failf(name, "Spec", "expected %v, got %T", expected, spec)
+	}
 }

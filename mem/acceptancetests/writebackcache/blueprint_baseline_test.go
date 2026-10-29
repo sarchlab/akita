@@ -1,12 +1,13 @@
 package main
 
 import (
+	"testing"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // The serial baseline was captured from the hand-built program at 1d8104ba,

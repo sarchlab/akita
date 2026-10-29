@@ -26,12 +26,12 @@ type PortConfig struct {
 
 // ComponentNode declares a component, its local ports, and shared resources.
 type ComponentNode struct {
-	Kind                     string
-	Spec                     any
-	Ports                    []PortConfig
-	Uses                     map[string]string
-	portsType, resourcesType reflect.Type
-	create                   func(modeling.Simulation, string, any, reflect.Value) messaging.PortOwner
+	Kind                               string
+	Spec                               any
+	Ports                              []PortConfig
+	Uses                               map[string]string
+	specType, portsType, resourcesType reflect.Type
+	create                             func(modeling.Simulation, string, any, reflect.Value) messaging.PortOwner
 }
 
 func (*ComponentNode) node() {}
@@ -51,7 +51,8 @@ func Comp[C interface{ MakeBuilder(S) B }, S, R any, B interface {
 	if !ok {
 		failf("", "Comp", "component has no Ports")
 	}
-	return &ComponentNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec), portsType: ports.Type,
+	return &ComponentNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec), specType: reflect.TypeFor[S](),
+		portsType:     ports.Type,
 		resourcesType: reflect.TypeFor[R](),
 		create: func(s modeling.Simulation, name string, spec any, resources reflect.Value) messaging.PortOwner {
 			c := modeling.MakeBuilder[C](spec.(S)).WithSimulation(s).WithResources(resources.Interface().(R)).
@@ -81,11 +82,11 @@ func (n *ComponentNode) Use(field, path string) *ComponentNode {
 // ResourceNode declares a named shared resource. Dependencies are constructed
 // first, in deterministic dependency order, and injected by Resources field.
 type ResourceNode struct {
-	Kind                      string
-	Spec                      any
-	Uses                      map[string]string
-	resultType, resourcesType reflect.Type
-	create                    func(modeling.Simulation, string, any, reflect.Value) naming.Named
+	Kind                                string
+	Spec                                any
+	Uses                                map[string]string
+	specType, resultType, resourcesType reflect.Type
+	create                              func(modeling.Simulation, string, any, reflect.Value) naming.Named
 }
 
 func (*ResourceNode) node() {}
@@ -96,7 +97,7 @@ func (*ResourceNode) node() {}
 func Res[S interface {
 	BuildResource(modeling.Simulation, string, R) T
 }, R any, T naming.Named](spec S) *ResourceNode {
-	return &ResourceNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec),
+	return &ResourceNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec), specType: reflect.TypeFor[S](),
 		resourcesType: reflect.TypeFor[R](), resultType: reflect.TypeFor[T](),
 		create: func(s modeling.Simulation, name string, spec any, r reflect.Value) naming.Named {
 			return spec.(S).BuildResource(s, name, r.Interface().(R))
@@ -118,17 +119,17 @@ func (n *ResourceNode) Use(field, path string) *ResourceNode {
 // DomainNode is a reusable declaration whose build function only adds nodes.
 // Its static Ports shape is filled with exposed inner ports after initialization.
 type DomainNode struct {
-	Kind      string
-	Spec      any
-	portsType reflect.Type
-	expand    func(any, *Blueprint)
+	Kind                string
+	Spec                any
+	specType, portsType reflect.Type
+	expand              func(any, *Blueprint)
 }
 
 func (*DomainNode) node() {}
 
 // NewDomain retains a typed declaration function, without executing it.
 func NewDomain[S, P any](spec S, build func(S, *Blueprint)) *DomainNode {
-	return &DomainNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec),
+	return &DomainNode{Kind: reflect.TypeFor[S]().PkgPath(), Spec: clone(spec), specType: reflect.TypeFor[S](),
 		portsType: reflect.TypeFor[P](), expand: func(s any, bp *Blueprint) { build(s.(S), bp) }}
 }
 

@@ -42,7 +42,8 @@ reads these declarations without executing them. Every single port and every gro
 element must be exposed; group indices are contiguous and empty groups are allowed.
 Cross-domain port references target exposed ports. Parent-supplied references are
 already absolute and pass through child Specs unchanged. Resource paths identify
-shared resources and dependencies. Build copies configuration; expansion is pure.
+shared resources and dependencies globally, without port exposure boundaries.
+Build copies configuration; expansion is pure.
 
 Blueprint ports explicitly configure both incoming and outgoing capacities.
 `messaging.Unconnected` is an intentionally absent destination, never a connection
@@ -55,6 +56,10 @@ initialization; it does not contain connector-specific dispatch. Mesh, PCIe and
 NVLink use the same mechanism. Expand retains network declarations without exposing
 internal switches or endpoints; existing connectors create those during
 initialization, then existing setup computes and validates routes.
+
+`sim` depends on `blueprint`, which constructs concrete direct connections and
+two-way buffered ports. Tests in `direct`, `twowaybuffered`, and their dependencies
+that use `sim` must use external test packages to avoid import cycles.
 
 Component-specific package builders only supply Spec and Resources to the model
 builder; checks and derived runtime state belong to Spec or setup initialization.

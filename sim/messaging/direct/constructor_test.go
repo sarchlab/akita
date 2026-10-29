@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	akitasim "github.com/sarchlab/akita/v5/sim"
-
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"go.uber.org/mock/gomock"
 )

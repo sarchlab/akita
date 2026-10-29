@@ -2,16 +2,23 @@ package pcie
 
 import (
 	"fmt"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// Switch declares a PCIe switch and its attached devices. Entry zero is the
+// Switch declares a PCIe switch. Entry zero is the
 // root complex (Parent=-1); every other Parent indexes an earlier switch.
 type Switch struct {
-	Parent int                    `json:"parent"`
+	Parent int `json:"parent"`
+}
+
+// Device declares one endpoint attached to the indexed switch. Multiple devices
+// can attach to the same switch; their slice order is endpoint binding order.
+type Device struct {
+	Switch int                    `json:"switch"`
 	Ports  []messaging.RemotePort `json:"ports"`
 }
 
@@ -23,6 +30,8 @@ type Spec struct {
 	InputWidth    int
 	OutputWidth   int
 	Switches      []Switch
+	RootPorts     []messaging.RemotePort
+	Devices       []Device
 }
 
 // DefaultSpec returns settings matching MakeBuilder; add a root before use.
@@ -43,14 +52,19 @@ func (s Spec) Validate() error {
 			return fmt.Errorf("Switches[%d].Parent: root requires -1; child requires an earlier switch", i)
 		}
 	}
+	for i, d := range s.Devices {
+		if d.Switch < 0 || d.Switch >= len(s.Switches) {
+			return fmt.Errorf("Devices[%d].Switch: unknown switch", i)
+		}
+	}
 	return nil
 }
 
 // Node declares a PCIe tree using the public network extension contract.
 func Node(spec Spec) *blueprint.NetworkNode {
-	var members []messaging.RemotePort
-	for _, sw := range spec.Switches {
-		members = append(members, sw.Ports...)
+	members := append([]messaging.RemotePort(nil), spec.RootPorts...)
+	for _, d := range spec.Devices {
+		members = append(members, d.Ports...)
 	}
 	return blueprint.NewNetwork(spec, members, assemble)
 }
@@ -59,15 +73,14 @@ func assemble(spec Spec, s modeling.Simulation, name string, ports []messaging.P
 		WithSwitchLatency(spec.SwitchLatency).WithInputWidth(spec.InputWidth).
 		WithOutputWidth(spec.OutputWidth).Build(name)
 	ids := make([]int, len(spec.Switches))
-	offset := 0
-	for i, sw := range spec.Switches {
-		next := offset + len(sw.Ports)
-		if i == 0 {
-			ids[i] = c.AddRootComplex(ports[offset:next])
-		} else {
-			ids[i] = c.AddSwitch(ids[sw.Parent])
-			c.ConnectDevice(ids[i], ports[offset:next])
-		}
+	offset := len(spec.RootPorts)
+	ids[0] = c.AddRootComplex(ports[:offset])
+	for i := 1; i < len(spec.Switches); i++ {
+		ids[i] = c.AddSwitch(ids[spec.Switches[i].Parent])
+	}
+	for _, d := range spec.Devices {
+		next := offset + len(d.Ports)
+		c.ConnectDevice(ids[d.Switch], ports[offset:next])
 		offset = next
 	}
 }

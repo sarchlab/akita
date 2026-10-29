@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"fmt"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"

@@ -38,7 +38,9 @@ func networkCases() []networkCase {
 		}},
 		{"pcie", func(refs []messaging.RemotePort) *blueprint.NetworkNode {
 			s := pcie.DefaultSpec()
-			s.Switches = []pcie.Switch{{Parent: -1, Ports: refs[:1]}, {Parent: 0, Ports: refs[1:]}}
+			s.RootPorts = refs[:1]
+			s.Switches = []pcie.Switch{{Parent: -1}, {Parent: 0}}
+			s.Devices = []pcie.Device{{Switch: 1, Ports: refs[1:]}}
 			return pcie.Node(s)
 		}, func(s modeling.Simulation, p []messaging.Port) {
 			c := pcie.MakeBuilder().WithSimulation(s).Build("Network")
@@ -46,10 +48,35 @@ func networkCases() []networkCase {
 			child := c.AddSwitch(root)
 			c.ConnectDevice(child, p[1:])
 		}},
+		{"pcie-multiple-devices-and-transit", func(refs []messaging.RemotePort) *blueprint.NetworkNode {
+			s := pcie.DefaultSpec()
+			s.Switches = []pcie.Switch{{Parent: -1}, {Parent: 0}, {Parent: 1}}
+			s.Devices = []pcie.Device{{Switch: 2, Ports: refs[:1]}, {Switch: 2, Ports: refs[1:]}}
+			return pcie.Node(s)
+		}, func(s modeling.Simulation, p []messaging.Port) {
+			c := pcie.MakeBuilder().WithSimulation(s).Build("Network")
+			root := c.AddRootComplex(nil)
+			transit := c.AddSwitch(root)
+			child := c.AddSwitch(transit)
+			c.ConnectDevice(child, p[:1])
+			c.ConnectDevice(child, p[1:])
+		}},
+		{"nvlink-root-device", func(refs []messaging.RemotePort) *blueprint.NetworkNode {
+			s := nvlink.DefaultSpec()
+			s.RootPorts = refs[:1]
+			s.Devices = []nvlink.Device{{Switch: 0, Ports: refs[1:]}}
+			s.NVLinks = []nvlink.Link{{A: 0, B: 1}}
+			return nvlink.Node(s)
+		}, func(s modeling.Simulation, p []messaging.Port) {
+			c := nvlink.MakeBuilder().WithSimulation(s).Build("Network")
+			root := c.AddRootComplex(p[:1])
+			b := c.ConnectDevice(root, p[1:])
+			c.ConnectDevicesWithNVLink(0, b)
+		}},
 		{"nvlink", func(refs []messaging.RemotePort) *blueprint.NetworkNode {
 			s := nvlink.DefaultSpec()
 			s.Devices = []nvlink.Device{{Switch: 0, Ports: refs[:1]}, {Switch: 0, Ports: refs[1:]}}
-			s.NVLinks = []nvlink.Link{{A: 0, B: 1}}
+			s.NVLinks = []nvlink.Link{{A: 1, B: 2}}
 			return nvlink.Node(s)
 		}, func(s modeling.Simulation, p []messaging.Port) {
 			c := nvlink.MakeBuilder().WithSimulation(s).Build("Network")
@@ -172,7 +199,11 @@ func TestInvalidNetworkFailsBeforeInstantiation(t *testing.T) {
 		name string
 		node *blueprint.NetworkNode
 	}{
-		{"Mesh", mesh.Node(mesh.Spec{})}, {"PCIe", pcie.Node(pcie.DefaultSpec())}, {"NVLink",
+		{"Mesh", mesh.Node(mesh.Spec{})}, {"PCIe", pcie.Node(pcie.DefaultSpec())},
+		{"PCIeDevice", pcie.Node(pcie.Spec{Freq: timing.GHz, FlitSize: 34, InputWidth: 1, OutputWidth: 1,
+			Switches: []pcie.Switch{{Parent: -1}}, Devices: []pcie.Device{{Switch: 1}}})},
+		{"NVLinkDevice", nvlink.Node(nvlink.Spec{Freq: timing.GHz, FlitSize: 34, InputWidth: 1, OutputWidth: 1,
+			NVLinks: []nvlink.Link{{A: 0, B: 1}}})}, {"NVLink",
 			nvlink.Node(nvlink.Spec{Freq: timing.GHz, FlitSize: 16, InputWidth: 1, OutputWidth: 1,
 				Devices: []nvlink.Device{{Switch: 9}}})},
 	} {
@@ -251,4 +282,37 @@ func TestMeshPreservesContendedDeviceBindingOrder(t *testing.T) {
 			t.Logf("reverse=%v: contended arrivals %v, manual=blueprint time %d ps", reverse, got, at)
 		})
 	}
+}
+
+func TestNetworkMembersResolveExposedDomainAliases(t *testing.T) {
+	var bp blueprint.Blueprint
+	bp.Add("Child", leaf(domainSpec{}))
+	bp.Add("Peer", comp(testSpec{}))
+	spec := mesh.DefaultSpec()
+	spec.Tiles = []mesh.Tile{
+		{Ports: []messaging.RemotePort{bp.PortRef("Child.Top")}},
+		{X: 1, Ports: []messaging.RemotePort{bp.PortRef("Peer.Top")}},
+	}
+	bp.Add("Network", mesh.Node(spec))
+	flat, err := blueprint.Expand(&bp)
+	require.NoError(t, err)
+	network := flat.Nodes()[2].Node.(*blueprint.NetworkNode)
+	require.Equal(t, []messaging.RemotePort{"Child.Inner.Top", "Peer.Top"}, network.PortReferences())
+	resolved := network.Configuration().(mesh.Spec)
+	require.Equal(t, messaging.RemotePort("Child.Inner.Top"), resolved.Tiles[0].Ports[0])
+	require.Equal(t, messaging.RemotePort("Peer.Top"), resolved.Tiles[1].Ports[0])
+	s := sim.MakeBuilder().Build()
+	defer s.Terminate()
+	for _, node := range bp.Nodes() {
+		s.Add(node.Name, node.Node)
+	}
+	require.NoError(t, s.Initialize())
+	ports := []messaging.Port{
+		blueprint.Lookup[domainPorts](s, "Child").Top,
+		blueprint.Lookup[*testComp](s, "Peer").Ports.Top,
+	}
+	seedNetwork(s, ports)
+	delivered := finishNetwork(t, s, ports)
+	require.Equal(t, ports[1].AsRemote(), delivered[0].Src)
+	require.Equal(t, ports[0].AsRemote(), delivered[1].Src)
 }

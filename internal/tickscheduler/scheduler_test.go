@@ -1,11 +1,10 @@
 package tickscheduler_test
 
 import (
-	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 

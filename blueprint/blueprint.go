@@ -33,7 +33,8 @@ type Blueprint struct {
 }
 
 // Add snapshots a node and returns its absolute path. Only a root domain may
-// have an empty name. The same input node may be reused in independent domains.
+// have an empty name. Other names must be a single path segment. The same input
+// node may be reused in independent domains.
 // The returned path is already absolute; do not pass it to PortRef.
 func (bp *Blueprint) Add(name string, n Node) string {
 	if bp.expanded {
@@ -48,6 +49,9 @@ func (bp *Blueprint) Add(name string, n Node) string {
 			failf(path, "name", "empty name requires a root domain")
 		}
 	} else {
+		if strings.Contains(name, ".") {
+			failf(path, "name", "node name must be a single path segment")
+		}
 		checkName(path, "name", name)
 	}
 	if n == nil || reflect.ValueOf(n).IsNil() {

@@ -363,14 +363,32 @@ func TestPortGroupConfigurationOrder(t *testing.T) {
 	}
 }
 
-func TestDomainNameAndPortCollision(t *testing.T) {
+func TestAddRejectsDottedNames(t *testing.T) {
 	var bp blueprint.Blueprint
-	bp.Add("A", comp(testSpec{}))
-	bp.Add("A.Top", blueprint.NewDomain[modeling.None,
-		modeling.None](modeling.None{}, func(_ modeling.None, _ *blueprint.Blueprint) {}))
-	_, err := blueprint.Expand(&bp)
-	require.ErrorContains(t, err, "A.Top: duplicate name A.Top")
+	require.PanicsWithError(t, "blueprint: A.Top.name: node name must be a single path segment", func() {
+		bp.Add("A.Top", comp(testSpec{}))
+	})
+	require.PanicsWithError(t, "blueprint: A.Wire.name: node name must be a single path segment", func() {
+		bp.Connect("A.Wire", timing.GHz)
+	})
 }
+
+func TestChangedSpecTypesFailDuringExpand(t *testing.T) {
+	component := comp(testSpec{})
+	component.Spec = modeling.None{}
+	resource := blueprint.Res(mem.StorageSpec{Capacity: 64, UnitSize: 16})
+	resource.Spec = modeling.None{}
+	domain := leaf(domainSpec{})
+	domain.Spec = modeling.None{}
+	for _, node := range []blueprint.Node{component, resource, domain} {
+		var bp blueprint.Blueprint
+		bp.Add("Changed", node)
+		_, err := blueprint.Expand(&bp)
+		require.ErrorContains(t, err, "Changed.Spec: expected")
+		require.NotContains(t, err.Error(), "interface conversion")
+	}
+}
+
 func TestMalformedConstructionDescriptors(t *testing.T) {
 	var bp blueprint.Blueprint
 	bp.Add("A", blueprint.Comp[*resourceComp](testSpec{}).Port("Top", portSpec()).

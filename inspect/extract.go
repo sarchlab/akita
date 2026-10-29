@@ -7,9 +7,8 @@ import (
 	"go/token"
 	"go/types"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 // componentModels identifies the three supported component types.
@@ -76,10 +75,10 @@ func componentTypeName(typ types.Type) string {
 
 // defaultSpecLiteral accepts exactly func DefaultSpec() Spec { return Spec{...} }.
 // It does not call the function or interpret arbitrary Go statements.
-func defaultSpecLiteral(pkg *packages.Package, specType types.Type) (*ast.CompositeLit, error) {
+func defaultSpecLiteral(pkg *packages.Package, specType types.Type, anchor token.Pos) (*ast.CompositeLit, error) {
 	obj := pkg.Types.Scope().Lookup("DefaultSpec")
 	if obj == nil {
-		return nil, fmt.Errorf("%s: definition requires func DefaultSpec() Spec", pkg.PkgPath)
+		return nil, posErrorf(pkg, anchor, "definition requires func DefaultSpec() Spec")
 	}
 	function, ok := obj.(*types.Func)
 	if !ok {

@@ -2,6 +2,7 @@ package nvlink
 
 import (
 	"fmt"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -9,7 +10,7 @@ import (
 )
 
 // Device attaches ports to a PCIe switch. Switch zero denotes the root complex;
-// switches 1..NumSwitches are added in that order. Device indices are slice indices.
+// switches 1..NumSwitches are added in that order. Device index zero is the root; Devices[i] has device index i+1.
 type Device struct {
 	Switch int                    `json:"switch"`
 	Ports  []messaging.RemotePort `json:"ports"`
@@ -60,7 +61,7 @@ func (s Spec) Validate() error {
 		}
 	}
 	for i, l := range s.NVLinks {
-		if l.A < 0 || l.B < 0 || l.A >= len(s.Devices) || l.B >= len(s.Devices) || l.A == l.B {
+		if l.A < 0 || l.B < 0 || l.A > len(s.Devices) || l.B > len(s.Devices) || l.A == l.B {
 			return fmt.Errorf("NVLinks[%d]: invalid device pair", i)
 		}
 	}
@@ -88,10 +89,11 @@ func assemble(spec Spec, s modeling.Simulation, name string, ports []messaging.P
 	for _, l := range spec.PCIeLinks {
 		c.ConnectSwitchesWithPCIeLink(switches[l.A], switches[l.B])
 	}
-	devices := make([]int, len(spec.Devices))
+	// AddRootComplex creates connector device zero before listed devices.
+	devices := make([]int, len(spec.Devices)+1)
 	for i, d := range spec.Devices {
 		next := offset + len(d.Ports)
-		devices[i] = c.ConnectDevice(switches[d.Switch], ports[offset:next])
+		devices[i+1] = c.ConnectDevice(switches[d.Switch], ports[offset:next])
 		offset = next
 	}
 	for _, l := range spec.NVLinks {

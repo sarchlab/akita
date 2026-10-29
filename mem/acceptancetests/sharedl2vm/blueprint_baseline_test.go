@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // Captured from the original hand-built program at 1d8104ba: four agents,

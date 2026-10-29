@@ -1,9 +1,10 @@
 package inspect
 
 import (
+	"testing"
+
 	"github.com/sarchlab/akita/v5/inspect/schema"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestInspectBlueprintDomain(t *testing.T) {
@@ -34,4 +35,12 @@ func TestInspectRealAgentChain(t *testing.T) {
 	require.Len(t, defs, 1)
 	require.Equal(t, schema.KindDomain, defs[0].Kind)
 	require.Len(t, defs[0].Ports, 2)
+}
+
+func TestMissingDefaultSpecHasSourcePosition(t *testing.T) {
+	for _, fixture := range []string{"domainnodefault", "wrongname"} {
+		_, errs := Inspect(Options{}, "./testdata/fixtures/"+fixture)
+		require.NotEmpty(t, errs)
+		require.Regexp(t, `\.go:[0-9]+:[0-9]+:.*requires func DefaultSpec`, errs[0].Error())
+	}
 }

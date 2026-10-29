@@ -1,13 +1,14 @@
 package ping
 
 import (
+	"testing"
+
 	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestBlueprintBidirectionalPingDeclarationOrder(t *testing.T) {

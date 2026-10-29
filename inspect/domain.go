@@ -45,7 +45,7 @@ func extractDomainPackage(pkg *packages.Package, index pkgIndex) (schema.Definit
 	if err := validateSpecType(pkg, specObj.Type(), index); err != nil {
 		return schema.Definition{}, false, err
 	}
-	lit, err := defaultSpecLiteral(pkg, specObj.Type())
+	lit, err := defaultSpecLiteral(pkg, specObj.Type(), obj.Pos())
 	if err != nil {
 		return schema.Definition{}, false, err
 	}

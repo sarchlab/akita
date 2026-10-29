@@ -30,9 +30,8 @@ import (
 	"os"
 	"sort"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 // Options configures an inspection run.

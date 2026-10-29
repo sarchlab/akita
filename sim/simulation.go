@@ -3,11 +3,11 @@ package sim
 import (
 	"errors"
 	"fmt"
-	"github.com/sarchlab/akita/v5/blueprint"
 	"reflect"
 	"slices"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/internal/assembly"
 	"github.com/sarchlab/akita/v5/internal/idgen"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
