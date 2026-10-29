@@ -206,7 +206,8 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	page := mshrEntry.Page
 	reqMsg := mshrEntry.Requests[0]
 	rspToTop := vmprotocol.TranslationRsp{
-		Page: page,
+		Page:  page,
+		Fault: mshrEntry.Fault,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
@@ -367,6 +368,7 @@ func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
 	fetchBottom.PID = msg.PID
 	fetchBottom.VAddr = msg.VAddr
 	fetchBottom.DeviceID = msg.DeviceID
+	fetchBottom.CanFault = msg.CanFault
 	fetchBottom.TrafficClass = "vmprotocol.TranslationReq"
 
 	if !m.bottomPort().CanSend() {
@@ -431,19 +433,24 @@ func (m *tlbMiddleware) parseBottom() bool {
 		})
 	}
 
-	setID := vAddrToSetID(page.VAddr, spec)
-	wayID, ok := setEvict(&next.Sets[setID])
+	// A faulted translation is passed to the requests but not cached: the
+	// requests translate again once the fault is serviced.
+	if !item.Fault {
+		setID := vAddrToSetID(page.VAddr, spec)
+		wayID, ok := setEvict(&next.Sets[setID])
 
-	if !ok {
-		panic("failed to evict")
+		if !ok {
+			panic("failed to evict")
+		}
+
+		setUpdate(&next.Sets[setID], wayID, page)
+		setVisit(&next.Sets[setID], wayID)
 	}
-
-	setUpdate(&next.Sets[setID], wayID, page)
-	setVisit(&next.Sets[setID], wayID)
 
 	next.HasRespondingMSHR = true
 	next.RespondingMSHRData = next.MSHREntries[mshrIdx]
 	next.RespondingMSHRData.Page = page
+	next.RespondingMSHRData.Fault = item.Fault
 
 	// Get reqToBottom for tracing before removing
 	reqToBottom := next.MSHREntries[mshrIdx].ReqToBottom

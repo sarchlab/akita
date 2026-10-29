@@ -19,18 +19,19 @@ below describe the implemented state.
 - Every memory agent exposes a port named `Control`.
 - That port carries `memcontrolprotocol.Req` in and `memcontrolprotocol.Rsp` out (by
   value, not pointers — handlers type-assert `msg.(memcontrolprotocol.Req)`).
-- The request's `Command` field is one of six verbs.
+- The request's `Command` field is one of eight verbs.
 - The component runs the verb and replies on the same port.
 - Whether the reply is same-tick (sync) or whenever-the-work-finishes
   (async) is fixed by the verb, not the component.
 - A component that does not implement a verb still replies, with
   `Success: false, Error: "unsupported"`.
 
-## The six verbs
+## The eight verbs
 
-Four verbs are **universal** — every memory agent supports them. Two
-are **conditional** — only agents that hold private cache-of-memory
-state support them.
+Four verbs are **universal** — every memory agent supports them. Four
+are **conditional**: Invalidate and Flush are supported by the agents
+that hold private cache-of-memory state, Hold and Release by the agents
+that translate accesses (address translators).
 
 | Verb           | Universal? | What it does                                                                                                                            | Ack timing |
 | -------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
@@ -40,6 +41,8 @@ state support them.
 | **Reset**      | ✓          | Hard reset to post-build state: drop in-flight, clear queues, clear private caches, drain Top/Bottom queues. Legal from any state.       | Sync       |
 | **Invalidate** | conditional | Drop entries from private cache state without writeback. Component must be paused or drained first. Filterable by `Addresses` and `PID`. | Sync       |
 | **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. Component must be paused or drained first.                   | Async      |
+| **Hold**       | conditional | Make the accesses to the pages in `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state; does not block later verbs. | Async      |
+| **Release**    | conditional | Let the accesses that wait on the pages in `Addresses` go again (they are translated again, in arrival order).                           | Sync       |
 
 ### Sync vs async, more precisely
 
@@ -50,7 +53,8 @@ state support them.
 - **Async** means the request is accepted silently. The component
   acknowledges by sending the response when the underlying work is
   finished — Drain when all in-flight transactions have drained, Flush
-  when all dirty data has been written back.
+  when all dirty data has been written back, Hold when no access to the
+  held pages and no translation of them is in flight.
 
 ### Why no `PauseAfter`/`InvalidateAfter`/`DiscardInflight`
 
@@ -119,13 +123,15 @@ const (
     CmdReset
     CmdInvalidate
     CmdFlush
+    CmdHold
+    CmdRelease
 )
 
 type Req struct {
     messaging.MsgMeta
     Command   Command
-    Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
-    PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
+    Addresses []uint64 // Invalidate / Flush filter (empty = all entries); Hold / Release pages.
+    PID       vm.PID   // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
 }
 
 type Rsp struct {
@@ -137,25 +143,26 @@ type Rsp struct {
 }
 ```
 
-`Addresses` and `PID` are only meaningful for `CmdInvalidate` and
-`CmdFlush`. For the other verbs they are ignored.
+`Addresses` and `PID` are only meaningful for `CmdInvalidate`,
+`CmdFlush`, `CmdHold`, and `CmdRelease`. For the other verbs they are
+ignored.
 
 ## Support matrix (final state)
 
-|                              | Pause | Drain | Enable | Reset | Invalidate | Flush |
-| ---------------------------- | ----- | ----- | ------ | ----- | ---------- | ----- |
-| `cache/writeback`            | ✓     | ✓     | ✓      | ✓     | ✓          | ✓     |
-| `cache/writethroughcache`    | ✓     | ✓     | ✓      | ✓     | ✓          | no-op |
-| `vm/tlb`                     | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
-| `vm/mmuCache`                | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
-| `vm/mmu`                     | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `vm/gmmu`                    | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `vm/addresstranslator`       | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `rob`                        | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `idealmemcontroller`         | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `dram`                       | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `simplebankedmemory`         | ✓     | ✓     | ✓      | ✓     | —          | —     |
-| `datamover`                  | ✓     | ✓     | ✓      | ✓     | —          | —     |
+|                              | Pause | Drain | Enable | Reset | Invalidate | Flush | Hold | Release |
+| ---------------------------- | ----- | ----- | ------ | ----- | ---------- | ----- | ---- | ------- |
+| `cache/writeback`            | ✓     | ✓     | ✓      | ✓     | ✓          | ✓     | —    | —       |
+| `cache/writethroughcache`    | ✓     | ✓     | ✓      | ✓     | ✓          | no-op | —    | —       |
+| `vm/tlb`                     | ✓     | ✓     | ✓      | ✓     | ✓          | —     | —    | —       |
+| `vm/mmuCache`                | ✓     | ✓     | ✓      | ✓     | ✓          | —     | —    | —       |
+| `vm/mmu`                     | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `vm/gmmu`                    | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `vm/addresstranslator`       | ✓     | ✓     | ✓      | ✓     | —          | —     | ✓    | ✓       |
+| `rob`                        | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `idealmemcontroller`         | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `dram`                       | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `simplebankedmemory`         | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
+| `datamover`                  | ✓     | ✓     | ✓      | ✓     | —          | —     | —    | —       |
 
 Legend: **✓** = supported; **no-op** = supported (verb succeeds) but
 does no work; **—** = unsupported (replies `Success: false,
@@ -169,6 +176,8 @@ declares to `memcontrolprotocol.RunContract`:
 - `vm/tlb`, `vm/mmuCache` → `memcontrolprotocol.TranslationCacheLike()`
   (Universal + Invalidate; Flush is **not** supported because
   translations are never dirty).
+- `vm/addresstranslator` → `memcontrolprotocol.TranslatorLike()`
+  (Universal + Hold + Release).
 - everyone else → `memcontrolprotocol.Universal()` (Pause, Drain, Enable, Reset).
 
 `mshr` is not in the matrix — it is a substructure of a cache, not a
@@ -235,9 +244,21 @@ Error: "must be paused or drained"`.
 - Reset clears in-flight walks and outstanding remote memory requests;
   the shared page table is not touched.
 
-**`vm/addresstranslator`** — `Universal`; `State.ControlState`.
-- Drain acks once `Transactions` and `InflightReqToBottom` are empty.
-- Reset clears both and drains the Top/Bottom/Translation ports.
+**`vm/addresstranslator`** — `TranslatorLike`; `State.ControlState`.
+- Drain acks once `Transactions`, `InflightReqToBottom`, `HeldReqs`, and
+  `ReplayReqs` are empty.
+- Reset clears them and the held pages, drops the Holds that are not
+  acknowledged yet (without an ack), and drains the Top/Bottom/Translation
+  ports.
+- Hold marks the pages held. A new access to a held page waits without
+  being translated; an access whose translation arrives after the Hold
+  waits too. The Hold acks once no access to the pages (`Transactions`,
+  `InflightReqToBottom`) is in flight. Several Holds may wait at once, and
+  the verbs after a Hold are processed while it waits.
+- Release clears the pages, both held and faulted (a translation answered
+  with `vmprotocol.TranslationRsp.Fault`), and queues their waiting
+  accesses to be translated again in arrival order. Releasing a page whose
+  Hold has not acked is a protocol error.
 
 **`vm/tlb`** — `TranslationCacheLike` (Invalidate, no Flush); state is a
 string in `State.TLBState` (`enable`/`pause`/`drain`).

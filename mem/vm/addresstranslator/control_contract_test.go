@@ -53,7 +53,7 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	memcontrolprotocol.RunContract(t, "addresstranslator", build, memcontrolprotocol.Universal())
+	memcontrolprotocol.RunContract(t, "addresstranslator", build, memcontrolprotocol.TranslatorLike())
 }
 
 var _ memcontrolprotocol.Controllable = (*Comp)(nil)

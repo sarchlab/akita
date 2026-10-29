@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // Spec contains immutable configuration for the AddressTranslator.
@@ -19,6 +20,11 @@ type Spec struct {
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
+
+	// CanFault lets the translations of this translator fault when the page
+	// is on another device (vmprotocol.TranslationReq.CanFault). A faulted
+	// access waits until a Release of its page.
+	CanFault bool `json:"can_fault"`
 }
 
 // Resources holds the external wiring referenced by the AddressTranslator. The
@@ -26,39 +32,6 @@ type Spec struct {
 type Resources struct {
 	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
 	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
-
-	// MigrationHook is nil unless pages can migrate while the simulation
-	// runs. When set, every translated access is resolved against it before
-	// it is sent, and its issue and completion are reported to it.
-	MigrationHook MigrationHook `json:"-"`
-}
-
-// MigrationHook lets a page-migration manager gate and observe the accesses
-// of an address translator. A migration holds the accesses to the pages it
-// moves, waits until the accesses already sent to the old frames complete,
-// copies the pages, and then lets the held accesses proceed with the new
-// mapping.
-type MigrationHook interface {
-	// Resolve is called when the translation of an access arrives, and again
-	// for every held access after the hook wakes the translator. It returns
-	// the page to use, which can differ from the translated page (a TLB may
-	// return a mapping that a migration has replaced), and false if the
-	// access must wait because its page is migrating. The hook must call
-	// waker.TickLater once a held access may proceed.
-	Resolve(waker Waker, pid vm.PID, vAddr uint64, page vm.Page) (vm.Page, bool)
-
-	// Issued is called after a translated access is sent to the memory
-	// system.
-	Issued(pid vm.PID, vAddr, pAddr uint64)
-
-	// Completed is called when the response to the access sent to pAddr
-	// arrives.
-	Completed(pAddr uint64)
-}
-
-// Waker is a component that can be asked to tick again.
-type Waker interface {
-	TickLater()
 }
 
 // incomingReqState is a serializable representation of an incoming request.
@@ -98,14 +71,29 @@ type reqToBottomState struct {
 	ReqToBottomSrc  messaging.RemotePort `json:"req_to_bottom_src"`
 	ReqToBottomDst  messaging.RemotePort `json:"req_to_bottom_dst"`
 	ReqToBottomType string               `json:"req_to_bottom_type"`
-	ReqToBottomAddr uint64               `json:"req_to_bottom_addr"`
+
+	// PID and VAddr locate the page of the access, so that a Hold of the
+	// page can wait for it.
+	PID   vm.PID `json:"pid"`
+	VAddr uint64 `json:"vaddr"`
 }
 
-// heldReqState is an access whose translation arrived while its page was
-// migrating. Page is the translation it received.
-type heldReqState struct {
-	Req  incomingReqState `json:"req"`
-	Page vm.Page          `json:"page"`
+// heldPageState is a page whose accesses wait. Held is set by a Hold and
+// Faulted by a faulted translation; a Release clears both.
+type heldPageState struct {
+	PID     vm.PID `json:"pid"`
+	VAddr   uint64 `json:"vaddr"`
+	Held    bool   `json:"held"`
+	Faulted bool   `json:"faulted"`
+}
+
+// pendingHoldState is a Hold that is not acknowledged yet: an access to one
+// of its pages, or a translation of one, is still in flight.
+type pendingHoldState struct {
+	ID     uint64               `json:"id"`
+	Src    messaging.RemotePort `json:"src"`
+	PID    vm.PID               `json:"pid"`
+	VAddrs []uint64             `json:"vaddrs"`
 }
 
 // State contains mutable runtime data for the AddressTranslator.
@@ -116,10 +104,19 @@ type State struct {
 	Transactions        []transactionState       `json:"transactions"`
 	InflightReqToBottom []reqToBottomState       `json:"inflight_req_to_bottom"`
 
-	// HeldReqs are the accesses the migration hook holds, in arrival order.
-	// NumHeldReqs counts every access that was ever held.
-	HeldReqs    []heldReqState `json:"held_reqs"`
-	NumHeldReqs uint64         `json:"num_held_reqs"`
+	// HeldPages are the pages whose accesses wait, PendingHolds the Holds
+	// not acknowledged yet. HeldReqs are the waiting accesses, in arrival
+	// order; ReplayReqs are the accesses that a Release let go, waiting to
+	// be translated again.
+	HeldPages    []heldPageState    `json:"held_pages"`
+	PendingHolds []pendingHoldState `json:"pending_holds"`
+	HeldReqs     []incomingReqState `json:"held_reqs"`
+	ReplayReqs   []incomingReqState `json:"replay_reqs"`
+
+	// NumHeldReqs counts the accesses that ever waited, NumFaults the
+	// translations that faulted.
+	NumHeldReqs uint64 `json:"num_held_reqs"`
+	NumFaults   uint64 `json:"num_faults"`
 }
 
 // Helper functions
@@ -273,8 +270,54 @@ func buildReqToBottom(
 		ReqToBottomSrc:  translatedReq.Meta().Src,
 		ReqToBottomDst:  translatedReq.Meta().Dst,
 		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
-		ReqToBottomAddr: translatedReq.(memprotocol.AccessReq).GetAddress(),
+		PID:             reqState.PID,
+		VAddr:           reqState.Address,
 	}
+}
+
+// findHeldPage returns the index of the held page that holds vAddr of
+// process pid, or -1.
+func findHeldPage(state *State, pid vm.PID, vAddr, log2PageSize uint64) int {
+	page := addrToPageID(vAddr, log2PageSize)
+
+	for i, p := range state.HeldPages {
+		if p.PID == pid && p.VAddr == page {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// isPageHeld reports whether the accesses to the page of vAddr must wait.
+func isPageHeld(state *State, pid vm.PID, vAddr, log2PageSize uint64) bool {
+	return findHeldPage(state, pid, vAddr, log2PageSize) >= 0
+}
+
+// holdPage marks the page of vAddr held (by a Hold) or faulted.
+func holdPage(state *State, pid vm.PID, vAddr, log2PageSize uint64, fault bool) {
+	i := findHeldPage(state, pid, vAddr, log2PageSize)
+	if i < 0 {
+		state.HeldPages = append(state.HeldPages, heldPageState{
+			PID:   pid,
+			VAddr: addrToPageID(vAddr, log2PageSize),
+		})
+		i = len(state.HeldPages) - 1
+	}
+
+	if fault {
+		state.HeldPages[i].Faulted = true
+	} else {
+		state.HeldPages[i].Held = true
+	}
+}
+
+// topTaskID returns the tracing task of the request received from the top.
+func topTaskID(comp *Comp, reqState incomingReqState) uint64 {
+	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
+		reqState.RspTo, reqState.Type)
+
+	return tracing.MsgIDAtReceiver(fakeFromTop, comp)
 }
 
 // Comp is the AddressTranslator component.

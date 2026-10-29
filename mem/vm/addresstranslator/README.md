@@ -33,35 +33,37 @@ middleware also handles `mem.ControlReq` flush and reset commands on the
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
-### Migration hook
+### Holds, faults, and releases
 
-`Resources.MigrationHook` is optional and nil by default. A page-migration
-manager sets it to gate and observe the translated accesses:
+Page migration stops and restarts the accesses of a translator with control
+verbs on the `Control` port (see `mem/CONTROL_PROTOCOL.md`), so all of its
+state is in `State` and every interaction is a message:
 
-- `Resolve` is called when a translation arrives. It returns the page to use
-  (the manager can replace a stale translation with the current mapping) and
-  whether the access may proceed. An access that may not proceed is held in
-  `State.HeldReqs` without blocking later translations; after the hook wakes
-  the translator with `TickLater`, held accesses are resolved again and sent
-  in arrival order.
-- `Issued` and `Completed` report each translated access when it is sent on
-  `Bottom` and when its response arrives, so the manager can wait until no
-  access to a frame is in flight.
-
-A Drain completes only after the held accesses have been sent and answered;
-a Reset drops them.
+- **Hold** (`Addresses`, `PID`) marks pages held. A new access to a held page
+  waits in `State.HeldReqs` without being translated, and an access whose
+  translation arrives after the Hold waits too, so no access can use a
+  translation that was read before the Hold. The Hold is acknowledged once no
+  access to the pages and no translation of them is in flight. A Hold does not
+  block the verbs that follow it.
+- **Faults**: with `Spec.CanFault`, translation requests carry
+  `TranslationReq.CanFault`. A response with `TranslationRsp.Fault` is not
+  used: the access waits and its page is marked faulted, so that the later
+  accesses to it wait too, without being translated.
+- **Release** (`Addresses`, `PID`) clears held and faulted pages. Their
+  waiting accesses move to `State.ReplayReqs` and are translated again, in
+  arrival order, before new accesses from `Top`.
 
 ## Key Types
 
-- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
-  `NumReqPerCycle`. Port buffer sizes are chosen by the caller when the port
+- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`,
+  `NumReqPerCycle`, and `CanFault`. Port buffer sizes are chosen by the caller when the port
   instances are built and assigned, not in the `Spec`.
-- `State` — mutable runtime data: the in-flight translation transactions, the
-  requests forwarded to the bottom port awaiting responses, the accesses held
-  by the migration hook, and the flushing flag.
+- `State` — mutable runtime data: the control state, the in-flight translation
+  transactions, the requests forwarded to the bottom port awaiting responses,
+  the held and faulted pages, the Holds not acknowledged yet, and the waiting
+  and replayed accesses.
 - `Resources` — external wiring; holds the `MemProviderMapper` and the
-  `TranslationProviderMapper` (both `mem.AddressToPortMapper`) and the optional
-  `MigrationHook`.
+  `TranslationProviderMapper` (both `mem.AddressToPortMapper`).
 - `Comp` — `modeling.Component[Spec, State, Resources]`.
 
 ## Builder Pattern

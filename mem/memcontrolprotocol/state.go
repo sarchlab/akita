@@ -60,6 +60,8 @@ type VerbSupport struct {
 	Reset      bool
 	Invalidate bool
 	Flush      bool
+	Hold       bool
+	Release    bool
 }
 
 // Supports reports whether the given command is in the support set.
@@ -77,6 +79,10 @@ func (v VerbSupport) Supports(cmd Command) bool {
 		return v.Invalidate
 	case CmdFlush:
 		return v.Flush
+	case CmdHold:
+		return v.Hold
+	case CmdRelease:
+		return v.Release
 	default:
 		return false
 	}
@@ -114,6 +120,16 @@ func TranslationCacheLike() VerbSupport {
 	return v
 }
 
+// TranslatorLike is the support matrix for components that translate
+// accesses and can hold them while their pages migrate (address
+// translators): the four universal verbs plus Hold and Release.
+func TranslatorLike() VerbSupport {
+	v := Universal()
+	v.Hold = true
+	v.Release = true
+	return v
+}
+
 // Protocol-defined Error strings on ControlRsp.
 const (
 	// ErrUnsupported means the component does not implement the verb.
@@ -126,14 +142,14 @@ const (
 )
 
 // IsSyncVerb reports whether the verb is acknowledged synchronously
-// (Pause, Enable, Reset, Invalidate) versus asynchronously on
-// completion (Drain, Flush). Used by the contract harness to know
+// (Pause, Enable, Reset, Invalidate, Release) versus asynchronously on
+// completion (Drain, Flush, Hold). Used by the contract harness to know
 // whether to expect a Rsp within one tick or to keep ticking.
 func IsSyncVerb(cmd Command) bool {
 	switch cmd {
-	case CmdPause, CmdEnable, CmdReset, CmdInvalidate:
+	case CmdPause, CmdEnable, CmdReset, CmdInvalidate, CmdRelease:
 		return true
-	case CmdDrain, CmdFlush:
+	case CmdDrain, CmdFlush, CmdHold:
 		return false
 	default:
 		return true

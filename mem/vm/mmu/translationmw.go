@@ -108,7 +108,52 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 
 	state.WalkingTranslations[walkingIndex].Page = page
 
+	if m.faults(walking, page) {
+		return m.doPageWalkFault(walkingIndex)
+	}
+
 	return m.doPageWalkHit(walkingIndex)
+}
+
+// faults reports whether the walk faults: the page is on another device
+// than the requester and may not be accessed remotely.
+func (m *translationMW) faults(walking transactionState, page vm.Page) bool {
+	return m.comp.Spec().RemoteFaults && walking.CanFault &&
+		page.DeviceID != walking.DeviceID && !page.IsPinned
+}
+
+// doPageWalkFault answers a faulted walk at once and reports the fault. The
+// walk is not held while the fault is serviced; the requester waits for the
+// fault to be serviced and then translates again.
+func (m *translationMW) doPageWalkFault(walkingIndex int) bool {
+	faultPort := m.comp.GetPortByName("Fault")
+	if !m.topPort().CanSend() || !faultPort.CanSend() {
+		return false
+	}
+
+	state := &m.comp.State
+	walking := state.WalkingTranslations[walkingIndex]
+
+	fault := vmprotocol.PageFault{
+		PID:      vm.PID(walking.PID),
+		VAddr:    walking.VAddr,
+		DeviceID: walking.DeviceID,
+		Page:     walking.Page,
+	}
+	fault.ID = timing.GetIDGenerator().Generate()
+	fault.Src = faultPort.AsRemote()
+	fault.Dst = m.comp.Spec().FaultHandler
+	fault.TrafficClass = "vmprotocol.PageFault"
+	faultPort.Send(fault)
+
+	state.NumFaults++
+
+	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		TaskID: walking.RecvTaskID,
+		What:   "fault",
+	})
+
+	return m.respond(walkingIndex, true)
 }
 
 func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
@@ -116,11 +161,18 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 		return false
 	}
 
+	return m.respond(walkingIndex, false)
+}
+
+// respond sends the translation of a finished walk. The caller has checked
+// that the Top port can send.
+func (m *translationMW) respond(walkingIndex int, fault bool) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
 	rsp := vmprotocol.TranslationRsp{
-		Page: walking.Page,
+		Page:  walking.Page,
+		Fault: fault,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
@@ -201,6 +253,7 @@ func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 		VAddr:        req.VAddr,
 		DeviceID:     req.DeviceID,
 		TransLatency: req.TransLatency,
+		CanFault:     req.CanFault,
 		CycleLeft:    spec.Latency,
 		WalkTaskID:   walkTaskID,
 	}

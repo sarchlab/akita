@@ -18,28 +18,23 @@ The MMU is driven by two middlewares that run each tick.
    completes it looks up the page in the shared `vm.PageTable`:
    - If the page is missing and `AutoPageAllocation` is set, a new page is
      created and inserted (otherwise it panics).
-   - If the page is migrating, or needs migration (accessed by a different
-     device, unified, not pinned), the transaction is moved to the migration
-     queue.
+   - With `RemoteFaults`, if the request may fault (`CanFault`), the page is on
+     another device than the requester, and the page is not pinned, the walk
+     faults: a `vm.TranslationRsp` with `Fault` set is sent back on `Top` at
+     once, and a `vm.PageFault` is sent on the `Fault` port to
+     `FaultHandler`. The walk is not held while the fault is serviced; the
+     requester waits and translates again after the fault handler releases it.
    - Otherwise a `vm.TranslationRsp` is sent back on `Top`.
-
-### migrationMW — on-demand migration
-
-Transactions queued by `translationMW` are processed one at a time. When a page
-must move to the requesting device, a `vm.PageMigrationReqToDriver` is sent on the
-`Migration` port to the configured `MigrationServiceProvider`. When the driver's
-response returns, the page is marked pinned, the page table is updated, and the
-final `vm.TranslationRsp` is sent on `Top`.
 
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, walk `Latency`,
-  `MaxRequestsInFlight`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
+  `MaxRequestsInFlight`, `AutoPageAllocation`, `Log2PageSize`, `RemoteFaults`,
+  and `FaultHandler`. Port buffer
   sizes are no longer part of the spec; they are chosen by the caller when the
   port instances are built.
-- `State` — mutable runtime data: in-flight walks, the migration queue, the
-  current on-demand migration, per-page device-access tracking, and the next
-  physical page to allocate.
+- `State` — mutable runtime data: in-flight walks, the next physical page to
+  allocate, and the number of faulted walks.
 - `Resources` — shared wiring; holds the `vm.PageTable`. If none is supplied the
   builder constructs one sized by `Log2PageSize`.
 - `Comp` — `modeling.Component[Spec, State, Resources]`.
@@ -82,5 +77,6 @@ for _, name := range []string{"Top", "Control"} {
 `Build` declares these ports; the caller assigns the instances after `Build`.
 
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
+- **Fault** (only with `RemoteFaults`): sends `vm.PageFault` to `FaultHandler`.
 - **Control**: accepts `mem.ControlReq` (Pause, Drain, Enable, Reset), returns
   `mem.ControlRsp`.

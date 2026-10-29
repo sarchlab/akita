@@ -95,6 +95,8 @@ func RunContract(
 		{CmdReset, "Reset"},
 		{CmdInvalidate, "Invalidate"},
 		{CmdFlush, "Flush"},
+		{CmdHold, "Hold"},
+		{CmdRelease, "Release"},
 	}
 
 	for _, v := range verbs {

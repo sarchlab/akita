@@ -256,6 +256,38 @@ var _ = Describe("TLB", func() {
 			rsp := topPort.RetrieveOutgoing()
 			Expect(rsp).To(BeAssignableToTypeOf(vmprotocol.TranslationRsp{}))
 		})
+
+		It("should pass a faulted translation up without caching it", func() {
+			rsp.Fault = true
+			bottomPort.Deliver(rsp)
+
+			next := &tlbComp.State
+			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
+			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100)
+			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, req)
+			next.MSHREntries[idx].HasReqToBottom = true
+			next.MSHREntries[idx].ReqToBottom = fetchBottom
+
+			Expect(tlbMW.parseBottom()).To(BeTrue())
+
+			_, _, found := setLookup(&next.Sets[0], 1, 0x100)
+			Expect(found).To(BeFalse())
+
+			Expect(tlbMW.respondMSHREntry()).To(BeTrue())
+
+			up := topPort.RetrieveOutgoing().(vmprotocol.TranslationRsp)
+			Expect(up.Fault).To(BeTrue())
+			Expect(up.RspTo).To(Equal(req.ID))
+		})
+
+		It("should pass CanFault on with a miss", func() {
+			req.CanFault = true
+
+			Expect(tlbMW.fetchBottom(req)).To(BeTrue())
+
+			down := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+			Expect(down.CanFault).To(BeTrue())
+		})
 	})
 
 	Context("flush related handling", func() {

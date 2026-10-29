@@ -15,6 +15,14 @@ type Spec struct {
 	MaxRequestsInFlight int         `json:"max_requests_in_flight"`
 	AutoPageAllocation  bool        `json:"auto_page_allocation"`
 	Log2PageSize        uint64      `json:"log2_page_size"`
+
+	// RemoteFaults makes a walk fault when the request may fault
+	// (TranslationReq.CanFault), the page is on another device than the
+	// requester, and the page is not pinned. The walk is answered at once
+	// with TranslationRsp.Fault, and a PageFault is sent from the "Fault"
+	// port (declared only with RemoteFaults) to FaultHandler.
+	RemoteFaults bool                 `json:"remote_faults"`
+	FaultHandler messaging.RemotePort `json:"fault_handler"`
 }
 
 // transactionState is the canonical transaction representation.
@@ -27,6 +35,7 @@ type transactionState struct {
 	VAddr        uint64               `json:"vaddr"`
 	DeviceID     uint64               `json:"device_id"`
 	TransLatency uint64               `json:"trans_latency"`
+	CanFault     bool                 `json:"can_fault"`
 	Page         vm.Page              `json:"page"`
 	CycleLeft    int                  `json:"cycle_left"`
 	// WalkTaskID is the pipeline subtask that spans the local page-table-walk
@@ -44,6 +53,9 @@ type State struct {
 	WalkingTranslations []transactionState       `json:"walking_translations"`
 	NextPhysicalPage    uint64                   `json:"next_physical_page"`
 	ToRemoveFromPTW     []int                    `json:"to_remove_from_ptw"`
+
+	// NumFaults counts the walks that faulted.
+	NumFaults uint64 `json:"num_faults"`
 }
 
 // Resources holds the shared resources referenced by the MMU. The page table is

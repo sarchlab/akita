@@ -26,7 +26,9 @@ flow through a fixed-latency pipeline before lookup:
      `TranslationProviderMapper`.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
    the page, and replay every request queued in the matching MSHR entry back to
-   `Top`.
+   `Top`. A faulted response (`TranslationRsp.Fault`) is passed to the queued
+   requests but not installed. A miss forwards the `CanFault` flag of the
+   request that allocated the MSHR entry.
 
 Replacement order within each set is tracked by `lruset.Set`; in-flight misses
 are tracked by the shared `mshr` package.

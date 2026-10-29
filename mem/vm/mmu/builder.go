@@ -84,6 +84,10 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", vmprotocol.Responder)
 	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
+	if spec.RemoteFaults {
+		modelComp.DeclarePort("Fault", vmprotocol.FaultReporter)
+	}
+
 	cmw := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cmw)
 

@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -42,24 +43,32 @@ func (m *parseTranslateMW) Tick() bool {
 }
 
 func (m *parseTranslateMW) translate() bool {
+	if len(m.comp.State.ReplayReqs) > 0 {
+		return m.replay()
+	}
+
 	itemI := m.topPort().PeekIncoming()
 	if itemI == nil {
 		return false
 	}
 
 	item := itemI.(memprotocol.AccessReq)
-	vAddr := item.GetAddress()
-	spec := m.comp.Spec()
-	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
+	nextState := &m.comp.State
 
-	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = timing.GetIDGenerator().Generate()
-	transReq.Src = m.translationPort().AsRemote()
-	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
-	transReq.PID = item.GetPID()
-	transReq.VAddr = vPageID
-	transReq.DeviceID = spec.DeviceID
-	transReq.TrafficClass = "vmprotocol.TranslationReq"
+	if isPageHeld(nextState, item.GetPID(), item.GetAddress(),
+		m.comp.Spec().Log2PageSize) {
+		// The page is held or faulted: the access waits for the Release of
+		// the page without being translated.
+		tracing.TraceReqReceive(m.comp, itemI)
+		nextState.HeldReqs = append(nextState.HeldReqs,
+			msgToIncomingReqState(itemI))
+		nextState.NumHeldReqs++
+		m.topPort().RetrieveIncoming()
+
+		return true
+	}
+
+	transReq := m.translationReq(item.GetPID(), item.GetAddress())
 
 	if !m.translationPort().CanSend() {
 		return false
@@ -79,8 +88,6 @@ func (m *parseTranslateMW) translate() bool {
 
 	incoming := msgToIncomingReqState(itemI)
 
-	nextState := &m.comp.State
-
 	tracing.TraceReqReceive(m.comp, itemI)
 	tracing.TraceReqInitiate(
 		m.comp,
@@ -88,15 +95,78 @@ func (m *parseTranslateMW) translate() bool {
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 
-	trans := transactionState{
+	m.addTransaction(incoming, transReq)
+	m.topPort().RetrieveIncoming()
+
+	return true
+}
+
+// replay translates again the oldest access that a Release let go. If its
+// page has been held again since, the access waits again.
+func (m *parseTranslateMW) replay() bool {
+	nextState := &m.comp.State
+	req := nextState.ReplayReqs[0]
+
+	if isPageHeld(nextState, req.PID, req.Address,
+		m.comp.Spec().Log2PageSize) {
+		nextState.HeldReqs = append(nextState.HeldReqs, req)
+		nextState.ReplayReqs = nextState.ReplayReqs[1:]
+
+		return true
+	}
+
+	transReq := m.translationReq(req.PID, req.Address)
+
+	if !m.translationPort().CanSend() {
+		return false
+	}
+
+	m.translationPort().Send(transReq)
+
+	parentID := topTaskID(m.comp, req)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: parentID,
+		Kind:   tracing.MilestoneKindDependency,
+		What:   "migration",
+	})
+	tracing.TraceReqInitiate(m.comp, transReq, parentID)
+
+	m.addTransaction(req, transReq)
+	nextState.ReplayReqs = nextState.ReplayReqs[1:]
+
+	return true
+}
+
+// translationReq creates the request for the translation of the page of
+// vAddr.
+func (m *parseTranslateMW) translationReq(
+	pid vm.PID,
+	vAddr uint64,
+) vmprotocol.TranslationReq {
+	spec := m.comp.Spec()
+
+	transReq := vmprotocol.TranslationReq{}
+	transReq.ID = timing.GetIDGenerator().Generate()
+	transReq.Src = m.translationPort().AsRemote()
+	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
+	transReq.PID = pid
+	transReq.VAddr = addrToPageID(vAddr, spec.Log2PageSize)
+	transReq.DeviceID = spec.DeviceID
+	transReq.CanFault = spec.CanFault
+	transReq.TrafficClass = "vmprotocol.TranslationReq"
+
+	return transReq
+}
+
+func (m *parseTranslateMW) addTransaction(
+	incoming incomingReqState,
+	transReq vmprotocol.TranslationReq,
+) {
+	nextState := &m.comp.State
+	nextState.Transactions = append(nextState.Transactions, transactionState{
 		IncomingReqs:      []incomingReqState{incoming},
 		TranslationReqID:  transReq.ID,
 		TranslationReqSrc: transReq.Src,
 		TranslationReqDst: transReq.Dst,
-	}
-	nextState.Transactions = append(nextState.Transactions, trans)
-
-	m.topPort().RetrieveIncoming()
-
-	return true
+	})
 }

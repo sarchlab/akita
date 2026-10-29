@@ -72,6 +72,10 @@ type mshrEntryState struct {
 	HasReqToBottom bool                        `json:"has_req_to_bottom"`
 	ReqToBottom    vmprotocol.TranslationReq   `json:"req_to_bottom"`
 	Page           vm.Page                     `json:"page"`
+
+	// Fault is set when the translation fetched for the entry faulted. A
+	// faulted translation is passed to the requests but never cached.
+	Fault bool `json:"fault"`
 }
 
 // GetPID returns the PID of the MSHR entry.

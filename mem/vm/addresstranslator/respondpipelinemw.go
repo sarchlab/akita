@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -50,8 +49,6 @@ func (m *respondPipelineMW) Tick() bool {
 		madeProgress = m.respond() || madeProgress
 	}
 
-	madeProgress = m.releaseHeld() || madeProgress
-
 	for range spec.NumReqPerCycle {
 		madeProgress = m.parseTranslation() || madeProgress
 	}
@@ -76,16 +73,18 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
+	spec := m.comp.Spec()
 
-	page, proceed := rsp.Page, true
-	if hook := m.comp.Resources().MigrationHook; hook != nil {
-		page, proceed = hook.Resolve(m.comp, reqState.PID, reqState.Address,
-			rsp.Page)
-	}
+	// A faulted translation, or one that arrives after its page was held,
+	// must not be used: the access waits for the Release of the page.
+	wait := rsp.Fault ||
+		isPageHeld(nextState, reqState.PID, reqState.Address, spec.Log2PageSize)
 
 	var translatedReq messaging.Msg
-	if proceed {
-		translatedReq = m.translatedReq(reqState, page)
+	if !wait {
+		translatedReq = createTranslatedReq(reqState, rsp.Page,
+			spec.Log2PageSize, m.bottomPort().AsRemote(),
+			m.comp.Resources().MemProviderMapper)
 
 		if !m.bottomPort().CanSend() {
 			return false
@@ -102,12 +101,17 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	// the correct one's children.
 	m.traceTranslationDone(nextTrans, reqState)
 
-	if proceed {
-		m.sendTranslated(reqState, translatedReq)
-	} else {
-		nextState.HeldReqs = append(nextState.HeldReqs,
-			heldReqState{Req: reqState, Page: rsp.Page})
+	if wait {
+		if rsp.Fault {
+			holdPage(nextState, reqState.PID, reqState.Address,
+				spec.Log2PageSize, true)
+			nextState.NumFaults++
+		}
+
+		nextState.HeldReqs = append(nextState.HeldReqs, reqState)
 		nextState.NumHeldReqs++
+	} else {
+		m.sendTranslated(reqState, translatedReq)
 	}
 
 	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
@@ -120,55 +124,6 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	return true
 }
 
-// releaseHeld retries, in arrival order, the accesses held by the migration
-// hook. It stops at the first access that must still wait or cannot be sent,
-// so held accesses leave in order.
-func (m *respondPipelineMW) releaseHeld() bool {
-	nextState := &m.comp.State
-	hook := m.comp.Resources().MigrationHook
-	madeProgress := false
-
-	for len(nextState.HeldReqs) > 0 {
-		held := nextState.HeldReqs[0]
-
-		page, proceed := hook.Resolve(m.comp, held.Req.PID, held.Req.Address,
-			held.Page)
-		if !proceed {
-			return madeProgress
-		}
-
-		translatedReq := m.translatedReq(held.Req, page)
-		if !m.bottomPort().CanSend() {
-			return madeProgress
-		}
-
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: m.topTaskID(held.Req),
-			Kind:   tracing.MilestoneKindDependency,
-			What:   "migration",
-		})
-
-		m.sendTranslated(held.Req, translatedReq)
-		nextState.HeldReqs = nextState.HeldReqs[1:]
-		madeProgress = true
-	}
-
-	return madeProgress
-}
-
-// translatedReq creates the request that accesses the physical address of
-// page.
-func (m *respondPipelineMW) translatedReq(
-	reqState incomingReqState,
-	page vm.Page,
-) messaging.Msg {
-	spec := m.comp.Spec()
-
-	return createTranslatedReq(reqState, page,
-		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Resources().MemProviderMapper)
-}
-
 // sendTranslated sends a translated request to the memory system. The caller
 // has checked that the Bottom port can send.
 func (m *respondPipelineMW) sendTranslated(
@@ -178,34 +133,22 @@ func (m *respondPipelineMW) sendTranslated(
 	m.bottomPort().Send(translatedReq)
 
 	nextState := &m.comp.State
-	reqToBot := buildReqToBottom(reqState, translatedReq)
 	nextState.InflightReqToBottom = append(
-		nextState.InflightReqToBottom, reqToBot)
+		nextState.InflightReqToBottom, buildReqToBottom(reqState, translatedReq))
 
-	if hook := m.comp.Resources().MigrationHook; hook != nil {
-		hook.Issued(reqState.PID, reqState.Address, reqToBot.ReqToBottomAddr)
-	}
-
-	topTaskID := m.topTaskID(reqState)
+	parentID := topTaskID(m.comp, reqState)
 
 	// The translated request leaves through the Bottom port; this
 	// network-busy wait belongs to the top req_in, not to the downstream
 	// req_out (which this component sends, so its receiver-side ID would
 	// be a phantom task).
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: topTaskID,
+		TaskID: parentID,
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
 
-	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
-}
-
-func (m *respondPipelineMW) topTaskID(reqState incomingReqState) uint64 {
-	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
-		reqState.RspTo, reqState.Type)
-
-	return tracing.MsgIDAtReceiver(fakeFromTop, m.comp)
+	tracing.TraceReqInitiate(m.comp, translatedReq, parentID)
 }
 
 // traceTranslationDone records, on the top req_in task, the milestone for a
@@ -218,7 +161,7 @@ func (m *respondPipelineMW) traceTranslationDone(
 	reqState incomingReqState,
 ) {
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: m.topTaskID(reqState),
+		TaskID: topTaskID(m.comp, reqState),
 		Kind:   tracing.MilestoneKindTranslation,
 		What:   "translation",
 	})
@@ -328,10 +271,6 @@ func (m *respondPipelineMW) respond() bool {
 
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
-
-		if hook := m.comp.Resources().MigrationHook; hook != nil {
-			hook.Completed(reqFromTopState.ReqToBottomAddr)
-		}
 
 		fakeReqToBottom := restoreMemMsg(
 			reqFromTopState.ReqToBottomID,
