@@ -24,14 +24,24 @@ func (m *parseTranslateMW) translationPort() messaging.Port {
 // Handle runs translate while the component is enabled. Pause, Drain, and
 // Reset all stop new translation work; in-flight transactions continue
 // to drain through respondPipelineMW until the component is fully
-// paused.
+// paused. While draining, the released accesses are still sent for
+// translation again: they were accepted before the Drain, and the Drain
+// waits for them.
 func (m *parseTranslateMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
-	if m.comp.State.ControlState == controlStateEnabled {
-		spec := m.comp.Spec
-		for range spec.NumReqPerCycle {
+	switch m.comp.State.ControlState {
+	case controlStateEnabled:
+		for range m.comp.Spec.NumReqPerCycle {
 			madeProgress = m.translate() || madeProgress
+		}
+	case controlStateDraining:
+		for range m.comp.Spec.NumReqPerCycle {
+			if len(m.comp.State.ReplayReqs) == 0 {
+				break
+			}
+
+			madeProgress = m.replay() || madeProgress
 		}
 	}
 

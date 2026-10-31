@@ -52,10 +52,15 @@ the related data is in `State`:
   later accesses to it wait too, without being translated.
 - **Release** (`Addresses`, `PID`) clears held and faulted pages. Their
   waiting accesses move to `State.ReplayReqs` and are sent for translation
-  again, in arrival order, before new accesses from `Top`.
+  again, in arrival order, before new accesses from `Top`. A fault response
+  that is still on its way when the Release arrives faults the page again,
+  so a fault handler holds the page before it releases it.
 
 Control is independent of the data path: control commands are processed
-while accesses are held or the `Top` port is full.
+while accesses are held or the `Top` port is full. A Drain waits for the
+held accesses, so Hold and Release are accepted while draining. A Reset
+answers the Holds that are not acknowledged yet with
+`memcontrolprotocol.ErrCanceledByReset`.
 
 ## Key Types
 

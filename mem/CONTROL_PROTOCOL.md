@@ -41,8 +41,8 @@ that translate accesses (address translators).
 | **Reset**      | ✓          | Hard reset to post-build state: drop in-flight, clear queues, clear private caches, drain Top/Bottom queues. Legal from any state.       | Sync       |
 | **Invalidate** | conditional | Drop entries from private cache state without writeback. Component must be paused or drained first. Filterable by `Addresses` and `PID`. | Sync       |
 | **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. Component must be paused or drained first.                   | Async      |
-| **Hold**       | conditional | Make the accesses to the pages in `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state; does not block later verbs. | Async      |
-| **Release**    | conditional | Send the accesses that wait on the pages in `Addresses` for translation again, in arrival order.                                         | Sync       |
+| **Hold**       | conditional | Make the accesses to the pages in `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state, also during a Drain; does not block later verbs. | Async      |
+| **Release**    | conditional | Send the accesses that wait on the pages in `Addresses` for translation again, in arrival order. Legal in any state, also during a Drain. | Sync       |
 
 ### Sync vs async, more precisely
 
@@ -99,7 +99,10 @@ The primitives compose. The protocol stays small.
    (the async verb acks and the state becomes paused), so each
    command is always handled from a clean, fully-settled state. There is
    no priority or preemption: a Reset queued behind an in-flight Drain
-   waits for the Drain to finish and ack, then runs. Issuing a new control
+   waits for the Drain to finish and ack, then runs. Hold and Release are
+   the exceptions: they are accepted while a Drain is in progress, because
+   a Drain waits for the held accesses and only a Release lets them go.
+   Issuing a new control
    command before the previous one has acked is therefore safe — it is
    buffered, not dropped — but the sender must wait for each ack to know
    when the command took effect.
@@ -135,8 +138,9 @@ type Req struct {
 type Rsp struct {
     Command Command
     Success bool
-    Error   string // Empty on success. memcontrolprotocol.ErrUnsupported or
-                   // memcontrolprotocol.ErrMustBePausedOrDrained on failure.
+    Error   string // Empty on success. memcontrolprotocol.ErrUnsupported,
+                   // memcontrolprotocol.ErrMustBePausedOrDrained, or
+                   // memcontrolprotocol.ErrCanceledByReset on failure.
 }
 ```
 
@@ -243,10 +247,13 @@ Error: "must be paused or drained"`.
 
 **`vm/addresstranslator`** — `TranslatorLike`; `State.ControlState`.
 - Drain acks once `Transactions`, `InflightReqToBottom`, `HeldReqs`, and
-  `ReplayReqs` are empty.
-- Reset clears them and the held pages, drops the Holds that are not
-  acknowledged yet (without an ack), and drains the
-  Top/Bottom/Translation ports.
+  `ReplayReqs` are empty. Held and faulted accesses therefore need a
+  Release, which is accepted while draining; the released accesses are
+  translated again during the Drain.
+- Reset clears them and the held pages, and drains the
+  Top/Bottom/Translation ports. The Holds that are not acknowledged yet
+  are canceled: after the Reset ack, each is answered with `Success:
+  false, Error: memcontrolprotocol.ErrCanceledByReset`.
 - Hold marks the pages held. A new access to a held page waits in the
   held list without being translated; an access whose translation
   arrives after the Hold waits too. The held list uses no transaction
@@ -258,6 +265,15 @@ Error: "must be paused or drained"`.
   answered with `addrtransprotocol.Rsp.Fault`), and sends their waiting
   accesses for translation again in arrival order. Releasing a page
   whose Hold has not acked is a protocol error.
+- A Release clears the `Faulted` mark only for the fault responses that
+  have already arrived. A fault response still on its way through the TLBs
+  marks the page again after the Release, and its access then waits for
+  another Release. The fault response travels MMU → L2 TLB → L1 TLB →
+  translator, while the `addrtransprotocol.PageFault` notification goes
+  to the fault handler directly, so a Release can overtake the response.
+  A fault handler must order the two, for example by sending a Hold of the
+  page before the Release: the Hold acks only after the translation in
+  flight has returned.
 
 **`vm/tlb`** — `TranslationCacheLike` (Invalidate, no Flush); state is a
 string in `State.TLBState` (`enable`/`pause`/`drain`).
@@ -341,6 +357,7 @@ memcontroltest.IsSyncVerb(memcontrolprotocol.CmdPause)     // true
 // Error string constants on Rsp.
 memcontrolprotocol.ErrUnsupported
 memcontrolprotocol.ErrMustBePausedOrDrained
+memcontrolprotocol.ErrCanceledByReset
 ```
 
 ## Implementing the protocol in a new component

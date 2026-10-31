@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -94,9 +95,13 @@ func (h *holdHarness) answer(req messaging.Msg, fault bool) {
 }
 
 func (h *holdHarness) control(cmd memcontrolprotocol.Command) uint64 {
+	return h.controlAt(cmd, 0x10000)
+}
+
+func (h *holdHarness) controlAt(cmd memcontrolprotocol.Command, page uint64) uint64 {
 	msg := messaging.Msg{
 		Payload: memcontrolprotocol.Req{
-			Command: cmd, Addresses: []uint64{0x10000}, PID: 1,
+			Command: cmd, Addresses: []uint64{page}, PID: 1,
 		},
 		ID:  h.sim.NewID(),
 		Src: "Driver",
@@ -253,7 +258,57 @@ func TestFaultHoldsTheAccessAndLaterAccessesUntilRelease(t *testing.T) {
 	require.Len(t, h.at.State.Transactions, 2)
 }
 
-func TestDrainWaitsForHeldAccesses(t *testing.T) {
+// complete answers the read that the translator sent to the bottom.
+func (h *holdHarness) complete() {
+	h.t.Helper()
+
+	read, sent := h.bottom.RetrieveOutgoing()
+	require.True(h.t, sent)
+	h.bottom.Deliver(messaging.Msg{
+		Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
+		ID:      h.sim.NewID(),
+		RspTo:   read.ID,
+	})
+}
+
+// drainAfterRelease drains a translator with one waiting access, releases the
+// access while draining, and checks that the Drain acks once the access
+// completes.
+func (h *holdHarness) drainAfterRelease() {
+	t := h.t
+	t.Helper()
+
+	drainID := h.control(memcontrolprotocol.CmdDrain)
+	h.tick()
+	h.tick()
+	_, _, ok := h.ack()
+	require.False(t, ok, "the Drain waits for the held access")
+
+	// The Release is accepted while draining, and the released access is
+	// translated again.
+	releaseID := h.control(memcontrolprotocol.CmdRelease)
+	h.tick()
+	rsp, rspTo, ok := h.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdRelease, rsp.Command)
+	require.Equal(t, releaseID, rspTo)
+
+	req, sent := h.translationReq()
+	require.True(t, sent)
+	h.answer(req, false)
+	h.tick()
+	h.complete()
+	h.tick()
+	h.tick()
+
+	rsp, rspTo, ok = h.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdDrain, rsp.Command)
+	require.True(t, rsp.Success)
+	require.Equal(t, drainID, rspTo)
+}
+
+func TestDrainCompletesAfterTheReleaseOfAHeldAccess(t *testing.T) {
 	h := newHoldHarness(t)
 
 	h.control(memcontrolprotocol.CmdHold)
@@ -262,18 +317,128 @@ func TestDrainWaitsForHeldAccesses(t *testing.T) {
 
 	h.access(0x10040)
 	h.tick()
+	require.Len(t, h.at.State.HeldReqs, 1)
 
-	h.ctrl.Deliver(messaging.Msg{
-		Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdDrain},
-		ID:      h.sim.NewID(),
-		Src:     "Driver",
-		Dst:     h.ctrl.AsRemote(),
-	})
+	h.drainAfterRelease()
+}
+
+func TestDrainCompletesAfterTheReleaseOfAFaultedAccess(t *testing.T) {
+	h := newHoldHarness(t)
+
+	h.access(0x10040)
+	h.tick()
+	req, _ := h.translationReq()
+	h.answer(req, true)
+	h.tick()
+	require.Len(t, h.at.State.HeldReqs, 1)
+
+	h.drainAfterRelease()
+}
+
+func TestHoldIsAcceptedWhileDraining(t *testing.T) {
+	h := newHoldHarness(t)
+
+	h.access(0x10040)
+	h.tick()
+	req, _ := h.translationReq()
+
+	h.control(memcontrolprotocol.CmdDrain)
+	h.tick()
+	holdID := h.control(memcontrolprotocol.CmdHold)
+	h.tick()
+	require.True(t, isPageHeld(&h.at.State, 1, 0x10000, h.at.Spec.Log2PageSize))
+
+	// The translation returns after the Hold: the access is held, so the
+	// Hold acks while the Drain still waits.
+	h.answer(req, false)
 	h.tick()
 	h.tick()
 
+	rsp, rspTo, ok := h.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdHold, rsp.Command)
+	require.Equal(t, holdID, rspTo)
+	_, _, ok = h.ack()
+	require.False(t, ok)
+}
+
+func TestResetCancelsPendingHolds(t *testing.T) {
+	h := newHoldHarness(t)
+
+	h.access(0x10040)
+	h.tick()
+
+	holdID := h.control(memcontrolprotocol.CmdHold)
+	h.tick()
 	_, _, ok := h.ack()
 	require.False(t, ok)
+
+	resetID := h.control(memcontrolprotocol.CmdReset)
+	h.tick()
+
+	rsp, rspTo, ok := h.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdReset, rsp.Command)
+	require.Equal(t, resetID, rspTo)
+
+	h.tick()
+	rsp, rspTo, ok = h.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdHold, rsp.Command)
+	require.Equal(t, holdID, rspTo)
+	require.False(t, rsp.Success)
+	require.Equal(t, memcontrolprotocol.ErrCanceledByReset, rsp.Error)
+	require.Empty(t, h.at.State.PendingHolds)
+	require.Empty(t, h.at.State.HeldPages)
+}
+
+func TestCheckpointKeepsHeldPagesPendingHoldsAndReplays(t *testing.T) {
+	h := newHoldHarness(t)
+
+	// Page 0x10000 faulted and was released: its access waits for replay.
+	// Page 0x20000 is held while its translation is in flight.
+	h.access(0x10040)
+	h.access(0x20040)
+	h.tick()
+	h.tick()
+	req, _ := h.translationReq()
+	pending, _ := h.translationReq()
+	h.answer(req, true)
+	h.tick()
+
+	h.control(memcontrolprotocol.CmdRelease)
+	h.at.Middlewares.Ctrl.Handle(nil)
+	h.ack()
+	holdID := h.controlAt(memcontrolprotocol.CmdHold, 0x20000)
+	h.at.Middlewares.Ctrl.Handle(nil)
+
+	require.Len(t, h.at.State.ReplayReqs, 1)
+	require.Len(t, h.at.State.PendingHolds, 1)
+	require.Len(t, h.at.State.HeldPages, 1)
+
+	var buf bytes.Buffer
+	require.NoError(t, h.at.SaveCheckpoint(&buf))
+
+	restored := newHoldHarness(t)
+	require.NoError(t, restored.at.LoadCheckpoint(&buf))
+	require.Equal(t, h.at.State, restored.at.State)
+
+	// The restored translator replays the released access, holds the
+	// access whose translation returns, and then acks the Hold.
+	restored.tick()
+	req, sent := restored.translationReq()
+	require.True(t, sent)
+	require.Equal(t, uint64(0x10000), req.Payload.(addrtransprotocol.Req).VAddr)
+
+	restored.answer(pending, false)
+	restored.tick()
+	restored.tick()
+
+	rsp, rspTo, ok := restored.ack()
+	require.True(t, ok)
+	require.Equal(t, memcontrolprotocol.CmdHold, rsp.Command)
+	require.Equal(t, holdID, rspTo)
+	require.Len(t, restored.at.State.HeldReqs, 1)
 }
 
 func TestResetDropsHeldAccesses(t *testing.T) {

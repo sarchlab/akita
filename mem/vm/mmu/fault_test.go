@@ -1,6 +1,7 @@
 package mmu
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -133,4 +134,25 @@ func TestMMUDoesNotFaultOnPinnedLocalOrNonUnifiedPages(t *testing.T) {
 			require.Empty(t, mmuComp.State.PendingFaults)
 		})
 	}
+}
+
+func TestMMUCheckpointKeepsPendingFaults(t *testing.T) {
+	mmuComp, pageTable := buildFaultingMMU(t, "Driver.PageMigration", 16)
+	walk(t, mmuComp, pageTable, remoteUnifiedPage())
+	outgoing(mmuComp.Ports.Top)
+	require.Len(t, mmuComp.State.PendingFaults, 1)
+
+	var buf bytes.Buffer
+	require.NoError(t, mmuComp.SaveCheckpoint(&buf))
+
+	restored, _ := buildFaultingMMU(t, "Driver.PageMigration", 16)
+	require.NoError(t, restored.LoadCheckpoint(&buf))
+	require.Equal(t, mmuComp.State, restored.State)
+
+	// The restored MMU sends the notification.
+	require.True(t, restored.Middlewares.Translation.Handle(nil))
+	msgs := outgoing(restored.Ports.Notification)
+	require.Len(t, msgs, 1)
+	require.Equal(t, uint64(0x1000),
+		msgs[0].Payload.(addrtransprotocol.PageFault).VAddr)
 }

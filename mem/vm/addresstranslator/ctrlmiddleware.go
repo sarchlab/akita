@@ -2,7 +2,6 @@ package addresstranslator
 
 import (
 	"log"
-	"slices"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -35,15 +34,31 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
-	// Control port and is handled once the component settles. A Hold is the
-	// exception: it does not block the commands that follow it. Control is
+	// Control port and is handled once the component settles. Hold and
+	// Release are the exceptions: a Hold does not block the commands that
+	// follow it, and both are accepted while draining, since a Drain waits
+	// for the held accesses and only a Release lets them go. Control is
 	// independent of the data path, so it runs while accesses are held or
 	// the Top port is full.
-	if m.comp.State.ControlState != controlStateDraining {
+	if m.comp.State.ControlState != controlStateDraining || m.holdOrReleaseNext() {
 		madeProgress = m.handleIncoming() || madeProgress
 	}
 	madeProgress = m.completePendingHolds() || madeProgress
 	return madeProgress
+}
+
+// holdOrReleaseNext reports whether the next control command is a Hold or a
+// Release.
+func (m *ctrlMiddleware) holdOrReleaseNext() bool {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
+		return false
+	}
+
+	req, ok := msg.Payload.(memcontrolprotocol.Req)
+
+	return ok && (req.Command == memcontrolprotocol.CmdHold ||
+		req.Command == memcontrolprotocol.CmdRelease)
 }
 
 // completePendingDrain finalizes a Drain once no transactions, no in-flight
@@ -141,12 +156,17 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	state.Transactions = nil
 	state.InflightReqToBottom = nil
 	state.HeldPages = nil
-	state.PendingHolds = nil
 	state.HeldReqs = nil
 	state.ReplayReqs = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled
+
+	// The Holds not acknowledged yet are answered with a failure after the
+	// Reset ack.
+	for i := range state.PendingHolds {
+		state.PendingHolds[i].Canceled = true
+	}
 
 	for {
 		if _, ok := m.topPort().RetrieveIncoming(); !ok {
@@ -209,10 +229,12 @@ func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	state := &m.comp.State
 	log2PageSize := m.comp.Spec.Log2PageSize
 
-	hold := pendingHoldState{ID: msg.ID, Src: msg.Src, PID: req.PID}
+	hold := pendingHoldState{
+		ID: msg.ID, Src: msg.Src, PID: req.PID, Pages: make(map[uint64]bool),
+	}
 	for _, addr := range req.Addresses {
 		holdPage(state, req.PID, addr, log2PageSize, false)
-		hold.VAddrs = append(hold.VAddrs, addrToPageID(addr, log2PageSize))
+		hold.Pages[addrToPageID(addr, log2PageSize)] = true
 	}
 
 	state.PendingHolds = append(state.PendingHolds, hold)
@@ -222,19 +244,25 @@ func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 }
 
 // completePendingHolds acknowledges, in arrival order, the Holds whose pages
-// have no access and no translation in flight.
+// have no access and no translation in flight, and answers the Holds that a
+// Reset canceled with a failure.
 func (m *ctrlMiddleware) completePendingHolds() bool {
 	state := &m.comp.State
 	madeProgress := false
 
 	for len(state.PendingHolds) > 0 {
 		hold := state.PendingHolds[0]
-		if m.inFlight(hold) || !m.ctrlPort().CanSend() {
+		if !hold.Canceled && m.inFlight(hold) || !m.ctrlPort().CanSend() {
 			return madeProgress
 		}
 
+		errStr := ""
+		if hold.Canceled {
+			errStr = memcontrolprotocol.ErrCanceledByReset
+		}
+
 		m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdHold,
-			hold.Src, hold.ID, true, ""))
+			hold.Src, hold.ID, !hold.Canceled, errStr))
 		state.PendingHolds = state.PendingHolds[1:]
 		madeProgress = true
 	}
@@ -253,9 +281,7 @@ func (m *ctrlMiddleware) inFlight(hold pendingHoldState) bool {
 			return false
 		}
 
-		page := addrToPageID(vAddr, log2PageSize)
-
-		return slices.Contains(hold.VAddrs, page)
+		return hold.Pages[addrToPageID(vAddr, log2PageSize)]
 	}
 
 	for _, t := range state.Transactions {
@@ -289,11 +315,7 @@ func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
 
 	for _, addr := range req.Addresses {
 		m.mustNotBeHolding(req.PID, addrToPageID(addr, log2PageSize))
-
-		if i := findHeldPage(state, req.PID, addr, log2PageSize); i >= 0 {
-			state.HeldPages = append(state.HeldPages[:i],
-				state.HeldPages[i+1:]...)
-		}
+		delete(state.HeldPages, heldPageKey(req.PID, addr, log2PageSize))
 	}
 
 	waiting := state.HeldReqs[:0]
@@ -317,7 +339,7 @@ func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
 // page is released only after its Hold completes.
 func (m *ctrlMiddleware) mustNotBeHolding(pid vm.PID, page uint64) {
 	for _, h := range m.comp.State.PendingHolds {
-		if h.PID == pid && slices.Contains(h.VAddrs, page) {
+		if !h.Canceled && h.PID == pid && h.Pages[page] {
 			log.Panicf("%s: release of page %#x before its hold completed",
 				m.comp.Name(), page)
 		}

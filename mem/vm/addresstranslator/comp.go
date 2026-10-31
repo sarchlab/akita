@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -120,12 +121,15 @@ type heldPageState struct {
 }
 
 // pendingHoldState is a Hold that is not acknowledged yet: an access to one
-// of its pages, or a translation of one, is still in flight.
+// of its pages, or a translation of one, is still in flight. Pages is keyed
+// by the page address. A Reset cancels the Hold: it is then answered with
+// memcontrolprotocol.ErrCanceledByReset.
 type pendingHoldState struct {
-	ID     uint64               `json:"id"`
-	Src    messaging.RemotePort `json:"src"`
-	PID    vm.PID               `json:"pid"`
-	VAddrs []uint64             `json:"vaddrs"`
+	ID       uint64               `json:"id"`
+	Src      messaging.RemotePort `json:"src"`
+	PID      vm.PID               `json:"pid"`
+	Pages    map[uint64]bool      `json:"pages"`
+	Canceled bool                 `json:"canceled"`
 }
 
 // state contains mutable runtime data for the AddressTranslator.
@@ -136,15 +140,15 @@ type state struct {
 	Transactions        []transactionState   `json:"transactions"`
 	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
 
-	// HeldPages are the pages whose accesses wait, PendingHolds the Holds
-	// not acknowledged yet. HeldReqs is the held list: the waiting accesses
+	// HeldPages are the pages whose accesses wait, keyed by heldPageKey;
+	// PendingHolds are the Holds not acknowledged yet. HeldReqs is the held list: the waiting accesses
 	// in arrival order. They use no transaction slot, so accesses to other
 	// pages keep flowing. ReplayReqs are the accesses that a Release let go,
 	// waiting to be sent for translation again.
-	HeldPages    []heldPageState    `json:"held_pages"`
-	PendingHolds []pendingHoldState `json:"pending_holds"`
-	HeldReqs     []incomingReqState `json:"held_reqs"`
-	ReplayReqs   []incomingReqState `json:"replay_reqs"`
+	HeldPages    map[string]heldPageState `json:"held_pages"`
+	PendingHolds []pendingHoldState       `json:"pending_holds"`
+	HeldReqs     []incomingReqState       `json:"held_reqs"`
+	ReplayReqs   []incomingReqState       `json:"replay_reqs"`
 
 	// NumHeldReqs counts the accesses that ever waited, NumFaults the fault
 	// responses.
@@ -297,41 +301,43 @@ func buildReqToBottom(
 	}
 }
 
-// findHeldPage returns the index of the held page that holds vAddr of
-// process pid, or -1.
-func findHeldPage(state *state, pid vm.PID, vAddr, log2PageSize uint64) int {
-	page := addrToPageID(vAddr, log2PageSize)
-
-	for i, p := range state.HeldPages {
-		if p.PID == pid && p.VAddr == page {
-			return i
-		}
-	}
-
-	return -1
+// heldPageKey is the key of the page of vAddr of process pid in
+// State.HeldPages.
+func heldPageKey(pid vm.PID, vAddr, log2PageSize uint64) string {
+	return strconv.FormatUint(uint64(pid), 10) + "/" +
+		strconv.FormatUint(addrToPageID(vAddr, log2PageSize), 16)
 }
 
 // isPageHeld reports whether the accesses to the page of vAddr must wait.
 func isPageHeld(state *state, pid vm.PID, vAddr, log2PageSize uint64) bool {
-	return findHeldPage(state, pid, vAddr, log2PageSize) >= 0
+	if len(state.HeldPages) == 0 {
+		return false
+	}
+
+	_, ok := state.HeldPages[heldPageKey(pid, vAddr, log2PageSize)]
+
+	return ok
 }
 
 // holdPage marks the page of vAddr held (by a Hold) or faulted.
 func holdPage(state *state, pid vm.PID, vAddr, log2PageSize uint64, fault bool) {
-	i := findHeldPage(state, pid, vAddr, log2PageSize)
-	if i < 0 {
-		state.HeldPages = append(state.HeldPages, heldPageState{
-			PID:   pid,
-			VAddr: addrToPageID(vAddr, log2PageSize),
-		})
-		i = len(state.HeldPages) - 1
+	if state.HeldPages == nil {
+		state.HeldPages = make(map[string]heldPageState)
+	}
+
+	key := heldPageKey(pid, vAddr, log2PageSize)
+	p, ok := state.HeldPages[key]
+	if !ok {
+		p = heldPageState{PID: pid, VAddr: addrToPageID(vAddr, log2PageSize)}
 	}
 
 	if fault {
-		state.HeldPages[i].Faulted = true
+		p.Faulted = true
 	} else {
-		state.HeldPages[i].Held = true
+		p.Held = true
 	}
+
+	state.HeldPages[key] = p
 }
 
 // Comp is the AddressTranslator component.
