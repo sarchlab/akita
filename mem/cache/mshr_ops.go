@@ -8,7 +8,16 @@ import (
 // MSHRQuery finds the entry matching pid+addr in MSHRState.
 // Returns (entryIdx, found).
 func MSHRQuery(ms *MSHRState, pid vm.PID, addr uint64) (int, bool) {
-	return mshr.Find(ms.Entries, pid, addr)
+	// Only inspect the key: copying an entry also copies its message values and
+	// slice headers, even though lookup does not use them.
+	for i := range ms.Entries {
+		entry := &ms.Entries[i]
+		if vm.PID(entry.PID) == pid && entry.Address == addr {
+			return i, true
+		}
+	}
+
+	return -1, false
 }
 
 // MSHRAdd creates a new entry in MSHRState for pid+addr.

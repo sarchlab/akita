@@ -1,10 +1,56 @@
 package cache
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
+
+func TestMSHRQueryRestoredEntries(t *testing.T) {
+	first := MSHREntryState{
+		PID: 2, Address: 0x1000, TransactionIndices: []int{3, 7},
+		BlockSetID: 5, BlockWayID: 6, HasBlock: true,
+		HasReadReq: true, ReadReq: messaging.Msg{ID: 42},
+		HasDataReady: true, DataReady: messaging.Msg{ID: 43, RspTo: 42},
+		Data: []byte{1, 2, 3},
+	}
+	ms := MSHRState{Entries: []MSHREntryState{
+		{PID: 1, Address: first.Address}, first, first,
+	}}
+	encoded, err := json.Marshal(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored MSHRState
+	if err := json.Unmarshal(encoded, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ms, restored) {
+		t.Fatal("MSHR state changed during serialization")
+	}
+	idx, found := MSHRQuery(&restored, 2, first.Address)
+	if !found || idx != 1 {
+		t.Fatalf("query must return first matching entry, got (%d, %v)", idx, found)
+	}
+	if !reflect.DeepEqual(ms, restored) {
+		t.Fatal("query changed the restored entry payload or order")
+	}
+
+	// Removal shifts the remaining duplicate. Lookup must use the current slice
+	// immediately, without a separate index to rebuild after restore or mutation.
+	MSHRRemove(&restored, 2, first.Address)
+	idx, found = MSHRQuery(&restored, 2, first.Address)
+	if !found || idx != 1 || !reflect.DeepEqual(restored.Entries[idx], first) {
+		t.Fatalf("query after removal lost the remaining entry: (%d, %v)", idx, found)
+	}
+	MSHRRemove(&restored, 2, first.Address)
+	if idx, found := MSHRQuery(&restored, 2, first.Address); found || idx != -1 {
+		t.Fatalf("query matched the other PID after removal: (%d, %v)", idx, found)
+	}
+}
 
 func TestMSHRQuery_Found(t *testing.T) {
 	ms := MSHRState{
