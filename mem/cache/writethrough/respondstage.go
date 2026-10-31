@@ -32,6 +32,10 @@ func (s *respondStage) Tick() bool {
 }
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
+	if !s.cache.topPort().CanSend() {
+		return false
+	}
+
 	dr := messaging.Msg{Payload: memprotocol.DataReadyRsp{
 		Data: trans.Data},
 		ID:    s.cache.comp.NewID(),
@@ -40,10 +44,6 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 		RspTo: trans.ReadMeta.ID,
 
 		TrafficBytes: len(trans.Data) + 4,
-	}
-
-	if !s.cache.topPort().CanSend() {
-		return false
 	}
 
 	s.cache.topPort().Send(dr)
@@ -57,16 +57,16 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 }
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
+	if !s.cache.topPort().CanSend() {
+		return false
+	}
+
 	done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 		ID:           s.cache.comp.NewID(),
 		Src:          s.cache.topPort().AsRemote(),
 		Dst:          trans.WriteMeta.Src,
 		RspTo:        trans.WriteMeta.ID,
 		TrafficBytes: 4,
-	}
-
-	if !s.cache.topPort().CanSend() {
-		return false
 	}
 
 	s.cache.topPort().Send(done)
