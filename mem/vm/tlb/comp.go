@@ -96,6 +96,10 @@ type mshrEntryState struct {
 	HasReqToBottom bool                  `json:"has_req_to_bottom"`
 	ReqToBottom    messaging.Msg         `json:"req_to_bottom"`
 	Page           vm.Page               `json:"page"`
+
+	// Fault is set when the translation fetched for the entry faulted. A
+	// fault response is forwarded to the requests but never filled.
+	Fault bool `json:"fault"`
 }
 
 // Matches reports whether the MSHR entry has the given PID and virtual address.

@@ -36,6 +36,7 @@ func (m *translationMW) Handle(_ timing.Event) bool {
 
 	madeProgress := false
 
+	madeProgress = m.sendFaults() || madeProgress
 	madeProgress = m.walkPageTable() || madeProgress
 	if m.comp.State.ControlState == controlStateEnabled {
 		madeProgress = m.parseFromTop() || madeProgress
@@ -94,7 +95,67 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 
 	state.WalkingTranslations[walkingIndex].Page = page
 
+	if m.faults(walking, page) {
+		return m.doPageWalkFault(walkingIndex)
+	}
+
 	return m.doPageWalkHit(walkingIndex)
+}
+
+// faults reports whether a walk faults: faults are enabled, and the page is
+// unified, on another device than the requester, and not pinned.
+func (m *translationMW) faults(walking transactionState, page vm.Page) bool {
+	return m.comp.Spec.FaultHandler != "" && page.Unified &&
+		page.DeviceID != walking.DeviceID && !page.IsPinned
+}
+
+// doPageWalkFault answers a faulted walk at once and queues the notification
+// of the fault handler. The MMU never holds a walk while the fault is
+// serviced (a held walk would wait for the migration, which waits for the
+// requester to drain its translations): the requester holds the access and
+// translates it again when it is released.
+func (m *translationMW) doPageWalkFault(walkingIndex int) bool {
+	state := &m.comp.State
+	walking := state.WalkingTranslations[walkingIndex]
+
+	if !m.doPageWalkHit(walkingIndex) {
+		return false
+	}
+
+	state.PendingFaults = append(state.PendingFaults, messaging.Msg{
+		Payload: addrtransprotocol.PageFault{
+			PID:      vm.PID(walking.PID),
+			VAddr:    walking.VAddr,
+			DeviceID: walking.DeviceID,
+			Page:     walking.Page,
+		},
+		ID:  m.comp.NewID(),
+		Src: m.comp.Ports.Notification[0].AsRemote(),
+		Dst: m.comp.Spec.FaultHandler,
+	})
+	state.NumFaults++
+
+	return true
+}
+
+// sendFaults sends the queued fault notifications from the Notification[0]
+// port.
+func (m *translationMW) sendFaults() bool {
+	state := &m.comp.State
+	madeProgress := false
+
+	if len(state.PendingFaults) == 0 {
+		return false
+	}
+
+	port := m.comp.Ports.Notification[0]
+	for len(state.PendingFaults) > 0 && port.CanSend() {
+		port.Send(state.PendingFaults[0])
+		state.PendingFaults = state.PendingFaults[1:]
+		madeProgress = true
+	}
+
+	return madeProgress
 }
 
 func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
@@ -106,7 +167,8 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	walking := state.WalkingTranslations[walkingIndex]
 
 	rsp := messaging.Msg{Payload: addrtransprotocol.Rsp{
-		Page: walking.Page,
+		Page:  walking.Page,
+		Fault: m.faults(walking, walking.Page),
 	},
 		ID:    m.comp.NewID(),
 		Src:   m.topPort().AsRemote(),
@@ -116,6 +178,13 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
+
+	if rsp.Payload.(addrtransprotocol.Rsp).Fault {
+		m.comp.TaskTracker().AddTag(tasks.Tag{
+			TaskID: walking.RecvTaskID,
+			What:   "fault",
+		})
+	}
 
 	// The page walk is fully local (a CycleLeft countdown, no downstream
 	// req_out): label that latency interval as work on the req_in and close the

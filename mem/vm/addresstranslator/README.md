@@ -33,14 +33,44 @@ saved in a transaction record while the translation is outstanding.
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
+### Holds, faults, and releases
+
+Page migration stops and restarts the accesses of a translator with
+control verbs on the `Control` port (see `mem/CONTROL_PROTOCOL.md`); all of
+the related data is in `State`:
+
+- **Hold** (`Addresses`, `PID`) marks pages held. A new access to a held
+  page waits in the held list (`State.HeldReqs`) without being translated,
+  and an access whose translation arrives after the Hold waits too. The
+  held list uses no transaction slot, so accesses to other pages keep
+  flowing. The Hold is acknowledged once no issued access to the pages is
+  outstanding and no translation of them is in flight. A TLB fills before
+  it responds, so after the ack no walk can refill a TLB with the old
+  translation.
+- **Fault**: an `addrtransprotocol.Rsp` with `Fault` set is not used. The
+  access waits in the held list and its page is marked faulted, so the
+  later accesses to it wait too, without being translated.
+- **Release** (`Addresses`, `PID`) clears held and faulted pages. Their
+  waiting accesses move to `State.ReplayReqs` and are sent for translation
+  again, in arrival order, before new accesses from `Top`. A fault response
+  that is still on its way when the Release arrives faults the page again,
+  so a fault handler holds the page before it releases it.
+
+Control is independent of the data path: control commands are processed
+while accesses are held or the `Top` port is full. A Drain waits for the
+held accesses, so Hold and Release are accepted while draining. A Reset
+answers the Holds that are not acknowledged yet with
+`memcontrolprotocol.ErrCanceledByReset`.
+
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
   `NumReqPerCycle`. Port buffer sizes are chosen by the system builder when it
   creates the port instances, not in the `Spec`.
 - `State` — mutable runtime data: the control state, the in-flight translation
-  transactions, and the requests forwarded to the bottom port awaiting
-  responses.
+  transactions, the requests forwarded to the bottom port awaiting
+  responses, the held and faulted pages, the Holds not acknowledged yet, and
+  the held and replayed accesses.
 - `Resources` — empty. Routing uses `mem.AddressMapper` values in Spec (Bottom and Translation).
   Middleware calls their `Find` methods directly; Resources has no routing override.
 - `Ports` — the `Top`, `Bottom`, `Translation`, and `Control` ports.
