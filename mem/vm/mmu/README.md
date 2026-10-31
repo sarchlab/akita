@@ -27,7 +27,7 @@ Invalidate and Flush are answered as unsupported.
    - With `FaultHandler` set, the walk faults if the page is `Unified`, on
      another device than the requester, and not `IsPinned`. The response
      has `Fault` set, and an `addrtransprotocol.PageFault` is queued in
-     `State.PendingFaults` and sent from `Notification` to `FaultHandler`. The MMU
+     `State.PendingFaults` and sent from `Notification[0]` to `FaultHandler`. The MMU
      never holds a walk while a fault is serviced; the requester holds the
      access and translates it again when the fault handler releases it.
 
@@ -45,7 +45,8 @@ Invalidate and Flush are answered as unsupported.
   panics if `PageTable` is nil, or if its page size does not match
   `Log2PageSize`. (The MMU no longer builds a default page table; build one with
   `vm.MakePageTableBuilder()` or `vm.NewPageTable(log2PageSize)`.)
-- `Ports` — the `Top`, `Control`, and `Notification` ports.
+- `Ports` — the `Top` and `Control` ports, and the optional `Notification`
+  port group.
 - `Middlewares` — `Ctrl` (control commands) and `Translation` (page-table
   walks), run in that order every cycle.
 - `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
@@ -87,7 +88,11 @@ After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
 - **Top**: accepts `addrtransprotocol.Req`, returns `addrtransprotocol.Rsp`.
-- **Notification**: sends `addrtransprotocol.PageFault` to `Spec.FaultHandler`.
-  It must be bound; it needs no connection while `FaultHandler` is empty.
+- **Notification** (optional port group of at most one port):
+  `Notification[0]` sends `addrtransprotocol.PageFault` to
+  `Spec.FaultHandler`. Bind it with `BindPort("Notification[0]", port)` when
+  `FaultHandler` is set; `Initialize` panics if it is missing. An MMU
+  without a fault handler leaves the group empty, so v5.0 wirings need no
+  change.
 - **Control**: accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset), returns
   `memcontrolprotocol.Rsp`.

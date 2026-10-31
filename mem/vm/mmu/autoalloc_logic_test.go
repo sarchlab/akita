@@ -23,7 +23,6 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
-	mmu.BindPort("Notification", mmuPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
@@ -91,7 +90,6 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
-	mmu.BindPort("Notification", mmuPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
@@ -136,7 +134,6 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
-	mmu.BindPort("Notification", mmuPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}
@@ -160,7 +157,6 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	mmuPorts := makePorts(sim, "TestMMU", 4096)
 	mmu.BindPort("Top", mmuPorts.Top)
 	mmu.BindPort("Control", mmuPorts.Control)
-	mmu.BindPort("Notification", mmuPorts.Notification)
 	if err := sim.Initialize(); err != nil {
 		panic(err)
 	}

@@ -19,7 +19,7 @@ type Spec struct {
 	// driver). When it is set, a walk faults if the page is unified, is on
 	// another device than the requester, and is not pinned: the walk is
 	// answered at once with a fault response, and an
-	// addrtransprotocol.PageFault is sent from the Notification port to
+	// addrtransprotocol.PageFault is sent from the Notification[0] port to
 	// FaultHandler. When it is empty, the MMU raises no faults.
 	FaultHandler messaging.RemotePort `json:"fault_handler"`
 }
@@ -29,9 +29,11 @@ type Ports struct {
 	// Top receives translation requests and returns their responses.
 	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
 
-	// Notification sends the fault notifications to Spec.FaultHandler. It
-	// must be bound; it needs no connection when FaultHandler is empty.
-	Notification messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.notifier"`
+	// Notification is an optional port group of at most one port. Its
+	// Notification[0] sends the fault notifications to Spec.FaultHandler and
+	// must be bound when FaultHandler is set. An MMU without a fault handler
+	// leaves the group empty, so wirings that predate faults stay valid.
+	Notification []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.notifier"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`

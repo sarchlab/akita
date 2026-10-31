@@ -135,7 +135,6 @@ func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Co
 
 	ioMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
 	ioMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
-	ioMMU.BindPort("Notification", newPort(s, "IoMMU.Notification"))
 
 	l2TLBSpec := tlb.DefaultSpec()
 	l2TLBSpec.NumWays = 64

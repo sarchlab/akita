@@ -42,10 +42,6 @@ func makePorts(simulation modeling.Simulation, name string, topBufSize int) Port
 			WithSimulation(simulation).
 			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
 			Build(),
-		Notification: twowaybuffered.MakeBuilder().
-			WithSimulation(simulation).
-			WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
-			Build(),
 	}
 }
 
@@ -72,7 +68,6 @@ func TestMMU(t *testing.T) {
 		mmuCompPorts := makePorts(sim, "MMU", topBufSize)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
-		mmuComp.BindPort("Notification", mmuCompPorts.Notification)
 
 		topPort = mmuComp.Ports.Top
 
@@ -259,7 +254,6 @@ func TestMMUIntegration(t *testing.T) {
 		mmuCompPorts := makePorts(sim, "MMU", 4096)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
-		mmuComp.BindPort("Notification", mmuCompPorts.Notification)
 
 		topPort = mmuComp.Ports.Top
 		(&noopConn{}).BindPort(topPort)

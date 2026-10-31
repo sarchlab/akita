@@ -87,7 +87,6 @@ func TestMMUMilestones(t *testing.T) {
 		mmuCompPorts := makePorts(sim, "MMU", 16)
 		mmuComp.BindPort("Top", mmuCompPorts.Top)
 		mmuComp.BindPort("Control", mmuCompPorts.Control)
-		mmuComp.BindPort("Notification", mmuCompPorts.Notification)
 
 		topPort = mmuComp.Ports.Top
 

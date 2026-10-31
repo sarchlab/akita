@@ -198,7 +198,6 @@ func buildTranslationHierarchy(
 
 	IoMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
 	IoMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
-	IoMMU.BindPort("Notification", newPort(s, "IoMMU.Notification"))
 
 	L2TLBMapper := IoMMU.Ports.Top.AsRemote()
 

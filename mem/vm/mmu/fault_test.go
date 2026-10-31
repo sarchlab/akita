@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -35,10 +36,10 @@ func buildFaultingMMU(
 	ports := makePorts(sim, "MMU", topBufSize)
 	mmuComp.BindPort("Top", ports.Top)
 	mmuComp.BindPort("Control", ports.Control)
-	mmuComp.BindPort("Notification", ports.Notification)
+	mmuComp.BindPort("Notification[0]", makeNotificationPort(sim))
 	(&noopConn{}).BindPort(mmuComp.Ports.Top)
 	(&noopConn{}).BindPort(mmuComp.Ports.Control)
-	(&noopConn{}).BindPort(mmuComp.Ports.Notification)
+	(&noopConn{}).BindPort(mmuComp.Ports.Notification[0])
 	require.NoError(t, sim.Initialize())
 
 	return mmuComp, pageTable
@@ -58,6 +59,47 @@ func walk(t *testing.T, mmuComp *Comp, pageTable *vm.PageTable, page vm.Page) {
 	}}
 
 	require.True(t, mmuComp.Middlewares.Translation.Handle(nil))
+}
+
+func makeNotificationPort(sim modeling.Simulation) messaging.Port {
+	return twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: 4, OutgoingCapacity: 4}).
+		Build()
+}
+
+// TestMMUWithoutAFaultHandlerNeedsNoNotificationPort builds an MMU wired as
+// in v5.0, with only Top and Control.
+func TestMMUWithoutAFaultHandlerNeedsNoNotificationPort(t *testing.T) {
+	sim := testsim.New(timing.NewSerialEngine(), false)
+	mmuComp := modeling.MakeBuilder[*Comp](DefaultSpec()).
+		WithSimulation(sim).
+		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
+		Build("MMU")
+	ports := makePorts(sim, "MMU", 16)
+	mmuComp.BindPort("Top", ports.Top)
+	mmuComp.BindPort("Control", ports.Control)
+	(&noopConn{}).BindPort(mmuComp.Ports.Top)
+	(&noopConn{}).BindPort(mmuComp.Ports.Control)
+
+	require.NoError(t, sim.Initialize())
+}
+
+func TestMMUWithAFaultHandlerRequiresANotificationPort(t *testing.T) {
+	sim := testsim.New(timing.NewSerialEngine(), false)
+	spec := DefaultSpec()
+	spec.FaultHandler = "Driver.PageMigration"
+	mmuComp := modeling.MakeBuilder[*Comp](spec).
+		WithSimulation(sim).
+		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
+		Build("MMU")
+	ports := makePorts(sim, "MMU", 16)
+	mmuComp.BindPort("Top", ports.Top)
+	mmuComp.BindPort("Control", ports.Control)
+	(&noopConn{}).BindPort(mmuComp.Ports.Top)
+	(&noopConn{}).BindPort(mmuComp.Ports.Control)
+
+	require.Panics(t, func() { _ = sim.Initialize() })
 }
 
 func remoteUnifiedPage() vm.Page {
@@ -91,7 +133,7 @@ func TestMMUFaultsOnARemoteUnifiedPage(t *testing.T) {
 
 	// The notification follows the response, from the Notification port.
 	require.True(t, mmuComp.Middlewares.Translation.Handle(nil))
-	msgs = outgoing(mmuComp.Ports.Notification)
+	msgs = outgoing(mmuComp.Ports.Notification[0])
 	require.Len(t, msgs, 1)
 	fault := msgs[0].Payload.(addrtransprotocol.PageFault)
 	require.Equal(t, messaging.RemotePort("Driver.PageMigration"), msgs[0].Dst)
@@ -151,7 +193,7 @@ func TestMMUCheckpointKeepsPendingFaults(t *testing.T) {
 
 	// The restored MMU sends the notification.
 	require.True(t, restored.Middlewares.Translation.Handle(nil))
-	msgs := outgoing(restored.Ports.Notification)
+	msgs := outgoing(restored.Ports.Notification[0])
 	require.Len(t, msgs, 1)
 	require.Equal(t, uint64(0x1000),
 		msgs[0].Payload.(addrtransprotocol.PageFault).VAddr)

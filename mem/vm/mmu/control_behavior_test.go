@@ -42,7 +42,6 @@ func TestMMUControlBehavior(t *testing.T) {
 		compPorts := makePorts(sim, "MMU", 16)
 		comp.BindPort("Top", compPorts.Top)
 		comp.BindPort("Control", compPorts.Control)
-		comp.BindPort("Notification", compPorts.Notification)
 
 		topPort = comp.Ports.Top
 		ctrlPort = comp.Ports.Control
