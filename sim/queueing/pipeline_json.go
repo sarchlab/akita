@@ -32,6 +32,7 @@ func (p *Pipeline[T]) UnmarshalJSON(data []byte) error {
 	p.width = s.Width
 	p.numStages = s.NumStages
 	p.stages = s.Stages
+	p.occupancy = nil
 
 	return nil
 }
