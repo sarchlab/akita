@@ -31,6 +31,8 @@ var expectedErrors = []struct {
 	pkgSubstr string
 	msgSubstr string
 }{
+	{"domain port shape", "fixtures/baddomainports", "must be an exported messaging.Port"},
+	{"domain missing default", "fixtures/domainnodefault", "requires func DefaultSpec() Spec"},
 	{"event progress return", "fixtures/badeventmiddleware", "implement event.Middleware"},
 	{"wakeup missing progress", "fixtures/badwakeupmiddleware", "implement wakeup.Middleware"},
 	{"ticking missing progress", "fixtures/badtickingmiddleware", "implement ticking.Middleware"},
@@ -73,7 +75,8 @@ var expectedErrors = []struct {
 		"want role=<protocol>.<role>"},
 	{"value receiver initializer", "fixtures/valueinitializer", "must use a pointer receiver"},
 	{"invalid State initializer", "fixtures/badstateinitializer", "State.Initialize must have signature"},
-	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer", "Middlewares.Initialize must have signature"},
+	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer",
+		"Middlewares.Initialize must have signature"},
 	{"middleware without Handle", "fixtures/badmiddleware",
 		"implement ticking.Middleware"},
 }
@@ -358,7 +361,8 @@ func TestModuleDiscovery(t *testing.T) {
 
 	got := make([]string, 0, len(defs))
 	for _, def := range defs {
-		if def.Kind != schema.KindComponent || !models[def.Model] {
+		if (def.Kind == schema.KindComponent && !models[def.Model]) || (def.Kind != schema.KindComponent &&
+			def.Kind != schema.KindDomain) || (def.Kind == schema.KindDomain && def.Model != "") {
 			t.Errorf("%s: kind %q, model %q; want a component model",
 				def.Package, def.Kind, def.Model)
 		}
@@ -451,6 +455,14 @@ func declaresDefinition(t *testing.T, path string) bool {
 	}
 
 	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "Node" && fn.Type.Results != nil &&
+			len(fn.Type.Results.List) == 1 {
+			if ptr, ok := fn.Type.Results.List[0].Type.(*ast.StarExpr); ok {
+				if sel, ok := ptr.X.(*ast.SelectorExpr); ok && sel.Sel.Name == "DomainNode" {
+					return true
+				}
+			}
+		}
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.TYPE {
 			continue

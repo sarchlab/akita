@@ -1,4 +1,4 @@
-package twowaybuffered
+package twowaybuffered_test
 
 import (
 	"bytes"
@@ -49,9 +49,9 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 	}
 
 	src := newCkptPort(4, 4)
-	src.incomingBuf.Push(bufferEntry{Message: mk(1, 10)})
-	src.incomingBuf.Push(bufferEntry{Message: mk(2, 20)})
-	src.outgoingBuf.Push(bufferEntry{Message: mk(3, 30)})
+	src.TestPushIncoming(mk(1, 10))
+	src.TestPushIncoming(mk(2, 20))
+	src.TestPushOutgoing(mk(3, 30))
 
 	var buf bytes.Buffer
 	if err := src.SaveCheckpoint(&buf); err != nil {
@@ -63,7 +63,7 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	in := dst.incomingBuf.Elements()
+	in := dst.TestIncomingEntries()
 	if len(in) != 2 {
 		t.Fatalf("incoming size = %d, want 2", len(in))
 	}
@@ -74,7 +74,7 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 		t.Fatalf("incoming[1] = %+v", m)
 	}
 
-	out := dst.outgoingBuf.Elements()
+	out := dst.TestOutgoingEntries()
 	if len(out) != 1 || out[0].Message.Payload.(registryTestMsg).Value != 30 {
 		t.Fatalf("outgoing = %+v", out)
 	}

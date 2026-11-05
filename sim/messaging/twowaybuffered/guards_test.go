@@ -1,4 +1,4 @@
-package twowaybuffered
+package twowaybuffered_test
 
 import (
 	"testing"
@@ -42,7 +42,7 @@ func TestSendGuardsLeavePortUnchanged(t *testing.T) {
 	require.Equal(t, 1, p.OutgoingBuf().Size())
 	require.Equal(t, 1, hook.calls)
 	// Check every send, even when the outgoing buffer already contains traffic.
-	p.conn = nil
+	p.TestClearConnection()
 	require.Panics(t, func() { p.Send(valid) })
 	require.Equal(t, 1, p.OutgoingBuf().Size())
 	require.Equal(t, 1, hook.calls)

@@ -1,28 +1,6 @@
-// This acceptance test wires four memory-access agents on top of a shared
-// lower memory hierarchy. Each agent has its own private ROB, address
-// translator, L1 cache, and L1 TLB; all four agents share a single L2 cache,
-// L2 TLB, memory controller, and MMU.
-//
-//	agent_i -Mem-> ROB_i -Bottom-> AT_i
-//	                                 |-Bottom------> L1Cache_i --\
-//	                                 |-Translation-> L1TLB_i --\  \
-//	                                                           |   |  (shared connections)
-//	                4x L1TLB.Bottom -----> L2TLB.Top           |   |
-//	                                         |                 |   |
-//	                                       MMU.Top             |   4x L1Cache.Bottom --> L2Cache.Top
-//	                                                           |                            |
-//	                                                           +-------------------------> MemCtrl.Top
-//
-// A directconnection routes by message destination, so a single shared
-// connection can fan four private L1s into the one shared L2 (and four L1 TLBs
-// into the one L2 TLB): requests carry Dst=L2.Top, responses carry Dst=req.Src
-// (the originating L1), so the routing is automatic.
-//
-// Each agent only verifies the values it itself wrote, so the four agents must
-// touch disjoint physical memory. The MemAccessAgent's AddressOffset is set to
-// i*MaxAddress for agent i, giving every agent a private slice of the combined
-// virtual range [0, numAgents*MaxAddress), which the page table maps to a
-// disjoint physical frame.
+// This acceptance program instantiates four private agent-chain domains above
+// a shared L2 cache, L2 TLB, memory controller, and MMU. Agents access disjoint
+// address ranges; shared connections retain their original arbitration order.
 package main
 
 import (
@@ -31,501 +9,144 @@ import (
 	"os"
 	"time"
 
+	"github.com/sarchlab/akita/v5/blueprint"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/acceptancetests/sharedl2vm/agentchain"
+	"github.com/sarchlab/akita/v5/mem/acceptancetests/sharedl2vm/workload"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
-	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/internal/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// numAgents is the number of independent memory-access agents.
 const numAgents = 4
-
-// ptBase is the physical base address that the page table maps virtual
-// address 0 to. Every virtual page is mapped to ptBase + vAddr.
-const ptBase = uint64(0x100000)
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
 var numAccessFlag = flag.Int("num-access", 1000, "Number of accesses per agent")
-var maxAddressFlag = flag.Uint64(
-	"max-address", 16*mem.MB, "Per-agent memory range size")
-
+var maxAddressFlag = flag.Uint64("max-address", 16*mem.MB, "Per-agent memory range size")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-// sharedHierarchy holds the lower memory components shared by all agents.
-type sharedHierarchy struct {
-	l2Cache *writeback.Comp
-	l2TLB   *tlb.Comp
-	memCtrl *idealmemcontroller.Comp
-	ioMMU   *mmu.Comp
+type agentChain struct{ agent *memaccessagent.Comp }
+
+type platformSpec struct{ MemoryCapacity uint64 }
+
+func buffers() twowaybuffered.Spec {
+	return twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}
 }
 
-// agentChain holds an agent together with its private upstream components.
-type agentChain struct {
-	agent   *memaccessagent.Comp
-	rob     *rob.Comp
-	at      *addresstranslator.Comp
-	l1Cache *writethrough.Comp
-	l1TLB   *tlb.Comp
-}
-
-func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
-	monitor := monitoring.MakeBuilder().Build()
-	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
-
-	if *parallelFlag {
-		simBuilder = simBuilder.WithParallelEngine()
-	}
-	if *traceFlag {
-		simBuilder = simBuilder.WithVisTracingOnStart()
-	}
-
-	s := simBuilder.Build()
-	engine := s.Engine()
-
-	shared := buildSharedHierarchy(s)
-
-	chains := make([]agentChain, numAgents)
-	for i := 0; i < numAgents; i++ {
-		chains[i] = buildAgentChain(s, i, shared, seed)
-	}
-
-	setupConnections(s, shared, chains)
-	if err := s.Initialize(); err != nil {
-		panic(err)
-	}
-	for i := range chains {
-		memaccessagent.SetProgressTrackers(chains[i].agent,
-			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),
-			monitor.CreateProgressBar(chains[i].agent.Name()+".Reads", uint64(chains[i].agent.State.ReadLeft)),
-		)
-	}
-
-	return s, engine, chains
-}
-
-// agentStride returns the per-agent address-range stride: the configured
-// per-agent range rounded up to a 4-byte boundary. Using it for both the agent
-// offset (index*stride) and the combined page-table range keeps every agent's
-// range disjoint while guaranteeing each agent starts at a 4-byte-aligned
-// address, so the agent's 4-byte accesses stay aligned even when -max-address
-// is not a multiple of 4. For aligned -max-address (every value the acceptance
-// suite uses) the stride equals -max-address, so behavior is unchanged.
-func agentStride() uint64 {
-	const wordSize = 4
-	return (*maxAddressFlag + wordSize - 1) / wordSize * wordSize
-}
-
-// buildSharedHierarchy builds the L2 cache, L2 TLB, memory controller, and MMU
-// that every agent shares, plus the page table backing the MMU.
-func buildSharedHierarchy(s *sim.Simulation) sharedHierarchy {
-	combinedRange := uint64(numAgents) * agentStride()
-
-	memCtrl := buildMemCtrl(s, combinedRange)
-	l2Cache := buildL2Cache(s, memCtrl)
-
-	pageTable := setupPageTable(combinedRange, s)
-	ioMMU := buildMMU(s, pageTable)
-	l2TLB := buildL2TLB(s, ioMMU)
-
-	return sharedHierarchy{
-		l2Cache: l2Cache,
-		l2TLB:   l2TLB,
-		memCtrl: memCtrl,
-		ioMMU:   ioMMU,
-	}
-}
-
-func buildMemCtrl(
-	s *sim.Simulation,
-	combinedRange uint64,
-) *idealmemcontroller.Comp {
-	memCtrlSpec := idealmemcontroller.DefaultSpec()
-	memCtrlSpec.NumReqPerCycle = 1
-	memCtrlSpec.Latency = 100
-	memCtrl := modeling.MakeBuilder[*idealmemcontroller.Comp](memCtrlSpec).
-		WithSimulation(s).
-		WithResources(idealmemcontroller.Resources{
-			Storage: newStorage(s, ptBase+combinedRange+mem.MB,
-				"MemCtrl.Storage"),
-		}).
-		Build("MemCtrl")
-
-	memCtrl.BindPort("Top", newPort(s, "MemCtrl.Top"))
-	memCtrl.BindPort("Control", newPort(s, "MemCtrl.Control"))
-
-	return memCtrl
-}
-
-func buildL2Cache(
-	s *sim.Simulation,
-	memCtrl *idealmemcontroller.Comp,
-) *writeback.Comp {
-	l2Spec := writeback.DefaultSpec()
-	l2Spec.NumWays = 4
-	l2Spec.NumReqPerCycle = 2
-
-	l2Spec.DirectoryWidth = 2
-	l2Spec.BankWidth = 2
-	l2Spec.Bottom.Destinations = []messaging.RemotePort{
-		memCtrl.Ports.Top.AsRemote(),
-	}
-	l2Cache := modeling.MakeBuilder[*writeback.Comp](l2Spec).
-		WithSimulation(s).
-		WithResources(writeback.Resources{Storage: newStorage(s, l2Spec.ByteSize(), "L2Cache.Storage")}).
-		Build("L2Cache")
-
-	l2Cache.BindPort("Top", newPort(s, "L2Cache.Top"))
-	l2Cache.BindPort("Bottom", newPort(s, "L2Cache.Bottom"))
-	l2Cache.BindPort("Control", newPort(s, "L2Cache.Control"))
-
-	return l2Cache
-}
-
-func buildMMU(
-	s *sim.Simulation,
-	pageTable *vm.PageTable,
-) *mmu.Comp {
+func declarePlatform(spec platformSpec, bp *blueprint.Blueprint) {
+	memory := bp.Add("MemCtrlStorage",
+		blueprint.Res(mem.StorageSpec{Capacity: spec.MemoryCapacity,
+			UnitSize: 4 * mem.KB}))
+	mcSpec := idealmemcontroller.DefaultSpec()
+	mcSpec.NumReqPerCycle = 1
+	mcSpec.Latency = 100
+	bp.Add("MemCtrl", blueprint.Comp[*idealmemcontroller.Comp](mcSpec).Use("Storage", memory).Port("Top",
+		buffers()).Port("Control", buffers()))
+	cacheSpec := writeback.DefaultSpec()
+	cacheSpec.NumWays = 4
+	cacheSpec.NumReqPerCycle = 2
+	cacheSpec.DirectoryWidth = 2
+	cacheSpec.BankWidth = 2
+	cacheSpec.Bottom.Destinations = []messaging.RemotePort{bp.PortRef("MemCtrl.Top")}
+	storage := bp.Add("L2CacheStorage", blueprint.Res(mem.StorageSpec{Capacity: cacheSpec.ByteSize(),
+		UnitSize: 4 * mem.KB}))
+	bp.Add("L2Cache", blueprint.Comp[*writeback.Comp](cacheSpec).Use("Storage", storage).Port("Top",
+		buffers()).Port("Bottom", buffers()).Port("Control", buffers()))
+	pt := bp.Add("PageTable", blueprint.Res(vm.PageTableSpec{Log2PageSize: 12}))
 	mmuSpec := mmu.DefaultSpec()
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxInFlightTranslations = 16
 	mmuSpec.Latency = 10
-	ioMMU := modeling.MakeBuilder[*mmu.Comp](mmuSpec).
-		WithSimulation(s).
-		WithResources(mmu.Resources{PageTable: pageTable}).
-		Build("IoMMU")
-
-	ioMMU.BindPort("Top", newPort(s, "IoMMU.Top"))
-	ioMMU.BindPort("Control", newPort(s, "IoMMU.Control"))
-
-	return ioMMU
+	bp.Add("IoMMU", blueprint.Comp[*mmu.Comp](mmuSpec).Use("PageTable", pt).Port("Top", buffers()).
+		Port("Control", buffers()))
+	tlbSpec := tlb.DefaultSpec()
+	tlbSpec.NumWays = 64
+	tlbSpec.NumSets = 64
+	tlbSpec.Log2PageSize = 12
+	tlbSpec.NumReqPerCycle = 4
+	tlbSpec.Bottom.Destinations = []messaging.RemotePort{bp.PortRef("IoMMU.Top")}
+	bp.Add("L2TLB", blueprint.Comp[*tlb.Comp](tlbSpec).Port("Top", buffers()).Port("Bottom", buffers()).
+		Port("Control", buffers()))
+	declareAgentChains(bp)
 }
 
-func buildL2TLB(
-	s *sim.Simulation,
-	ioMMU *mmu.Comp,
-) *tlb.Comp {
-	l2TLBSpec := tlb.DefaultSpec()
-	l2TLBSpec.NumWays = 64
-	l2TLBSpec.NumSets = 64
-	l2TLBSpec.Log2PageSize = 12
-	l2TLBSpec.NumReqPerCycle = 4
-
-	l2TLBSpec.Bottom.Destinations = []messaging.RemotePort{ioMMU.Ports.Top.AsRemote()}
-	l2TLB := modeling.MakeBuilder[*tlb.Comp](l2TLBSpec).
-		WithSimulation(s).
-		Build("L2TLB")
-
-	l2TLB.BindPort("Top", newPort(s, "L2TLB.Top"))
-	l2TLB.BindPort("Bottom", newPort(s, "L2TLB.Bottom"))
-	l2TLB.BindPort("Control", newPort(s, "L2TLB.Control"))
-
-	return l2TLB
-}
-
-// buildAgentChain builds the private ROB, address translator, L1 cache, and
-// L1 TLB for one agent, plus the agent itself. The L1 cache and L1 TLB point
-// at the shared L2 cache and L2 TLB respectively.
-func buildAgentChain(
-	s *sim.Simulation,
-	index int,
-	shared sharedHierarchy,
-	seed int64,
-) agentChain {
-	suffix := fmt.Sprintf("[%d]", index)
-
-	l1Cache := buildL1Cache(s, suffix, shared.l2Cache)
-	l1TLB := buildL1TLB(s, suffix, shared.l2TLB)
-	at := buildAddressTranslator(s, suffix, l1Cache, l1TLB)
-	robComp := buildROB(s, suffix, at)
-	agent := buildAgent(s, index, robComp, seed)
-
-	return agentChain{
-		agent:   agent,
-		rob:     robComp,
-		at:      at,
-		l1Cache: l1Cache,
-		l1TLB:   l1TLB,
+func declareAgentChains(bp *blueprint.Blueprint) {
+	memoryPorts := []messaging.RemotePort{bp.PortRef("L2Cache.Top")}
+	translationPorts := []messaging.RemotePort{bp.PortRef("L2TLB.Top")}
+	for i := 0; i < numAgents; i++ {
+		name := fmt.Sprintf("Chain[%d]", i)
+		chainSpec := agentchain.DefaultSpec()
+		chainSpec.Memory = bp.PortRef("L2Cache.Top")
+		chainSpec.Translation = bp.PortRef("L2TLB.Top")
+		bp.Add(name, agentchain.Node(chainSpec))
+		memoryPorts = append(memoryPorts, bp.PortRef(name+".Memory"))
+		translationPorts = append(translationPorts, bp.PortRef(name+".Translation"))
 	}
+	bp.Connect("ConnL1L2", timing.GHz, memoryPorts...)
+	bp.Connect("ConnL1L2TLB", timing.GHz, translationPorts...)
+	bp.Connect("ConnL2Mem", timing.GHz, bp.PortRef("L2Cache.Bottom"), bp.PortRef("MemCtrl.Top"))
+	bp.Connect("ConnL2TLBMMU", timing.GHz, bp.PortRef("L2TLB.Bottom"), bp.PortRef("IoMMU.Top"))
 }
 
-func buildL1Cache(
-	s *sim.Simulation,
-	suffix string,
-	l2Cache *writeback.Comp,
-) *writethrough.Comp {
-	l1Spec := writethrough.DefaultSpec()
-	l1Spec.WritePolicy = "write-through"
-	l1Spec.NumWays = 2
-	l1Spec.NumSets = 32 // Preserve the previous 4 KiB capacity.
-
-	name := "L1Cache" + suffix
-	l1Spec.Bottom.Destinations = []messaging.RemotePort{
-		l2Cache.Ports.Top.AsRemote(),
+func setupTest(seed int64) (*sim.Simulation, []agentChain) {
+	monitor := monitoring.MakeBuilder().Build()
+	b := sim.MakeBuilder().WithMonitor(monitor)
+	if *parallelFlag {
+		b = b.WithParallelEngine()
 	}
-	l1Cache := modeling.MakeBuilder[*writethrough.Comp](l1Spec).
-		WithSimulation(s).
-		WithResources(writethrough.Resources{Storage: newStorage(s, l1Spec.ByteSize(), name+".Storage")}).
-		Build(name)
-
-	l1Cache.BindPort("Top", newPort(s, name+".Top"))
-	l1Cache.BindPort("Bottom", newPort(s, name+".Bottom"))
-	l1Cache.BindPort("Control", newPort(s, name+".Control"))
-
-	return l1Cache
-}
-
-func buildL1TLB(
-	s *sim.Simulation,
-	suffix string,
-	l2TLB *tlb.Comp,
-) *tlb.Comp {
-	l1TLBSpec := tlb.DefaultSpec()
-	l1TLBSpec.NumWays = 8
-	l1TLBSpec.NumSets = 8
-	l1TLBSpec.Log2PageSize = 12
-	l1TLBSpec.NumReqPerCycle = 2
-
-	name := "L1TLB" + suffix
-
-	l1TLBSpec.Bottom.Destinations = []messaging.RemotePort{l2TLB.Ports.Top.AsRemote()}
-	l1TLB := modeling.MakeBuilder[*tlb.Comp](l1TLBSpec).
-		WithSimulation(s).
-		Build(name)
-
-	l1TLB.BindPort("Top", newPort(s, name+".Top"))
-	l1TLB.BindPort("Bottom", newPort(s, name+".Bottom"))
-	l1TLB.BindPort("Control", newPort(s, name+".Control"))
-
-	return l1TLB
-}
-
-func buildAddressTranslator(
-	s *sim.Simulation,
-	suffix string,
-	l1Cache *writethrough.Comp,
-	l1TLB *tlb.Comp,
-) *addresstranslator.Comp {
-	atSpec := addresstranslator.DefaultSpec()
-	atSpec.Log2PageSize = 12
-	atSpec.NumReqPerCycle = 4
-
-	name := "AT" + suffix
-
-	atSpec.Bottom.Destinations = []messaging.RemotePort{l1Cache.Ports.Top.AsRemote()}
-
-	atSpec.Translation.Destinations = []messaging.RemotePort{l1TLB.Ports.Top.AsRemote()}
-	at := modeling.MakeBuilder[*addresstranslator.Comp](atSpec).
-		WithSimulation(s).
-		Build(name)
-
-	at.BindPort("Top", newPort(s, name+".Top"))
-	at.BindPort("Bottom", newPort(s, name+".Bottom"))
-	at.BindPort("Translation", newPort(s, name+".Translation"))
-	at.BindPort("Control", newPort(s, name+".Control"))
-
-	return at
-}
-
-func buildROB(
-	s *sim.Simulation,
-	suffix string,
-	at *addresstranslator.Comp,
-) *rob.Comp {
-	robSpec := rob.DefaultSpec()
-	robSpec.NumReqPerCycle = 4
-	robSpec.Bottom = at.Ports.Top.AsRemote()
-
-	name := "ROB" + suffix
-
-	builtComponent := modeling.MakeBuilder[*rob.Comp](robSpec).
-		WithSimulation(s).
-		Build(name)
-
-	builtComponent.BindPort("Top", newPort(s, name+".Top"))
-	builtComponent.BindPort("Bottom", newPort(s, name+".Bottom"))
-	builtComponent.BindPort("Control", newPort(s, name+".Control"))
-	return builtComponent
-}
-
-func buildAgent(
-	s *sim.Simulation,
-	index int,
-	robComp *rob.Comp,
-	seed int64,
-) *memaccessagent.Comp {
-	agentSpec := memaccessagent.DefaultSpec()
-	agentSpec.MaxAddress = *maxAddressFlag
-	agentSpec.AddressOffset = uint64(index) * agentStride()
-	agentSpec.ReadLeft = *numAccessFlag
-	agentSpec.WriteLeft = *numAccessFlag
-	agentSpec.RandSeed = seed + int64(index)
-
-	name := fmt.Sprintf("MemAccessAgent[%d]", index)
-	agentSpec.LowModule = robComp.Ports.Top.AsRemote()
-	agent := modeling.MakeBuilder[*memaccessagent.Comp](agentSpec).
-		WithSimulation(s).
-		Build(name)
-
-	agent.BindPort("Mem", newPort(s, name+".Mem"))
-
-	return agent
-}
-
-func setupPageTable(addressRange uint64, s *sim.Simulation) *vm.PageTable {
-	pageTable := vm.MakePageTableBuilder().
-		WithSimulation(s).
-		WithLog2PageSize(12).
-		Build("PageTable")
-
-	pageSize := uint64(4096)
-	numEntries := (addressRange-1)/pageSize + 1
-
-	for i := uint64(0); i < numEntries; i++ {
-		vAddr := i * pageSize
-		pAddr := ptBase + i*pageSize
-		page := vm.Page{
-			PID:      1,
-			VAddr:    vAddr,
-			PAddr:    pAddr,
-			PageSize: pageSize,
-			Valid:    true,
-		}
-		pageTable.Insert(page)
+	if *traceFlag {
+		b = b.WithVisTracingOnStart()
 	}
-
-	return pageTable
-}
-
-// setupConnections wires every private chain and fans the private L1s into the
-// shared L2 cache and L2 TLB.
-func setupConnections(
-	s *sim.Simulation,
-	shared sharedHierarchy,
-	chains []agentChain,
-) {
-	for i, c := range chains {
-		suffix := fmt.Sprintf("[%d]", i)
-
-		connect(s, "ConnAgentROB"+suffix,
-			c.agent.Ports.Mem,
-			c.rob.Ports.Top,
-		)
-		connect(s, "ConnROBAT"+suffix,
-			c.rob.Ports.Bottom,
-			c.at.Ports.Top,
-		)
-		connect(s, "ConnATL1"+suffix,
-			c.at.Ports.Bottom,
-			c.l1Cache.Ports.Top,
-		)
-		connect(s, "ConnATTrans"+suffix,
-			c.at.Ports.Translation,
-			c.l1TLB.Ports.Top,
-		)
+	s := b.Build()
+	s.Add("", blueprint.NewDomain[platformSpec, modeling.None](platformSpec{MemoryCapacity: 4 * mem.GB}, declarePlatform))
+	if err := s.Initialize(); err != nil {
+		panic(err)
 	}
-
-	// Shared data path: all L1 caches plus the L2 cache on one connection.
-	dataConn := direct.NewConnection("ConnL1L2", s, timing.GHz)
-	dataConn.BindPort(shared.l2Cache.Ports.Top)
-	for _, c := range chains {
-		dataConn.BindPort(c.l1Cache.Ports.Bottom)
+	work := workload.DefaultSpec()
+	work.Seed, work.ReadCount, work.WriteCount = seed, *numAccessFlag, *numAccessFlag
+	work.AddressRange = *maxAddressFlag
+	workload.New(work).Execute(s)
+	chains := make([]agentChain, numAgents)
+	for i := range chains {
+		a := s.Lookup(fmt.Sprintf("Chain[%d].Agent", i)).(*memaccessagent.Comp)
+		chains[i] = agentChain{a}
+		memaccessagent.SetProgressTrackers(a, monitor.CreateProgressBar(a.Name()+".Writes",
+			uint64(a.State.WriteLeft)), monitor.CreateProgressBar(a.Name()+".Reads", uint64(a.State.ReadLeft)))
 	}
-
-	// Shared translation path: all L1 TLBs plus the L2 TLB on one connection.
-	transConn := direct.NewConnection("ConnL1L2TLB", s, timing.GHz)
-	transConn.BindPort(shared.l2TLB.Ports.Top)
-	for _, c := range chains {
-		transConn.BindPort(c.l1TLB.Ports.Bottom)
-	}
-
-	connect(s, "ConnL2Mem",
-		shared.l2Cache.Ports.Bottom,
-		shared.memCtrl.Ports.Top,
-	)
-	connect(s, "ConnL2TLBMMU",
-		shared.l2TLB.Ports.Bottom,
-		shared.ioMMU.Ports.Top,
-	)
-}
-
-// newPort creates an unowned port named fullName, for a component that takes
-// its ports during wiring. BindPort names, binds, and registers it.
-func newPort(simulation modeling.Simulation, fullName string) messaging.Port {
-	return twowaybuffered.MakeBuilder().
-		WithSimulation(simulation).
-		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
-		Build()
-}
-
-// newStorage builds a storage of the given capacity that registers with the
-// simulation.
-func newStorage(
-	s *sim.Simulation,
-	capacity uint64,
-	name string,
-) *mem.Storage {
-	return mem.MakeStorageBuilder().
-		WithCapacity(capacity).
-		WithSimulation(s).
-		Build(name)
-}
-
-func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
-	conn := direct.NewConnection(name, s, timing.GHz)
-	conn.BindPort(p1)
-	conn.BindPort(p2)
+	return s, chains
 }
 
 func main() {
 	flag.Parse()
-
 	seed := *seedFlag
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	}
-
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
-
-	s, engine, chains := setupTest(seed)
-
-	for _, c := range chains {
-		c.agent.TickLater()
-	}
-
-	err := engine.Run()
-	if err != nil {
+	s, chains := setupTest(seed)
+	if err := s.Run(); err != nil {
 		panic(err)
 	}
-
 	for i, c := range chains {
-		if len(c.agent.State.PendingWriteReq) > 0 ||
-			len(c.agent.State.PendingReadReq) > 0 {
+		if len(c.agent.State.PendingWriteReq) > 0 || len(c.agent.State.PendingReadReq) > 0 {
 			panic(fmt.Sprintf("agent %d: not all req returned", i))
 		}
-
 		if c.agent.State.WriteLeft > 0 || c.agent.State.ReadLeft > 0 {
 			panic(fmt.Sprintf("agent %d: more requests to send", i))
 		}
 	}
-
-	fmt.Fprintf(os.Stderr,
-		"All %d agents completed %d reads and %d writes each.\n",
-		numAgents, *numAccessFlag, *numAccessFlag)
-
+	fmt.Fprintf(os.Stderr, "All %d agents completed %d reads and %d writes each.\n", numAgents,
+		*numAccessFlag, *numAccessFlag)
 	if err := s.Terminate(); err != nil {
 		panic(err)
 	}

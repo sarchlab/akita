@@ -7,9 +7,8 @@ import (
 	"go/token"
 	"go/types"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 // componentModels identifies the three supported component types.
@@ -24,12 +23,13 @@ var componentModels = map[string]string{
 func extractPackage(pkg *packages.Package, index pkgIndex) (schema.Definition, bool, error) {
 	obj := pkg.Types.Scope().Lookup("Comp")
 	if obj == nil {
-		return schema.Definition{}, false, nil
+		return extractDomainPackage(pkg, index)
 	}
 	typ := types.Unalias(obj.Type())
 	if pointer, ok := typ.(*types.Pointer); ok {
 		if componentModels[componentTypeName(pointer.Elem())] != "" {
-			return schema.Definition{}, false, posErrorf(pkg, obj.Pos(), "Comp must alias a component value type, not a pointer")
+			return schema.Definition{}, false, posErrorf(pkg, obj.Pos(),
+				"Comp must alias a component value type, not a pointer")
 		}
 	}
 	model := componentModels[componentTypeName(typ)]
@@ -75,10 +75,10 @@ func componentTypeName(typ types.Type) string {
 
 // defaultSpecLiteral accepts exactly func DefaultSpec() Spec { return Spec{...} }.
 // It does not call the function or interpret arbitrary Go statements.
-func defaultSpecLiteral(pkg *packages.Package, specType types.Type) (*ast.CompositeLit, error) {
+func defaultSpecLiteral(pkg *packages.Package, specType types.Type, anchor token.Pos) (*ast.CompositeLit, error) {
 	obj := pkg.Types.Scope().Lookup("DefaultSpec")
 	if obj == nil {
-		return nil, posErrorf(pkg, pkg.Types.Scope().Lookup("Comp").Pos(), "component requires func DefaultSpec() Spec")
+		return nil, posErrorf(pkg, anchor, "definition requires func DefaultSpec() Spec")
 	}
 	function, ok := obj.(*types.Func)
 	if !ok {

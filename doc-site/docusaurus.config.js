@@ -11,6 +11,8 @@ const crossPluginRoutes = new Map([
   ['sim/tasks/tracing/README.md', '/packages/tasks/tracing/'],
   ['doc/tutorial/checkpointing.md', '/tutorial/checkpointing'],
   ['doc/tutorial/migration.md', '/tutorial/migration'],
+  ['doc/tutorial/configuration/01_manual_hardware.md', '/tutorial/configuration/manual_hardware'],
+  ['doc/tutorial/configuration/02_blueprint_hardware.md', '/tutorial/configuration/blueprint_hardware'],
 ].map(([file, route]) => [path.resolve(__dirname, '..', file), route]));
 
 /** @type {import('@docusaurus/types').OnBrokenMarkdownLinksFunction} */

@@ -1,4 +1,4 @@
-package twowaybuffered
+package twowaybuffered_test
 
 import (
 	"bytes"

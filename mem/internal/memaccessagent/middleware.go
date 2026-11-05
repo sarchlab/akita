@@ -29,6 +29,7 @@ func (m *agentMiddleware) lowModule() messaging.RemotePort {
 // Handle updates the states of the agent and issues new read and write
 // requests.
 func (m *agentMiddleware) Handle(_ timing.Event) bool {
+	m.comp.State.Started = true
 	madeProgress := false
 
 	madeProgress = m.processMsgRsp() || madeProgress
@@ -204,12 +205,10 @@ func (m *agentMiddleware) doRead() bool {
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
-	spec := m.comp.Spec
-
 	var addr uint64
 
 	for {
-		addr = spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
+		addr = state.AddressOffset + m.uint64()%(state.MaxAddress/4)*4
 
 		if _, written := state.KnownMemValue[addr]; written {
 			return addr
@@ -243,9 +242,8 @@ func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool
 
 func (m *agentMiddleware) doWrite() bool {
 	state := &m.comp.State
-	spec := m.comp.Spec
 
-	address := spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
+	address := state.AddressOffset + m.uint64()%(state.MaxAddress/4)*4
 
 	data := m.uint32r()
 

@@ -1,4 +1,4 @@
-package direct
+package direct_test
 
 import (
 	"fmt"

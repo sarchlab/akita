@@ -5,9 +5,8 @@ import (
 	"go/types"
 	"reflect"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 const (
@@ -33,7 +32,7 @@ func extractModelDefinition(
 	if err := validateSpecType(pkg, specType, index); err != nil {
 		return nil, err
 	}
-	lit, err := defaultSpecLiteral(pkg, specType)
+	lit, err := defaultSpecLiteral(pkg, specType, pkg.Types.Scope().Lookup("Comp").Pos())
 	if err != nil {
 		return nil, err
 	}

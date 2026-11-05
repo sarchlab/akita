@@ -10,9 +10,8 @@ import (
 	"strings"
 	"unicode"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"golang.org/x/tools/go/packages"
 )
 
 // unitByType maps fully-qualified named types to the semantic unit they
@@ -130,6 +129,10 @@ func isValidJSONName(name string) bool {
 // choicesFor lists the declared constants of a named string type, sorted.
 // Non-string and unnamed types have no choices.
 func choicesFor(typ types.Type) []string {
+	// RemotePort is an open address space; Unconnected is a sentinel, not an enum.
+	if qualifiedTypeName(types.Unalias(typ)) == messagingPath+".RemotePort" {
+		return nil
+	}
 	named, ok := typ.(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
 		return nil

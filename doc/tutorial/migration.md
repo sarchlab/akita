@@ -1413,3 +1413,22 @@ migration is deferred until after the Akita v5 release and is not part of this P
 Old checkpoints must be rebuilt after these Spec and topology changes. Default
 geometry and widths are preserved, but queue sizing and NoC forwarding can
 change results. DRAM configuration, calculations, and presets are unchanged.
+
+## Separate hardware assembly from workload input
+
+New code can assemble hardware with builders or declare it with Blueprint. After
+`Initialize`, use the instance method `s.Lookup(name)` and assert the concrete type
+required by the workload. The lookup inventory is shared by both assembly methods;
+there is no `blueprint.Lookup` or generic `sim.Lookup` helper.
+
+A workload's `Execute(*sim.Simulation)` loads input and starts hardware through its
+package-specific API, then `s.Run()` advances time. Keep agents/drivers and resources
+in hardware, and active input/RNG/address data in checkpointed State. Do not mutate
+Spec after initialization. The internal memory acceptance agent retains its legacy
+Spec defaults for older programs; migrated examples explicitly start work after
+Initialize. Their memory capacity is configured independently (4 GiB), and workload
+addresses must fit that hardware.
+
+See [manual assembly](./configuration/01_manual_hardware.md) and
+[Blueprint assembly](./configuration/02_blueprint_hardware.md) for the same ping
+workload on identical hardware.

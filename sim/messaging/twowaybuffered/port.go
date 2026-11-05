@@ -106,6 +106,9 @@ func (p *Port) CanSend() bool {
 // the port has capacity with CanSend before calling Send; sending into a full
 // outgoing buffer is a programming error and will panic.
 func (p *Port) Send(msg messaging.Msg) {
+	if msg.Dst == messaging.Unconnected {
+		panic(fmt.Sprintf("twowaybuffered: sender %q cannot send to %q", p.name, msg.Dst))
+	}
 	if p.conn == nil {
 		panic(fmt.Sprintf("twowaybuffered: port %q has no connection", p.name))
 	}
@@ -317,7 +320,8 @@ func (p *Port) msgMustBeValid(msg messaging.Msg) {
 		panic(fmt.Sprintf("twowaybuffered: port %q cannot send message with zero ID", p.name))
 	}
 	if !messaging.PayloadRegistered(msg.Payload) {
-		panic(fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", msg.Payload))
+		panic(fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol",
+			msg.Payload))
 	}
 	portMustBeMsgSrc(p, msg)
 	dstMustNotBeEmpty(msg.Dst)

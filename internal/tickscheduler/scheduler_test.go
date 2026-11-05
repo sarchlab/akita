@@ -1,10 +1,10 @@
-package tickscheduler
+package tickscheduler_test
 
 import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
+	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -22,15 +22,15 @@ func (e *testEngine) Schedule(event timing.Event) {
 	e.scheduled = append(e.scheduled, event)
 }
 
-func newTestScheduler(secondary bool) (*Scheduler, *testEngine) {
+func newTestScheduler(secondary bool) (*tickscheduler.Scheduler, *testEngine) {
 	engine := &testEngine{now: timing.VTimeInPicoSec(10000)}
 	sim := testsim.New(engine, false)
 
 	if secondary {
-		return NewSecondaryScheduler("TC", sim, 1*timing.GHz), engine
+		return tickscheduler.NewSecondaryScheduler("TC", sim, 1*timing.GHz), engine
 	}
 
-	return NewScheduler("TC", sim, 1*timing.GHz), engine
+	return tickscheduler.NewScheduler("TC", sim, 1*timing.GHz), engine
 }
 
 func wantScheduled(t *testing.T, engine *testEngine, times ...timing.VTimeInPicoSec) {
