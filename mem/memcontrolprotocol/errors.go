@@ -9,4 +9,8 @@ const (
 	// while the component was Enabled. The caller must Pause or Drain
 	// first.
 	ErrMustBePausedOrDrained = "must be paused or drained"
+
+	// ErrCanceledByReset answers a Hold that was not acknowledged yet when
+	// the component was reset. The pages are not held.
+	ErrCanceledByReset = "canceled by reset"
 )

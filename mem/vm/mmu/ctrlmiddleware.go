@@ -31,14 +31,15 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 }
 
 // completePendingDrain notices Drain has reached quiescence and acks.
-// Quiescence means no page-table walks are in progress.
+// Quiescence means no page-table walks are in progress and no fault
+// notification waits to be sent.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
 	if state.ControlState != controlStateDraining {
 		return false
 	}
 
-	if len(state.WalkingTranslations) != 0 {
+	if len(state.WalkingTranslations) != 0 || len(state.PendingFaults) != 0 {
 		return false
 	}
 
@@ -123,6 +124,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	m.endInflightTasks()
 	state.WalkingTranslations = nil
 	state.ToRemoveFromPTW = nil
+	state.PendingFaults = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled

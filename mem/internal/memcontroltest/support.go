@@ -12,6 +12,8 @@ type VerbSupport struct {
 	Reset      bool
 	Invalidate bool
 	Flush      bool
+	Hold       bool
+	Release    bool
 }
 
 // Supports reports whether the given command is in the support set.
@@ -29,6 +31,10 @@ func (v VerbSupport) Supports(cmd memcontrolprotocol.Command) bool {
 		return v.Invalidate
 	case memcontrolprotocol.CmdFlush:
 		return v.Flush
+	case memcontrolprotocol.CmdHold:
+		return v.Hold
+	case memcontrolprotocol.CmdRelease:
+		return v.Release
 	default:
 		return false
 	}
@@ -66,16 +72,28 @@ func TranslationCacheLike() VerbSupport {
 	return v
 }
 
+// TranslatorLike is the support matrix for components that translate
+// accesses and hold them while their pages migrate (address translators):
+// the four universal verbs plus Hold and Release.
+func TranslatorLike() VerbSupport {
+	v := Universal()
+	v.Hold = true
+	v.Release = true
+	return v
+}
+
 // IsSyncVerb reports whether the verb is acknowledged synchronously
-// (Pause, Enable, Reset, Invalidate) versus asynchronously on
-// completion (Drain, Flush). Used by the contract harness to know
+// (Pause, Enable, Reset, Invalidate, Release) versus asynchronously on
+// completion (Drain, Flush, Hold). Used by the contract harness to know
 // whether to expect a memcontrolprotocol.Rsp within one tick or to keep ticking.
 func IsSyncVerb(cmd memcontrolprotocol.Command) bool {
 	switch cmd {
 	case memcontrolprotocol.CmdPause, memcontrolprotocol.CmdEnable,
-		memcontrolprotocol.CmdReset, memcontrolprotocol.CmdInvalidate:
+		memcontrolprotocol.CmdReset, memcontrolprotocol.CmdInvalidate,
+		memcontrolprotocol.CmdRelease:
 		return true
-	case memcontrolprotocol.CmdDrain, memcontrolprotocol.CmdFlush:
+	case memcontrolprotocol.CmdDrain, memcontrolprotocol.CmdFlush,
+		memcontrolprotocol.CmdHold:
 		return false
 	default:
 		return true

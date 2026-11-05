@@ -25,10 +25,24 @@ func (m *middlewares) Initialize(c *Comp) {
 	}
 
 	validatePageTablePageSize(pt, c.Spec.Log2PageSize)
+	validateNotificationPorts(c)
 
 	*m = middlewares{
 		Ctrl:        &ctrlMiddleware{comp: c},
 		Translation: &translationMW{comp: c},
+	}
+}
+
+// validateNotificationPorts checks that the Notification group holds at most
+// one port, and that Notification[0] is bound when the MMU raises faults.
+func validateNotificationPorts(c *Comp) {
+	n := len(c.Ports.Notification)
+	if n > 1 {
+		panic("vm/mmu: Ports.Notification holds at most one port")
+	}
+
+	if c.Spec.FaultHandler != "" && n == 0 {
+		panic("vm/mmu: Spec.FaultHandler requires Ports.Notification[0]")
 	}
 }
 

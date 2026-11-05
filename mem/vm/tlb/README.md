@@ -26,7 +26,8 @@ flow through a fixed-latency pipeline before lookup:
      the Spec routing value.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
    the page, and replay every request queued in the matching MSHR entry back to
-   `Top`.
+   `Top`. A fault response (`addrtransprotocol.Rsp.Fault`) is forwarded to the
+   queued requests but not filled.
 
 Replacement order within each set is tracked by `lruset.Set`; in-flight misses
 are tracked by the shared `mshr` package.

@@ -12,7 +12,7 @@ protocol reference.
 ## What this package provides
 
 - **Messages and roles** — `Req`, `Rsp`, `Command`, and requester/responder roles.
-- **Error strings** — `ErrUnsupported` and `ErrMustBePausedOrDrained`.
+- **Error strings** — `ErrUnsupported`, `ErrMustBePausedOrDrained`, and `ErrCanceledByReset`.
 - Zero is not a valid `Command`; receivers reject it as unsupported.
 
 Component states are private implementation details. The protocol specifies
@@ -38,7 +38,9 @@ verb (Drain, Flush) is acked when the underlying work completes.
 Invalidate and Flush are only legal once the component is paused or
 drained. Issued while enabled, they are rejected with
 `Success: false, Error: ErrMustBePausedOrDrained`. Unsupported verbs
-reply with `Success: false, Error: ErrUnsupported`.
+reply with `Success: false, Error: ErrUnsupported`. A Reset answers the
+Holds that are not acknowledged yet with
+`Success: false, Error: ErrCanceledByReset`.
 
 ## Support matrix
 

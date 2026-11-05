@@ -24,20 +24,29 @@ Invalidate and Flush are answered as unsupported.
    - If the page is missing and `AutoPageAllocation` is set, a new page is
      created and inserted (otherwise it panics).
    - A `addrtransprotocol.Rsp` is then sent back on `Top`.
+   - With `FaultHandler` set, the walk faults if the page is `Unified`, on
+     another device than the requester, and not `IsPinned`. The response
+     has `Fault` set, and an `addrtransprotocol.PageFault` is queued in
+     `State.PendingFaults` and sent from `Notification[0]` to `FaultHandler`. The MMU
+     never holds a walk while a fault is serviced; the requester holds the
+     access and translates it again when the fault handler releases it.
 
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, walk `Latency`,
-  `MaxInFlightTranslations`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
+  `MaxInFlightTranslations`, `AutoPageAllocation`, `Log2PageSize`, and
+  `FaultHandler` (empty: no faults). Port buffer
   sizes are not part of the spec; the system builder chooses them when it
   creates the port instances.
-- `State` — mutable runtime data: the control state, the in-flight walks, and
-  the next physical page to allocate.
+- `State` — mutable runtime data: the control state, the in-flight walks, the
+  next physical page to allocate, the fault notifications waiting to be sent,
+  and the number of faulted walks.
 - `Resources` — shared wiring; holds the `vm.PageTable`. It is required: `Build`
   panics if `PageTable` is nil, or if its page size does not match
   `Log2PageSize`. (The MMU no longer builds a default page table; build one with
   `vm.MakePageTableBuilder()` or `vm.NewPageTable(log2PageSize)`.)
-- `Ports` — the `Top` and `Control` ports.
+- `Ports` — the `Top` and `Control` ports, and the optional `Notification`
+  port group.
 - `Middlewares` — `Ctrl` (control commands) and `Translation` (page-table
   walks), run in that order every cycle.
 - `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
@@ -79,5 +88,11 @@ After all connections are bound, `simulation.Initialize()` creates State and
 middlewares and freezes the topology.
 
 - **Top**: accepts `addrtransprotocol.Req`, returns `addrtransprotocol.Rsp`.
+- **Notification** (optional port group of at most one port):
+  `Notification[0]` sends `addrtransprotocol.PageFault` to
+  `Spec.FaultHandler`. Bind it with `BindPort("Notification[0]", port)` when
+  `FaultHandler` is set; `Initialize` panics if it is missing. An MMU
+  without a fault handler leaves the group empty, so v5.0 wirings need no
+  change.
 - **Control**: accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset), returns
   `memcontrolprotocol.Rsp`.

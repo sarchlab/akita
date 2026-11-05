@@ -70,7 +70,19 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.Spec
-	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(addrtransprotocol.Rsp).Page,
+	content := rsp.Payload.(addrtransprotocol.Rsp)
+
+	// A fault response, or a translation that arrives after its page was
+	// held, must not be used: the access waits in the held list.
+	if content.Fault ||
+		isPageHeld(nextState, reqState.PID, reqState.Address, spec.Log2PageSize) {
+		m.holdTranslated(transIdx, content.Fault)
+		m.translationPort().RetrieveIncoming()
+
+		return true
+	}
+
+	translatedReq := createTranslatedReq(m.comp.NewID, reqState, content.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Spec.Bottom)
 
@@ -83,7 +95,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
-	nextTrans.Page = rsp.Payload.(addrtransprotocol.Rsp).Page
+	nextTrans.Page = content.Page
 
 	reqToBot := buildReqToBottom(reqState, translatedReq)
 	reqToBot.SendTaskID = sendTaskID
@@ -98,6 +110,36 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	m.translationPort().RetrieveIncoming()
 
 	return true
+}
+
+// holdTranslated moves the access of a returned translation to the held
+// list. A fault response also marks the page faulted, so that the later
+// accesses to it wait without being translated.
+func (m *respondPipelineMW) holdTranslated(transIdx int, fault bool) {
+	nextState := &m.comp.State
+	trans := &nextState.Transactions[transIdx]
+	reqState := trans.IncomingReqs[0]
+
+	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
+		TaskID: reqState.RecvTaskID,
+		Kind:   tasks.MilestoneKindTranslation,
+		What:   "translation",
+	})
+	m.comp.TaskTracker().EndReqOut(trans.TranslationTaskID)
+
+	if fault {
+		holdPage(nextState, reqState.PID, reqState.Address,
+			m.comp.Spec.Log2PageSize, true)
+		nextState.NumFaults++
+	}
+
+	nextState.HeldReqs = append(nextState.HeldReqs, reqState)
+	nextState.NumHeldReqs++
+
+	trans.IncomingReqs = trans.IncomingReqs[1:]
+	if len(trans.IncomingReqs) == 0 {
+		removeTransaction(nextState, transIdx)
+	}
 }
 
 // traceTranslationComplete records, on the top req_in task, the milestones

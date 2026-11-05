@@ -14,12 +14,26 @@ type Spec struct {
 	MaxInFlightTranslations int         `json:"max_in_flight_translations"`
 	AutoPageAllocation      bool        `json:"auto_page_allocation"`
 	Log2PageSize            uint64      `json:"log2_page_size"`
+
+	// FaultHandler is the port that services translation faults (a
+	// driver). When it is set, a walk faults if the page is unified, is on
+	// another device than the requester, and is not pinned: the walk is
+	// answered at once with a fault response, and an
+	// addrtransprotocol.PageFault is sent from the Notification[0] port to
+	// FaultHandler. When it is empty, the MMU raises no faults.
+	FaultHandler messaging.RemotePort `json:"fault_handler"`
 }
 
 // Ports holds the MMU's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
 	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.responder"`
+
+	// Notification is an optional port group of at most one port. Its
+	// Notification[0] sends the fault notifications to Spec.FaultHandler and
+	// must be bound when FaultHandler is set. An MMU without a fault handler
+	// leaves the group empty, so wirings that predate faults stay valid.
+	Notification []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol.notifier"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
@@ -62,6 +76,11 @@ type state struct {
 	WalkingTranslations []transactionState   `json:"walking_translations"`
 	NextPhysicalPage    uint64               `json:"next_physical_page"`
 	ToRemoveFromPTW     []int                `json:"to_remove_from_ptw"`
+
+	// PendingFaults are fault notifications waiting for the Notification port.
+	// NumFaults counts the walks that faulted.
+	PendingFaults []messaging.Msg `json:"pending_faults"`
+	NumFaults     uint64          `json:"num_faults"`
 }
 
 // Resources holds the shared resources referenced by the MMU. The page table is

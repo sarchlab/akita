@@ -266,6 +266,35 @@ func TestTLB(t *testing.T) {
 			require.Equal(t, false, mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100)))
 		})
 
+		t.Run("should forward a fault response without filling it", func(t *testing.T) {
+			setup1(t)
+			setup4(t)
+
+			content := rsp.Payload.(addrtransprotocol.Rsp)
+			content.Fault = true
+			rsp.Payload = content
+			bottomPort.Deliver(rsp)
+
+			next := &tlbComp.State
+			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
+			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100)
+			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, pipelineTLBReqState{Msg: req})
+			next.MSHREntries[idx].HasReqToBottom = true
+			next.MSHREntries[idx].ReqToBottom = fetchBottom
+
+			require.True(t, tlbMW.parseBottom())
+
+			_, _, found := setLookup(&next.Sets[0], 1, 0x100)
+			require.False(t, found)
+
+			require.True(t, tlbMW.respondMSHREntry())
+
+			up, ok := topPort.RetrieveOutgoing()
+			require.True(t, ok)
+			require.True(t, up.Payload.(addrtransprotocol.Rsp).Fault)
+			require.Equal(t, req.ID, up.RspTo)
+		})
+
 		t.Run("should respond", func(t *testing.T) {
 			setup1(t)
 			setup4(t)
