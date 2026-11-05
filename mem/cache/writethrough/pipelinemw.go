@@ -90,7 +90,12 @@ func (m *pipelineMW) tickRespondStage() bool {
 	madeProgress := false
 	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respondStage.Tick() || madeProgress
+		// Stop this cycle on backpressure or when no response is ready.
+		// Port availability notifications schedule a later retry.
+		if !m.respondStage.Tick() {
+			break
+		}
+		madeProgress = true
 	}
 
 	return madeProgress

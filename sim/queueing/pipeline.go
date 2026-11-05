@@ -22,6 +22,9 @@ type Pipeline[T any] struct {
 	width     int
 	numStages int
 	stages    []PipelineStage[T]
+	// occupancy is scratch space rebuilt from stages on every advance. It is
+	// not simulation state and is excluded from checkpoints.
+	occupancy []bool
 }
 
 // MakePipeline creates a pipeline with the given width (lanes) and number of
@@ -47,6 +50,7 @@ func (p *Pipeline[T]) Stages() []PipelineStage[T] {
 // Clear removes all items from the pipeline.
 func (p *Pipeline[T]) Clear() {
 	p.stages = nil
+	p.occupancy = nil
 }
 
 // CanAccept returns true if there is at least one free lane at stage 0.
@@ -214,17 +218,11 @@ func (p *Pipeline[T]) buildOccupancy(minStage, maxStage int) []bool {
 	occRange := maxStage + 1 - minStage + 1 // +1 for nextStage lookups
 	occSlots := occRange * p.width
 
-	var occSmall [128]bool
-	var occ []bool
-
-	if occSlots <= len(occSmall) {
-		occ = occSmall[:occSlots]
-		for i := range occ {
-			occ[i] = false
-		}
-	} else {
-		occ = make([]bool, occSlots)
+	if cap(p.occupancy) < occSlots {
+		p.occupancy = make([]bool, occSlots)
 	}
+	occ := p.occupancy[:occSlots]
+	clear(occ)
 
 	for i := 0; i < len(p.stages); i++ {
 		s := &p.stages[i]
