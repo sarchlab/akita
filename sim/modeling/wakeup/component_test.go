@@ -238,27 +238,3 @@ func TestBackgroundPromotionCheckpoint(t *testing.T) {
 		t.Fatal(restored.State.Woken)
 	}
 }
-
-func TestRestoreLegacyPendingForeground(t *testing.T) {
-	s := newSim()
-	c := build(s, Spec{})
-	c.WakeAt(1000)
-	archive := []byte(`{"state":{},"pending_event_guard":[1000]}`)
-	if err := c.LoadCheckpoint(bytes.NewReader(archive)); err != nil {
-		t.Fatal(err)
-	}
-	c.WakeAt(1000)
-	if err := s.Run(); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(c.State.Woken, []timing.VTimeInPicoSec{1000}) {
-		t.Fatal(c.State.Woken)
-	}
-	c.WakeAt(1000)
-	if err := s.Run(); err != nil {
-		t.Fatal(err)
-	}
-	if len(c.State.Woken) != 2 {
-		t.Fatal(c.State.Woken)
-	}
-}

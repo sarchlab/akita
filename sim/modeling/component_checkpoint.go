@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// PendingEventGuard records the times of the component's own pending ticks or
-// wakeups, so restore does not schedule a duplicate.
+// PendingEventGuard lets a component using WriteCheckpoint and ReadCheckpoint
+// save and restore a list of pending event times.
 type PendingEventGuard interface {
 	// Snapshot returns the guard: the times of the pending events.
 	Snapshot() []timing.VTimeInPicoSec

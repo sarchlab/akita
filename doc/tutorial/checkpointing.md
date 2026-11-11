@@ -226,8 +226,8 @@ each of them.
   tracking settings are supported: off-to-on starts empty, and on-to-off ignores
   the optional tracker payload. See [task tracking](../../sim/tasks/README.md).
 - **Take mid-transaction checkpoints with `SerialEngine.RunUntil(t)`**, which
-  stops at a reproducible boundary (every event with time ≤ `t`), unlike `Run`
-  (drains everything) or `RequestPause` (stops at a non-reproducible point).
+  stops before the first event after `t` and also stops when only background
+  events remain. The checkpoint preserves queued background work for a later run.
 
 ## Testing your types
 

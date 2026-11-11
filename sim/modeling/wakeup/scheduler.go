@@ -1,7 +1,6 @@
 package wakeup
 
 import (
-	"encoding/json"
 	"maps"
 	"sync"
 
@@ -48,23 +47,6 @@ type wake struct {
 	Promotion  uint64 `json:"promotion,omitempty"`
 }
 
-// Older checkpoints record foreground wakeups by time without an event ID.
-func (g *wakeGuard) UnmarshalJSON(data []byte) error {
-	if len(data) > 0 && data[0] == '[' {
-		var times []timing.VTimeInPicoSec
-		if err := json.Unmarshal(data, &times); err != nil {
-			return err
-		}
-		g.Pending = make(map[timing.VTimeInPicoSec]wake, len(times))
-		for _, at := range times {
-			g.Pending[at] = wake{}
-		}
-		return nil
-	}
-	type fields wakeGuard
-	return json.Unmarshal(data, (*fields)(g))
-}
-
 func newScheduler(handlerID string, sim modeling.Simulation) *scheduler {
 	return &scheduler{handlerID: handlerID, simulation: sim,
 		guard: wakeGuard{Pending: make(map[timing.VTimeInPicoSec]wake)}}
@@ -105,7 +87,8 @@ func (s *scheduler) deliver(event Event) bool {
 		return false
 	}
 	pending, found := s.guard.Pending[event.At]
-	if !found || (pending.ID != 0 && pending.ID != event.ID && (pending.Promotion == 0 || pending.Promotion != event.ID)) {
+	// An externally delivered event has no matching scheduler ID.
+	if event.ID == 0 || !found || (event.ID != pending.ID && event.ID != pending.Promotion) {
 		return true
 	}
 	if pending.Promotion != 0 {

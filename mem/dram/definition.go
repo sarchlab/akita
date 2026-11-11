@@ -47,10 +47,14 @@ func DefaultSpec() Spec {
 	}
 }
 
-// Initialize creates the State of a freshly built controller: empty queues and
-// every bank closed.
+// Initialize validates configuration, closes every bank, and arms the refresh timer.
 func (s *state) Initialize(c *Comp) {
 	spec := c.Spec
+	spec.mustBeSupported()
+
+	if c.Resources.Storage == nil {
+		panic("dram: Resources.Storage is required")
+	}
 
 	*s = state{
 		SubTransQueue: subTransQueueState{
@@ -63,22 +67,16 @@ func (s *state) Initialize(c *Comp) {
 		BankStates: initBankStatesFlat(
 			spec.NumRank, spec.NumBankGroup, spec.NumBank),
 	}
+	startRefreshTimer(c)
 }
 
-// Initialize checks the configuration and creates the middlewares. The
+// Initialize creates the middlewares. The
 // immutable values derived from the Spec — the inter-command timing tables,
 // the command completion delays, and the controller strategies with their
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
 func (m *middlewares) Initialize(c *Comp) {
 	spec := c.Spec
-	spec.mustBeSupported()
-
-	if c.Resources.Storage == nil {
-		panic("dram: Resources.Storage is required")
-	}
-
-	startRefreshTimer(c)
 	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},

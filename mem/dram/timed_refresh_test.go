@@ -70,3 +70,22 @@ func TestPauseFreezesTimedRefresh(t *testing.T) {
 	require.True(t, c.State.RefreshInProgress)
 	require.EqualValues(t, 48000, c.State.RefreshAt)
 }
+
+func TestWaitingRequestCountsRefreshStallCycles(t *testing.T) {
+	spec := DDR4Spec()
+	spec.TREFI, spec.TRFC, spec.Freq = 20, 15, timing.GHz
+	h := newP0Harness(t, spec)
+	e := h.engine.(*timing.SerialEngine)
+	h.dram.TickAt(21000)
+	require.NoError(t, e.RunUntil(20000))
+	h.src.Send(h.read(0))
+	require.NoError(t, e.RunUntil(27000))
+	require.True(t, h.dram.State.RefreshBlockedIssue)
+	start := h.dram.State.TickCount
+	require.NoError(t, e.RunUntil(32000))
+	require.EqualValues(t, 32000, e.CurrentTime())
+	require.Equal(t, start+5, h.dram.State.TickCount)
+	require.NoError(t, e.Run())
+	reads, _ := h.collect()
+	require.Len(t, reads, 1)
+}

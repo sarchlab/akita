@@ -311,20 +311,3 @@ func TestBackgroundPromotionCheckpoint(t *testing.T) {
 		t.Fatal(restored.State.Log)
 	}
 }
-
-func TestRestoreLegacyPendingForeground(t *testing.T) {
-	s := newSim()
-	c := build(s, Ports{In: newPort(s, "C.In")})
-	c.TickAt(1000)
-	archive := []byte(`{"state":{},"pending_event_guard":[1000]}`)
-	if err := c.LoadCheckpoint(bytes.NewReader(archive)); err != nil {
-		t.Fatal(err)
-	}
-	c.TickAt(1000)
-	if err := s.Run(); err != nil {
-		t.Fatal(err)
-	}
-	if len(c.State.Log) != 2 {
-		t.Fatal(c.State.Log)
-	}
-}

@@ -1,7 +1,6 @@
 package tickscheduler
 
 import (
-	"encoding/json"
 	"slices"
 	"sync"
 
@@ -45,15 +44,6 @@ type guardState struct {
 	Background  []timing.VTimeInPicoSec `json:"background,omitempty"`
 	LastHandled timing.VTimeInPicoSec   `json:"last_handled,omitempty"`
 	HasHandled  bool                    `json:"has_handled,omitempty"`
-}
-
-// Older checkpoints store only the foreground edges as an array.
-func (g *guardState) UnmarshalJSON(data []byte) error {
-	if len(data) > 0 && data[0] == '[' {
-		return json.Unmarshal(data, &g.Foreground)
-	}
-	type fields guardState
-	return json.Unmarshal(data, (*fields)(g))
 }
 
 // NewScheduler creates a scheduler for the tick events of the handler with
