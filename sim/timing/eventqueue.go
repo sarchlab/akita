@@ -3,6 +3,7 @@ package timing
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 // eventQueue is a queue of events ordered by event time. Peek and Pop report
@@ -19,8 +20,14 @@ type eventQueue interface {
 // order (FIFO) — giving a total, deterministic order that is reproducible after
 // a checkpoint is saved and restored.
 type queuedEvent struct {
-	event Event
-	seq   uint64
+	event      Event
+	seq        uint64
+	background bool
+}
+
+func queueEvent(evt Event, seq uint64) queuedEvent {
+	kind, ok := evt.(BackgroundEvent)
+	return queuedEvent{event: evt, seq: seq, background: ok && kind.IsBackground()}
 }
 
 // eventHeap is a typed binary min-heap of queued events ordered by (time, seq).
@@ -69,21 +76,26 @@ func (h eventHeap) down(i, n int) {
 // eventQueueImpl provides a thread-safe event queue.
 type eventQueueImpl struct {
 	sync.Mutex
+	foreground *atomic.Int64 // shared across all parallel-engine queues
 
 	events  eventHeap
 	nextSeq uint64
 }
 
 // newEventQueue creates and returns a newly created EventQueue.
-func newEventQueue() *eventQueueImpl {
-	return &eventQueueImpl{events: make(eventHeap, 0)}
+func newEventQueue(foreground *atomic.Int64) *eventQueueImpl {
+	return &eventQueueImpl{foreground: foreground}
 }
 
 // Push adds an event to the event queue.
 func (q *eventQueueImpl) Push(evt Event) {
 	q.Lock()
 	defer q.Unlock()
-	q.events = append(q.events, queuedEvent{event: evt, seq: q.nextSeq})
+	entry := queueEvent(evt, q.nextSeq)
+	q.events = append(q.events, entry)
+	if !entry.background {
+		q.foreground.Add(1)
+	}
 	q.nextSeq++
 	q.events.up(len(q.events) - 1)
 }
@@ -92,6 +104,9 @@ func (q *eventQueueImpl) Push(evt Event) {
 func (q *eventQueueImpl) Pop() (Event, bool) {
 	q.Lock()
 	defer q.Unlock()
+	if len(q.events) > 0 && !q.events[0].background {
+		q.foreground.Add(-1)
+	}
 	return popHeap(&q.events)
 }
 
@@ -119,8 +134,9 @@ func (q *eventQueueImpl) Peek() (Event, bool) {
 // It implements the EventQueue interface but without mutex overhead.
 // Used by SerialEngine where the Run loop is inherently single-threaded.
 type unsafeEventQueue struct {
-	events  eventHeap
-	nextSeq uint64
+	foreground int
+	events     eventHeap
+	nextSeq    uint64
 }
 
 // newUnsafeEventQueue creates an unsafeEventQueue for single-threaded use.
@@ -130,13 +146,20 @@ func newUnsafeEventQueue() *unsafeEventQueue {
 
 // Push adds an event to the event queue without locking.
 func (q *unsafeEventQueue) Push(evt Event) {
-	q.events = append(q.events, queuedEvent{event: evt, seq: q.nextSeq})
+	entry := queueEvent(evt, q.nextSeq)
+	q.events = append(q.events, entry)
+	if !entry.background {
+		q.foreground++
+	}
 	q.nextSeq++
 	q.events.up(len(q.events) - 1)
 }
 
 // Pop returns the next earliest event without locking.
 func (q *unsafeEventQueue) Pop() (Event, bool) {
+	if len(q.events) > 0 && !q.events[0].background {
+		q.foreground--
+	}
 	return popHeap(&q.events)
 }
 

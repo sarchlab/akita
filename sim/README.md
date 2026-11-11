@@ -188,10 +188,10 @@ setup rebuilds; put cursors and counters in `State`.
   tracking settings are supported: off-to-on starts empty, and on-to-off ignores
   the optional tracker payload. See [task tracking](tasks/README.md).
 - **`SerialEngine.RunUntil(t)`** stops the engine at a deterministic boundary
-  (every event with time ≤ `t`), unlike `Run` (drains everything) or
-  `RequestPause().Wait(ctx)` (acknowledges a pause at an execution boundary
-  without choosing a reproducible virtual time) — useful for taking a mid-transaction
-  checkpoint.
+  for a mid-transaction checkpoint. Both `Run` and `RunUntil` stop when only
+  background events remain. `RunUntil` also stops before the first event after
+  `t`. Pending background events remain in the archive. On restore, the engine
+  replaces timers scheduled during initialization with the restored queues.
 - **Register your message and event types.** A port holds `messaging.Msg` values whose non-nil payloads must be registered
   at package initialization
   and the engine queue any `timing.Event`; each concrete type must be registered

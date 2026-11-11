@@ -1,25 +1,14 @@
 package modeling
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// componentCheckpoint is the serialized form of a generic component: the
-// mutable State and the pending-event guard. Spec, Resources and ports are
-// rebuilt by setup, not serialized or compared. The guard is saved directly,
-// alongside the engine's matching event, so load is a single pass with no
-// post-load reconciliation against the queue.
-type componentCheckpoint struct {
-	State             json.RawMessage         `json:"state"`
-	PendingEventGuard []timing.VTimeInPicoSec `json:"pending_event_guard"`
-}
-
-// PendingEventGuard records the times of the component's own pending ticks or
-// wakeups, so restore does not schedule a duplicate.
+// PendingEventGuard lets a component using WriteCheckpoint and ReadCheckpoint
+// save and restore a list of pending event times.
 type PendingEventGuard interface {
 	// Snapshot returns the guard: the times of the pending events.
 	Snapshot() []timing.VTimeInPicoSec
@@ -34,17 +23,7 @@ type PendingEventGuard interface {
 func WriteCheckpoint[T any](
 	w io.Writer, state T, guard PendingEventGuard,
 ) error {
-	data, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("modeling: marshal state: %w", err)
-	}
-
-	dto := componentCheckpoint{State: data}
-	if guard != nil {
-		dto.PendingEventGuard = guard.Snapshot()
-	}
-
-	return json.NewEncoder(w).Encode(dto)
+	return componentcheckpoint.Write(w, state, guard)
 }
 
 // ReadCheckpoint restores a component's State and pending-event guard. Loading
@@ -55,20 +34,5 @@ func WriteCheckpoint[T any](
 func ReadCheckpoint[T any](
 	r io.Reader, state *T, guard PendingEventGuard,
 ) error {
-	var dto componentCheckpoint
-	if err := json.NewDecoder(r).Decode(&dto); err != nil {
-		return fmt.Errorf("modeling: decode component checkpoint: %w", err)
-	}
-
-	var restored T
-	if err := json.Unmarshal(dto.State, &restored); err != nil {
-		return fmt.Errorf("modeling: unmarshal state: %w", err)
-	}
-	*state = restored
-
-	if guard != nil {
-		guard.Restore(dto.PendingEventGuard)
-	}
-
-	return nil
+	return componentcheckpoint.Read(r, state, guard)
 }

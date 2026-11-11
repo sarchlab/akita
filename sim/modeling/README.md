@@ -105,11 +105,12 @@ Each package doc shows how to declare and build a component of its model.
   hookable, the handler of its events, and the owner of its ports
   (`messaging.PortOwner`).
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
-  State and the dedup guard of its scheduler. A `Scheduler` is
-  what they save the guard through. Tick scheduling is shared internally
-  with direct connections; standalone schedulers are not a public extension point.
-  Component-level scheduling methods such as `TickLater()` and `TickAt(t)`
-  remain public.
+  State with an optional list of pending times. A custom foreground-only scheduler
+  can supply this list through `PendingEventGuard`.
+- Built-in tick and wakeup components checkpoint their scheduler's internal
+  guard, including the kind and delivery state of pending events. Direct
+  connections share the tick scheduler. Components schedule maintenance with
+  `TickAtBackground(t)` or `WakeAtBackground(t)`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.

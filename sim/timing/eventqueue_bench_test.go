@@ -1,6 +1,9 @@
 package timing
 
-import "testing"
+import (
+	"sync/atomic"
+	"testing"
+)
 
 // benchEvent is a minimal Event used by the queue benchmarks. Pointers to a
 // fixed pool are reused so the benchmark loop itself allocates nothing, leaving
@@ -43,6 +46,6 @@ func BenchmarkUnsafeEventQueue(b *testing.B) {
 }
 
 func BenchmarkEventQueueImpl(b *testing.B) {
-	q := newEventQueue()
+	q := newEventQueue(new(atomic.Int64))
 	benchPushPop(b, q.Push, q.Pop)
 }

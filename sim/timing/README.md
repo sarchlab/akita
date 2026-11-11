@@ -127,6 +127,19 @@ It creates no recording by default. Call `s.Initialize()` after wiring, then
 `RunUntil` document the same precondition but perform no readiness check.
 Custom engine injection is deferred to v5.2.
 
+## Background events
+
+Both engines run events in their normal time and priority order while at least
+one foreground event remains. When only background events remain, the engine
+returns with those events queued. Its current time is the last dispatched event
+time. Serial `RunUntil(t)` applies the same rule and also stops before the first
+event after `t`. A later foreground event lets the queued maintenance run.
+
+Events default to foreground. A raw event can implement `timing.BackgroundEvent`
+or set `EventBase.Background`. Ticking and wakeup components request maintenance
+with `TickAtBackground` and `WakeAtBackground`. Port notifications and framework
+retries schedule foreground work even when a background handler triggered them.
+
 ## Hooks
 
 Engines are `hooking.Hookable`. They fire `HookPosBeforeEvent` and

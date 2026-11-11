@@ -166,6 +166,7 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 		EventBase{At: 1, Handler: "model"},
 		panicTimeEvent{attempted: attempted},
 	}}
+	e.foreground.Store(2) // the injected queue holds two foreground events
 	e.queues = []eventQueue{q}
 	e.queueChan = make(chan eventQueue, 1)
 	e.queueChan <- q
@@ -181,7 +182,7 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 }
 
 func TestEventQueueReleasesExistingLockOnPanic(t *testing.T) {
-	q := newEventQueue()
+	q := newEventQueue(new(atomic.Int64))
 	catchPanic(t, func() {
 		q.Push(EventBase{At: 1})
 		ready := make(chan struct{})

@@ -128,7 +128,7 @@ func TestDRAMRefreshStallAttribution(t *testing.T) {
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
 		spec := DefaultSpec()
-		spec.TREFI = 1
+		spec.TREFI = 4
 		spec.TRFC = 3
 
 		memCtrl := buildDRAM(sim, spec, "MemCtrl", 16)
@@ -153,6 +153,7 @@ func TestDRAMRefreshStallAttribution(t *testing.T) {
 		// Tick enough for the refresh window to open and close and the command
 		// to finally issue.
 		for i := 0; i < 20; i++ {
+			engine.now = spec.Freq.NCyclesLater(i+1, 0)
 			modelingtest.Tick(memCtrl)
 		}
 

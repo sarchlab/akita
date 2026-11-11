@@ -20,9 +20,10 @@ type SerialEngine struct {
 
 	singleRunLock sync.Mutex
 
-	registry     map[string]Handler
-	failure      *PanicError
-	currentEvent Event
+	registry      map[string]Handler
+	failure       *PanicError
+	currentEvent  Event
+	hasDispatched bool // a fresh setup may already have scheduled background timers
 }
 
 // NewSerialEngine creates a SerialEngine.
@@ -71,7 +72,7 @@ func (e *SerialEngine) Schedule(evt Event) {
 	e.queue.Push(evt)
 }
 
-// Run processes all the events scheduled in the SerialEngine.
+// Run dispatches events in time order while foreground events remain queued.
 // The owning simulation must have been initialized successfully and not
 // terminated; these preconditions are not checked by the engine.
 func (e *SerialEngine) Run() (err error) {
@@ -87,7 +88,7 @@ func (e *SerialEngine) Run() (err error) {
 
 	for {
 		e.currentEvent = nil
-		if e.noMoreEvent() {
+		if e.noForeground() {
 			return nil
 		}
 
@@ -100,9 +101,8 @@ func (e *SerialEngine) Run() (err error) {
 }
 
 // RunUntil runs events in time order until the next event's time would exceed t,
-// or the queue empties. Events at times <= t scheduled while running (including
-// newly scheduled ones) are processed; the engine stops with its time at the
-// last processed event and all later events still queued. This is a
+// or only background work remains. The engine stops with its time at the
+// last processed event and all remaining events still queued. This is a
 // deterministic mid-run boundary — unlike RequestPause, which stops at a
 // non-reproducible point — used to take a mid-transaction checkpoint.
 // The owning simulation must have been initialized successfully and not
@@ -120,7 +120,7 @@ func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 
 	for {
 		e.currentEvent = nil
-		if e.noMoreEvent() {
+		if e.noForeground() {
 			return nil
 		}
 		if e.nextEventTime() > t {
@@ -138,6 +138,7 @@ func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 // dispatchNext pops the earliest event and runs it, invoking hooks when present.
 func (e *SerialEngine) dispatchNext(hasHooks bool) {
 	evt := e.nextEvent()
+	e.hasDispatched = true
 	e.currentEvent = evt
 
 	if evt.Time() < e.time {
@@ -191,8 +192,8 @@ func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
 	return secondary
 }
 
-func (e *SerialEngine) noMoreEvent() bool {
-	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
+func (e *SerialEngine) noForeground() bool {
+	return e.queue.foreground == 0 && e.secondaryQueue.foreground == 0
 }
 
 func (e *SerialEngine) nextEvent() Event {

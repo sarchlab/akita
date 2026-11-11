@@ -71,9 +71,16 @@ adds the work; each tick handles the work that is due. `TickAt` and `WakeAt`
 always produce a tick or wakeup at the requested edge or time. It must not
 hold the engine or register extra event handlers: the tick stays its only entry
 point, so the work is checkpointed and inspected with State and is handled
-under the component's lock. A tick scheduler never schedules two ticks on the
-same edge. A wakeup scheduler keeps at most one undelivered wakeup pending for
-a given time; another wakeup at the same time may be asked for after delivery.
+under the component's lock. A tick scheduler delivers at most one tick per edge.
+A wakeup scheduler coalesces requests for the same time until delivery, after
+which the component can request another wakeup at that time.
+
+Use `TickAtBackground` or `WakeAtBackground` for periodic maintenance. A
+foreground request for the same edge or time promotes pending background work.
+Progress retries and port notifications schedule foreground work. Both engines
+stop when only background events remain, leaving them queued for the next run.
+A serial checkpoint preserves these timers and replaces any timers scheduled
+during initialization of the rebuilt simulation.
 
 ## Builders and packages
 

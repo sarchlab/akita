@@ -37,14 +37,15 @@ func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
 }
 
 // LoadCheckpoint restores the engine's time and event queues into a freshly
-// rebuilt engine, whose queues must already be empty. Events are restored in
-// pop order so the (time, sequence) ordering is reproduced, and each event's
+// rebuilt engine. Setup-time background timers are replaced by those in the
+// archive. Foreground events or queued events from an earlier run are rejected.
+// Restoring events in pop order reproduces (time, sequence) ordering. Each event's
 // handler must already be registered.
 func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
 	if e.failure != nil {
 		return e.failure
 	}
-	if e.queue.Len() != 0 || e.secondaryQueue.Len() != 0 {
+	if !e.noForeground() || (e.hasDispatched && (e.queue.Len() != 0 || e.secondaryQueue.Len() != 0)) {
 		return fmt.Errorf(
 			"timing: cannot load a checkpoint into a non-empty serial engine queue")
 	}
@@ -63,6 +64,9 @@ func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
 		return err
 	}
 
+	e.queue = newUnsafeEventQueue()
+	e.secondaryQueue = newUnsafeEventQueue()
+	e.hasDispatched = true
 	e.queue.restore(primary)
 	e.secondaryQueue.restore(secondary)
 	e.time = dto.Time

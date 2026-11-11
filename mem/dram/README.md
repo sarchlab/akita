@@ -42,9 +42,9 @@ in field order: `Ctrl`, `Respond`, `Refresh`, `BankTick`, `ParseTop`.
 2. **Respond** — Completes transactions when all sub-transactions finish,
    reads/writes data from the backing `mem.Storage`, and sends responses.
 
-3. **Refresh** — Schedules periodic refresh (a global tRFC stall every tREFI
-   cycles). It runs ahead of BankTick so its stall flag is set before the issue
-   step reads it.
+3. **Refresh** — Schedules background ticks for the start and end of each global
+   tRFC stall, every tREFI cycles in simulated time. Idle intervals preserve
+   the refresh phase. Refresh runs before BankTick to stall command issue.
 
 4. **BankTick** — The core scheduling engine. Each tick it advances bank
    state machines, enforces timing constraints between commands (same-bank,

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTFAWAndRefresh(t *testing.T) {
+func TestTFAW(t *testing.T) {
 	var (
 		spec      Spec
 		st        *state
@@ -165,72 +165,6 @@ func TestTFAWAndRefresh(t *testing.T) {
 			// tFAW=0 means no constraint
 			ready := getReadyCommand(&spec, st, bs, cmd)
 			require.NotNil(t, ready)
-		})
-	})
-
-	t.Run("Periodic Refresh", func(t *testing.T) {
-		setup2 := func(t *testing.T) {
-			t.Helper()
-
-			spec = DDR4Spec()
-			spec.TREFI = 20 // small value for testing
-			spec.TRFC = 5
-
-			st = &state{
-				BankStates: initBankStatesFlat(
-					spec.NumRank, spec.NumBankGroup, spec.NumBank),
-			}
-		}
-
-		t.Run("should trigger refresh after TREFI ticks and stall for TRFC", func(t *testing.T) {
-			setup2(t)
-
-			// Simulate the countdown
-			require.False(t, st.RefreshInProgress)
-
-			// After TREFI ticks, refresh should trigger
-			for i := range spec.TREFI {
-				_ = i
-				progress := runFakeStallRefresh(&spec, st)
-				if i < spec.TREFI-1 {
-					require.False(t, st.RefreshInProgress)
-				}
-				_ = progress
-			}
-
-			require.True(t, st.RefreshInProgress)
-			require.Equal(t, spec.TRFC, st.RefreshCyclesRemaining)
-			require.Equal(t, 0, st.RefreshCycleCounter)
-		})
-
-		t.Run("should complete refresh after TRFC cycles", func(t *testing.T) {
-			setup2(t)
-
-			// Set up state as if refresh just triggered
-			st.RefreshInProgress = true
-			st.RefreshCyclesRemaining = spec.TRFC
-			st.RefreshCycleCounter = 0
-
-			// Tick TRFC times
-			for range spec.TRFC {
-				require.True(t, st.RefreshInProgress)
-				runFakeStallRefresh(&spec, st)
-			}
-
-			// After TRFC ticks, refresh should be complete
-			require.False(t, st.RefreshInProgress)
-		})
-
-		t.Run("should not trigger refresh when TREFI is 0", func(t *testing.T) {
-			setup2(t)
-
-			spec.TREFI = 0
-
-			for range 100 {
-				runFakeStallRefresh(&spec, st)
-			}
-
-			require.False(t, st.RefreshInProgress)
 		})
 	})
 }

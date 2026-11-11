@@ -30,7 +30,8 @@ type Engine interface {
 	// registers itself.
 	RegisterHandler(name string, handler Handler)
 
-	// Run processes events until the simulation finishes. The owning simulation
+	// Run processes events while foreground work remains. Background events left
+	// queued do not advance CurrentTime and can run on a later call. The owning simulation
 	// must have been initialized successfully and not terminated; these
 	// preconditions are not checked by the engine.
 	Run() error

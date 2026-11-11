@@ -309,10 +309,9 @@ implementations; the old names are removed.
 - `ticking.TickEvent` → `ticking.Event`.
 - `ticking.MakeTickEvent(id, handlerID, time)` →
   `ticking.MakeEvent(id, time, handlerID)`, matching `timing.MakeEventBase`.
-- `modeling.Scheduler` → `modeling.PendingEventGuard`. It records the times of
-  the component's own pending ticks or wakeups, so restore does not schedule a
-  duplicate; see [Ticks at a later time](#ticks-at-a-later-time-585) for its
-  current `Snapshot` and `Restore` signatures.
+- `modeling.Scheduler` → `modeling.PendingEventGuard`. Custom foreground-only
+  schedulers implement `Snapshot() []timing.VTimeInPicoSec` and
+  `Restore(pending []timing.VTimeInPicoSec)` to checkpoint pending event times.
 - Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
 - Concrete `*vm.PageTable` exposes `Log2PageSize()` instead of
   `GetLog2PageSize()`; both MMU and GMMU validate it.
@@ -325,7 +324,7 @@ implementations; the old names are removed.
 Simulation behavior and the event field keys `time` and `handler_id` are
 unchanged. Tick checkpoint type tags now use `tickscheduler.Event`, derived from the
 internal Go type; `ticking.Event` remains a public alias. The component checkpoint guard is named `pending_event_guard` instead
-of `scheduler`; it is now a list of pending times (see below). Saved checkpoints from before
+of `scheduler`; its current contents are described under background events below. Saved checkpoints from before
 this cleanup are not supported; no legacy type-tag alias or schema migration
 is provided.
 
@@ -407,11 +406,32 @@ pending for a given time, and a later tick or wakeup requested while the
 current one is handled is no longer dropped. `TickNow` and `TickLater` are no
 longer held back by a tick pending further in the future.
 
-`modeling.PendingEventGuard` now has `Snapshot() []timing.VTimeInPicoSec` and
-`Restore([]timing.VTimeInPicoSec)`, and the component checkpoint stores
-`pending_event_guard` as a list of times, for example
-`"pending_event_guard":[1000]`. Checkpoints saved by v5.0.0-rc.2 or earlier
-cannot be loaded; rebuild them.
+## Background events and DRAM refresh (#603)
+
+Events default to foreground. To schedule maintenance, set
+`timing.EventBase.Background` to true, implement the optional
+`timing.BackgroundEvent` interface on a custom event, or call
+`TickAtBackground(t)` or `WakeAtBackground(t)` on a component. Requesting a
+foreground tick or wakeup for the same edge or time promotes pending work.
+Port notifications and retries after middleware progress always schedule
+foreground work.
+
+Both engines return from `Run` as soon as only background events remain.
+`SerialEngine.RunUntil(t)` applies the same rule and the time bound. Remaining
+events stay queued, and the engine time stays at the last event it dispatched.
+DRAM refresh uses background timers at the start and end of its tRFC stall,
+so idle time elapses on the same tREFI schedule as active time. For tRFC shorter
+than tREFI, refresh starts are now tREFI cycles apart. Under continuous traffic,
+the previous counter placed starts tREFI + tRFC cycles apart. With tRFC at least
+tREFI, the next refresh starts on the first tREFI boundary strictly after the
+current stall ends. Idle refresh ticks dispatched during a run count toward
+`TotalCycles`.
+
+Serial checkpoints retain pending timers. Load into a freshly initialized
+simulation: restored queues replace any background timers scheduled during
+setup. The built-in scheduler's `pending_event_guard` records the event kinds
+and the delivery metadata needed to coalesce promoted work. Rebuild checkpoints
+from earlier versions if they cannot be decoded.
 
 ## Best-effort checkpoints
 

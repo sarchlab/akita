@@ -24,7 +24,7 @@ The full source is in `examples/01_print_event/main.go`.
 - How to create a simulation and get its engine.
 - What an event is and how to schedule one.
 - What a handler is and how to register it.
-- How the engine runs until the event queue is empty.
+- How the engine runs until foreground work is complete.
 
 ## Walk-Through
 
@@ -99,7 +99,7 @@ if err != nil {
 ```
 
 `Run()` pulls events off the queue in time order, dispatches each to its
-handler, and returns when the queue is empty. Here it fires exactly one
+handler, and returns when no foreground events remain. Here it fires exactly one
 event and returns.
 
 ### 6. Cleanup

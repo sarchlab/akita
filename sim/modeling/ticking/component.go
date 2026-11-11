@@ -4,9 +4,9 @@ import (
 	"io"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -50,6 +50,9 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
+	if _, ok := e.(Event); ok && !c.ticks.Deliver(e.Time()) {
+		return
+	}
 	if base.Dispatch(c.pipeline, e) {
 		c.ticks.TickLater()
 	}
@@ -72,6 +75,12 @@ func (c *Component[S, T, R, P, M]) TickAt(at timing.VTimeInPicoSec) {
 	c.ticks.TickAt(at)
 }
 
+// TickAtBackground requests a tick on the first edge at or after at, without
+// keeping the simulation running. A foreground request on that edge keeps it live.
+func (c *Component[S, T, R, P, M]) TickAtBackground(at timing.VTimeInPicoSec) {
+	c.ticks.TickAtBackground(at)
+}
+
 // NotifyRecv wakes the instance when a port receives a message.
 func (c *Component[S, T, R, P, M]) NotifyRecv(_ messaging.Port) {
 	c.ticks.TickLater()
@@ -85,13 +94,13 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 // SaveCheckpoint writes the instance's State and tick-scheduler guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.WriteCheckpoint(w, c.State, c.ticks)
+	return componentcheckpoint.Write(w, c.State, c.ticks)
 }
 
 // LoadCheckpoint restores the State and tick-scheduler guard (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.ReadCheckpoint(r, &c.State, c.ticks)
+	return componentcheckpoint.Read(r, &c.State, c.ticks)
 }
 
 // Name returns the instance name given to Build.
