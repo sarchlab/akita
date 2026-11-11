@@ -1,6 +1,8 @@
 package datamover
 
 import (
+	"bytes"
+	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -27,7 +29,7 @@ func TestDataMover(t *testing.T) {
 		srcPort        messaging.Port
 	)
 
-	setup1 := func(t *testing.T) {
+	setup := func(t *testing.T, bufferSize uint64, limit int) {
 		t.Helper()
 
 		engine = timing.NewSerialEngine()
@@ -39,13 +41,15 @@ func TestDataMover(t *testing.T) {
 		memSpec.Latency = 100
 		memSpec.NumReqPerCycle = 1
 
-		insideStorage = mem.NewStorage(1 * mem.MB)
+		storage := mem.MakeStorageBuilder().WithSimulation(sim).WithCapacity(mem.MB)
+		insideStorage = storage.Build("InsideStorage")
 		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
-		outsideStorage = mem.NewStorage(1 * mem.MB)
+		outsideStorage = storage.Build("OutsideStorage")
 		outsideMem = buildIdealMem(sim, memSpec, outsideStorage, "OutsideMem")
 
 		dmSpec := DefaultSpec()
-		dmSpec.BufferSize = 2048
+		dmSpec.MaxTransactions = limit
+		dmSpec.BufferSize = bufferSize
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
@@ -72,6 +76,85 @@ func TestDataMover(t *testing.T) {
 			panic(err)
 		}
 	}
+
+	setup1 := func(t *testing.T) { t.Helper(); setup(t, 2048, 1) }
+	runStream := func(t *testing.T, limit int, restore bool) timing.VTimeInPicoSec {
+		t.Helper()
+		setup(t, 65536, limit)
+		var ids [4]uint64
+		var expected [4][]byte
+		for i := range 4 {
+			addr := uint64(i * 8192)
+			data := make([]byte, 4096)
+			for j := range data {
+				data[j] = byte(i + j)
+			}
+			outsideStorage.Write(addr, data)
+			expected[i] = data
+			id := sim.NewID()
+			ids[i] = id
+			dataMover.Ports.Top.Deliver(messaging.Msg{ID: id, Src: srcPort.AsRemote(),
+				Dst: dataMover.Ports.Top.AsRemote(), Payload: datamoverprotocol.Req{
+					SrcAddress: addr, DstAddress: addr, SrcSide: "outside", DstSide: "inside", ByteSize: 4096,
+				}})
+		}
+		if restore {
+			require.NoError(t, engine.(*timing.SerialEngine).RunUntil(130000))
+			require.Len(t, dataMover.State.Transactions, 4)
+			require.NotEmpty(t, dataMover.State.Transactions[0].PendingWrite)
+			require.NotEmpty(t, dataMover.State.Transactions[2].PendingRead)
+			path := filepath.Join(t.TempDir(), "in-flight.chk")
+			require.NoError(t, sim.SaveCheckpoint(path))
+			setup(t, 65536, limit)
+			require.NoError(t, sim.LoadCheckpoint(path))
+		}
+		require.NoError(t, engine.Run())
+		for i, id := range ids {
+			addr := uint64(i * 8192)
+			require.Equal(t, expected[i], insideStorage.Read(addr, 4096))
+			rsp, ok := srcPort.RetrieveIncoming()
+			require.True(t, ok)
+			require.Equal(t, id, rsp.RspTo)
+		}
+		return engine.CurrentTime()
+	}
+	t.Run("independent page stream", func(t *testing.T) {
+		serial := runStream(t, 1, false)
+		overlapped := runStream(t, 4, false)
+		require.Equal(t, timing.VTimeInPicoSec(1070000), serial) // measured on the single-transaction implementation
+		require.Less(t, overlapped, serial)
+		require.Equal(t, overlapped, runStream(t, 4, true))
+		t.Logf("four independent 4 KiB copies: %d ps serial, %d ps overlapped", serial, overlapped)
+	})
+
+	t.Run("short final chunks in either direction", func(t *testing.T) {
+		for _, side := range []datamoverprotocol.Side{"inside", "outside"} {
+			setup(t, 2048, 2)
+			src, dst := insideStorage, outsideStorage
+			dstSide := datamoverprotocol.SideOutside
+			if side == "outside" {
+				src, dst = dst, src
+				dstSide = datamoverprotocol.SideInside
+			}
+			for i := range 2 {
+				addr := uint64(4096 * i)
+				src.Write(addr, bytes.Repeat([]byte{0x11}, 512))
+				dst.Write(addr, bytes.Repeat([]byte{0xff}, 512))
+				dataMover.Ports.Top.Deliver(messaging.Msg{ID: sim.NewID(), Src: srcPort.AsRemote(),
+					Dst: dataMover.Ports.Top.AsRemote(), Payload: datamoverprotocol.Req{
+						SrcSide: side, DstSide: dstSide, SrcAddress: addr, DstAddress: addr, ByteSize: 257,
+					}})
+			}
+			require.NoError(t, engine.Run())
+			for i := range 2 {
+				addr := uint64(4096 * i)
+				require.Equal(t, bytes.Repeat([]byte{0x11}, 257), dst.Read(addr, 257))
+				require.Equal(t, []byte{0xff}, dst.Read(addr+257, 1))
+				_, ok := srcPort.RetrieveIncoming()
+				require.True(t, ok)
+			}
+		}
+	})
 
 	t.Run("should move data outside to inside", func(t *testing.T) {
 		setup1(t)

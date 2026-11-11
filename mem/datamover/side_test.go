@@ -18,8 +18,16 @@ func TestInvalidSidesRejectedBeforeAdmission(t *testing.T) {
 		req := messaging.Msg{ID: c.NewID(), Payload: datamoverprotocol.Req{SrcSide: sides[0], DstSide: sides[1]}}
 		c.Ports.Top.Deliver(req)
 		require.Panics(t, func() { c.Middlewares.CtrlParse.parseFromCP() })
-		require.False(t, c.State.CurrentTransaction.Active)
+		require.Empty(t, c.State.Transactions)
 		_, present := c.Ports.Top.PeekIncoming()
 		require.True(t, present)
+	}
+}
+
+func TestTransactionLimitMustBePositive(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		c := &Comp{Spec: DefaultSpec()}
+		c.Spec.MaxTransactions = limit
+		require.Panics(t, func() { c.Middlewares.Initialize(c) })
 	}
 }

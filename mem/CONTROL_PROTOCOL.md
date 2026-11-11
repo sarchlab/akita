@@ -333,9 +333,8 @@ pipeline.
   task IDs for tracing) and drains the Top/Bottom ports.
 
 **`datamover`** — `Universal`; `State.ControlState`.
-- Drain acks once the current transfer finishes
-  (`State.CurrentTransaction.Active == false`).
-- Reset wipes the current transaction and the data buffer and drains the
+- Drain acks once all accepted transfers finish (`State.Transactions` is empty).
+- Reset discards all accepted transfers and their buffered data and drains the
   Top/Inside/Outside ports.
 
 ## Protocol constants and internal test helpers

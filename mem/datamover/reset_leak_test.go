@@ -21,6 +21,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
+	spec.MaxTransactions = 2
 	spec.BufferSize = 2048
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
@@ -100,12 +101,13 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	if !gotRead {
 		t.Fatal("expected an Outside read to be issued")
 	}
-	if !dataMover.State.CurrentTransaction.Active {
+	_, gotRead = startMove()
+	if !gotRead || len(dataMover.State.Transactions) != 2 {
 		t.Fatal("expected the move to be active in flight")
 	}
 
 	// Guard against a vacuous test: the req_in and the read req_out must be open.
-	if rec.NumStarted() < 2 {
+	if rec.NumStarted() < 4 {
 		t.Fatalf("expected at least 2 tasks opened, got %d", rec.NumStarted())
 	}
 

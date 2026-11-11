@@ -2,7 +2,6 @@ package datamover
 
 import (
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -40,98 +39,65 @@ func (m *ctrlParseMW) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
-// parseFromCP admits the head request from topPort. The data mover runs a
-// single transaction at a time, so a request that arrives while one is already
-// running must wait at the head of the buffer rather than be retrieved and
-// dropped. The head is therefore peeked first; the message is only retrieved
-// (and admitted) once the single transaction slot is free.
+// Admit at most one head request per tick. A change of direction waits
+// for all accepted moves to finish, including their destination write acks.
 func (m *ctrlParseMW) parseFromCP() bool {
 	state := &m.comp.State
-	if state.CurrentTransaction.Active {
+	if len(state.Transactions) >= m.comp.Spec.MaxTransactions {
 		return false
 	}
-
-	reqI, ok := m.topPort().PeekIncoming()
+	msg, ok := m.topPort().PeekIncoming()
 	if !ok {
 		return false
 	}
-	_, ok = reqI.Payload.(datamoverprotocol.Req)
-	req := reqI
+	req, ok := msg.Payload.(datamoverprotocol.Req)
 	if !ok {
-		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI.Payload))
+		log.Panicf("can't process request of type %T", msg.Payload)
 	}
+	if len(state.Transactions) > 0 {
+		first := &state.Transactions[0]
+		if first.SrcSide != req.SrcSide || first.DstSide != req.DstSide {
+			return false
+		}
+	}
+	srcWidth := resolveByteGranularity(m.comp.Spec, req.SrcSide)
+	addressMustBeAligned(req.SrcAddress, srcWidth)
+	addressMustBeAligned(req.DstAddress, resolveByteGranularity(m.comp.Spec, req.DstSide))
 
-	spec := m.comp.Spec
-
-	srcByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.Req).SrcSide)
-	addressMustBeAligned(req.Payload.(datamoverprotocol.Req).SrcAddress, srcByteGranularity)
-
-	dstByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.Req).DstSide)
-	addressMustBeAligned(req.Payload.(datamoverprotocol.Req).DstAddress, dstByteGranularity)
-
-	// The slot is free and this request is being admitted. Attribute the
-	// at-head admission wait to the buffer task (which the port closes at
-	// retrieve), using the task ID stored in the port's head entry.
 	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".transaction"))
-
 	m.topPort().RetrieveIncoming()
-
-	state.SrcSide = req.Payload.(datamoverprotocol.Req).SrcSide
-	state.DstSide = req.Payload.(datamoverprotocol.Req).DstSide
-	state.SrcByteGranularity = srcByteGranularity
-	state.DstByteGranularity = dstByteGranularity
-
-	state.CurrentTransaction = dataMoverTransactionState{
-		Active:        true,
-		ReqID:         req.ID,
-		ReqSrc:        req.Src,
-		ReqDst:        req.Dst,
-		SrcAddress:    req.Payload.(datamoverprotocol.Req).SrcAddress,
-		DstAddress:    req.Payload.(datamoverprotocol.Req).DstAddress,
-		ByteSize:      req.Payload.(datamoverprotocol.Req).ByteSize,
-		SrcSide:       req.Payload.(datamoverprotocol.Req).SrcSide,
-		DstSide:       req.Payload.(datamoverprotocol.Req).DstSide,
-		NextReadAddr:  req.Payload.(datamoverprotocol.Req).SrcAddress,
-		NextWriteAddr: req.Payload.(datamoverprotocol.Req).DstAddress,
+	state.Transactions = append(state.Transactions, dataMoverTransactionState{
+		ReqID:         msg.ID,
+		ReqSrc:        msg.Src,
+		ReqDst:        msg.Dst,
+		SrcAddress:    req.SrcAddress,
+		DstAddress:    req.DstAddress,
+		ByteSize:      req.ByteSize,
+		SrcSide:       req.SrcSide,
+		DstSide:       req.DstSide,
+		NextReadAddr:  req.SrcAddress,
+		NextWriteAddr: req.DstAddress,
 		PendingRead:   make(map[uint64]pendingReadState),
-		PendingWrite:  make(map[uint64]pendingWriteState),
-	}
-
-	state.Buffer = bufferState{
-		Granularity: srcByteGranularity,
-	}
-
-	state.CurrentTransaction.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, req)
-
+		PendingWrite:  make(map[uint64]uint64),
+		Buffer:        bufferState{Granularity: srcWidth},
+		RecvTaskID:    m.comp.TaskTracker().StartReqIn(m.comp, msg),
+	})
 	return true
 }
 
-// finishTransaction finishes the current transaction.
+// Complete only the oldest transaction so responses retain admission order.
 func (m *ctrlParseMW) finishTransaction() bool {
 	state := &m.comp.State
-	if !state.CurrentTransaction.Active {
+	if len(state.Transactions) == 0 {
 		return false
 	}
-
-	trans := &state.CurrentTransaction
-
-	if trans.NextWriteAddr < trans.DstAddress+trans.ByteSize {
+	trans := &state.Transactions[0]
+	if trans.NextWriteAddr-trans.DstAddress < trans.ByteSize ||
+		len(trans.PendingRead) > 0 || len(trans.PendingWrite) > 0 {
 		return false
 	}
-
-	// All reads/writes have been issued, but the move is only truly complete
-	// once every one is acknowledged. Completing earlier would report the copy
-	// done (and let a Drain quiesce) while destination writes are still in
-	// flight and their pending metadata is about to be discarded.
-	if len(trans.PendingRead) > 0 || len(trans.PendingWrite) > 0 {
-		return false
-	}
-
-	rsp := messaging.Msg{ID: m.comp.NewID(),
-		Src:   trans.ReqDst,
-		Dst:   trans.ReqSrc,
-		RspTo: trans.ReqID, Payload: datamoverprotocol.Rsp{}}
-
+	rsp := messaging.Msg{ID: m.comp.NewID(), Src: trans.ReqDst,
+		Dst: trans.ReqSrc, RspTo: trans.ReqID, Payload: datamoverprotocol.Rsp{}}
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -140,15 +106,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
 
-	// Reset transaction
-	state.CurrentTransaction = dataMoverTransactionState{
-		PendingRead:  make(map[uint64]pendingReadState),
-		PendingWrite: make(map[uint64]pendingWriteState),
-	}
-	state.Buffer = bufferState{
-		Offset:      alignAddress(trans.SrcAddress, state.SrcByteGranularity),
-		Granularity: state.SrcByteGranularity,
-	}
-
+	state.Transactions[0] = dataMoverTransactionState{}
+	state.Transactions = state.Transactions[1:]
 	return true
 }

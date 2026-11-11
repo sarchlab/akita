@@ -1413,3 +1413,12 @@ migration is deferred until after the Akita v5 release and is not part of this P
 Old checkpoints must be rebuilt after these Spec and topology changes. Default
 geometry and widths are preserved, but queue sizing and NoC forwarding can
 change results. DRAM configuration, calculations, and presets are unchanged.
+
+
+## Streaming data movers
+
+`datamover.DefaultSpec()` sets `MaxTransactions` to 1 for serial execution.
+When constructing a `datamover.Spec` literal, set this field explicitly.
+Zero or negative values panic during initialization. Larger limits allow
+independent copies with the same source and destination sides to overlap.
+Wait for the earlier copy's completion before submitting a dependent copy.

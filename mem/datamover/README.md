@@ -10,7 +10,7 @@ two memory-facing ports.
 ## How It Works
 
 A move is driven by a single `Req` on the `Top` port. The
-component processes one transaction at a time:
+component admits up to `MaxTransactions` moves in arrival order:
 
 ```
 Top ──► Req ──► dataTransferMW ──► Rsp ──► Top
@@ -20,27 +20,23 @@ Top ──► Req ──► dataTransferMW ──► Rsp ──► Top
    ReadReq ──► [Inside|Outside] ──► DataReadyRsp ──► buffer ──► WriteReq ──► [Inside|Outside] ──► WriteDoneRsp
 ```
 
-Each tick the `dataTransferMW` middleware:
+The source and destination of each move can be `inside` or `outside`,
+including same-side copies. Consecutive requests with the same source and
+destination sides can overlap. A direction change waits at the head of the Top
+queue until all active moves complete. Callers must order dependent copies by
+waiting for the earlier response before submitting the later request.
 
-1. **readFromSrc** — issues `memprotocol.ReadReq`s at the source granularity, as long as
-   the read window stays within the configured `BufferSize` and the requested
-   region.
-2. **processDataReadyFromSrc** — stores each `memprotocol.DataReadyRsp` payload into the
-   sliding buffer at its address offset.
-3. **writeToDst** — once a full destination-granularity chunk is available in the
-   buffer, issues a `memprotocol.WriteReq` to the destination and advances the buffer
-   offset, discarding consumed chunks.
-4. **processWriteDoneFromDst** — clears the matching pending write on each
-   `memprotocol.WriteDoneRsp`.
-
-The `ctrlParseMW` middleware parses incoming `Req`s (rejecting a new
-one while a transaction is active) and, once every byte has been written back,
-sends a `Rsp` to the original requester.
-
-The source and destination each name one of the two sides — `"inside"` or
-`"outside"` — so a move can go inside→outside, outside→inside, or same-side. The
-buffer (`InsideByteGranularity` / `OutsideByteGranularity`) decouples the read
-and write transfer sizes.
+Each tick the mover can issue one source read and one destination write and
+consume one data response and one write acknowledgment. It issues reads in
+admission order and writes from the oldest move with a ready chunk. Each copy
+has its own sliding buffer; all copies share the read window set by `BufferSize`.
+Source chunks occupy the window from read issue until their data is sent to the
+destination. A read may start when its first byte fits. For a 65-byte window
+and 64-byte source granularity, two reads can be outstanding. Size the window
+to hold the source chunks needed for a destination write. Short final reads and
+writes transfer only the remaining bytes. Source and destination start addresses
+must be aligned to their respective granularities. Responses return on Top in
+admission order after each copy's writes have been acknowledged.
 
 ## Key Types
 
@@ -57,10 +53,12 @@ type Rsp struct {
 }
 ```
 
-- **Spec** — immutable config: `Freq`, `BufferSize`, and
+- **Spec** — immutable config: `Freq`, `MaxTransactions`, `BufferSize`, and
   `InsideByteGranularity`/`OutsideByteGranularity`.
-- **State** — mutable runtime: the single `CurrentTransaction` (with its pending
-  read/write maps and next read/write addresses) and the sliding `Buffer`.
+  `MaxTransactions` must be positive. `DefaultSpec()` sets it to 1 for serial
+  operation. Existing Spec literals must set this field explicitly.
+- **State** — accepted `Transactions` in order, each with its pending reads,
+  pending writes, next addresses, and buffered data.
 - **Resources** — empty. `Spec.Inside` and `Spec.Outside` are
   `mem.AddressMapper` values. Middleware routes directly through these values.
 - **Ports** — the `Top`, `Inside`, `Outside`, and `Control` ports.

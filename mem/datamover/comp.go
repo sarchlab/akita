@@ -18,6 +18,8 @@ type Spec struct {
 	// Outside routing configuration.
 	Outside mem.AddressMapper `json:"outside"`
 
+	// MaxTransactions bounds concurrent copies with matching source and destination sides.
+	MaxTransactions        int         `json:"max_transactions"`
 	Freq                   timing.Freq `json:"freq"`
 	BufferSize             uint64      `json:"buffer_size"`
 	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
@@ -69,25 +71,10 @@ type bufferState struct {
 	Chunks      []dataChunk `json:"chunks"`
 }
 
-// pendingReadState captures the serializable fields of a pending read request.
+// A returned read supplies its payload; retain its buffer offset and trace task.
 type pendingReadState struct {
 	TaskID uint64 `json:"task_id"`
-
-	ID      uint64               `json:"id"`
-	Src     messaging.RemotePort `json:"src"`
-	Dst     messaging.RemotePort `json:"dst"`
-	Address uint64               `json:"address"`
-}
-
-// pendingWriteState captures the serializable fields of a pending write request.
-type pendingWriteState struct {
-	TaskID uint64 `json:"task_id"`
-
-	ID      uint64               `json:"id"`
-	Src     messaging.RemotePort `json:"src"`
-	Dst     messaging.RemotePort `json:"dst"`
-	Address uint64               `json:"address"`
-	Data    []byte               `json:"data"`
+	Offset uint64 `json:"offset"`
 }
 
 // dataMoverTransactionState is the serializable representation of a
@@ -95,40 +82,31 @@ type pendingWriteState struct {
 type dataMoverTransactionState struct {
 	RecvTaskID uint64 `json:"recv_task_id"`
 
-	ReqID         uint64                       `json:"req_id"`
-	ReqSrc        messaging.RemotePort         `json:"req_src"`
-	ReqDst        messaging.RemotePort         `json:"req_dst"`
-	SrcAddress    uint64                       `json:"src_address"`
-	DstAddress    uint64                       `json:"dst_address"`
-	ByteSize      uint64                       `json:"byte_size"`
-	SrcSide       datamoverprotocol.Side       `json:"src_side"`
-	DstSide       datamoverprotocol.Side       `json:"dst_side"`
-	NextReadAddr  uint64                       `json:"next_read_addr"`
-	NextWriteAddr uint64                       `json:"next_write_addr"`
-	PendingRead   map[uint64]pendingReadState  `json:"pending_read"`
-	PendingWrite  map[uint64]pendingWriteState `json:"pending_write"`
-	Active        bool                         `json:"active"`
+	ReqID         uint64                      `json:"req_id"`
+	ReqSrc        messaging.RemotePort        `json:"req_src"`
+	ReqDst        messaging.RemotePort        `json:"req_dst"`
+	SrcAddress    uint64                      `json:"src_address"`
+	DstAddress    uint64                      `json:"dst_address"`
+	ByteSize      uint64                      `json:"byte_size"`
+	SrcSide       datamoverprotocol.Side      `json:"src_side"`
+	DstSide       datamoverprotocol.Side      `json:"dst_side"`
+	NextReadAddr  uint64                      `json:"next_read_addr"`
+	NextWriteAddr uint64                      `json:"next_write_addr"`
+	PendingRead   map[uint64]pendingReadState `json:"pending_read"`
+	PendingWrite  map[uint64]uint64           `json:"pending_write"`
+	Buffer        bufferState                 `json:"buffer"`
 }
 
 // state contains mutable runtime data for the data mover.
 type state struct {
-	ControlState       controlState              `json:"control_state"`
-	CurrentCmdID       uint64                    `json:"current_cmd_id"`
-	CurrentCmdSrc      messaging.RemotePort      `json:"current_cmd_src"`
-	CurrentTransaction dataMoverTransactionState `json:"current_transaction"`
-	Buffer             bufferState               `json:"buffer"`
-	SrcByteGranularity uint64                    `json:"src_byte_granularity"`
-	DstByteGranularity uint64                    `json:"dst_byte_granularity"`
-	SrcSide            datamoverprotocol.Side    `json:"src_side"`
-	DstSide            datamoverprotocol.Side    `json:"dst_side"`
+	ControlState  controlState                `json:"control_state"`
+	CurrentCmdID  uint64                      `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort        `json:"current_cmd_src"`
+	Transactions  []dataMoverTransactionState `json:"transactions"`
 }
 
 // Comp is the data mover component.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
-
-func alignAddress(addr, granularity uint64) uint64 {
-	return addr / granularity * granularity
-}
 
 func addressMustBeAligned(addr, granularity uint64) {
 	if addr%granularity != 0 {

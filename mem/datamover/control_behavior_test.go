@@ -32,9 +32,10 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		insideRemote messaging.RemotePort
 	)
 
-	build := func() {
+	build := func(limit int, window uint64) {
 		spec := DefaultSpec()
-		spec.BufferSize = 2048
+		spec.BufferSize = window
+		spec.MaxTransactions = limit
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
 
@@ -138,15 +139,93 @@ func TestDataMoverControlBehavior(t *testing.T) {
 
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
-		build()
+		build(1, 2048)
 	}
+
+	t.Run("shares read credits and drains a direction before reversing", func(t *testing.T) {
+		engine = timing.NewSerialEngine()
+		sim = testsim.New(engine, false)
+		build(3, 64) // room for three moves, but just one read
+		first, second, reverse, last := makeMove(), makeMove(), makeMove(), makeMove()
+		reverse.Payload = datamoverprotocol.Req{SrcSide: "inside", DstSide: "outside", ByteSize: 64}
+		for _, move := range []messaging.Msg{first, second, reverse, last} {
+			topPort.Deliver(move)
+		}
+
+		tick := func() { modelingtest.Tick(dataMover) }
+		tick()
+		read1, ok := outsidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		tick()
+		tick()
+		require.Len(t, dataMover.State.Transactions, 2)
+		_, ok = outsidePort.RetrieveOutgoing()
+		require.False(t, ok)
+		head, ok := topPort.PeekIncoming()
+		require.True(t, ok)
+		require.Equal(t, reverse.ID, head.ID)
+
+		answerRead(outsidePort, read1)
+		tick()
+		tick()
+		write1, ok := insidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		read2, ok := outsidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		answerRead(outsidePort, read2)
+		tick()
+		tick()
+		write2, ok := insidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		answerWrite(insidePort, write2)
+		tick()
+		tick()
+		_, ok = topPort.RetrieveOutgoing()
+		require.False(t, ok, "later write completed first")
+
+		answerWrite(insidePort, write1)
+		tick()
+		tick()
+		tick()
+		for _, want := range []uint64{first.ID, second.ID} {
+			rsp, ok := topPort.RetrieveOutgoing()
+			require.True(t, ok)
+			require.Equal(t, want, rsp.RspTo)
+		}
+		read3, ok := insidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.IsType(t, memprotocol.ReadReq{}, read3.Payload)
+		head, ok = topPort.PeekIncoming()
+		require.True(t, ok)
+		require.Equal(t, last.ID, head.ID)
+	})
+
+	t.Run("last source chunk may start within the shared window", func(t *testing.T) {
+		engine = timing.NewSerialEngine()
+		sim = testsim.New(engine, false)
+		build(3, 65)
+		for range 3 {
+			topPort.Deliver(makeMove())
+		}
+		for range 4 {
+			modelingtest.Tick(dataMover)
+		}
+		require.Len(t, dataMover.State.Transactions, 3)
+		for range 2 {
+			read, ok := outsidePort.RetrieveOutgoing()
+			require.True(t, ok)
+			require.Equal(t, uint64(64), read.Payload.(memprotocol.ReadReq).AccessByteSize)
+		}
+		_, ok := outsidePort.RetrieveOutgoing()
+		require.False(t, ok)
+	})
 
 	t.Run("acks Drain only after the in-flight move completes", func(t *testing.T) {
 		setup1(t)
 
 		read, gotRead := startMove()
 		require.True(t, gotRead)
-		require.True(t, dataMover.State.CurrentTransaction.Active)
+		require.NotEmpty(t, dataMover.State.Transactions)
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
@@ -156,7 +235,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		for range 5 {
 			modelingtest.Tick(dataMover)
 			require.Equal(t, controlStateDraining, dataMover.State.ControlState)
-			require.True(t, dataMover.State.CurrentTransaction.Active)
+			require.NotEmpty(t, dataMover.State.Transactions)
 			_, present0 := ctrlPort.RetrieveOutgoing()
 			require.False(t, present0)
 		}
@@ -202,7 +281,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		require.Equal(t, drain.ID, drainRsp.RspTo)
 		// The move completed (response emitted) before the async Drain ack.
 		require.True(t, moveDone)
-		require.False(t, dataMover.State.CurrentTransaction.Active)
+		require.Empty(t, dataMover.State.Transactions)
 		require.Equal(t, controlStatePaused, dataMover.State.ControlState)
 	})
 
@@ -224,8 +303,8 @@ func TestDataMoverControlBehavior(t *testing.T) {
 			}
 		}
 		require.True(t, gotWrite)
-		require.True(t, dataMover.State.CurrentTransaction.Active)
-		require.NotEmpty(t, dataMover.State.CurrentTransaction.PendingWrite)
+		require.NotEmpty(t, dataMover.State.Transactions)
+		require.NotEmpty(t, dataMover.State.Transactions[0].PendingWrite)
 
 		// Drain while the write's ack is still outstanding: the move is not
 		// complete, so Drain must stay pending and emit no move response.
@@ -237,7 +316,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 			require.False(t, present1)
 			_, present2 := ctrlPort.RetrieveOutgoing()
 			require.False(t, present2)
-			require.True(t, dataMover.State.CurrentTransaction.Active)
+			require.NotEmpty(t, dataMover.State.Transactions)
 		}
 
 		// Ack the write; only now may the move finish and the Drain ack.
@@ -266,7 +345,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		require.True(t, gotDrainRsp)
 		require.True(t, drainRsp.Payload.(memcontrolprotocol.Rsp).Success)
 		require.Equal(t, drain.ID, drainRsp.RspTo)
-		require.False(t, dataMover.State.CurrentTransaction.Active)
+		require.Empty(t, dataMover.State.Transactions)
 		require.Equal(t, controlStatePaused, dataMover.State.ControlState)
 	})
 
@@ -302,7 +381,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		for range 8 {
 			modelingtest.Tick(dataMover)
 		}
-		require.True(t, dataMover.State.CurrentTransaction.Active)
+		require.NotEmpty(t, dataMover.State.Transactions)
 
 		// Move 2 completes once its own read and write are answered.
 		answerRead(outsidePort, readB)
@@ -339,7 +418,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 
 		_, present3 := topPort.PeekIncoming()
 		require.True(t, present3)
-		require.False(t, dataMover.State.CurrentTransaction.Active)
+		require.Empty(t, dataMover.State.Transactions)
 		_, present4 := outsidePort.RetrieveOutgoing()
 		require.False(t, present4)
 	})
@@ -352,7 +431,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 
 			_, gotRead := startMove()
 			require.True(t, gotRead)
-			require.True(t, dataMover.State.CurrentTransaction.Active)
+			require.NotEmpty(t, dataMover.State.Transactions)
 
 			dataMover.State.ControlState = startState
 
@@ -373,9 +452,7 @@ func TestDataMoverControlBehavior(t *testing.T) {
 			require.Equal(t, memcontrolprotocol.CmdReset, rsp.Payload.(memcontrolprotocol.Rsp).Command)
 			require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
 			require.Equal(t, reset.ID, rsp.RspTo)
-			require.False(t, dataMover.State.CurrentTransaction.Active)
-			require.Empty(t, dataMover.State.CurrentTransaction.PendingRead)
-			require.Empty(t, dataMover.State.CurrentTransaction.PendingWrite)
+			require.Empty(t, dataMover.State.Transactions)
 			require.Equal(t, controlStateEnabled, dataMover.State.ControlState)
 		}
 		t.Run("from Enabled", func(t *testing.T) { runCase(t, controlStateEnabled) })
