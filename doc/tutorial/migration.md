@@ -505,8 +505,8 @@ const (
     CmdDrain               // Finish in-flight work, then remain paused
     CmdEnable              // Resume processing
     CmdReset               // Reset component state
-    CmdInvalidate          // Drop filtered cache entries while paused/drained
-    CmdFlush               // Write back dirty lines while paused/drained
+    CmdInvalidate          // Drop matching cache entries without writeback
+    CmdFlush               // Write back matching dirty lines and keep them valid
 )
 
 type Req struct {
@@ -594,7 +594,8 @@ func handleControlRsp(msg messaging.Msg) {
 - Put `memcontrolprotocol.Req{Command: ...}` in `messaging.Msg.Payload`; put routing fields on the outer message.
 - Replace `FlushReq` with `CmdFlush`, `DrainReq` with `CmdDrain`, and `RestartReq` with `CmdEnable` or `CmdReset`, as appropriate.
 - Handle `msg.Payload.(memcontrolprotocol.Rsp)` and match `msg.RspTo` to the original message ID.
-- Pause or drain before `CmdFlush`/`CmdInvalidate`. Wait for each command's acknowledgment before issuing a dependent command.
+- Running writeback and writethrough caches accept `CmdInvalidate` with a nonempty address list. A running writeback cache also accepts address-filtered `CmdFlush`. Pause or drain before broader cache maintenance or a writethrough Flush.
+- For a writeback cache, send Flush and wait for its ACK before issuing Invalidate if dirty data must survive. The running cache waits for older matching accesses and lower write acknowledgments before completing Flush. New matching accesses resume after the ACK.
 - Use `Addresses` and `PID` for filtered flush/invalidation; the earlier `DiscardInflight`, `InvalidateAfter`, and `PauseAfter` flags are not part of V5.
 
 ---

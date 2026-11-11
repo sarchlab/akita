@@ -47,15 +47,15 @@ const (
 	CmdReset
 
 	// CmdInvalidate drops entries from the agent's private cache state
-	// without writeback. Requires Paused or Drained. May be filtered by
-	// Addresses and PID. Conditional verb (caches, TLB, MMU cache).
-	// Ack is synchronous.
+	// without writeback. A running data cache accepts a nonempty Addresses
+	// filter and replies after processing those lines. In a paused agent
+	// Invalidate is synchronous. PID zero matches every address space.
 	CmdInvalidate
 
 	// CmdFlush writes back dirty private state to backing memory. Clean
-	// entries remain valid. Requires Paused or Drained. May be filtered
-	// by Addresses and PID. Conditional verb (caches only). Ack is
-	// asynchronous (on writeback completion).
+	// entries remain valid. Running writeback caches require a nonempty
+	// Addresses filter. Other supported Flush operations require Pause or
+	// Drain. The ACK follows completion of matching writebacks.
 	CmdFlush
 
 	// CmdHold stops the accesses to the pages at Addresses (page-aligned
@@ -88,8 +88,8 @@ type Req struct {
 // Success is true when the verb was accepted and (for async verbs)
 // completed. When Success is false, Error names the reason; conventional
 // values include "unsupported" (the component does not implement this
-// verb) and "must be paused or drained" (Invalidate/Flush issued while
-// Enabled).
+// verb) and "must be paused or drained" (the requested maintenance
+// requires Pause or Drain).
 type Rsp struct {
 	Command Command
 	Success bool

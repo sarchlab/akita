@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -72,11 +73,10 @@ type Ports struct {
 // Reset takes effect in the same cycle, before any Top or Bottom traffic or
 // in-flight operation advances.
 type middlewares struct {
-	// Ctrl handles every control command except Flush: Pause, Drain, Enable,
-	// Reset, and Invalidate.
+	// Ctrl handles the universal verbs, Invalidate, and running filtered Flush.
 	Ctrl *ctrlMiddleware
 
-	// Flusher handles Flush commands, writing dirty blocks back to lower
+	// Flusher handles paused Flush commands, writing dirty blocks back to lower
 	// memory.
 	Flusher *controlMW
 
@@ -87,6 +87,7 @@ type middlewares struct {
 
 // state contains mutable runtime data for the writeback cache.
 type state struct {
+	Maintenance    maintenance.State    `json:"maintenance"`
 	CacheState     int                  `json:"cache_state"`
 	CurrentCmdID   uint64               `json:"current_cmd_id"`
 	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
@@ -121,7 +122,8 @@ type state struct {
 	HasProcessingMSHREntry bool `json:"has_processing_mshr_entry"`
 	ProcessingMSHREntryIdx int  `json:"processing_mshr_entry_idx"`
 
-	// Flusher
+	// Paused Flush and running directory maintenance share this queue of ways
+	// awaiting bank writeback. Control serializes the producers.
 	FlusherBlockToEvictRefs []blockRef    `json:"flusher_block_to_evict_refs"`
 	HasProcessingFlush      bool          `json:"has_processing_flush"`
 	ProcessingFlush         flushReqState `json:"processing_flush"`
@@ -236,9 +238,11 @@ const (
 // transactionState is the canonical runtime transaction type.
 // All fields are flat and directly JSON-serializable.
 type transactionState struct {
-	RecvTaskID     uint64 `json:"recv_task_id"`
-	FetchTaskID    uint64 `json:"fetch_task_id"`
-	EvictionTaskID uint64 `json:"eviction_task_id"`
+	MaintenanceLookup bool   `json:"maintenance_lookup"`
+	LookupAddress     uint64 `json:"lookup_address"`
+	RecvTaskID        uint64 `json:"recv_task_id"`
+	FetchTaskID       uint64 `json:"fetch_task_id"`
+	EvictionTaskID    uint64 `json:"eviction_task_id"`
 
 	Action action `json:"action"`
 
@@ -260,8 +264,9 @@ type transactionState struct {
 	WritePID       vm.PID        `json:"write_pid"`
 
 	// Flush request fields (flat)
-	HasFlush  bool          `json:"has_flush"`
-	FlushMeta messaging.Msg `json:"flush_meta"`
+	HasFlush bool `json:"has_flush"`
+	// OwnsFlushLock releases the selected way when this writeback is acknowledged.
+	OwnsFlushLock bool `json:"owns_flush_lock"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

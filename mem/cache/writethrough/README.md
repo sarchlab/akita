@@ -121,7 +121,7 @@ middlewares and freezes the topology.
 - **Bottom** — sends `memprotocol.ReadReq`/`memprotocol.WriteReq` to lower memory and receives
   `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp`.
 - **Control** — accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset,
-  and, once paused, Invalidate and Flush), returns `memcontrolprotocol.Rsp`.
+  address-filtered Invalidate while running, and Invalidate or Flush while paused), returns `memcontrolprotocol.Rsp`.
 
 ## Processing widths and internal buffering
 

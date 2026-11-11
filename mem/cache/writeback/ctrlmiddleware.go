@@ -8,10 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// ctrlMiddleware owns every control verb except CmdFlush, which is
-// handled by the legacy flusher pipeline. The verbs it owns are
-// Pause, Drain, Enable, Reset, Invalidate. CmdFlush is left in the
-// Control port's incoming queue for the flusher to pick up.
+// ctrlMiddleware coordinates control commands, including filtered maintenance
+// while running. The flusher handles paused Flush.
 type ctrlMiddleware struct {
 	pipeline *pipelineMW
 }
@@ -25,12 +23,15 @@ func (m *ctrlMiddleware) ctrlPort() messaging.Port {
 func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
-	// Control commands are processed serially: while an async verb (Drain or
-	// Flush) is in progress, the next command is not accepted — it stays queued
-	// on the Control port and is handled once the component settles. Flush is
-	// driven by the separate flusher middleware, which gates its own intake the
-	// same way.
+	// A queued control command waits for any earlier maintenance ACK and for
+	// requests held by that command to re-enter the directory input.
 	next := &m.pipeline.comp.State
+	if next.Maintenance.Command != 0 {
+		return m.advanceMaintenance()
+	}
+	if len(next.Maintenance.Deferred) > 0 {
+		return false
+	}
 	if cacheState(next.CacheState) != cacheStateDraining &&
 		!next.HasProcessingFlush {
 		madeProgress = m.handleIncoming() || madeProgress
@@ -92,13 +93,13 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	if !ok {
 		return false
 	}
-	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	command, ok := msg.Payload.(memcontrolprotocol.Req)
 	req := msg
 	if !ok {
 		return false
 	}
 
-	switch req.Payload.(memcontrolprotocol.Req).Command {
+	switch command.Command {
 	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
@@ -108,7 +109,10 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	case memcontrolprotocol.CmdFlush:
-		// Owned by flusher; leave in queue.
+		if cacheState(m.pipeline.comp.State.CacheState) == cacheStateRunning && len(command.Addresses) > 0 {
+			return m.startMaintenance(req)
+		}
+		// Paused flushes are owned by the flusher.
 		return false
 	case memcontrolprotocol.CmdInvalidate:
 		return m.handleInvalidate(req)
@@ -122,13 +126,15 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 // PIDs) WITHOUT writeback: matched blocks are marked invalid even if
 // dirty. Per the resolved protocol decision, Invalidate discards dirty
 // data silently; a caller that wants to keep it must Flush first.
-// Invalidate is acknowledged synchronously but is only legal once the
-// cache is paused (or drained, which lands in paused); issued while
-// Running it is rejected with ErrMustBePausedOrDrained.
+// A running cache schedules address-filtered maintenance through the directory.
+// A paused cache applies its filter synchronously.
 func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 	request := req.Payload.(memcontrolprotocol.Req)
 
 	next := &m.pipeline.comp.State
+	if cacheState(next.CacheState) == cacheStateRunning && len(request.Addresses) > 0 {
+		return m.startMaintenance(req)
+	}
 	if cacheState(next.CacheState) != cacheStatePaused {
 		return m.rejectMustBePaused(req)
 	}

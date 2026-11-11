@@ -10,9 +10,7 @@ import (
 
 // ctrlMiddleware owns every control verb: the universal verbs (Pause,
 // Drain, Enable, Reset) and the conditional verbs (Invalidate, Flush).
-// Invalidate and Flush are only legal once the cache is paused or
-// drained; issued while Enabled they are rejected with
-// ErrMustBePausedOrDrained.
+// A running cache accepts Invalidate with an address filter.
 type ctrlMiddleware struct {
 	comp *Comp
 }
@@ -24,6 +22,12 @@ func (m *ctrlMiddleware) ctrlPort() messaging.Port {
 
 // Handle completes a pending Drain and handles the next control command.
 func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
+	if m.comp.State.Maintenance.Command != 0 {
+		return m.advanceMaintenance()
+	}
+	if len(m.comp.State.Maintenance.Deferred) > 0 {
+		return false
+	}
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
@@ -213,13 +217,17 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // handleInvalidate drops directory blocks matching the request's
 // address/PID filter (empty address list = all addresses, zero PID = all
 // PIDs). The writethrough directory only ever holds clean blocks, so the
-// matching blocks are dropped without any writeback. Invalidate is a
-// synchronous verb that is only legal once the cache is paused or
-// drained; issued while Enabled it is rejected.
+// matching blocks are dropped without any writeback. A running cache uses timed
+// lookups for address-filtered Invalidate. Paused invalidation is synchronous.
 func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 	request := req.Payload.(memcontrolprotocol.Req)
 
 	next := &m.comp.State
+	if !next.IsPaused && len(request.Addresses) > 0 {
+		next.Maintenance.Start(req, m.comp.Spec.Log2BlockSize, m.comp.TaskTracker().StartReqIn(m.comp, req))
+		m.ctrlPort().RetrieveIncoming()
+		return true
+	}
 	if !next.IsPaused {
 		// Only the fully-paused state is legal; while still draining,
 		// in-flight work can still touch the directory after the verb.
@@ -241,7 +249,7 @@ func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 // handleFlush acknowledges a Flush. A writethrough cache never holds
 // dirty data (every write is forwarded to the bottom immediately), so
 // there is nothing to write back: Flush is a no-op that immediately acks
-// Success, leaving the directory intact. Like Invalidate it is only legal
+// Success, leaving the directory intact. It is only legal
 // once the cache is paused or drained.
 func (m *ctrlMiddleware) handleFlush(req messaging.Msg) bool {
 	next := &m.comp.State

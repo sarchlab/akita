@@ -64,7 +64,7 @@ func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 
 	for _, eIdx := range next.InflightEvictionIndices {
 		e := &next.Transactions[eIdx]
-		if e.EvictingAddr == trans.FetchAddress {
+		if e.EvictingPID == trans.FetchPID && e.EvictingAddr == trans.FetchAddress {
 			trans.FetchedData = e.EvictingData
 			return true
 		}
@@ -72,7 +72,7 @@ func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 
 	for _, eIdx := range next.PendingEvictionIndices {
 		e := &next.Transactions[eIdx]
-		if e.EvictingAddr == trans.FetchAddress {
+		if e.EvictingPID == trans.FetchPID && e.EvictingAddr == trans.FetchAddress {
 			trans.FetchedData = e.EvictingData
 			return true
 		}
@@ -428,7 +428,15 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				next.InflightEvictionIndices[:i],
 				next.InflightEvictionIndices[i+1:]...,
 			)
-			delete(next.EvictingList, e.EvictingAddr)
+			if !e.HasFlush {
+				delete(next.EvictingList, e.EvictingAddr)
+			}
+			if e.OwnsFlushLock {
+				block := &next.DirectoryState.Sets[e.BlockSetID].Blocks[e.BlockWayID]
+				block.IsDirty = false
+				block.DirtyMask = nil
+				block.IsLocked = false
+			}
 
 			// A pure flush eviction (writeBufferFlush) terminates here: its
 			// write-back has landed and it has no fetch/write follow-up

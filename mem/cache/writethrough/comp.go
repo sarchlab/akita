@@ -3,6 +3,7 @@ package writethrough
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -96,6 +97,7 @@ type middlewares struct {
 
 // state contains mutable runtime data for the writethrough.
 type state struct {
+	Maintenance maintenance.State `json:"maintenance"`
 	// Admission stage belongs to the current message, not its private port task ID.
 	AdmissionMsgID uint64 `json:"admission_msg_id"`
 	WaitingForDir  bool   `json:"waiting_for_dir"`
@@ -131,9 +133,11 @@ const (
 // transactionState is the canonical transaction type for the writethrough.
 // All fields are directly JSON-serializable (no pointers to message types).
 type transactionState struct {
-	RecvTaskID  uint64 `json:"recv_task_id"`
-	ReadTaskID  uint64 `json:"read_task_id"`
-	WriteTaskID uint64 `json:"write_task_id"`
+	MaintenanceLookup bool   `json:"maintenance_lookup"`
+	LookupAddress     uint64 `json:"lookup_address"`
+	RecvTaskID        uint64 `json:"recv_task_id"`
+	ReadTaskID        uint64 `json:"read_task_id"`
+	WriteTaskID       uint64 `json:"write_task_id"`
 
 	ID uint64 `json:"id"`
 

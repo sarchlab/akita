@@ -82,7 +82,7 @@ func TranslatorLike() VerbSupport {
 	return v
 }
 
-// IsSyncVerb reports whether the verb is acknowledged synchronously
+// IsSyncVerb reports whether the unfiltered form tested here is acknowledged synchronously
 // (Pause, Enable, Reset, Invalidate, Release) versus asynchronously on
 // completion (Drain, Flush, Hold). Used by the contract harness to know
 // whether to expect a memcontrolprotocol.Rsp within one tick or to keep ticking.

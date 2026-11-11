@@ -25,8 +25,9 @@ TopPort ──► TopParser ──► DirectoryStage ──► BankStage ──�
 
 The cache's behavior is three middlewares, run in this order every cycle:
 
-- `Ctrl` handles the control commands other than Flush received on the
-  `Control` port: Pause, Drain, Enable, Reset, and Invalidate.
+- `Ctrl` handles Pause, Drain, Enable, Reset, Invalidate, and address-filtered
+  Flush while running. Running maintenance shares the directory pipeline and
+  orders matching accesses across the ACK.
 - `Flusher` handles Flush: once the cache is paused, it writes the dirty blocks
   that match the request's address/PID filter back to lower memory and marks
   them clean.
@@ -143,7 +144,7 @@ The cache operates in one of six states (the `cacheState` constants):
 - **Draining** — finishing in-flight transactions before pausing
 - **PreFlushing** — preparing for a flush operation
 - **Flushing** — evicting dirty blocks to lower memory
-- **Paused** — pipeline halted (after Pause, Drain, or Flush)
+- **Paused** — pipeline halted (after Pause, Drain, or a paused Flush)
 - **Invalid** — uninitialized
 
 ## Ports

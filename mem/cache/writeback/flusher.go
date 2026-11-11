@@ -24,6 +24,10 @@ func (f *flusher) ctrlPort() messaging.Port {
 func (f *flusher) Tick() bool {
 	next := &f.pipeline.comp.State
 
+	if next.Maintenance.Command != 0 || len(next.Maintenance.Deferred) > 0 {
+		return false
+	}
+
 	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStatePreFlushing {
 		return f.processPreFlushing()
 	}
@@ -31,7 +35,7 @@ func (f *flusher) Tick() bool {
 	madeProgress := false
 	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStateFlushing {
 		madeProgress = f.finalizeFlushing() || madeProgress
-		madeProgress = f.processFlush() || madeProgress
+		madeProgress = issueFlushWriteback(f.pipeline.comp, next.ProcessingFlush.RecvTaskID, false) || madeProgress
 
 		return madeProgress
 	}
@@ -104,14 +108,14 @@ func (f *flusher) prepareBlockToFlushList() {
 	}
 }
 
-func (f *flusher) processFlush() bool {
-	next := &f.pipeline.comp.State
+func issueFlushWriteback(c *Comp, recvTaskID uint64, ownsLockedWay bool) bool {
+	next := &c.State
 
 	if len(next.FlusherBlockToEvictRefs) == 0 {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec
+	spec := c.Spec
 	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
@@ -126,8 +130,8 @@ func (f *flusher) processFlush() bool {
 
 	trans := transactionState{
 		HasFlush:           true,
-		RecvTaskID:         next.ProcessingFlush.RecvTaskID,
-		FlushMeta:          next.ProcessingFlush.Msg,
+		OwnsFlushLock:      ownsLockedWay,
+		RecvTaskID:         recvTaskID,
 		HasVictim:          true,
 		VictimPID:          vm.PID(block.PID),
 		VictimTag:          block.Tag,
@@ -167,11 +171,12 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
-	// Flush is a conditional verb: it is only legal once the cache is
-	// paused (Drain lands the cache in paused too). Issued while Running it
-	// is rejected with ErrMustBePausedOrDrained.
+	// Running address-filtered Flush belongs to ctrlMiddleware.
 	next := &f.pipeline.comp.State
 	if cacheState(next.CacheState) != cacheStatePaused {
+		if cacheState(next.CacheState) == cacheStateRunning && len(req.Payload.(memcontrolprotocol.Req).Addresses) > 0 {
+			return false
+		}
 		return f.rejectFlush(req)
 	}
 
@@ -243,7 +248,7 @@ func (f *flusher) finalizeFlushing() bool {
 		block.DirtyMask = nil
 	}
 
-	// Flush is only legal from paused, and returns the cache to paused.
+	// The paused Flush path returns the cache to its previous state.
 	next.CacheState = int(cacheStatePaused)
 
 	f.pipeline.comp.TaskTracker().EndReqIn(next.ProcessingFlush.RecvTaskID)
