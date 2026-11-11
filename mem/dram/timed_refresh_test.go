@@ -62,7 +62,12 @@ func TestPauseFreezesTimedRefresh(t *testing.T) {
 	(&noopConn{}).BindPort(control)
 	require.NoError(t, s.Initialize())
 	command := func(cmd memcontrolprotocol.Command) {
-		msg := messaging.Msg{ID: s.NewID(), Src: "Driver", Dst: control.AsRemote(), Payload: memcontrolprotocol.Req{Command: cmd}}
+		msg := messaging.Msg{
+			ID:      s.NewID(),
+			Src:     "Driver",
+			Dst:     control.AsRemote(),
+			Payload: memcontrolprotocol.Req{Command: cmd},
+		}
 		control.Deliver(msg)
 		require.NoError(t, s.Run())
 		ack, ok := control.RetrieveOutgoing()

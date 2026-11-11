@@ -311,3 +311,20 @@ func TestBackgroundPromotionCheckpoint(t *testing.T) {
 		t.Fatal(restored.State.Log)
 	}
 }
+
+func TestParallelBackgroundPromotion(t *testing.T) {
+	s := akitasim.MakeBuilder().WithParallelEngine().Build()
+	c := build(s, Ports{In: newPort(s, "C.In")})
+	c.State.Count = 0
+	c.TickAtBackground(1000)
+	c.TickAt(1000)
+	// Keep the engine live until both copies at 1000 have been dispatched.
+	c.TickAt(2000)
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	// Two middlewares execute once per edge.
+	if len(c.State.Log) != 4 {
+		t.Fatalf("middleware calls = %v, want two per edge", c.State.Log)
+	}
+}

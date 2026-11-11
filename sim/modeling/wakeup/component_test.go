@@ -238,3 +238,15 @@ func TestBackgroundPromotionCheckpoint(t *testing.T) {
 		t.Fatal(restored.State.Woken)
 	}
 }
+
+func TestParallelBackgroundPromotion(t *testing.T) {
+	s := akitasim.MakeBuilder().WithParallelEngine().Build()
+	c := build(s, Spec{})
+	c.WakeAtBackground(1000)
+	c.WakeAt(1000)
+	c.WakeAt(2000)
+	run(t, s)
+	if !reflect.DeepEqual(c.State.Woken, []timing.VTimeInPicoSec{1000, 2000}) {
+		t.Fatal(c.State.Woken)
+	}
+}

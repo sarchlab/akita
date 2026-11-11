@@ -105,8 +105,8 @@ Each package doc shows how to declare and build a component of its model.
   hookable, the handler of its events, and the owner of its ports
   (`messaging.PortOwner`).
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
-  State with an optional list of pending times supplied by a component through
-  `PendingEventGuard`.
+  State with an optional list of pending times. A custom foreground-only scheduler
+  can supply this list through `PendingEventGuard`.
 - Built-in tick and wakeup components checkpoint their scheduler's internal
   guard, including the kind and delivery state of pending events. Direct
   connections share the tick scheduler. Components schedule maintenance with

@@ -17,10 +17,10 @@ type componentCheckpoint[G any] struct {
 	PendingEventGuard G               `json:"pending_event_guard"`
 }
 
-// Guard records the times of the component's own pending ticks or
-// wakeups, so restore does not schedule a duplicate.
+// Guard preserves the scheduler metadata needed to match pending events and
+// coalesce duplicate deliveries after the engine queue is restored.
 type Guard[G any] interface {
-	// Snapshot returns the guard: the times of the pending events.
+	// Snapshot returns the current scheduler metadata.
 	Snapshot() G
 
 	// Restore sets the guard from a checkpoint.
