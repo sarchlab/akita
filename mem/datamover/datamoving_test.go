@@ -127,6 +127,40 @@ func TestDataMover(t *testing.T) {
 		t.Logf("four independent 4 KiB copies: %d ps serial, %d ps overlapped", serial, overlapped)
 	})
 
+	t.Run("two independent copies on the same port", func(t *testing.T) {
+		for _, side := range []datamoverprotocol.Side{"inside", "outside"} {
+			t.Run(string(side), func(t *testing.T) {
+				setup(t, 2048, 2)
+				storage := insideStorage
+				if side == "outside" {
+					storage = outsideStorage
+				}
+				var ids [2]uint64
+				for i := range ids {
+					addr := uint64(i * 4096)
+					storage.Write(addr, bytes.Repeat([]byte{byte(i + 1)}, 512))
+					ids[i] = sim.NewID()
+					dataMover.Ports.Top.Deliver(messaging.Msg{ID: ids[i], Src: srcPort.AsRemote(),
+						Dst: dataMover.Ports.Top.AsRemote(), Payload: datamoverprotocol.Req{
+							SrcSide: side, DstSide: side, SrcAddress: addr, DstAddress: addr + 2048, ByteSize: 512,
+						}})
+				}
+				require.NoError(t, engine.(*timing.SerialEngine).RunUntil(20000))
+				require.Len(t, dataMover.State.Transactions, 2)
+				for _, trans := range dataMover.State.Transactions {
+					require.NotEmpty(t, trans.PendingRead)
+				}
+				require.NoError(t, engine.Run())
+				for i, id := range ids {
+					require.Equal(t, bytes.Repeat([]byte{byte(i + 1)}, 512), storage.Read(uint64(i*4096+2048), 512))
+					rsp, ok := srcPort.RetrieveIncoming()
+					require.True(t, ok)
+					require.Equal(t, id, rsp.RspTo)
+				}
+			})
+		}
+	})
+
 	t.Run("short final chunks in either direction", func(t *testing.T) {
 		for _, side := range []datamoverprotocol.Side{"inside", "outside"} {
 			setup(t, 2048, 2)

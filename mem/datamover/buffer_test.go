@@ -78,3 +78,16 @@ func TestBuffer(t *testing.T) {
 		}
 	})
 }
+
+func TestIncompleteWriteDoesNotAllocate(t *testing.T) {
+	bs := &bufferState{Granularity: 64, Chunks: []dataChunk{
+		{Valid: true, Data: make([]byte, 64)}, {Valid: false},
+	}}
+	allocations := testing.AllocsPerRun(100, func() {
+		_, ready := bufferExtractData(bs, 0, 128)
+		if ready {
+			t.Fatal("second source chunk is missing")
+		}
+	})
+	require.Zero(t, allocations)
+}

@@ -132,31 +132,31 @@ func bufferAddData(bs *bufferState, offset uint64, data []byte) {
 func bufferExtractData(
 	bs *bufferState, offset, size uint64,
 ) ([]byte, bool) {
-	data := make([]byte, size)
-
-	sizeLeft := size
+	if size == 0 {
+		return []byte{}, true
+	}
 	relOffset := offset - bs.Offset
-	slot := relOffset / bs.Granularity
-	slotOffset := relOffset - slot*bs.Granularity
-
-	for i := slot; i < uint64(len(bs.Chunks)); i++ {
-		if !bs.Chunks[i].Valid {
+	first := relOffset / bs.Granularity
+	last := (relOffset + size - 1) / bs.Granularity
+	if last >= uint64(len(bs.Chunks)) {
+		return nil, false
+	}
+	chunks := bs.Chunks[first : last+1]
+	for i := range chunks {
+		if !chunks[i].Valid {
 			return nil, false
-		}
-
-		bytesToCopy := min(bs.Granularity-slotOffset, sizeLeft)
-
-		copy(data[size-sizeLeft:],
-			bs.Chunks[i].Data[slotOffset:slotOffset+bytesToCopy])
-		sizeLeft -= bytesToCopy
-		slotOffset = 0
-
-		if sizeLeft == 0 {
-			return data, true
 		}
 	}
 
-	return nil, false
+	data := make([]byte, size)
+	slotOffset := relOffset % bs.Granularity
+	written := 0
+	for i := range chunks {
+		count := min(bs.Granularity-slotOffset, uint64(len(data)-written))
+		written += copy(data[written:], chunks[i].Data[slotOffset:slotOffset+count])
+		slotOffset = 0
+	}
+	return data, true
 }
 
 // bufferMoveOffsetForwardTo moves the buffer offset forward, discarding chunks.

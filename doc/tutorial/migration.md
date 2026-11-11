@@ -1422,3 +1422,6 @@ When constructing a `datamover.Spec` literal, set this field explicitly.
 Zero or negative values panic during initialization. Larger limits allow
 independent copies with the same source and destination sides to overlap.
 Wait for the earlier copy's completion before submitting a dependent copy.
+The source and destination addresses still require alignment to their respective
+granularities. A transfer size can end partway through a chunk. The final read
+and write now stop at the requested byte count, preserving adjacent bytes.

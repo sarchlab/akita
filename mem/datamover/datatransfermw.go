@@ -130,8 +130,16 @@ func (m *dataTransferMW) processDataReady(port messaging.Port) bool {
 
 // writeToDst sends data to destination.
 func (m *dataTransferMW) writeToDst() bool {
-	for i := range m.comp.State.Transactions {
-		trans := &m.comp.State.Transactions[i]
+	transfers := m.comp.State.Transactions
+	if len(transfers) == 0 {
+		return false
+	}
+	dstP := m.portFor(transfers[0].DstSide)
+	if !dstP.CanSend() {
+		return false
+	}
+	for i := range transfers {
+		trans := &transfers[i]
 		offset := trans.NextWriteAddr - trans.DstAddress
 		if offset >= trans.ByteSize {
 			continue
@@ -139,14 +147,14 @@ func (m *dataTransferMW) writeToDst() bool {
 		width := min(resolveByteGranularity(m.comp.Spec, trans.DstSide), trans.ByteSize-offset)
 		data, ready := bufferExtractData(&trans.Buffer, offset, width)
 		if ready {
-			return m.sendWrite(trans, data)
+			m.sendWrite(dstP, trans, data)
+			return true
 		}
 	}
 	return false
 }
 
-func (m *dataTransferMW) sendWrite(trans *dataMoverTransactionState, data []byte) bool {
-	dstP := m.portFor(trans.DstSide)
+func (m *dataTransferMW) sendWrite(dstP messaging.Port, trans *dataMoverTransactionState, data []byte) {
 	req := messaging.Msg{Payload: memprotocol.WriteReq{
 		Address: trans.NextWriteAddr,
 		Data:    data,
@@ -158,10 +166,6 @@ func (m *dataTransferMW) sendWrite(trans *dataMoverTransactionState, data []byte
 		Dst: m.mapperFor(trans.DstSide).Find(trans.NextWriteAddr),
 
 		TrafficBytes: len(data) + 12,
-	}
-
-	if !dstP.CanSend() {
-		return false
 	}
 
 	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
@@ -177,8 +181,6 @@ func (m *dataTransferMW) sendWrite(trans *dataMoverTransactionState, data []byte
 	} else {
 		bufferMoveOffsetForwardTo(&trans.Buffer, written)
 	}
-
-	return true
 }
 
 func (m *dataTransferMW) processWriteDone(port messaging.Port) bool {

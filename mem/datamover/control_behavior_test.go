@@ -200,6 +200,62 @@ func TestDataMoverControlBehavior(t *testing.T) {
 		require.Equal(t, last.ID, head.ID)
 	})
 
+	t.Run("late responses after reset and reversal", func(t *testing.T) {
+		sim = testsim.New(timing.NewSerialEngine(), false)
+		build(2, 2048)
+		firstRead, ok := startMove()
+		require.True(t, ok)
+		secondRead, ok := startMove()
+		require.True(t, ok)
+		tick := func() { modelingtest.Tick(dataMover) }
+		answerRead(outsidePort, firstRead)
+		tick()
+		tick()
+		oldWrite, ok := insidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Len(t, dataMover.State.Transactions, 2)
+
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
+		ctrlPort.Deliver(reset)
+		tick()
+		rsp, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, reset.ID, rsp.RspTo)
+		require.Empty(t, dataMover.State.Transactions)
+
+		reverse := makeMove()
+		reverse.Payload = datamoverprotocol.Req{SrcSide: "inside", DstSide: "outside", ByteSize: 64}
+		topPort.Deliver(reverse)
+		tick()
+		newRead, ok := insidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		answerWrite(insidePort, oldWrite)
+		answerRead(outsidePort, secondRead)
+		tick()
+		for _, port := range []messaging.Port{insidePort, outsidePort} {
+			_, ok := port.PeekIncoming()
+			require.False(t, ok, "late responses should be consumed on %s", port.Name())
+		}
+		require.Len(t, dataMover.State.Transactions, 1)
+		require.Contains(t, dataMover.State.Transactions[0].PendingRead, newRead.ID)
+		_, ok = topPort.RetrieveOutgoing()
+		require.False(t, ok)
+
+		answerRead(insidePort, newRead)
+		tick()
+		tick()
+		newWrite, ok := outsidePort.RetrieveOutgoing()
+		require.True(t, ok)
+		answerWrite(outsidePort, newWrite)
+		tick()
+		tick()
+		rsp, ok = topPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, reverse.ID, rsp.RspTo)
+		_, ok = topPort.RetrieveOutgoing()
+		require.False(t, ok)
+	})
+
 	t.Run("last source chunk may start within the shared window", func(t *testing.T) {
 		engine = timing.NewSerialEngine()
 		sim = testsim.New(engine, false)
