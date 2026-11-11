@@ -8,10 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// ctrlMiddleware owns every control verb except CmdFlush, which is
-// handled by the legacy flusher pipeline. The verbs it owns are
-// Pause, Drain, Enable, Reset, Invalidate. CmdFlush is left in the
-// Control port's incoming queue for the flusher to pick up.
+// ctrlMiddleware coordinates control commands, including filtered maintenance
+// while running. The flusher handles paused Flush.
 type ctrlMiddleware struct {
 	pipeline *pipelineMW
 }
@@ -25,11 +23,8 @@ func (m *ctrlMiddleware) ctrlPort() messaging.Port {
 func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
-	// Control commands are processed serially: while an async verb (Drain or
-	// Flush) is in progress, the next command is not accepted — it stays queued
-	// on the Control port and is handled once the component settles. Flush is
-	// driven by the separate flusher middleware, which gates its own intake the
-	// same way.
+	// A queued control command waits for any earlier maintenance ACK and for
+	// requests held by that command to re-enter the directory input.
 	next := &m.pipeline.comp.State
 	if next.Maintenance.Command != 0 {
 		return m.advanceMaintenance()

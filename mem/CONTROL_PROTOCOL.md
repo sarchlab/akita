@@ -91,11 +91,10 @@ The primitives compose. The protocol stays small.
    Error: memcontrolprotocol.ErrMustBePausedOrDrained`.
 5. **Control commands are processed serially.** A component handles one
    control command at a time, to completion, before it dequeues the next.
-   While an async verb (Drain or Flush) is in progress the component does
-   **not** accept another control command — the next command stays queued
-   on the `Control` port and is taken only once the component settles
-   (the async verb acks), so each
-   command is always handled from a clean, fully-settled state. There is
+   While a Drain, Flush, or running Invalidate is in progress, the next command
+   stays queued on the `Control` port until the earlier command acks.
+   After running maintenance acks, accesses it deferred re-enter the ordinary
+   directory input in arrival order before the cache accepts another command. There is
    no priority or preemption: a Reset queued behind an in-flight Drain
    waits for the Drain to finish and ack, then runs. Hold and Release are
    the exceptions: they are accepted while a Drain is in progress, because

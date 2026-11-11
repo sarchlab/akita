@@ -250,6 +250,44 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		require.False(t, ok, "later read consumed stale data")
 	})
 
+	t.Run("running invalidate waits for the older writethrough store ACK", func(t *testing.T) {
+		setup1(t)
+		const addr = uint64(0x1000)
+		set, way := seedBlock(addr, 0)
+		store := makeRead(addr)
+		store.Payload = memprotocol.WriteReq{Address: addr, Data: []byte{0xaa}}
+		topPort.Deliver(store)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		write, ok := bottomPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, addr, write.Payload.(memprotocol.WriteReq).Address)
+
+		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
+		inv.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: []uint64{addr}}
+		ctrlPort.Deliver(inv)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		_, ok = ctrlPort.PeekOutgoing()
+		require.False(t, ok)
+		require.True(t, comp.State.DirectoryState.Sets[set].Blocks[way].IsValid)
+
+		bottomPort.Deliver(messaging.Msg{ID: sim.NewID(), Src: "LowerCache", Dst: bottomPort.AsRemote(),
+			RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		done, ok := topPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, store.ID, done.RspTo)
+		ack, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, inv.ID, ack.RspTo)
+		require.False(t, comp.State.DirectoryState.Sets[set].Blocks[way].IsValid)
+	})
+
 	t.Run("drains all in-flight read misses before acking Drain", func(t *testing.T) {
 		setup1(t)
 
@@ -598,7 +636,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		// They must occupy distinct blocks for the filter to be meaningful.
 		require.NotEqual(t, [2]int{setB, wayB}, [2]int{setA, wayA})
 
-		// Invalidate is only legal once quiesced.
+		// Exercise the paused invalidation path.
 		comp.State.IsPaused = true
 
 		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)

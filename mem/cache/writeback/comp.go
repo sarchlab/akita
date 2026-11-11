@@ -73,11 +73,10 @@ type Ports struct {
 // Reset takes effect in the same cycle, before any Top or Bottom traffic or
 // in-flight operation advances.
 type middlewares struct {
-	// Ctrl handles every control command except Flush: Pause, Drain, Enable,
-	// Reset, and Invalidate.
+	// Ctrl handles the universal verbs, Invalidate, and running filtered Flush.
 	Ctrl *ctrlMiddleware
 
-	// Flusher handles Flush commands, writing dirty blocks back to lower
+	// Flusher handles paused Flush commands, writing dirty blocks back to lower
 	// memory.
 	Flusher *controlMW
 
@@ -265,6 +264,8 @@ type transactionState struct {
 
 	// Flush request fields (flat)
 	HasFlush bool `json:"has_flush"`
+	// OwnsFlushLock releases the selected way when this writeback is acknowledged.
+	OwnsFlushLock bool `json:"owns_flush_lock"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

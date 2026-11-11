@@ -249,7 +249,7 @@ func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 // handleFlush acknowledges a Flush. A writethrough cache never holds
 // dirty data (every write is forwarded to the bottom immediately), so
 // there is nothing to write back: Flush is a no-op that immediately acks
-// Success, leaving the directory intact. Like Invalidate it is only legal
+// Success, leaving the directory intact. It is only legal
 // once the cache is paused or drained.
 func (m *ctrlMiddleware) handleFlush(req messaging.Msg) bool {
 	next := &m.comp.State

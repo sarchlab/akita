@@ -431,7 +431,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			if !e.HasFlush {
 				delete(next.EvictingList, e.EvictingAddr)
 			}
-			if e.HasFlush && next.Maintenance.Command != 0 {
+			if e.OwnsFlushLock {
 				block := &next.DirectoryState.Sets[e.BlockSetID].Blocks[e.BlockWayID]
 				block.IsDirty = false
 				block.DirtyMask = nil

@@ -144,7 +144,7 @@ The cache operates in one of six states (the `cacheState` constants):
 - **Draining** — finishing in-flight transactions before pausing
 - **PreFlushing** — preparing for a flush operation
 - **Flushing** — evicting dirty blocks to lower memory
-- **Paused** — pipeline halted (after Pause, Drain, or Flush)
+- **Paused** — pipeline halted (after Pause, Drain, or a paused Flush)
 - **Invalid** — uninitialized
 
 ## Ports

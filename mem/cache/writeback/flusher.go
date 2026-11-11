@@ -35,7 +35,7 @@ func (f *flusher) Tick() bool {
 	madeProgress := false
 	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStateFlushing {
 		madeProgress = f.finalizeFlushing() || madeProgress
-		madeProgress = issueFlushWriteback(f.pipeline.comp, next.ProcessingFlush.RecvTaskID) || madeProgress
+		madeProgress = issueFlushWriteback(f.pipeline.comp, next.ProcessingFlush.RecvTaskID, false) || madeProgress
 
 		return madeProgress
 	}
@@ -108,7 +108,7 @@ func (f *flusher) prepareBlockToFlushList() {
 	}
 }
 
-func issueFlushWriteback(c *Comp, recvTaskID uint64) bool {
+func issueFlushWriteback(c *Comp, recvTaskID uint64, ownsLockedWay bool) bool {
 	next := &c.State
 
 	if len(next.FlusherBlockToEvictRefs) == 0 {
@@ -130,6 +130,7 @@ func issueFlushWriteback(c *Comp, recvTaskID uint64) bool {
 
 	trans := transactionState{
 		HasFlush:           true,
+		OwnsFlushLock:      ownsLockedWay,
 		RecvTaskID:         recvTaskID,
 		HasVictim:          true,
 		VictimPID:          vm.PID(block.PID),
@@ -247,7 +248,7 @@ func (f *flusher) finalizeFlushing() bool {
 		block.DirtyMask = nil
 	}
 
-	// Flush is only legal from paused, and returns the cache to paused.
+	// The paused Flush path returns the cache to its previous state.
 	next.CacheState = int(cacheStatePaused)
 
 	f.pipeline.comp.TaskTracker().EndReqIn(next.ProcessingFlush.RecvTaskID)

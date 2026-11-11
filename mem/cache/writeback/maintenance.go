@@ -38,7 +38,7 @@ func (m *ctrlMiddleware) advanceMaintenance() bool {
 		return true
 	}
 	if len(s.FlusherBlockToEvictRefs) > 0 {
-		return issueFlushWriteback(c, op.RecvTaskID)
+		return issueFlushWriteback(c, op.RecvTaskID, true)
 	}
 	if len(op.Lines) > 0 || op.LookupsInFlight > 0 || !m.ctrlPort().CanSend() {
 		return false

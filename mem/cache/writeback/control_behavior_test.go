@@ -37,6 +37,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 
 	dirLatency := 1
 	requestsPerCycle := 4
+	ways := 2
 	build := func() {
 		spec := DefaultSpec()
 		spec.NumSets = 512
@@ -46,7 +47,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 
 		spec.DirectoryWidth = 4
 		spec.BankWidth = 4
-		spec.NumWays = 2
+		spec.NumWays = ways
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = dirLatency
@@ -373,6 +374,98 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
 	})
 
+	t.Run("running Flush protects its way from a competing replacement until write ACK", func(t *testing.T) {
+		ways = 1
+		t.Cleanup(func() { ways = 2 })
+		setup1(t)
+		const addr = uint64(0)
+		set := residentDirtyBlock(addr, 0x3a)
+		flush := makeFilteredCtrlReq(memcontrolprotocol.CmdFlush, []uint64{addr})
+		ctrlPort.Deliver(flush)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		write, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, byte(0x3a), write.Payload.(memprotocol.WriteReq).Data[0])
+
+		replacement := uint64(blockSize)
+		for cache.DirectorySetID(replacement, blockSize, comp.Spec.NumSets) != set {
+			replacement += blockSize
+		}
+		topPort.Deliver(makeRead(replacement))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		block := &comp.State.DirectoryState.Sets[set].Blocks[0]
+		require.True(t, block.IsLocked)
+		require.Equal(t, addr, block.Tag)
+		_, ok = botPort.PeekOutgoing()
+		require.False(t, ok)
+		botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		ack, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, flush.ID, ack.RspTo)
+		fetch, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, replacement, fetch.Payload.(memprotocol.ReadReq).Address)
+		botPort.Deliver(makeFillRsp(fetch))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		require.Equal(t, replacement, block.Tag)
+		require.True(t, block.IsValid)
+		require.False(t, block.IsLocked)
+	})
+
+	t.Run("Reset queued behind running Invalidate follows its ACK and deferred admission", func(t *testing.T) {
+		setup1(t)
+		const addr = uint64(0x1000)
+		topPort.Deliver(makeRead(addr))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		fetch, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+
+		inv := makeFilteredCtrlReq(memcontrolprotocol.CmdInvalidate, []uint64{addr})
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
+		ctrlPort.Deliver(inv)
+		ctrlPort.Deliver(reset)
+		topPort.Deliver(makeRead(addr))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		head, ok := ctrlPort.PeekIncoming()
+		require.True(t, ok)
+		require.Equal(t, reset.ID, head.ID)
+		require.Len(t, comp.State.Maintenance.Deferred, 1)
+		_, ok = ctrlPort.PeekOutgoing()
+		require.False(t, ok)
+		botPort.Deliver(makeFillRsp(fetch))
+		for i := 0; i < 32; i++ {
+			modelingtest.Tick(comp)
+			if _, present := ctrlPort.PeekOutgoing(); present {
+				break
+			}
+		}
+		first, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, inv.ID, first.RspTo)
+		require.Empty(t, comp.State.Maintenance.Deferred)
+		require.Positive(t, comp.State.DirStageBuf.Size())
+		for range 4 {
+			modelingtest.Tick(comp)
+		}
+		second, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, reset.ID, second.RspTo)
+		require.Empty(t, comp.State.Transactions)
+	})
+
 	t.Run("drains all in-flight read misses before acking Drain", func(t *testing.T) {
 		setup1(t)
 
@@ -598,7 +691,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.True(t, comp.State.DirectoryState.Sets[setKeep].Blocks[0].IsValid)
 		require.True(t, comp.State.DirectoryState.Sets[setDrop].Blocks[0].IsValid)
 
-		// Pause: Invalidate is only legal once paused.
+		// Exercise the paused invalidation path.
 		comp.State.CacheState = int(cacheStatePaused)
 
 		inv := makeFilteredCtrlReq(memcontrolprotocol.CmdInvalidate, []uint64{addrDrop})
@@ -631,7 +724,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.False(t, present4)
 	})
 
-	t.Run("rejects Invalidate while Enabled with ErrMustBePausedOrDrained", func(t *testing.T) {
+	t.Run("rejects unfiltered Invalidate while Enabled with ErrMustBePausedOrDrained", func(t *testing.T) {
 		setup1(t)
 
 		residentDirtyBlock(0x0, 0xAA)
@@ -671,7 +764,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		setFlush := residentDirtyBlock(addrFlush, flushFill)
 		setKeep := residentDirtyBlock(addrKeep, keepFill)
 
-		// Pause so Flush is legal.
+		// Exercise the paused Flush path.
 		comp.State.CacheState = int(cacheStatePaused)
 
 		flush := makeFilteredCtrlReq(memcontrolprotocol.CmdFlush, []uint64{addrFlush})
