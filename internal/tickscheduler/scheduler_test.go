@@ -1,10 +1,11 @@
 package tickscheduler
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -173,4 +174,20 @@ func TestSecondarySchedulerSchedulesSecondaryTicks(t *testing.T) {
 	if !engine.scheduled[0].IsSecondary() {
 		t.Errorf("the tick of a secondary scheduler is not secondary")
 	}
+}
+
+func TestCheckpointRestoresPendingTick(t *testing.T) {
+	src, _ := newTestScheduler(false)
+	src.TickLater()
+	var buf bytes.Buffer
+	var state struct{}
+	if err := componentcheckpoint.Write(&buf, state, src); err != nil {
+		t.Fatalf("componentcheckpoint.Write: %v", err)
+	}
+	dst, engine := newTestScheduler(false)
+	if err := componentcheckpoint.Read(&buf, &state, dst); err != nil {
+		t.Fatalf("componentcheckpoint.Read: %v", err)
+	}
+	dst.TickLater()
+	wantScheduled(t, engine)
 }

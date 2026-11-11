@@ -36,6 +36,6 @@ func TestRejectUnknownChoicesAtInitialize(t *testing.T) {
 		if c.Spec.PagePolicy == "unknown" {
 			expected = "dram: unsupported page policy unknown"
 		}
-		require.PanicsWithValue(t, expected, func() { c.State.Initialize(c) })
+		require.PanicsWithValue(t, expected, func() { c.Middlewares.Initialize(c) })
 	}
 }

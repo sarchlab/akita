@@ -106,10 +106,11 @@ Each package doc shows how to declare and build a component of its model.
   (`messaging.PortOwner`).
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
   State with an optional list of pending times supplied by a component through
-  `PendingEventGuard`. Built-in tick and wakeup schedulers also save the kind
-  and delivery state of pending events. Direct connections share the tick
-  scheduler. Components schedule maintenance with `TickAtBackground(t)` or
-  `WakeAtBackground(t)`.
+  `PendingEventGuard`.
+- Built-in tick and wakeup components checkpoint their scheduler's internal
+  guard, including the kind and delivery state of pending events. Direct
+  connections share the tick scheduler. Components schedule maintenance with
+  `TickAtBackground(t)` or `WakeAtBackground(t)`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Comp` type and `DefaultSpec()` result;
   `Tick` steps a ticking component by one cycle in tests.

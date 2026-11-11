@@ -4,7 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -41,8 +43,8 @@ func TestTimedRefreshDuringIdleAndRestore(t *testing.T) {
 
 func TestTimedRefreshCanBeDisabled(t *testing.T) {
 	spec := DDR4Spec()
-	for _, timing := range []struct{ interval, duration int }{{0, 5}, {20, 0}} {
-		spec.TREFI, spec.TRFC = timing.interval, timing.duration
+	for _, refresh := range []struct{ interval, duration int }{{0, 5}, {20, 0}} {
+		spec.TREFI, spec.TRFC = refresh.interval, refresh.duration
 		h := newP0Harness(t, spec)
 		h.dram.TickAt(100000)
 		require.NoError(t, h.engine.Run())
@@ -54,19 +56,31 @@ func TestTimedRefreshCanBeDisabled(t *testing.T) {
 func TestPauseFreezesTimedRefresh(t *testing.T) {
 	spec := DDR4Spec()
 	spec.TREFI, spec.TRFC, spec.Freq = 20, 5, timing.GHz
-	h := newP0Harness(t, spec)
-	c := h.dram
-	c.TickAt(8000)
-	require.NoError(t, h.engine.Run())
-	c.Middlewares.Ctrl.pause()
-	c.TickAt(31000)
-	require.NoError(t, h.engine.Run())
+	s := sim.MakeBuilder().Build()
+	c := buildDRAM(s, spec, "DRAM", 4)
+	control := c.Ports.Control
+	(&noopConn{}).BindPort(control)
+	require.NoError(t, s.Initialize())
+	command := func(cmd memcontrolprotocol.Command) {
+		msg := messaging.Msg{ID: s.NewID(), Src: "Driver", Dst: control.AsRemote(), Payload: memcontrolprotocol.Req{Command: cmd}}
+		control.Deliver(msg)
+		require.NoError(t, s.Run())
+		ack, ok := control.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, msg.ID, ack.RspTo)
+		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
+	}
+	c.TickAt(7000)
+	require.NoError(t, s.Run())
+	command(memcontrolprotocol.CmdPause)
+	require.EqualValues(t, 8000, c.State.RefreshPausedAt)
+	c.TickAt(30000)
+	require.NoError(t, s.Run())
 	require.False(t, c.State.RefreshInProgress)
-	c.Middlewares.Ctrl.resumeTimer()
-	c.State.ControlState = controlStateEnabled
+	command(memcontrolprotocol.CmdEnable)
 	require.EqualValues(t, 43000, c.State.RefreshAt)
 	c.TickAt(44000)
-	require.NoError(t, h.engine.Run())
+	require.NoError(t, s.Run())
 	require.True(t, c.State.RefreshInProgress)
 	require.EqualValues(t, 48000, c.State.RefreshAt)
 }

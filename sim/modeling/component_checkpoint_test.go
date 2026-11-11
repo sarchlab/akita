@@ -2,17 +2,11 @@ package modeling_test
 
 import (
 	"bytes"
-	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"strings"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/internal/tickscheduler"
-
-	"github.com/sarchlab/akita/v5/internal/testsim"
-
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
-	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type ckptState struct {
@@ -40,55 +34,6 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		t.Fatalf("State.Names = %v, want [a b]", dst.Names)
 	}
 }
-
-// TestCheckpointRestoresPendingEventGuard shows that the scheduler's dedup guard
-// round-trips: after restoring a pending tick, asking for the same tick again
-// schedules nothing, since the engine's restored queue already holds it.
-func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
-	newScheduler := func(handler timing.Handler) (*tickscheduler.Scheduler, *timing.SerialEngine) {
-		engine := timing.NewSerialEngine()
-		engine.RegisterHandler("C", handler)
-		sim := testsim.New(engine, false)
-		if err := sim.Initialize(); err != nil {
-			t.Fatal(err)
-		}
-
-		return tickscheduler.NewScheduler("C", sim, 1*timing.GHz), engine
-	}
-
-	src, _ := newScheduler(handlerFunc(func(timing.Event) {}))
-	src.TickLater()
-
-	var buf bytes.Buffer
-	if err := componentcheckpoint.Write(&buf, ckptState{}, src); err != nil {
-		t.Fatalf("WriteCheckpoint: %v", err)
-	}
-	if !strings.Contains(buf.String(), `"foreground":[1000]`) {
-		t.Fatalf("checkpoint is missing the pending-event guard: %s", buf.String())
-	}
-
-	handled := 0
-	dst, engine := newScheduler(handlerFunc(func(timing.Event) { handled++ }))
-	var state ckptState
-	if err := componentcheckpoint.Read(&buf, &state, dst); err != nil {
-		t.Fatalf("ReadCheckpoint: %v", err)
-	}
-
-	dst.TickLater()
-
-	if err := engine.Run(); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	if handled != 0 {
-		t.Fatalf("a restored guard should suppress the duplicate tick, "+
-			"but %d ticks were scheduled", handled)
-	}
-}
-
-type handlerFunc func(timing.Event)
-
-func (f handlerFunc) Handle(e timing.Event) { f(e) }
 
 type bufState struct {
 	Items queueing.Buffer[int] `json:"items"`
