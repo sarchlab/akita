@@ -122,7 +122,8 @@ type state struct {
 	HasProcessingMSHREntry bool `json:"has_processing_mshr_entry"`
 	ProcessingMSHREntryIdx int  `json:"processing_mshr_entry_idx"`
 
-	// Flusher
+	// Paused Flush and running directory maintenance share this queue of ways
+	// awaiting bank writeback. Control serializes the producers.
 	FlusherBlockToEvictRefs []blockRef    `json:"flusher_block_to_evict_refs"`
 	HasProcessingFlush      bool          `json:"has_processing_flush"`
 	ProcessingFlush         flushReqState `json:"processing_flush"`

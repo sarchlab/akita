@@ -301,7 +301,9 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 While running, both data caches accept Invalidate with a nonempty address list.
 The writeback cache also accepts address-filtered Flush. The cache aligns and
 deduplicates addresses and sends a lookup for each distinct line through the
-directory pipeline. PID zero matches all address spaces. Older matching reads
+directory pipeline. PID zero matches all address spaces. A nonzero PID targets
+only that address space. Other PIDs can access the same line address, and the
+write buffer forwards data only for matching PID and address. Older matching reads
 and stores finish first. Later matching accesses wait until the control ACK can
 be sent. Other lines continue through the shared queues and pipeline. The
 writeback cache also waits for lower-memory ACKs for matching evictions, even

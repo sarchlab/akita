@@ -121,10 +121,9 @@ func RunContract(
 		})
 	}
 
-	// Conditional verbs (Invalidate, Flush) are only legal once the
-	// component is paused or drained. When supported, issuing them from
-	// the freshly-built (Enabled) state must be rejected with
-	// memcontrolprotocol.ErrMustBePausedOrDrained rather than silently acted on.
+	// The harness sends unfiltered Invalidate and Flush. Components that
+	// support these commands require Pause or Drain for the unfiltered form.
+	// Per-cache behavior tests cover address-filtered maintenance while running.
 	for _, v := range verbs {
 		if !matrix.Supports(v.cmd) || !isConditionalVerb(v.cmd) {
 			continue
@@ -216,14 +215,14 @@ func driveExpectSuccess(t *testing.T, h *Harness, cmd memcontrolprotocol.Command
 	}
 }
 
-// isConditionalVerb reports whether the verb requires the component to be
-// paused or drained before it is legal.
+// isConditionalVerb reports whether the unfiltered request used by this
+// harness requires Pause or Drain.
 func isConditionalVerb(cmd memcontrolprotocol.Command) bool {
 	return cmd == memcontrolprotocol.CmdInvalidate || cmd == memcontrolprotocol.CmdFlush
 }
 
 // pauseForConditionalVerb drives the component to a paused state so a
-// subsequent Invalidate or Flush is legal.
+// subsequent unfiltered Invalidate or Flush is legal.
 func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	t.Helper()
 
@@ -281,8 +280,7 @@ func checkVerb(
 	t.Helper()
 
 	if supported && isConditionalVerb(cmd) {
-		// Invalidate and Flush are only legal once the component is
-		// paused or drained, so quiesce it before driving the verb.
+		// Exercise the supported unfiltered form from the paused state.
 		pauseForConditionalVerb(t, h)
 	}
 

@@ -38,6 +38,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 	dirLatency := 1
 	requestsPerCycle := 4
 	ways := 2
+	maxEvictions := DefaultSpec().MaxInFlightEvictions
 	build := func() {
 		spec := DefaultSpec()
 		spec.NumSets = 512
@@ -48,6 +49,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		spec.DirectoryWidth = 4
 		spec.BankWidth = 4
 		spec.NumWays = ways
+		spec.MaxInFlightEvictions = maxEvictions
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = dirLatency
@@ -372,6 +374,77 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		ack, ok := ctrlPort.RetrieveOutgoing()
 		require.True(t, ok, "unrelated replacement's unanswered read must not delay flush")
 		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
+	})
+
+	t.Run("a filtered Flush isolates pending and issued writeback data by PID", func(t *testing.T) {
+		maxEvictions = 1
+		t.Cleanup(func() { maxEvictions = DefaultSpec().MaxInFlightEvictions })
+		setup1(t)
+		const owner, reader = 7, 8
+		addrs := []uint64{64, 128}
+		for _, addr := range addrs {
+			set := residentDirtyBlock(addr, 0xf1)
+			comp.State.DirectoryState.Sets[set].Blocks[0].PID = owner
+		}
+		flush := makeCtrlReq(memcontrolprotocol.CmdFlush)
+		flush.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush, PID: owner, Addresses: addrs}
+		ctrlPort.Deliver(flush)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		firstWrite, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.EqualValues(t, owner, firstWrite.Payload.(memprotocol.WriteReq).PID)
+		require.Len(t, comp.State.InflightEvictionIndices, 1)
+		require.Len(t, comp.State.PendingEvictionIndices, 1)
+
+		reads := make(map[uint64]uint64)
+		for _, addr := range addrs {
+			r := makeRead(addr)
+			r.Payload = memprotocol.ReadReq{PID: reader, Address: addr, AccessByteSize: 4}
+			reads[addr] = r.ID
+			topPort.Deliver(r)
+		}
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		for range addrs {
+			fetch, present := botPort.RetrieveOutgoing()
+			require.True(t, present, "a different PID's read must fetch its own bytes")
+			req := fetch.Payload.(memprotocol.ReadReq)
+			require.EqualValues(t, reader, req.PID)
+			require.Contains(t, reads, req.Address)
+			fill := makeFillRsp(fetch)
+			fill.Payload.(memprotocol.DataReadyRsp).Data[0] = byte(req.Address)
+			botPort.Deliver(fill)
+		}
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		for range addrs {
+			response, present := topPort.RetrieveOutgoing()
+			require.True(t, present)
+			data := response.Payload.(memprotocol.DataReadyRsp).Data
+			require.Contains(t, reads, uint64(data[0]))
+			require.Equal(t, reads[uint64(data[0])], response.RspTo)
+			delete(reads, uint64(data[0]))
+		}
+		_, ok = ctrlPort.PeekOutgoing()
+		require.False(t, ok)
+		ackWrite := func(write messaging.Msg) {
+			botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
+			for range 32 {
+				modelingtest.Tick(comp)
+			}
+		}
+		ackWrite(firstWrite)
+		secondWrite, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.EqualValues(t, owner, secondWrite.Payload.(memprotocol.WriteReq).PID)
+		ackWrite(secondWrite)
+		ack, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, flush.ID, ack.RspTo)
 	})
 
 	t.Run("running Flush protects its way from a competing replacement until write ACK", func(t *testing.T) {

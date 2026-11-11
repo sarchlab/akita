@@ -64,7 +64,7 @@ func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 
 	for _, eIdx := range next.InflightEvictionIndices {
 		e := &next.Transactions[eIdx]
-		if e.EvictingAddr == trans.FetchAddress {
+		if e.EvictingPID == trans.FetchPID && e.EvictingAddr == trans.FetchAddress {
 			trans.FetchedData = e.EvictingData
 			return true
 		}
@@ -72,7 +72,7 @@ func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 
 	for _, eIdx := range next.PendingEvictionIndices {
 		e := &next.Transactions[eIdx]
-		if e.EvictingAddr == trans.FetchAddress {
+		if e.EvictingPID == trans.FetchPID && e.EvictingAddr == trans.FetchAddress {
 			trans.FetchedData = e.EvictingData
 			return true
 		}
