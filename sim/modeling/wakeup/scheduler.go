@@ -1,7 +1,8 @@
 package wakeup
 
 import (
-	"slices"
+	"encoding/json"
+	"maps"
 	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -30,69 +31,108 @@ type scheduler struct {
 	handlerID  string
 	simulation modeling.Simulation
 
-	// pending holds the times of the undelivered wakeups in ascending order.
-	pending []timing.VTimeInPicoSec
+	guard wakeGuard
 }
 
-// newScheduler creates a scheduler for the wakeup events of the handler with
-// the given ID.
+// A promoted wakeup has a second event to keep its time live. After either
+// copy delivers the work, its partner is ignored by ID because a handler can
+// immediately request a fresh wakeup at the very same time.
+type wakeGuard struct {
+	Pending    map[timing.VTimeInPicoSec]wake `json:"pending"`
+	Superseded map[uint64]bool                `json:"superseded,omitempty"`
+}
+
+type wake struct {
+	ID         uint64 `json:"id"`
+	Background bool   `json:"background,omitempty"`
+	Promotion  uint64 `json:"promotion,omitempty"`
+}
+
+// Older checkpoints record foreground wakeups by time without an event ID.
+func (g *wakeGuard) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '[' {
+		var times []timing.VTimeInPicoSec
+		if err := json.Unmarshal(data, &times); err != nil {
+			return err
+		}
+		g.Pending = make(map[timing.VTimeInPicoSec]wake, len(times))
+		for _, at := range times {
+			g.Pending[at] = wake{}
+		}
+		return nil
+	}
+	type fields wakeGuard
+	return json.Unmarshal(data, (*fields)(g))
+}
+
 func newScheduler(handlerID string, sim modeling.Simulation) *scheduler {
-	return &scheduler{handlerID: handlerID, simulation: sim}
+	return &scheduler{handlerID: handlerID, simulation: sim,
+		guard: wakeGuard{Pending: make(map[timing.VTimeInPicoSec]wake)}}
 }
 
-// WakeAt makes sure a wakeup is pending at time t. It schedules nothing only
-// when an undelivered wakeup is already pending at t.
-func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) {
+// WakeAt schedules a foreground wakeup at t.
+func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) { s.schedule(t, false) }
+
+// WakeAtBackground schedules a wakeup at t without keeping the engine running.
+func (s *scheduler) WakeAtBackground(t timing.VTimeInPicoSec) { s.schedule(t, true) }
+
+func (s *scheduler) schedule(t timing.VTimeInPicoSec, background bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
-	i, found := slices.BinarySearch(s.pending, t)
-	if found {
+	pending, found := s.guard.Pending[t]
+	if found && (background || !pending.Background || pending.Promotion != 0) {
 		return
 	}
-
-	s.pending = slices.Insert(s.pending, i, t)
-
-	s.simulation.Engine().Schedule(Event{
-		EventBase: timing.MakeEventBase(s.simulation.NewID(), t, s.handlerID),
-	})
-}
-
-// WakeNow schedules a wakeup at the current time.
-func (s *scheduler) WakeNow() {
-	s.WakeAt(s.simulation.Engine().CurrentTime())
-}
-
-// Woke forgets the wakeups at or before t once the one at t is delivered, so
-// a wakeup can be asked for again at the same time. The component calls it
-// when it handles an Event at time t.
-func (s *scheduler) Woke(t timing.VTimeInPicoSec) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	i, found := slices.BinarySearch(s.pending, t)
+	id := s.simulation.NewID()
 	if found {
-		i++
+		pending.Promotion = id
+	} else {
+		pending = wake{ID: id, Background: background}
 	}
-
-	s.pending = slices.Delete(s.pending, 0, i)
+	s.guard.Pending[t] = pending
+	event := Event{timing.MakeEventBase(id, t, s.handlerID)}
+	event.Background = background
+	s.simulation.Engine().Schedule(event)
 }
 
-// Snapshot returns the scheduler's dedup guard: the times of the undelivered
-// wakeups. A component checkpoint saves it.
-func (s *scheduler) Snapshot() []timing.VTimeInPicoSec {
+func (s *scheduler) WakeNow() { s.WakeAt(s.simulation.Engine().CurrentTime()) }
+
+func (s *scheduler) deliver(event Event) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
-	return slices.Clone(s.pending)
+	if s.guard.Superseded[event.ID] {
+		delete(s.guard.Superseded, event.ID)
+		return false
+	}
+	pending, found := s.guard.Pending[event.At]
+	if !found || (pending.ID != 0 && pending.ID != event.ID && (pending.Promotion == 0 || pending.Promotion != event.ID)) {
+		return true
+	}
+	if pending.Promotion != 0 {
+		other := pending.Promotion
+		if other == event.ID {
+			other = pending.ID
+		}
+		if s.guard.Superseded == nil {
+			s.guard.Superseded = make(map[uint64]bool)
+		}
+		s.guard.Superseded[other] = true
+	}
+	delete(s.guard.Pending, event.At)
+	return true
 }
 
-// Restore sets the scheduler's dedup guard from a checkpoint. The engine
-// restores the matching wakeup events separately. Only checkpoint loading
-// should call it.
-func (s *scheduler) Restore(pending []timing.VTimeInPicoSec) {
+func (s *scheduler) Snapshot() wakeGuard {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	return wakeGuard{Pending: maps.Clone(s.guard.Pending), Superseded: maps.Clone(s.guard.Superseded)}
+}
 
-	s.pending = slices.Sorted(slices.Values(pending))
+func (s *scheduler) Restore(guard wakeGuard) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if guard.Pending == nil {
+		guard.Pending = make(map[timing.VTimeInPicoSec]wake)
+	}
+	s.guard = guard
 }

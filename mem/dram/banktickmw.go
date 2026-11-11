@@ -48,6 +48,7 @@ func (m *bankTickMW) Handle(_ timing.Event) bool {
 		progress = m.issue(&spec, next) || progress
 	} else if len(next.CommandQueues.Entries) > 0 {
 		next.RefreshBlockedIssue = true
+		progress = true // the request waiting to issue is foreground work
 	}
 
 	progress = m.ctrl.fillCommandQueue(m.comp.NewID, &spec, next) || progress

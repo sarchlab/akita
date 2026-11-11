@@ -1,6 +1,7 @@
 package timing
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,7 +11,7 @@ func TestEventQueuePresence(t *testing.T) {
 	for _, safe := range []bool{false, true} {
 		var q eventQueue = newUnsafeEventQueue()
 		if safe {
-			q = newEventQueue()
+			q = newEventQueue(new(atomic.Int64))
 		}
 		for cycle := 0; cycle < 2; cycle++ {
 			evt, ok := q.Peek()

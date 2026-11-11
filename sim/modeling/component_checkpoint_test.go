@@ -2,6 +2,7 @@ package modeling_test
 
 import (
 	"bytes"
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"strings"
 	"testing"
 
@@ -59,17 +60,17 @@ func TestCheckpointRestoresPendingEventGuard(t *testing.T) {
 	src.TickLater()
 
 	var buf bytes.Buffer
-	if err := modeling.WriteCheckpoint(&buf, ckptState{}, src); err != nil {
+	if err := componentcheckpoint.Write(&buf, ckptState{}, src); err != nil {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
-	if !strings.Contains(buf.String(), `"pending_event_guard":[1000]`) {
+	if !strings.Contains(buf.String(), `"foreground":[1000]`) {
 		t.Fatalf("checkpoint is missing the pending-event guard: %s", buf.String())
 	}
 
 	handled := 0
 	dst, engine := newScheduler(handlerFunc(func(timing.Event) { handled++ }))
 	var state ckptState
-	if err := modeling.ReadCheckpoint(&buf, &state, dst); err != nil {
+	if err := componentcheckpoint.Read(&buf, &state, dst); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
 	}
 

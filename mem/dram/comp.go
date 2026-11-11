@@ -322,12 +322,12 @@ type state struct {
 	// TickCount tracks the global cycle counter for tFAW enforcement.
 	TickCount uint64 `json:"tick_count"`
 
-	// RefreshCycleCounter counts cycles since last refresh.
-	RefreshCycleCounter int `json:"refresh_cycle_counter"`
-	// RefreshInProgress is true when a refresh is currently blocking.
+	// RefreshAt is the next start or end of a tRFC stall, in simulated time.
+	RefreshAt timing.VTimeInPicoSec `json:"refresh_at"`
+	// RefreshPausedAt records when the refresh timer was suspended.
+	RefreshPausedAt timing.VTimeInPicoSec `json:"refresh_paused_at"`
+	// RefreshInProgress stalls command issue between refresh boundaries.
 	RefreshInProgress bool `json:"refresh_in_progress"`
-	// RefreshCyclesRemaining counts remaining cycles of the current refresh.
-	RefreshCyclesRemaining int `json:"refresh_cycles_remaining"`
 	// RefreshBlockedIssue is set while a refresh window is holding off the issue
 	// step (deviation D2: a global tRFC stall). It is cleared by the first
 	// command that issues once the window ends, so that command's

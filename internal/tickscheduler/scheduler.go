@@ -1,6 +1,7 @@
 package tickscheduler
 
 import (
+	"encoding/json"
 	"slices"
 	"sync"
 
@@ -27,7 +28,7 @@ func init() {
 
 // Scheduler schedules the tick events of a handler. Its dedup guard remembers
 // the clock edge of every tick it scheduled that may still be pending, so it
-// never schedules two ticks on the same edge.
+// dispatches each edge at most once, including promotions to foreground.
 type Scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
@@ -36,11 +37,23 @@ type Scheduler struct {
 	engine     timing.EventScheduler
 	secondary  bool
 
-	// pending holds, in ascending order, the edges of the scheduled ticks at
-	// or after the current time. A tick at the current time may already have
-	// fired; it still counts for a request on the current edge, so a cycle
-	// ticks at most once.
-	pending []timing.VTimeInPicoSec
+	guard guardState
+}
+
+type guardState struct {
+	Foreground  []timing.VTimeInPicoSec `json:"foreground"`
+	Background  []timing.VTimeInPicoSec `json:"background,omitempty"`
+	LastHandled timing.VTimeInPicoSec   `json:"last_handled,omitempty"`
+	HasHandled  bool                    `json:"has_handled,omitempty"`
+}
+
+// Older checkpoints store only the foreground edges as an array.
+func (g *guardState) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '[' {
+		return json.Unmarshal(data, &g.Foreground)
+	}
+	type fields guardState
+	return json.Unmarshal(data, (*fields)(g))
 }
 
 // NewScheduler creates a scheduler for the tick events of the handler with
@@ -82,11 +95,11 @@ func (t *Scheduler) TickNow() {
 	now := t.engine.CurrentTime()
 	t.prune(now)
 
-	if len(t.pending) > 0 && t.pending[0] <= t.freq.NextTick(now) {
+	if len(t.guard.Foreground) > 0 && t.guard.Foreground[0] <= t.freq.NextTick(now) {
 		return
 	}
 
-	t.schedule(t.freq.ThisTick(now))
+	t.tickAt(now, t.freq.ThisTick(now), false)
 }
 
 // TickLater makes sure a tick is pending at the cycle after the current time.
@@ -95,7 +108,7 @@ func (t *Scheduler) TickLater() {
 	defer t.lock.Unlock()
 
 	now := t.engine.CurrentTime()
-	t.tickAt(now, t.freq.NextTick(now))
+	t.tickAt(now, t.freq.NextTick(now), false)
 }
 
 // TickAt makes sure a tick is pending at the first clock edge at or after time
@@ -110,54 +123,79 @@ func (t *Scheduler) TickAt(at timing.VTimeInPicoSec) {
 	defer t.lock.Unlock()
 
 	now := t.engine.CurrentTime()
-	t.tickAt(now, t.freq.ThisTick(max(at, now)))
+	t.tickAt(now, t.freq.ThisTick(max(at, now)), false)
 }
 
-// tickAt schedules a tick at edge, which is not before now, unless one is
-// already pending there.
-func (t *Scheduler) tickAt(now, edge timing.VTimeInPicoSec) {
-	t.prune(now)
+// TickAtBackground requests a tick which does not keep the engine running.
+func (t *Scheduler) TickAtBackground(at timing.VTimeInPicoSec) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	now := t.engine.CurrentTime()
+	t.tickAt(now, t.freq.ThisTick(max(at, now)), true)
+}
 
-	if _, found := slices.BinarySearch(t.pending, edge); found {
+func (t *Scheduler) tickAt(now, edge timing.VTimeInPicoSec, background bool) {
+	t.prune(now)
+	if t.guard.HasHandled && t.guard.LastHandled == edge {
 		return
 	}
-
-	t.schedule(edge)
-}
-
-// prune forgets the ticks before now, which have fired.
-func (t *Scheduler) prune(now timing.VTimeInPicoSec) {
-	i, _ := slices.BinarySearch(t.pending, now)
-	t.pending = slices.Delete(t.pending, 0, i)
-}
-
-// schedule records a tick at edge, which is not pending, and schedules it.
-func (t *Scheduler) schedule(edge timing.VTimeInPicoSec) {
-	i, _ := slices.BinarySearch(t.pending, edge)
-	t.pending = slices.Insert(t.pending, i, edge)
-
+	pending := &t.guard.Foreground
+	index, found := slices.BinarySearch(*pending, edge)
+	if found {
+		return
+	}
+	if background {
+		pending = &t.guard.Background
+		index, found = slices.BinarySearch(*pending, edge)
+		if found {
+			return
+		}
+	}
+	*pending = slices.Insert(*pending, index, edge)
 	tick := MakeEvent(t.simulation.NewID(), edge, t.handlerID)
 	tick.Secondary = t.secondary
-
+	tick.Background = background
 	t.engine.Schedule(tick)
 }
 
-// Snapshot returns the scheduler's dedup guard: the edges of the ticks that
-// may still be pending. A component checkpoint saves it so the guard can be
-// restored directly, with no post-load reconciliation against the event queue.
-func (t *Scheduler) Snapshot() []timing.VTimeInPicoSec {
+// Deliver coalesces background and foreground events scheduled for the same
+// edge. Either can reach Handle first in the parallel engine.
+func (t *Scheduler) Deliver(edge timing.VTimeInPicoSec) bool {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
-	return slices.Clone(t.pending)
+	if t.guard.HasHandled && t.guard.LastHandled == edge {
+		_, foreground := slices.BinarySearch(t.guard.Foreground, edge)
+		_, background := slices.BinarySearch(t.guard.Background, edge)
+		return !(foreground && background)
+	}
+	t.guard.LastHandled = edge
+	t.guard.HasHandled = true
+	return true
 }
 
-// Restore sets the scheduler's dedup guard from a checkpoint. The engine
-// restores the matching tick events separately, so the two stay consistent.
-// Only checkpoint loading should call it.
-func (t *Scheduler) Restore(pending []timing.VTimeInPicoSec) {
+func (t *Scheduler) prune(now timing.VTimeInPicoSec) {
+	t.guard.Foreground = prune(t.guard.Foreground, now)
+	t.guard.Background = prune(t.guard.Background, now)
+}
+
+func prune(pending []timing.VTimeInPicoSec, now timing.VTimeInPicoSec) []timing.VTimeInPicoSec {
+	i, _ := slices.BinarySearch(pending, now)
+	return slices.Delete(pending, 0, i)
+}
+
+// Snapshot saves pending foreground and background edges and the last delivery.
+func (t *Scheduler) Snapshot() guardState {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+	state := t.guard
+	state.Foreground = slices.Clone(state.Foreground)
+	state.Background = slices.Clone(state.Background)
+	return state
+}
 
-	t.pending = slices.Sorted(slices.Values(pending))
+// Restore reinstates the scheduler metadata for the restored engine events.
+func (t *Scheduler) Restore(state guardState) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.guard = state
 }

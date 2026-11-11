@@ -50,7 +50,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
-	state.ControlState = controlStatePaused
+	m.pause()
 	return true
 }
 
@@ -84,17 +84,26 @@ func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = controlStatePaused
+	m.pause()
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
+func (m *ctrlMiddleware) pause() {
+	state := &m.comp.State
+	if state.ControlState != controlStatePaused {
+		state.RefreshPausedAt = m.comp.CurrentTime()
+	}
+	state.ControlState = controlStatePaused
+}
+
 func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
+	m.resumeTimer()
 	m.comp.State.ControlState = controlStateEnabled
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
@@ -102,8 +111,17 @@ func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	return true
 }
 
+func (m *ctrlMiddleware) resumeTimer() {
+	state := &m.comp.State
+	if state.ControlState == controlStatePaused && state.RefreshAt != 0 {
+		state.RefreshAt += m.comp.CurrentTime() - state.RefreshPausedAt
+		m.comp.TickAtBackground(state.RefreshAt)
+	}
+}
+
 func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
+	m.resumeTimer()
 	state.ControlState = controlStateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
@@ -133,9 +151,10 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 		spec.NumRank, spec.NumBankGroup, spec.NumBank)
 	state.PendingCompletions = nil
 	state.TickCount = 0
-	state.RefreshCycleCounter = 0
+	state.RefreshAt = 0
+	state.RefreshPausedAt = 0
 	state.RefreshInProgress = false
-	state.RefreshCyclesRemaining = 0
+	startRefreshTimer(m.comp)
 	state.RefreshBlockedIssue = false
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""

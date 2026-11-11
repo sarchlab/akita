@@ -2,6 +2,7 @@ package wakeup_test
 
 import (
 	"bytes"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -213,4 +214,51 @@ func (s *State) Initialize(c *Comp) {
 
 func (m *Middlewares) Initialize(c *Comp) {
 	*m = Middlewares{Worker: &workMW{comp: c}}
+}
+
+func TestBackgroundPromotionCheckpoint(t *testing.T) {
+	s := newSim()
+	c := build(s, Spec{Work: 1})
+	c.WakeAtBackground(10)
+	c.WakeAt(10)
+	c.WakeAt(20)
+	path := filepath.Join(t.TempDir(), "checkpoint.zip")
+	if err := s.SaveCheckpoint(path); err != nil {
+		t.Fatal(err)
+	}
+	s = newSim()
+	restored := build(s, Spec{Work: 1})
+	if err := s.LoadCheckpoint(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(restored.State.Woken, []timing.VTimeInPicoSec{10, 10, 20}) {
+		t.Fatal(restored.State.Woken)
+	}
+}
+
+func TestRestoreLegacyPendingForeground(t *testing.T) {
+	s := newSim()
+	c := build(s, Spec{})
+	c.WakeAt(1000)
+	archive := []byte(`{"state":{},"pending_event_guard":[1000]}`)
+	if err := c.LoadCheckpoint(bytes.NewReader(archive)); err != nil {
+		t.Fatal(err)
+	}
+	c.WakeAt(1000)
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.State.Woken, []timing.VTimeInPicoSec{1000}) {
+		t.Fatal(c.State.Woken)
+	}
+	c.WakeAt(1000)
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.State.Woken) != 2 {
+		t.Fatal(c.State.Woken)
+	}
 }

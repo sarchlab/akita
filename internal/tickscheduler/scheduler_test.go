@@ -152,7 +152,7 @@ func TestSnapshotAndRestoreTheGuard(t *testing.T) {
 	ts.TickLater()
 
 	saved := ts.Snapshot()
-	if len(saved) != 2 || saved[0] != 11000 || saved[1] != 15000 {
+	if len(saved.Foreground) != 2 || saved.Foreground[0] != 11000 || saved.Foreground[1] != 15000 {
 		t.Fatalf("Snapshot = %v, want [11000 15000]", saved)
 	}
 

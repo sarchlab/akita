@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v5/internal/assembly"
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"github.com/sarchlab/akita/v5/internal/tickscheduler"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -155,10 +156,10 @@ func (c *Connection) forwardMany(port messaging.Port) bool {
 
 // SaveCheckpoint writes the connection's State and tick-scheduler guard.
 func (c *Connection) SaveCheckpoint(w io.Writer) error {
-	return modeling.WriteCheckpoint(w, c.State, c.ticks)
+	return componentcheckpoint.Write(w, c.State, c.ticks)
 }
 
 // LoadCheckpoint restores the State and tick-scheduler guard (best effort).
 func (c *Connection) LoadCheckpoint(r io.Reader) error {
-	return modeling.ReadCheckpoint(r, &c.State, c.ticks)
+	return componentcheckpoint.Read(r, &c.State, c.ticks)
 }

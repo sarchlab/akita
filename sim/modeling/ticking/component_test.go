@@ -3,6 +3,7 @@ package ticking_test
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -284,5 +285,46 @@ func (m *Middlewares) Initialize(c *Comp) {
 	*m = Middlewares{
 		First:  &recordMW{comp: c, name: "first"},
 		Second: &recordMW{comp: c, name: "second", counting: true},
+	}
+}
+
+func TestBackgroundPromotionCheckpoint(t *testing.T) {
+	s := newSim()
+	c := build(s, Ports{In: newPort(s, "C.In")})
+	c.State.Count = 0
+	c.TickAtBackground(1000)
+	c.NotifyRecv(c.Ports.In)
+	c.TickAt(3000)
+	path := filepath.Join(t.TempDir(), "checkpoint.zip")
+	if err := s.SaveCheckpoint(path); err != nil {
+		t.Fatal(err)
+	}
+	s = newSim()
+	restored := build(s, Ports{In: newPort(s, "C.In")})
+	if err := s.LoadCheckpoint(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.State.Log) != 4 {
+		t.Fatal(restored.State.Log)
+	}
+}
+
+func TestRestoreLegacyPendingForeground(t *testing.T) {
+	s := newSim()
+	c := build(s, Ports{In: newPort(s, "C.In")})
+	c.TickAt(1000)
+	archive := []byte(`{"state":{},"pending_event_guard":[1000]}`)
+	if err := c.LoadCheckpoint(bytes.NewReader(archive)); err != nil {
+		t.Fatal(err)
+	}
+	c.TickAt(1000)
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.State.Log) != 2 {
+		t.Fatal(c.State.Log)
 	}
 }

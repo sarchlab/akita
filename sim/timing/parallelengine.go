@@ -22,6 +22,7 @@ type ParallelEngine struct {
 	now                    VTimeInPicoSec
 	runningSecondaryEvents bool
 
+	foreground   atomic.Int64
 	eventChan    chan Event
 	waitGroup    sync.WaitGroup
 	maxGoRoutine int
@@ -62,12 +63,12 @@ func NewParallelEngine() *ParallelEngine {
 	e.secondaryQueueChan = make(chan eventQueue, numQueues)
 
 	for i := 0; i < numQueues; i++ {
-		queue := newEventQueue()
+		queue := newEventQueue(&e.foreground)
 		e.queueChan <- queue
 
 		e.queues = append(e.queues, queue)
 
-		secondaryQueue := newEventQueue()
+		secondaryQueue := newEventQueue(&e.foreground)
 		e.secondaryQueueChan <- secondaryQueue
 
 		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
@@ -128,7 +129,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 	}
 }
 
-// Run processes all the events scheduled in the ParallelEngine.
+// Run dispatches events in time order while foreground work remains.
 // The owning simulation must have been initialized successfully.
 func (e *ParallelEngine) Run() (err error) {
 	if err := e.engineControl.begin(); err != nil {
@@ -147,7 +148,7 @@ func (e *ParallelEngine) Run() (err error) {
 		if failure := e.failure.Load(); failure != nil {
 			return failure
 		}
-		if !e.hasMoreEvents() {
+		if e.foreground.Load() == 0 {
 			return nil
 		}
 
@@ -224,34 +225,6 @@ func (e *ParallelEngine) emptyQueueChan(
 	}
 }
 
-func (e *ParallelEngine) hasMoreEvents() bool {
-	if e.hasMorePrimaryEvents() || e.hasMoreSecondaryEvents() {
-		return true
-	}
-
-	return false
-}
-
-func (e *ParallelEngine) hasMorePrimaryEvents() bool {
-	for _, q := range e.queues {
-		if q.Len() > 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (e *ParallelEngine) hasMoreSecondaryEvents() bool {
-	for _, q := range e.secondaryQueues {
-		if q.Len() > 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (e *ParallelEngine) runEventsUntilConflict(
 	queues []eventQueue,
 	queueChan chan eventQueue,
@@ -259,7 +232,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 	now := e.readNow()
 
 	for _, queue := range queues {
-		for queue.Len() > 0 {
+		for queue.Len() > 0 && e.foreground.Load() > 0 {
 			if e.failure.Load() != nil {
 				break
 			}

@@ -78,6 +78,7 @@ func (m *middlewares) Initialize(c *Comp) {
 		panic("dram: Resources.Storage is required")
 	}
 
+	startRefreshTimer(c)
 	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},

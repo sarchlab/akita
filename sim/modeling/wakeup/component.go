@@ -4,8 +4,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/sarchlab/akita/v5/internal/componentcheckpoint"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -50,8 +50,8 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
-	if _, ok := e.(Event); ok {
-		c.wakeups.Woke(e.Time())
+	if event, ok := e.(Event); ok && !c.wakeups.deliver(event) {
+		return
 	}
 
 	if base.Dispatch(c.pipeline, e) {
@@ -67,6 +67,12 @@ func (c *Component[S, T, R, P, M]) WakeAt(t timing.VTimeInPicoSec) {
 	c.wakeups.WakeAt(t)
 }
 
+// WakeAtBackground requests a wakeup at t without keeping the simulation running.
+// A foreground request at the same time keeps the pending wakeup live.
+func (c *Component[S, T, R, P, M]) WakeAtBackground(t timing.VTimeInPicoSec) {
+	c.wakeups.WakeAtBackground(t)
+}
+
 // NotifyRecv wakes the instance when a port receives a message.
 func (c *Component[S, T, R, P, M]) NotifyRecv(_ messaging.Port) {
 	c.wakeups.WakeNow()
@@ -80,13 +86,13 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 // SaveCheckpoint writes the instance's State and wakeup guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.WriteCheckpoint(w, c.State, c.wakeups)
+	return componentcheckpoint.Write(w, c.State, c.wakeups)
 }
 
 // LoadCheckpoint restores the State and wakeup guard (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return modeling.ReadCheckpoint(r, &c.State, c.wakeups)
+	return componentcheckpoint.Read(r, &c.State, c.wakeups)
 }
 
 // Name returns the instance name given to Build.
