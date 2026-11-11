@@ -53,7 +53,7 @@ func TestControlContract(t *testing.T) {
 			Sim:  sim,
 			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
-				return !comp.State.CurrentTransaction.Active
+				return len(comp.State.Transactions) == 0
 			},
 		}
 	}

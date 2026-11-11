@@ -58,13 +58,11 @@ func TestRestoreRoutingSpec(t *testing.T) {
 	if err := rebuilt.LoadCheckpoint(bytes.NewReader(original)); err != nil {
 		t.Fatal(err)
 	}
-	rebuilt.State.SrcSide = "inside"
-	rebuilt.State.DstSide = "outside"
 	dt := dataTransferOf(t, rebuilt)
-	if got := dt.findSrcPort(0); got != "Inside.Top" {
+	if got := dt.mapperFor("inside").Find(0); got != "Inside.Top" {
 		t.Fatalf("source routes to %s", got)
 	}
-	if got := dt.findDstPort(0); got != "Outside.Top" {
+	if got := dt.mapperFor("outside").Find(0); got != "Outside.Top" {
 		t.Fatalf("destination routes to %s", got)
 	}
 }

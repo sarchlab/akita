@@ -9,7 +9,8 @@ import (
 // DefaultSpec returns the component's default configuration.
 func DefaultSpec() Spec {
 	return Spec{
-		Freq: 1 * timing.GHz,
+		MaxTransactions: 1,
+		Freq:            1 * timing.GHz,
 	}
 }
 
@@ -28,6 +29,9 @@ func (m *middlewares) Initialize(c *Comp) {
 }
 
 func validateSpec(spec Spec) error {
+	if spec.MaxTransactions <= 0 {
+		return fmt.Errorf("MaxTransactions must be positive, got %d", spec.MaxTransactions)
+	}
 	if err := spec.Inside.Validate(); err != nil {
 		return err
 	}

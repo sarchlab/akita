@@ -1,8 +1,6 @@
 package datamover
 
 import (
-	"log"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -17,60 +15,26 @@ type dataTransferMW struct {
 	comp *Comp
 }
 
-func (m *dataTransferMW) insidePort() messaging.Port {
-	return m.comp.Ports.Inside
-}
-
-func (m *dataTransferMW) outsidePort() messaging.Port {
-	return m.comp.Ports.Outside
-}
-
-func (m *dataTransferMW) srcPort() messaging.Port {
-	state := &m.comp.State
-	switch state.SrcSide {
-	case datamoverprotocol.SideInside:
-		return m.insidePort()
-	case datamoverprotocol.SideOutside:
-		return m.outsidePort()
-	default:
-		return nil
-	}
-}
-
-func (m *dataTransferMW) dstPort() messaging.Port {
-	state := &m.comp.State
-	switch state.DstSide {
-	case datamoverprotocol.SideInside:
-		return m.insidePort()
-	case datamoverprotocol.SideOutside:
-		return m.outsidePort()
-	default:
-		return nil
-	}
-}
-
-func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
-	return m.mapperFor(m.comp.State.SrcSide).Find(addr)
-}
-
-func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
-	return m.mapperFor(m.comp.State.DstSide).Find(addr)
-}
-
-// mapperFor returns the mapper for the "inside" or "outside" side.
-func (m *dataTransferMW) mapperFor(side datamoverprotocol.Side) mem.AddressMapper {
-	var mapper mem.AddressMapper
-
+func (m *dataTransferMW) portFor(side datamoverprotocol.Side) messaging.Port {
 	switch side {
 	case datamoverprotocol.SideInside:
-		mapper = m.comp.Spec.Inside
+		return m.comp.Ports.Inside
 	case datamoverprotocol.SideOutside:
-		mapper = m.comp.Spec.Outside
+		return m.comp.Ports.Outside
 	default:
-		log.Panicf("unknown side %q", side)
+		panic("invalid memory side")
 	}
+}
 
-	return mapper
+func (m *dataTransferMW) mapperFor(side datamoverprotocol.Side) mem.AddressMapper {
+	switch side {
+	case datamoverprotocol.SideInside:
+		return m.comp.Spec.Inside
+	case datamoverprotocol.SideOutside:
+		return m.comp.Spec.Outside
+	default:
+		panic("invalid memory side")
+	}
 }
 
 // Handle runs data transfer stages. Paused data movers make no progress;
@@ -81,54 +45,46 @@ func (m *dataTransferMW) Handle(_ timing.Event) bool {
 		return false
 	}
 
-	madeProgress := false
-
-	madeProgress = m.processWriteDoneFromDst() || madeProgress
+	inside, outside := m.comp.Ports.Inside, m.comp.Ports.Outside
+	madeProgress := m.processWriteDone(inside) || m.processWriteDone(outside)
 	madeProgress = m.writeToDst() || madeProgress
-	madeProgress = m.processDataReadyFromSrc() || madeProgress
+	madeProgress = (m.processDataReady(inside) || m.processDataReady(outside)) || madeProgress
 	madeProgress = m.readFromSrc() || madeProgress
 
 	return madeProgress
 }
 
-// readFromSrc reads data from source.
+// All copies share the read window. As in the serial mover, a source chunk
+// may start while its first byte fits; the reservation lasts until its last
+// byte is written. Issue reads in admission order.
 func (m *dataTransferMW) readFromSrc() bool {
-	state := &m.comp.State
-	if !state.CurrentTransaction.Active {
+	transfers := m.comp.State.Transactions
+	var used uint64
+	var trans *dataMoverTransactionState
+	for i := range transfers {
+		t := &transfers[i]
+		issued := t.NextReadAddr - t.SrcAddress
+		used += issued - t.Buffer.Offset
+		if trans == nil && issued < t.ByteSize {
+			trans = t
+		}
+	}
+	if trans == nil || used >= m.comp.Spec.BufferSize {
 		return false
 	}
-
-	trans := &state.CurrentTransaction
-	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
-
-	spec := m.comp.Spec
-	// The buffer is indexed in transaction-relative space (offsets measured from
-	// SrcAddress), and Buffer.Offset slides in that same relative space as data
-	// is written out. The read-window check must therefore use the relative
-	// address; comparing the absolute addr would wrongly reject every read of a
-	// transaction whose SrcAddress is at or beyond BufferSize.
-	relAddr := addr - trans.SrcAddress
-	bufEndAddr := state.Buffer.Offset + spec.BufferSize
-	if relAddr >= bufEndAddr {
-		return false
-	}
-
-	transEndAddr := trans.SrcAddress + trans.ByteSize
-	if addr >= transEndAddr {
-		return false
-	}
-
-	srcP := m.srcPort()
+	addr := trans.NextReadAddr
+	width := min(trans.Buffer.Granularity, trans.ByteSize-(addr-trans.SrcAddress))
+	srcP := m.portFor(trans.SrcSide)
 
 	req := messaging.Msg{Payload: memprotocol.ReadReq{
 		Address: addr,
 
-		AccessByteSize: state.SrcByteGranularity,
+		AccessByteSize: width,
 		PID:            0},
 		ID: m.comp.NewID(),
 
 		Src: srcP.AsRemote(),
-		Dst: m.findSrcPort(addr),
+		Dst: m.mapperFor(trans.SrcSide).Find(addr),
 
 		TrafficBytes: 12,
 	}
@@ -140,82 +96,65 @@ func (m *dataTransferMW) readFromSrc() bool {
 	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	srcP.Send(req)
 
-	trans.NextReadAddr += state.SrcByteGranularity
-	trans.PendingRead[req.ID] = pendingReadState{
-		TaskID:  taskID,
-		ID:      req.ID,
-		Src:     req.Src,
-		Dst:     req.Dst,
-		Address: req.Payload.(memprotocol.ReadReq).Address,
-	}
+	trans.NextReadAddr += width
+	trans.PendingRead[req.ID] = pendingReadState{TaskID: taskID, Offset: addr - trans.SrcAddress}
 
 	return true
 }
 
-// processDataReadyFromSrc processes data ready from source.
-func (m *dataTransferMW) processDataReadyFromSrc() bool {
-	state := &m.comp.State
-	if !state.CurrentTransaction.Active {
+// Match the returned request ID to its owner. Unmatched responses can
+// arrive after Reset, including on a side now used in the other direction.
+func (m *dataTransferMW) processDataReady(port messaging.Port) bool {
+	rsp, present := port.PeekIncoming()
+	data, ok := rsp.Payload.(memprotocol.DataReadyRsp)
+	if !present || !ok {
 		return false
 	}
-
-	srcP := m.srcPort()
-	rspI, ok := srcP.PeekIncoming()
-	if !ok {
-		return false
+	port.RetrieveIncoming()
+	for i := range m.comp.State.Transactions {
+		trans := &m.comp.State.Transactions[i]
+		req, ok := trans.PendingRead[rsp.RspTo]
+		if !ok {
+			continue
+		}
+		bufferAddData(&trans.Buffer, req.Offset, data.Data)
+		delete(trans.PendingRead, rsp.RspTo)
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
+			TaskID: trans.RecvTaskID, Kind: tasks.MilestoneKindData, What: port.Name(),
+		})
+		m.comp.TaskTracker().EndReqOut(req.TaskID)
+		break
 	}
-	_, ok = rspI.Payload.(memprotocol.DataReadyRsp)
-	rsp := rspI
-	if !ok {
-		// it can be write done rsp if src and dst is the same side. So ignore.
-		return false
-	}
-
-	trans := &state.CurrentTransaction
-	originalReq, ok := trans.PendingRead[rsp.RspTo]
-	if !ok {
-		// Orphaned response: its read was discarded by a Reset issued while it
-		// was in flight. Drop it rather than crash the current transaction.
-		srcP.RetrieveIncoming()
-		return true
-	}
-
-	offset := originalReq.Address - trans.SrcAddress
-	bufferAddData(&state.Buffer, offset, rsp.Payload.(memprotocol.DataReadyRsp).Data)
-
-	delete(trans.PendingRead, rsp.RspTo)
-	srcP.RetrieveIncoming()
-
-	// Charge the in-flight src-read wait to the req_in opened for this move
-	// transaction (the stored receive ID also parents the read req_out), so the dominant latency of a move is attributed.
-	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
-		TaskID: trans.RecvTaskID,
-		Kind:   tasks.MilestoneKindData,
-		What:   m.srcPort().Name(),
-	})
-
-	m.comp.TaskTracker().EndReqOut(originalReq.TaskID)
-
 	return true
 }
 
 // writeToDst sends data to destination.
 func (m *dataTransferMW) writeToDst() bool {
-	state := &m.comp.State
-	if !state.CurrentTransaction.Active {
+	transfers := m.comp.State.Transactions
+	if len(transfers) == 0 {
 		return false
 	}
-
-	trans := &state.CurrentTransaction
-	offset := trans.NextWriteAddr - trans.DstAddress
-	data, ok := bufferExtractData(&state.Buffer, offset, state.DstByteGranularity)
-
-	if !ok {
+	dstP := m.portFor(transfers[0].DstSide)
+	if !dstP.CanSend() {
 		return false
 	}
+	for i := range transfers {
+		trans := &transfers[i]
+		offset := trans.NextWriteAddr - trans.DstAddress
+		if offset >= trans.ByteSize {
+			continue
+		}
+		width := min(resolveByteGranularity(m.comp.Spec, trans.DstSide), trans.ByteSize-offset)
+		data, ready := bufferExtractData(&trans.Buffer, offset, width)
+		if ready {
+			m.sendWrite(dstP, trans, data)
+			return true
+		}
+	}
+	return false
+}
 
-	dstP := m.dstPort()
-
+func (m *dataTransferMW) sendWrite(dstP messaging.Port, trans *dataMoverTransactionState, data []byte) {
 	req := messaging.Msg{Payload: memprotocol.WriteReq{
 		Address: trans.NextWriteAddr,
 		Data:    data,
@@ -224,74 +163,45 @@ func (m *dataTransferMW) writeToDst() bool {
 		ID: m.comp.NewID(),
 
 		Src: dstP.AsRemote(),
-		Dst: m.findDstPort(trans.NextWriteAddr),
+		Dst: m.mapperFor(trans.DstSide).Find(trans.NextWriteAddr),
 
 		TrafficBytes: len(data) + 12,
-	}
-
-	if !dstP.CanSend() {
-		return false
 	}
 
 	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	dstP.Send(req)
 
-	trans.NextWriteAddr += state.DstByteGranularity
-	trans.PendingWrite[req.ID] = pendingWriteState{
-		TaskID:  taskID,
-		ID:      req.ID,
-		Src:     req.Src,
-		Dst:     req.Dst,
-		Address: req.Payload.(memprotocol.WriteReq).Address,
-		Data:    data,
+	trans.NextWriteAddr += uint64(len(data))
+	trans.PendingWrite[req.ID] = taskID
+	written := trans.NextWriteAddr - trans.DstAddress
+	if written == trans.ByteSize {
+		// Release the final source chunk even when it is shorter than the granularity.
+		trans.Buffer.Chunks = nil
+		trans.Buffer.Offset = written
+	} else {
+		bufferMoveOffsetForwardTo(&trans.Buffer, written)
 	}
-	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
-
-	return true
 }
 
-// processWriteDoneFromDst processes write done from destination.
-func (m *dataTransferMW) processWriteDoneFromDst() bool {
-	state := &m.comp.State
-	if !state.CurrentTransaction.Active {
+func (m *dataTransferMW) processWriteDone(port messaging.Port) bool {
+	rsp, present := port.PeekIncoming()
+	_, ok := rsp.Payload.(memprotocol.WriteDoneRsp)
+	if !present || !ok {
 		return false
 	}
-
-	dstP := m.dstPort()
-	rspI, ok := dstP.PeekIncoming()
-	if !ok {
-		return false
+	port.RetrieveIncoming()
+	for i := range m.comp.State.Transactions {
+		trans := &m.comp.State.Transactions[i]
+		taskID, ok := trans.PendingWrite[rsp.RspTo]
+		if !ok {
+			continue
+		}
+		delete(trans.PendingWrite, rsp.RspTo)
+		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
+			TaskID: trans.RecvTaskID, Kind: tasks.MilestoneKindSubTask, What: port.Name(),
+		})
+		m.comp.TaskTracker().EndReqOut(taskID)
+		break
 	}
-	_, ok = rspI.Payload.(memprotocol.WriteDoneRsp)
-	rsp := rspI
-	if !ok {
-		return false
-	}
-
-	trans := &state.CurrentTransaction
-	originalReq, ok := trans.PendingWrite[rsp.RspTo]
-	if !ok {
-		// Orphaned ack: its write was discarded by a Reset issued while it was
-		// in flight. Drop it rather than crash the current transaction.
-		dstP.RetrieveIncoming()
-		return true
-	}
-
-	delete(trans.PendingWrite, rsp.RspTo)
-	dstP.RetrieveIncoming()
-
-	// Charge the in-flight dst-write wait to the req_in opened for this move
-	// transaction (the stored receive ID also parents the write req_out), so the dominant latency of a move is attributed.
-	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
-		TaskID: trans.RecvTaskID,
-		Kind:   tasks.MilestoneKindSubTask,
-		What:   m.dstPort().Name(),
-	})
-
-	m.comp.TaskTracker().EndReqOut(originalReq.TaskID)
-
-	// Processing a write ack is real progress: the component must tick again
-	// so the remaining acks drain and the transaction can finish (which now
-	// waits for every write to be acknowledged).
 	return true
 }

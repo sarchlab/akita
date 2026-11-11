@@ -45,7 +45,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 	if state.ControlState != controlStateDraining {
 		return false
 	}
-	if state.CurrentTransaction.Active {
+	if len(state.Transactions) > 0 {
 		return false
 	}
 
@@ -127,11 +127,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 
 	state := &m.comp.State
 	m.endInflightTasks()
-	state.CurrentTransaction = dataMoverTransactionState{
-		PendingRead:  map[uint64]pendingReadState{},
-		PendingWrite: map[uint64]pendingWriteState{},
-	}
-	state.Buffer = bufferState{}
+	state.Transactions = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled
@@ -158,24 +154,17 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	return true
 }
 
-// endInflightTasks completes the req_in tracing task of the in-flight move (when
-// one is active) and finalizes the req_out task of every outstanding downstream
-// read and write, so a hard Reset that wipes the transaction leaves no
-// started-never-ended task. Each pending entry stores its req_out task ID.
-// Mirrors ctrlParseMW (req_in) and dataTransferMW (req_out) completion.
+// Close tracing tasks for all copies and their outstanding memory requests.
 func (m *ctrlMiddleware) endInflightTasks() {
-	trans := &m.comp.State.CurrentTransaction
-
-	if trans.Active {
+	for i := range m.comp.State.Transactions {
+		trans := &m.comp.State.Transactions[i]
+		for _, req := range trans.PendingRead {
+			m.comp.TaskTracker().EndReqOut(req.TaskID)
+		}
+		for _, taskID := range trans.PendingWrite {
+			m.comp.TaskTracker().EndReqOut(taskID)
+		}
 		m.comp.TaskTracker().EndReqIn(trans.RecvTaskID)
-	}
-
-	for _, req := range trans.PendingRead {
-		m.comp.TaskTracker().EndReqOut(req.TaskID)
-	}
-
-	for _, req := range trans.PendingWrite {
-		m.comp.TaskTracker().EndReqOut(req.TaskID)
 	}
 }
 

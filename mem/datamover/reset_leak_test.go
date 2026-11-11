@@ -13,14 +13,13 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
-// TestResetEndsInflightTracingTasks drives a move into flight (req_in open, the
-// outstanding Outside-read req_out open), then issues a control Reset and asserts
-// the Reset cleanup (ctrlMiddleware.endInflightTasks) ends every started task,
-// leaving no started-never-ended tracing leak.
+// TestResetEndsInflightTracingTasks checks that Reset closes the tracing tasks
+// for two concurrent moves and their outstanding Outside reads.
 func TestResetEndsInflightTracingTasks(t *testing.T) {
 	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
 
 	spec := DefaultSpec()
+	spec.MaxTransactions = 2
 	spec.BufferSize = 2048
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
@@ -100,13 +99,14 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	if !gotRead {
 		t.Fatal("expected an Outside read to be issued")
 	}
-	if !dataMover.State.CurrentTransaction.Active {
+	_, gotRead = startMove()
+	if !gotRead || len(dataMover.State.Transactions) != 2 {
 		t.Fatal("expected the move to be active in flight")
 	}
 
 	// Guard against a vacuous test: the req_in and the read req_out must be open.
-	if rec.NumStarted() < 2 {
-		t.Fatalf("expected at least 2 tasks opened, got %d", rec.NumStarted())
+	if rec.NumStarted() < 4 {
+		t.Fatalf("expected at least 4 tasks opened, got %d", rec.NumStarted())
 	}
 
 	reset := makeCtrlReq(memcontrolprotocol.CmdReset)
