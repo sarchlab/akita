@@ -78,7 +78,8 @@ func (m *middlewares) Initialize(c *Comp) {
 		panic("dram: Resources.Storage is required")
 	}
 
-	// Arm the initial timer only after both the timing and storage checks pass.
+	// State.Initialize has already built the bank state. Arm its refresh timer
+	// once both the timing and storage checks have passed.
 	startRefreshTimer(c)
 	*m = middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},

@@ -309,10 +309,9 @@ implementations; the old names are removed.
 - `ticking.TickEvent` → `ticking.Event`.
 - `ticking.MakeTickEvent(id, handlerID, time)` →
   `ticking.MakeEvent(id, time, handlerID)`, matching `timing.MakeEventBase`.
-- `modeling.Scheduler` → `modeling.PendingEventGuard`. It records the times of
-  the component's own pending ticks or wakeups, so restore does not schedule a
-  duplicate; see [Ticks at a later time](#ticks-at-a-later-time-585) for its
-  current `Snapshot` and `Restore` signatures.
+- `modeling.Scheduler` → `modeling.PendingEventGuard`. Custom foreground-only
+  schedulers implement `Snapshot() []timing.VTimeInPicoSec` and
+  `Restore(pending []timing.VTimeInPicoSec)` to checkpoint pending event times.
 - Writeback's internal `pipelineMW.GetSpec()` → `Spec()`.
 - Concrete `*vm.PageTable` exposes `Log2PageSize()` instead of
   `GetLog2PageSize()`; both MMU and GMMU validate it.
