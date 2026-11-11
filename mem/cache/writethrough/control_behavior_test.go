@@ -1,6 +1,7 @@
 package writethrough
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
@@ -39,6 +40,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		ctrlPort   messaging.Port
 	)
 
+	dirLatency := 1
 	build := func() {
 		spec := DefaultSpec()
 		spec.NumReqPerCycle = 1
@@ -50,7 +52,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		spec.NumWays = 2
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
-		spec.DirLatency = 1
+		spec.DirLatency = dirLatency
 		spec.NumSets = 512
 		spec.MaxInFlightRequests = 16
 
@@ -170,6 +172,83 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		storage = mem.NewStorage(4 * mem.GB)
 		build()
 	}
+
+	t.Run("running maintenance uses configured directory latency and width", func(t *testing.T) {
+		t.Cleanup(func() { dirLatency = 1 })
+		ticksToACK := func(latency, lines int) int {
+			dirLatency = latency
+			setup1(t)
+			addrs := make([]uint64, lines)
+			for i := range addrs {
+				addrs[i] = uint64(i) * blockSize
+			}
+			req := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
+			req.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: addrs}
+			ctrlPort.Deliver(req)
+			for i := 1; i < 100; i++ {
+				modelingtest.Tick(comp)
+				if ack, ok := ctrlPort.RetrieveOutgoing(); ok {
+					require.Equal(t, req.ID, ack.RspTo)
+					return i
+				}
+			}
+			t.Fatal("timed out waiting for Invalidate ACK")
+			return 0
+		}
+		fast := ticksToACK(1, 1)
+		slow := ticksToACK(5, 1)
+		require.GreaterOrEqual(t, slow-fast, 4)
+		require.Greater(t, ticksToACK(1, 17), fast)
+	})
+
+	t.Run("running invalidate orders a pending fill and a later same-line read", func(t *testing.T) {
+		setup1(t)
+		const addr = uint64(0x1000)
+		older := makeRead(addr)
+		topPort.Deliver(older)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		fetch, ok := bottomPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, addr, fetch.Payload.(memprotocol.ReadReq).Address)
+		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
+		inv.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: []uint64{addr + 4, addr}}
+		ctrlPort.Deliver(inv)
+		later := makeRead(addr)
+		topPort.Deliver(later)
+		topPort.Deliver(makeRead(addr + 64))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		unrelated, ok := bottomPort.RetrieveOutgoing()
+		require.True(t, ok, "unrelated miss behind the later read must issue while the target is held")
+		require.Equal(t, addr+64, unrelated.Payload.(memprotocol.ReadReq).Address)
+		_, ok = ctrlPort.PeekOutgoing()
+		require.False(t, ok, "invalidate overtook the original fill")
+		require.Len(t, comp.State.Maintenance.Deferred, 1)
+		var saved bytes.Buffer
+		require.NoError(t, comp.SaveCheckpoint(&saved))
+		comp.State.Maintenance.Deferred = nil
+		comp.State.Maintenance.ID = 0
+		require.NoError(t, comp.LoadCheckpoint(&saved))
+		bottomPort.Deliver(makeFill(fetch))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		reply, ok := topPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, older.ID, reply.RspTo)
+		ack, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, inv.ID, ack.RspTo)
+		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
+		refetch, ok := bottomPort.RetrieveOutgoing()
+		require.True(t, ok, "later read must miss after invalidation")
+		require.Equal(t, addr, refetch.Payload.(memprotocol.ReadReq).Address)
+		_, ok = topPort.PeekOutgoing()
+		require.False(t, ok, "later read consumed stale data")
+	})
 
 	t.Run("drains all in-flight read misses before acking Drain", func(t *testing.T) {
 		setup1(t)
@@ -566,7 +645,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		require.Equal(t, addr/blockSize*blockSize, block.Tag)
 	})
 
-	t.Run("rejects Invalidate issued while Enabled", func(t *testing.T) {
+	t.Run("rejects unfiltered Invalidate issued while Enabled", func(t *testing.T) {
 		setup1(t)
 
 		setID, wayID := seedBlock(0, vm.PID(1))
@@ -576,9 +655,6 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		require.False(t, comp.State.IsDraining)
 
 		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
-		payload3 := inv.Payload.(memcontrolprotocol.Req)
-		payload3.Addresses = []uint64{0}
-		inv.Payload = payload3
 
 		rsp, found := driveCtrl(inv)
 

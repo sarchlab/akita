@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -87,6 +88,7 @@ type middlewares struct {
 
 // state contains mutable runtime data for the writeback cache.
 type state struct {
+	Maintenance    maintenance.State    `json:"maintenance"`
 	CacheState     int                  `json:"cache_state"`
 	CurrentCmdID   uint64               `json:"current_cmd_id"`
 	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
@@ -236,9 +238,11 @@ const (
 // transactionState is the canonical runtime transaction type.
 // All fields are flat and directly JSON-serializable.
 type transactionState struct {
-	RecvTaskID     uint64 `json:"recv_task_id"`
-	FetchTaskID    uint64 `json:"fetch_task_id"`
-	EvictionTaskID uint64 `json:"eviction_task_id"`
+	MaintenanceLookup bool   `json:"maintenance_lookup"`
+	LookupAddress     uint64 `json:"lookup_address"`
+	RecvTaskID        uint64 `json:"recv_task_id"`
+	FetchTaskID       uint64 `json:"fetch_task_id"`
+	EvictionTaskID    uint64 `json:"eviction_task_id"`
 
 	Action action `json:"action"`
 
@@ -260,8 +264,7 @@ type transactionState struct {
 	WritePID       vm.PID        `json:"write_pid"`
 
 	// Flush request fields (flat)
-	HasFlush  bool          `json:"has_flush"`
-	FlushMeta messaging.Msg `json:"flush_meta"`
+	HasFlush bool `json:"has_flush"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

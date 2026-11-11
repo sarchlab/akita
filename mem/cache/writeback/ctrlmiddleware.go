@@ -31,6 +31,12 @@ func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	// driven by the separate flusher middleware, which gates its own intake the
 	// same way.
 	next := &m.pipeline.comp.State
+	if next.Maintenance.Command != 0 {
+		return m.advanceMaintenance()
+	}
+	if len(next.Maintenance.Deferred) > 0 {
+		return false
+	}
 	if cacheState(next.CacheState) != cacheStateDraining &&
 		!next.HasProcessingFlush {
 		madeProgress = m.handleIncoming() || madeProgress
@@ -92,13 +98,13 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	if !ok {
 		return false
 	}
-	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	command, ok := msg.Payload.(memcontrolprotocol.Req)
 	req := msg
 	if !ok {
 		return false
 	}
 
-	switch req.Payload.(memcontrolprotocol.Req).Command {
+	switch command.Command {
 	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
@@ -108,7 +114,10 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	case memcontrolprotocol.CmdFlush:
-		// Owned by flusher; leave in queue.
+		if cacheState(m.pipeline.comp.State.CacheState) == cacheStateRunning && len(command.Addresses) > 0 {
+			return m.startMaintenance(req)
+		}
+		// Paused flushes are owned by the flusher.
 		return false
 	case memcontrolprotocol.CmdInvalidate:
 		return m.handleInvalidate(req)
@@ -122,13 +131,15 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 // PIDs) WITHOUT writeback: matched blocks are marked invalid even if
 // dirty. Per the resolved protocol decision, Invalidate discards dirty
 // data silently; a caller that wants to keep it must Flush first.
-// Invalidate is acknowledged synchronously but is only legal once the
-// cache is paused (or drained, which lands in paused); issued while
-// Running it is rejected with ErrMustBePausedOrDrained.
+// A running cache schedules address-filtered maintenance through the directory.
+// A paused cache applies its filter synchronously.
 func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 	request := req.Payload.(memcontrolprotocol.Req)
 
 	next := &m.pipeline.comp.State
+	if cacheState(next.CacheState) == cacheStateRunning && len(request.Addresses) > 0 {
+		return m.startMaintenance(req)
+	}
 	if cacheState(next.CacheState) != cacheStatePaused {
 		return m.rejectMustBePaused(req)
 	}

@@ -29,14 +29,15 @@ Four are **universal** (every agent supports them); two are
 | Drain      | universal   | async |
 | Enable     | universal   | sync  |
 | Reset      | universal   | sync  |
-| Invalidate | conditional | sync  |
+| Invalidate | conditional | async in running data caches, otherwise sync |
 | Flush      | conditional | async |
 
 A **sync** verb is acked in the same tick it is received; an **async**
 verb (Drain, Flush) is acked when the underlying work completes.
 
-Invalidate and Flush are only legal once the component is paused or
-drained. Issued while enabled, they are rejected with
+Running data caches accept Invalidate with a nonempty address filter. Running
+writeback caches also accept filtered Flush. Other supported Invalidate and
+Flush operations require Pause or Drain. When issued while enabled they return
 `Success: false, Error: ErrMustBePausedOrDrained`. Unsupported verbs
 reply with `Success: false, Error: ErrUnsupported`. A Reset answers the
 Holds that are not acknowledged yet with

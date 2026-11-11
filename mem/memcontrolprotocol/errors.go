@@ -6,8 +6,7 @@ const (
 	ErrUnsupported = "unsupported"
 
 	// ErrMustBePausedOrDrained means Invalidate or Flush was issued
-	// while the component was Enabled. The caller must Pause or Drain
-	// first.
+	// while enabled and the requested operation requires Pause or Drain.
 	ErrMustBePausedOrDrained = "must be paused or drained"
 
 	// ErrCanceledByReset answers a Hold that was not acknowledged yet when

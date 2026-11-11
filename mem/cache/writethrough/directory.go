@@ -2,6 +2,7 @@ package writethrough
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 
@@ -80,7 +81,13 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 		})
 
 		var processed bool
-		if trans.HasRead {
+		if trans.MaintenanceLookup {
+			next.Maintenance.VisitLine(&next.DirectoryState, spec.blockSize(), trans.LookupAddress, maintenance.Invalidate)
+			next.Maintenance.LookupsInFlight--
+			trans.Removed = true
+			dirPostBuf.Pop()
+			processed = true
+		} else if trans.HasRead {
 			processed = d.processRead(trans, transIdx)
 		} else {
 			processed = d.processWrite(trans, transIdx)

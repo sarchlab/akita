@@ -25,8 +25,9 @@ TopPort ──► TopParser ──► DirectoryStage ──► BankStage ──�
 
 The cache's behavior is three middlewares, run in this order every cycle:
 
-- `Ctrl` handles the control commands other than Flush received on the
-  `Control` port: Pause, Drain, Enable, Reset, and Invalidate.
+- `Ctrl` handles Pause, Drain, Enable, Reset, Invalidate, and address-filtered
+  Flush while running. Running maintenance shares the directory pipeline and
+  orders matching accesses across the ACK.
 - `Flusher` handles Flush: once the cache is paused, it writes the dirty blocks
   that match the request's address/PID filter back to lower memory and marks
   them clean.

@@ -21,8 +21,8 @@ below describe the implemented state.
   value, not pointers — handlers type-assert `msg.Payload.(memcontrolprotocol.Req)`).
 - The request's `Command` field is one of eight verbs.
 - The component runs the verb and replies on the same port.
-- Whether the reply is same-tick (sync) or whenever-the-work-finishes
-  (async) is fixed by the verb, not the component.
+- Running caches process address-filtered maintenance asynchronously. Paused
+  caches acknowledge Invalidate synchronously.
 - A component that does not implement a verb still replies, with
   `Success: false, Error: "unsupported"`.
 
@@ -39,8 +39,8 @@ that translate accesses (address translators).
 | **Drain**      | ✓          | Stop accepting new traffic; let in-flight transactions finish; end in the paused state.                                                  | Async      |
 | **Enable**     | ✓          | Resume processing from paused.                                                                                                          | Sync       |
 | **Reset**      | ✓          | Hard reset to post-build state: drop in-flight, clear queues, clear private caches, drain Top/Bottom queues. Legal from any state.       | Sync       |
-| **Invalidate** | conditional | Drop entries from private cache state without writeback. Component must be paused or drained first. Filterable by `Addresses` and `PID`. | Sync       |
-| **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. Component must be paused or drained first.                   | Async      |
+| **Invalidate** | conditional | Drop entries from private cache state without writeback. Running data caches require a nonempty address filter. Other agents require Pause or Drain. | Async while running, otherwise sync       |
+| **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. A running writeback cache accepts a nonempty address filter.                   | Async      |
 | **Hold**       | conditional | Make the accesses to the pages in `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state, also during a Drain; does not block later verbs. | Async      |
 | **Release**    | conditional | Send the accesses that wait on the pages in `Addresses` for translation again, in arrival order. Legal in any state, also during a Drain. | Sync       |
 
@@ -87,16 +87,14 @@ The primitives compose. The protocol stays small.
    implement a verb sends `Rsp{Command: <verb>, Success:
    false, Error: memcontrolprotocol.ErrUnsupported}`. It never panics on a
    well-formed verb.
-4. **Illegal-state verbs reply with a reason.** Invalidate and Flush
-   require the component to be in a paused state after Pause or completed Drain.
-   Issuing them while enabled returns `Success: false,
+4. **Illegal-state verbs reply with a reason.** A running writeback cache accepts address-filtered Invalidate and Flush, and a running writethrough cache accepts address-filtered Invalidate. Other supported Invalidate and Flush requests require Pause or completed Drain. Issuing those while enabled returns `Success: false,
    Error: memcontrolprotocol.ErrMustBePausedOrDrained`.
 5. **Control commands are processed serially.** A component handles one
    control command at a time, to completion, before it dequeues the next.
    While an async verb (Drain or Flush) is in progress the component does
    **not** accept another control command — the next command stays queued
    on the `Control` port and is taken only once the component settles
-   (the async verb acks and the state becomes paused), so each
+   (the async verb acks), so each
    command is always handled from a clean, fully-settled state. There is
    no priority or preemption: a Reset queued behind an in-flight Drain
    waits for the Drain to finish and ack, then runs. Hold and Release are
@@ -188,7 +186,7 @@ cache's Reset.
 `Flush` on the writethrough cache is a *supported* verb (the matrix
 declares it via `CacheLike()`), but it is a no-op because writethrough
 holds no dirty data: it acks `Success: true` immediately. Callers can
-therefore issue Flush uniformly across cache types without branching.
+therefore issue Flush uniformly across paused cache types.
 
 ## Per-component behavior
 
@@ -212,7 +210,7 @@ here and only the component-specific details are repeated below:
   condition.
 
 Unsupported verbs reply `Success: false, Error: "unsupported"`.
-Invalidate and Flush issued while running reply `Success: false,
+Invalidate and Flush outside the supported states reply `Success: false,
 Error: "must be paused or drained"`.
 
 ### Memory controllers
@@ -301,6 +299,16 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 
 ### Caches
 
+While running, both data caches accept Invalidate with a nonempty address list.
+The writeback cache also accepts address-filtered Flush. The cache aligns and
+deduplicates addresses and sends a lookup for each distinct line through the
+directory pipeline. PID zero matches all address spaces. Older matching reads
+and stores finish first. Later matching accesses wait until the control ACK can
+be sent. Other lines continue through the shared queues and pipeline. The
+writeback cache also waits for lower-memory ACKs for matching evictions, even
+when the victim has already left the directory. To preserve data when removing
+a line, issue Flush, wait for its ACK, then issue Invalidate.
+
 **`cache/writeback`** — `CacheLike`; state in `State.CacheState` (an int
 holding `cacheState`: running / paused / draining / pre-flushing /
 flushing).
@@ -322,7 +330,7 @@ and `State.IsDraining`.
 - Reset resets the directory and MSHR and clears transactions and
   buffers.
 - Invalidate drops matching blocks (always clean; no writeback).
-- Flush is a no-op that acks `Success` immediately (no dirty data).
+- Flush is a no-op while paused and acks `Success` immediately (no dirty data).
 
 ### Others
 

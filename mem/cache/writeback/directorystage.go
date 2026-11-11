@@ -54,6 +54,12 @@ func (ds *directoryStage) processTransaction() bool {
 			What:   ds.cache.comp.Name() + ".dir_pipeline",
 		})
 
+		if trans.MaintenanceLookup {
+			ds.processMaintenanceLookup(trans)
+			madeProgress = true
+			continue
+		}
+
 		addr := trans.accessReqAddress()
 		cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 

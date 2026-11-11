@@ -21,6 +21,14 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
+	if next.Maintenance.Resume(&next.DirBuf) {
+		return true
+	}
+	return next.Maintenance.Admit(s.acceptTop, s.issueMaintenanceLookup)
+}
+
+func (s *intake) acceptTop() bool {
+	next := &s.cache.comp.State
 	msg, ok := s.cache.topPort().PeekIncoming()
 	if !ok {
 		return false
@@ -45,7 +53,9 @@ func (s *intake) Tick() bool {
 	}
 
 	dirBuf := &next.DirBuf
-	if !dirBuf.CanPush() {
+	blocked := next.Maintenance.Blocks(msg, s.cache.comp.Spec.Log2BlockSize)
+	if blocked && len(next.Maintenance.Deferred) >= s.cache.comp.Spec.NumReqPerCycle ||
+		!blocked && !dirBuf.CanPush() {
 		return false
 	}
 
@@ -56,7 +66,11 @@ func (s *intake) Tick() bool {
 
 	transIdx := s.createTransaction(msg)
 
-	dirBuf.Push(transIdx)
+	if blocked {
+		next.Maintenance.Deferred = append(next.Maintenance.Deferred, transIdx)
+	} else {
+		dirBuf.Push(transIdx)
+	}
 
 	s.cache.topPort().RetrieveIncoming()
 	next.AdmissionMsgID = 0

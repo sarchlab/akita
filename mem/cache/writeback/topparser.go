@@ -16,12 +16,23 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
+	if next.Maintenance.Resume(&next.DirStageBuf) {
+		return true
+	}
+
+	return next.Maintenance.Admit(p.acceptTop, p.issueMaintenanceLookup)
+}
+
+func (p *topParser) acceptTop() bool {
+	next := &p.cache.comp.State
 	msg, ok := p.cache.topPort().PeekIncoming()
 	if !ok {
 		return false
 	}
 
-	if !next.DirStageBuf.CanPush() {
+	blocked := next.Maintenance.Blocks(msg, p.cache.comp.Spec.Log2BlockSize)
+	if blocked && len(next.Maintenance.Deferred) >= p.cache.comp.Spec.NumReqPerCycle ||
+		!blocked && !next.DirStageBuf.CanPush() {
 		return false
 	}
 
@@ -48,7 +59,11 @@ func (p *topParser) Tick() bool {
 	}
 
 	idx := next.allocTransaction(trans)
-	next.DirStageBuf.Push(idx)
+	if blocked {
+		next.Maintenance.Deferred = append(next.Maintenance.Deferred, idx)
+	} else {
+		next.DirStageBuf.Push(idx)
+	}
 
 	// Admission milestone on the incoming-buffer task: the message left the Top
 	// buffer because the directory stage buffer had room. The buffer task is
