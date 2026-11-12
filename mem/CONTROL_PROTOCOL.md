@@ -292,8 +292,10 @@ Error: "must be paused or drained"`.
 - Reset clears them and the held pages, and drains the
   Top/Bottom/Translation ports. The Holds that are not acknowledged yet
   are canceled: after the Reset ack, each is answered with `Success:
-  false, Error: memcontrolprotocol.ErrCanceledByReset`, in arrival order
-  and before the ack of a Hold that arrives after the Reset.
+  false, Error: memcontrolprotocol.ErrCanceledByReset`, in arrival order.
+  These answers precede the successful ack of a valid Hold that arrives
+  after the Reset. A Hold or a Release whose addressing is not valid is
+  still answered at once (see below), so its failure can precede them.
 - Hold marks the pages held. A new access to a held page waits in the
   held list without being translated; an access whose translation
   arrives after the Hold waits too. The held list uses no transaction

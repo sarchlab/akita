@@ -154,6 +154,7 @@ func TestHoldWaitsForEveryEarlierPendingHoldOfItsPages(t *testing.T) {
 		h.tick()
 		h.noAck("Hold E waits for Hold C")
 		require.Equal(t, []uint64{holdA, holdB, holdC, holdE}, h.pendingHoldIDs())
+		slots := h.at.State.PendingHolds
 
 		// The translation returns and its access is held: Hold A is ready,
 		// and the Holds behind it follow in arrival order, as far as the
@@ -169,6 +170,8 @@ func TestHoldWaitsForEveryEarlierPendingHoldOfItsPages(t *testing.T) {
 		}
 		require.Equal(t, []uint64{holdA, holdB, holdC, holdE}, acked)
 		require.Empty(t, h.at.State.PendingHolds)
+		require.Equal(t, make([]pendingHoldState, 4), slots,
+			"the state does not keep the page lists of the answered Holds")
 	}
 }
 

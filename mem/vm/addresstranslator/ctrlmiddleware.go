@@ -291,6 +291,10 @@ func (m *ctrlMiddleware) completePendingHolds() bool {
 			hold.Src, hold.ID, !hold.Canceled, errStr))
 		madeProgress = true
 	}
+
+	// The slots after the Holds that stay pending are cleared, so that they
+	// do not keep the page lists of the answered Holds.
+	clear(state.PendingHolds[len(waiting):])
 	state.PendingHolds = waiting
 
 	return madeProgress
