@@ -27,7 +27,9 @@ The cache's behavior is three middlewares, run in this order every cycle:
 
 - `Ctrl` handles Pause, Drain, Enable, Reset, Invalidate, and address-filtered
   Flush while running. Running maintenance shares the directory pipeline and
-  orders matching accesses across the ACK.
+  orders matching accesses across the ACK. An address filter is a byte range
+  or a list of addresses; a range larger than the number of sets is handled
+  with one lookup per set.
 - `Flusher` handles Flush: once the cache is paused, it writes the dirty blocks
   that match the request's address/PID filter back to lower memory and marks
   them clean.

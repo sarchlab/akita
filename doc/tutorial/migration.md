@@ -509,10 +509,17 @@ const (
     CmdFlush               // Write back matching dirty lines and keep them valid
 )
 
+type AddressRange struct {
+    Start uint64 // First byte
+    End   uint64 // One past the last byte; greater than Start
+}
+
 type Req struct {
     Command   Command
-    Addresses []uint64 // Invalidate/Flush filter; empty = all entries
-    PID       vm.PID   // Filter; zero = all PIDs
+    Addresses []uint64     // Deprecated address filter; empty = all entries
+    PID       vm.PID       // Filter; zero = all PIDs
+    HasRange  bool         // Range is the address filter
+    Range     AddressRange // Every line or page that [Start, End) intersects
 }
 
 type Rsp struct {
@@ -594,9 +601,11 @@ func handleControlRsp(msg messaging.Msg) {
 - Put `memcontrolprotocol.Req{Command: ...}` in `messaging.Msg.Payload`; put routing fields on the outer message.
 - Replace `FlushReq` with `CmdFlush`, `DrainReq` with `CmdDrain`, and `RestartReq` with `CmdEnable` or `CmdReset`, as appropriate.
 - Handle `msg.Payload.(memcontrolprotocol.Rsp)` and match `msg.RspTo` to the original message ID.
-- Running writeback and writethrough caches accept `CmdInvalidate` with a nonempty address list. A running writeback cache also accepts address-filtered `CmdFlush`. Pause or drain before broader cache maintenance or a writethrough Flush.
+- Running writeback and writethrough caches accept `CmdInvalidate` with a range or a nonempty address list. A running writeback cache also accepts address-filtered `CmdFlush`. Pause or drain before broader cache maintenance or a writethrough Flush.
 - For a writeback cache, send Flush and wait for its ACK before issuing Invalidate if dirty data must survive. The running cache waits for older matching accesses and lower write acknowledgments before completing Flush. New matching accesses resume after the ACK.
-- Use `Addresses` and `PID` for filtered flush/invalidation; the earlier `DiscardInflight`, `InvalidateAfter`, and `PauseAfter` flags are not part of V5.
+- Use `HasRange` with `Range`, and `PID`, for filtered flush/invalidation; the earlier `DiscardInflight`, `InvalidateAfter`, and `PauseAfter` flags are not part of V5.
+- `Range` is the half-open byte interval `[Start, End)` and selects every cache line or page that it intersects; its endpoints need no alignment. Set `HasRange` whenever you set `Range`: an empty or reversed range, a `Range` without `HasRange`, and a range together with a nonempty `Addresses` are rejected with `ErrInvalidRange` or `ErrAmbiguousAddressing`.
+- `Addresses` keeps its V5 meaning, including an empty list for every entry, but is deprecated: V6 will address by range only. Replace an address list with one request per contiguous range.
 
 ---
 

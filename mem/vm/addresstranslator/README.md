@@ -39,7 +39,9 @@ Page migration stops and restarts the accesses of a translator with
 control verbs on the `Control` port (see `mem/CONTROL_PROTOCOL.md`); all of
 the related data is in `State`:
 
-- **Hold** (`Addresses`, `PID`) marks pages held. A new access to a held
+- **Hold** (`Range` or `Addresses`, `PID`) marks pages held. A range holds
+  every page that it intersects and is kept as an interval in
+  `State.HeldRanges`, not as a list of pages. A new access to a held
   page waits in the held list (`State.HeldReqs`) without being translated,
   and an access whose translation arrives after the Hold waits too. The
   held list uses no transaction slot, so accesses to other pages keep
@@ -50,7 +52,9 @@ the related data is in `State`:
 - **Fault**: an `addrtransprotocol.Rsp` with `Fault` set is not used. The
   access waits in the held list and its page is marked faulted, so the
   later accesses to it wait too, without being translated.
-- **Release** (`Addresses`, `PID`) clears held and faulted pages. Their
+- **Release** (`Range` or `Addresses`, `PID`) clears held and faulted pages,
+  however they were held: a Release of part of a held range leaves its other
+  pages held. Their
   waiting accesses move to `State.ReplayReqs` and are sent for translation
   again, in arrival order, before new accesses from `Top`. A fault response
   that is still on its way when the Release arrives faults the page again,

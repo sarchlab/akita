@@ -147,6 +147,9 @@ func (m *ctrlMiddleware) performCtrlPause(msg messaging.Msg) bool {
 // mmuCache is paused or drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 	request := msg.Payload.(memcontrolprotocol.Req)
+	if errStr := request.AddressingError(); errStr != "" {
+		return m.reject(msg, errStr)
+	}
 
 	state := &m.comp.State
 	// Invalidate is only legal once the cache is fully paused; while it is
@@ -159,7 +162,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec, request.Addresses, request.PID)
+	invalidateEntries(state, m.comp.Spec, request)
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
@@ -171,11 +174,16 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
 func (m *ctrlMiddleware) rejectMustBePaused(msg messaging.Msg) bool {
+	return m.reject(msg, memcontrolprotocol.ErrMustBePausedOrDrained)
+}
+
+// reject answers the command with a failure.
+func (m *ctrlMiddleware) reject(msg messaging.Msg, errStr string) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
 	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Payload.(memcontrolprotocol.Req).Command,
-		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
+		msg.Src, msg.ID, false, errStr))
 	m.controlPort().RetrieveIncoming()
 	return true
 }
@@ -184,27 +192,62 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg messaging.Msg) bool {
 // filter. The mmuCache stores per-level VPN segments rather than full
 // virtual addresses, so an address filter is resolved by deriving each
 // address's segment at every level and dropping the block that caches it
-// (mirroring how lookups and refills derive segments). An empty address
-// list drops every segment; a zero PID matches every PID.
-func invalidateEntries(
-	state *state,
-	spec Spec,
-	addresses []uint64,
-	pid vm.PID,
-) {
-	if len(addresses) == 0 {
-		invalidateAllSegments(state, pid)
+// (mirroring how lookups and refills derive segments). A range drops, at
+// every level, the segments of the pages that it intersects. A request with
+// neither drops every segment; a zero PID matches every PID.
+func invalidateEntries(state *state, spec Spec, req memcontrolprotocol.Req) {
+	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
+	mask := uint64(1)<<levelWidth - 1
+
+	if req.HasRange {
+		first, last := req.Range.Bounds(spec.Log2PageSize)
+		for level := range state.Table {
+			invalidateSegmentRange(&state.Table[level], req.PID,
+				first>>spec.Log2PageSize>>(uint64(level)*levelWidth),
+				last>>spec.Log2PageSize>>(uint64(level)*levelWidth), mask)
+		}
 		return
 	}
 
-	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
-	for _, addr := range addresses {
+	if len(req.Addresses) == 0 {
+		invalidateAllSegments(state, req.PID)
+		return
+	}
+
+	for _, addr := range req.Addresses {
 		vpn := addr >> spec.Log2PageSize
 		for level := range state.Table {
-			seg := (vpn >> (uint64(level) * levelWidth)) &
-				((1 << levelWidth) - 1)
-			invalidateSegment(&state.Table[level], pid, seg)
+			seg := (vpn >> (uint64(level) * levelWidth)) & mask
+			invalidateSegment(&state.Table[level], req.PID, seg)
 		}
+	}
+}
+
+// invalidateSegmentRange drops the live blocks of set whose segment is the
+// level's segment of a page number prefix from lo to hi, both inclusive. The
+// segments of consecutive prefixes wrap around, so the matching segments are
+// a cyclic interval, or all of them when the prefixes span a full cycle. The
+// work is bounded by the size of the set, not by the size of the range.
+func invalidateSegmentRange(set *setState, pid vm.PID, lo, hi, mask uint64) {
+	all := hi-lo >= mask
+	a, b := lo&mask, hi&mask
+
+	for wi := range set.Blocks {
+		block := set.Blocks[wi]
+		inRange := block.Seg >= a && block.Seg <= b
+		if a > b {
+			inRange = block.Seg >= a || block.Seg <= b
+		}
+		if !all && !inRange {
+			continue
+		}
+		if pid != 0 && vm.PID(block.PID) != pid {
+			continue
+		}
+		if _, found := setLookup(set, vm.PID(block.PID), block.Seg); !found {
+			continue
+		}
+		setRemove(set, vm.PID(block.PID), block.Seg)
 	}
 }
 

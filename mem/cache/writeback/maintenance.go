@@ -11,7 +11,7 @@ import (
 
 func (m *ctrlMiddleware) startMaintenance(msg messaging.Msg) bool {
 	c := m.pipeline.comp
-	c.State.Maintenance.Start(msg, c.Spec.Log2BlockSize, c.TaskTracker().StartReqIn(c, msg))
+	c.State.Maintenance.Start(msg, c.Spec.Log2BlockSize, c.Spec.NumSets, c.TaskTracker().StartReqIn(c, msg))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }

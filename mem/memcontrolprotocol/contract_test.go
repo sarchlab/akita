@@ -97,6 +97,16 @@ func (c *fakeComp) handleReq(port messaging.Port, req messaging.Msg) {
 		return
 	}
 
+	// The address-consuming verbs check their addressing first.
+	switch request.Command {
+	case memcontrolprotocol.CmdInvalidate, memcontrolprotocol.CmdFlush,
+		memcontrolprotocol.CmdHold, memcontrolprotocol.CmdRelease:
+		if errStr := request.AddressingError(); errStr != "" {
+			c.respond(port, req, false, errStr)
+			return
+		}
+	}
+
 	// Conditional verbs are only legal while paused or drained.
 	if (request.Command == memcontrolprotocol.CmdInvalidate || request.Command == memcontrolprotocol.CmdFlush) &&
 		!c.paused {

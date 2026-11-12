@@ -39,10 +39,10 @@ that translate accesses (address translators).
 | **Drain**      | ✓          | Stop accepting new traffic; let in-flight transactions finish; end in the paused state.                                                  | Async      |
 | **Enable**     | ✓          | Resume processing from paused.                                                                                                          | Sync       |
 | **Reset**      | ✓          | Hard reset to post-build state: drop in-flight, clear queues, clear private caches, drain Top/Bottom queues. Legal from any state.       | Sync       |
-| **Invalidate** | conditional | Drop entries from private cache state without writeback. Running data caches require a nonempty address filter. Other agents require Pause or Drain. | Async while running, otherwise sync       |
-| **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. A running writeback cache accepts a nonempty address filter.                   | Async      |
-| **Hold**       | conditional | Make the accesses to the pages in `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state, also during a Drain; does not block later verbs. | Async      |
-| **Release**    | conditional | Send the accesses that wait on the pages in `Addresses` for translation again, in arrival order. Legal in any state, also during a Drain. | Sync       |
+| **Invalidate** | conditional | Drop entries from private cache state without writeback. Running data caches require an address filter (`Range` or nonempty `Addresses`). Other agents require Pause or Drain. | Async while running, otherwise sync       |
+| **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. A running writeback cache accepts an address filter.                   | Async      |
+| **Hold**       | conditional | Make the accesses to the pages of `Range` or `Addresses` (of `PID`) wait; other pages are not affected. Legal in any state, also during a Drain; does not block later verbs. | Async      |
+| **Release**    | conditional | Send the accesses that wait on the pages of `Range` or `Addresses` for translation again, in arrival order. Legal in any state, also during a Drain. | Sync       |
 
 ### Sync vs async, more precisely
 
@@ -126,24 +126,65 @@ const (
     CmdRelease
 )
 
+type AddressRange struct {
+    Start uint64 // First byte.
+    End   uint64 // One past the last byte; greater than Start.
+}
+
 type Req struct {
     Command   Command
-    Addresses []uint64 // Invalidate / Flush filter (empty = all entries); Hold / Release pages.
-    PID       vm.PID   // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
+    Addresses []uint64     // Deprecated: use HasRange and Range.
+    PID       vm.PID       // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
+    HasRange  bool         // Range is the address filter or the pages.
+    Range     AddressRange // Must be the zero value unless HasRange is set.
 }
 
 type Rsp struct {
     Command Command
     Success bool
     Error   string // Empty on success. memcontrolprotocol.ErrUnsupported,
-                   // memcontrolprotocol.ErrMustBePausedOrDrained, or
-                   // memcontrolprotocol.ErrCanceledByReset on failure.
+                   // memcontrolprotocol.ErrMustBePausedOrDrained,
+                   // memcontrolprotocol.ErrCanceledByReset,
+                   // memcontrolprotocol.ErrInvalidRange, or
+                   // memcontrolprotocol.ErrAmbiguousAddressing on failure.
 }
 ```
 
-`Addresses` and `PID` are only meaningful for `CmdInvalidate`,
-`CmdFlush`, `CmdHold`, and `CmdRelease`. For the other verbs they are
-ignored.
+`Addresses`, `HasRange`, `Range`, and `PID` are only meaningful for
+`CmdInvalidate`, `CmdFlush`, `CmdHold`, and `CmdRelease`. For the other verbs,
+and for a verb that the component does not support, they are ignored.
+
+### Addressing
+
+A request names addresses in one of two ways.
+
+- **Range** (`HasRange: true`). `Range` is the half-open byte interval
+  `[Start, End)`. It selects every cache line or page that it intersects, so
+  its endpoints need no alignment: a range of one byte selects the line or the
+  page of that byte, and an `End` on a line or page boundary does not select
+  the line or page that starts there. `End` is exclusive, so a range cannot
+  include the byte at address 2^64 - 1.
+- **Addresses** (deprecated). Each address selects the line or the page that
+  contains it. For Invalidate and Flush, an empty list with no range selects
+  every entry; for Hold and Release it selects nothing. This meaning is
+  unchanged. Akita v6 will address by range only and remove `Addresses`; a v6
+  request for every entry will name the whole range.
+
+`PID` combines with both in the same way.
+
+A component that supports the verb checks the addressing before anything else,
+in every control state, and answers a request that is not valid at once with
+`Success: false` and no effect:
+
+| Request                                         | `Error`                  |
+| ----------------------------------------------- | ------------------------ |
+| `HasRange` with `End <= Start`, including `[0, 0)` | `ErrInvalidRange`        |
+| A nonzero `Range` without `HasRange`             | `ErrInvalidRange`        |
+| `HasRange` with a nonempty `Addresses`           | `ErrAmbiguousAddressing` |
+
+A range is never expanded into its lines or pages, so a range of nearly the
+whole address space costs a component work and state bounded by its own size.
+See the per-component notes for what each one does.
 
 ## Support matrix (final state)
 
@@ -257,11 +298,18 @@ Error: "must be paused or drained"`.
   slot, so accesses to other pages keep flowing. The Hold acks once no
   issued access to the pages is outstanding and no translation of them
   is in flight. Several Holds may wait at once, and the verbs after a
-  Hold are processed while it waits.
+  Hold are processed while it waits. A range Hold holds every page that the
+  range intersects. It is kept as an interval (`State.HeldRanges`), and the
+  overlapping intervals of a process are merged.
 - Release clears the pages, both held and faulted (a translation
   answered with `addrtransprotocol.Rsp.Fault`), and sends their waiting
   accesses for translation again in arrival order. Releasing a page
-  whose Hold has not acked is a protocol error.
+  whose Hold has not acked is a protocol error. A Release need not repeat the
+  addressing of the Hold: a range Release clears the pages held by address
+  and the faulted pages in the range, and a Release of part of a held range,
+  by range or by address, leaves the other pages of the range held.
+- A Hold or a Release whose addressing is not valid is answered at once, also
+  when earlier Holds are not acknowledged yet.
 - A Release clears the `Faulted` mark only for the fault responses that
   have already arrived. A fault response still on its way through the TLBs
   marks the page again after the Release, and its access then waits for
@@ -280,8 +328,8 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 - Reset is a hard reset to the freshly-built shape: it discards the MSHR
   (in-flight misses) and re-initializes the sets and pipeline, so cached
   translations and staged work are dropped.
-- Invalidate marks cached entries matching the `Addresses`
-  (page-aligned) and `PID` filter invalid (empty filter = all). No
+- Invalidate marks cached entries matching the address (the pages of
+  `Range` or `Addresses`) and `PID` filter invalid (empty filter = all). No
   writeback — translations are never dirty.
 - Flush is unsupported.
 
@@ -293,15 +341,24 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 - Invalidate drops cached page-walk entries matching the filter. Because
   the cache stores per-level VPN segments, an address filter can also
   drop sibling pages that share an upper-level segment — this is safe
-  over-invalidation (it only forces re-walks), never incorrect.
+  over-invalidation (it only forces re-walks), never incorrect. A range
+  drops what the list of its pages would drop: at each level, the segments
+  of the pages that the range intersects. It is computed from the two ends
+  of the range in one pass over the cached blocks.
 - Flush is unsupported.
 
 ### Caches
 
-While running, both data caches accept Invalidate with a nonempty address list.
+While running, both data caches accept Invalidate with an address filter: a
+range or a nonempty address list.
 The writeback cache also accepts address-filtered Flush. The cache aligns and
 deduplicates addresses and sends a lookup for each distinct line through the
-directory pipeline. PID zero matches all address spaces. A nonzero PID targets
+directory pipeline. A range of no more lines than the cache has sets does the
+same for its lines, in ascending order, so it costs what the list of those
+lines costs. A larger range sends one lookup per set instead, in set order,
+and each lookup handles the lines of the range that reside in that set; the
+work and the checkpointed state are bounded by the number of sets, whatever
+the size of the range. PID zero matches all address spaces. A nonzero PID targets
 only that address space. Other PIDs can access the same line address, and the
 write buffer forwards data only for matching PID and address. Older matching reads
 and stores finish first. Later matching accesses wait until the control ACK can
@@ -318,8 +375,8 @@ flushing).
   counter is zero.
 - Reset resets the directory and MSHR and clears all transactions,
   stage/bank buffers, pipelines, and flusher state.
-- Invalidate drops blocks matching the `Addresses` (line-aligned) and
-  `PID` filter **without writeback** — dirty data is discarded silently,
+- Invalidate drops blocks matching the address (the lines of `Range` or
+  `Addresses`) and `PID` filter **without writeback** — dirty data is discarded silently,
   so Flush first if it must survive.
 - Flush (async) writes back the dirty blocks matching the filter and
   marks exactly those clean; clean lines and blocks outside the filter
@@ -332,6 +389,7 @@ and `State.IsDraining`.
   buffers.
 - Invalidate drops matching blocks (always clean; no writeback).
 - Flush is a no-op while paused and acks `Success` immediately (no dirty data).
+  Its addressing is still checked.
 
 ### Others
 

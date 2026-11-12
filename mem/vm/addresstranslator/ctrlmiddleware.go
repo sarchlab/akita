@@ -156,6 +156,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	state.Transactions = nil
 	state.InflightReqToBottom = nil
 	state.HeldPages = nil
+	state.HeldRanges = nil
 	state.HeldReqs = nil
 	state.ReplayReqs = nil
 	state.CurrentCmdID = 0
@@ -226,11 +227,20 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // flight.
 func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	req := msg.Payload.(memcontrolprotocol.Req)
+	if errStr := req.AddressingError(); errStr != "" {
+		return m.reject(msg, errStr)
+	}
+
 	state := &m.comp.State
 	log2PageSize := m.comp.Spec.Log2PageSize
 
 	hold := pendingHoldState{
 		ID: msg.ID, Src: msg.Src, PID: req.PID, Pages: make(map[uint64]bool),
+	}
+	if req.HasRange {
+		hold.HasRange = true
+		hold.First, hold.Last = req.Range.Bounds(log2PageSize)
+		holdRange(state, req.PID, hold.First, hold.Last)
 	}
 	for _, addr := range req.Addresses {
 		holdPage(state, req.PID, addr, log2PageSize, false)
@@ -277,11 +287,7 @@ func (m *ctrlMiddleware) inFlight(hold pendingHoldState) bool {
 	log2PageSize := m.comp.Spec.Log2PageSize
 
 	onHeldPage := func(pid vm.PID, vAddr uint64) bool {
-		if pid != hold.PID {
-			return false
-		}
-
-		return hold.Pages[addrToPageID(vAddr, log2PageSize)]
+		return hold.covers(pid, addrToPageID(vAddr, log2PageSize))
 	}
 
 	for _, t := range state.Transactions {
@@ -305,17 +311,27 @@ func (m *ctrlMiddleware) inFlight(hold pendingHoldState) bool {
 // the accesses that wait on them are sent for translation again, in arrival
 // order.
 func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
+	req := msg.Payload.(memcontrolprotocol.Req)
+	if errStr := req.AddressingError(); errStr != "" {
+		return m.reject(msg, errStr)
+	}
+
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	req := msg.Payload.(memcontrolprotocol.Req)
 	state := &m.comp.State
 	log2PageSize := m.comp.Spec.Log2PageSize
 
+	if req.HasRange {
+		first, last := req.Range.Bounds(log2PageSize)
+		m.mustNotBeHolding(req.PID, first, last)
+		releasePages(state, req.PID, first, last, log2PageSize)
+	}
 	for _, addr := range req.Addresses {
-		m.mustNotBeHolding(req.PID, addrToPageID(addr, log2PageSize))
-		delete(state.HeldPages, heldPageKey(req.PID, addr, log2PageSize))
+		page := addrToPageID(addr, log2PageSize)
+		m.mustNotBeHolding(req.PID, page, page)
+		releasePages(state, req.PID, page, page, log2PageSize)
 	}
 
 	waiting := state.HeldReqs[:0]
@@ -335,23 +351,37 @@ func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
 	return true
 }
 
-// mustNotBeHolding panics if a Hold of the page is not acknowledged yet: a
-// page is released only after its Hold completes.
-func (m *ctrlMiddleware) mustNotBeHolding(pid vm.PID, page uint64) {
+// mustNotBeHolding panics if a Hold of a page from first to last is not
+// acknowledged yet: a page is released only after its Hold completes.
+func (m *ctrlMiddleware) mustNotBeHolding(pid vm.PID, first, last uint64) {
 	for _, h := range m.comp.State.PendingHolds {
-		if !h.Canceled && h.PID == pid && h.Pages[page] {
-			log.Panicf("%s: release of page %#x before its hold completed",
-				m.comp.Name(), page)
+		if h.Canceled || h.PID != pid {
+			continue
+		}
+
+		holding := h.HasRange && h.First <= last && first <= h.Last
+		for page := range h.Pages {
+			holding = holding || first <= page && page <= last
+		}
+
+		if holding {
+			log.Panicf("%s: release of pages %#x to %#x before their hold completed",
+				m.comp.Name(), first, last)
 		}
 	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req messaging.Msg) bool {
+	return m.reject(req, memcontrolprotocol.ErrUnsupported)
+}
+
+// reject answers the command with a failure.
+func (m *ctrlMiddleware) reject(req messaging.Msg, errStr string) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, req.Payload.(memcontrolprotocol.Req).Command,
-		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
+		req.Src, req.ID, false, errStr))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }

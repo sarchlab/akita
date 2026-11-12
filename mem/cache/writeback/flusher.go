@@ -1,6 +1,7 @@
 package writeback
 
 import (
+	"github.com/sarchlab/akita/v5/mem/internal/addrfilter"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -75,12 +76,9 @@ func (f *flusher) existInflightTransaction() bool {
 func (f *flusher) prepareBlockToFlushList() {
 	next := &f.pipeline.comp.State
 	spec := f.pipeline.comp.Spec
-	blockSize := uint64(1) << spec.Log2BlockSize
-
-	matchAddr := make(map[uint64]bool, len(next.ProcessingFlush.FilterAddresses))
-	for _, a := range next.ProcessingFlush.FilterAddresses {
-		matchAddr[a/blockSize*blockSize] = true
-	}
+	flush := &next.ProcessingFlush
+	filter := addrfilter.New(flush.FilterAddresses, flush.FilterHasRange,
+		flush.FilterRange, spec.Log2BlockSize)
 	filterPID := next.ProcessingFlush.FilterPID
 
 	for setID, set := range next.DirectoryState.Sets {
@@ -95,7 +93,7 @@ func (f *flusher) prepareBlockToFlushList() {
 			if filterPID != 0 && vm.PID(block.PID) != filterPID {
 				continue
 			}
-			if len(matchAddr) > 0 && !matchAddr[block.Tag] {
+			if !filter.Matches(block.Tag) {
 				continue
 			}
 
@@ -171,10 +169,15 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
+	// ctrlMiddleware rejects a Flush whose addressing is not valid.
+	if req.Payload.(memcontrolprotocol.Req).AddressingError() != "" {
+		return false
+	}
+
 	// Running address-filtered Flush belongs to ctrlMiddleware.
 	next := &f.pipeline.comp.State
 	if cacheState(next.CacheState) != cacheStatePaused {
-		if cacheState(next.CacheState) == cacheStateRunning && len(req.Payload.(memcontrolprotocol.Req).Addresses) > 0 {
+		if cacheState(next.CacheState) == cacheStateRunning && req.Payload.(memcontrolprotocol.Req).HasAddressFilter() {
 			return false
 		}
 		return f.rejectFlush(req)
@@ -204,6 +207,8 @@ func (f *flusher) startProcessingFlush(msg messaging.Msg) bool {
 		Msg:             msg,
 		FilterAddresses: msg.Payload.(memcontrolprotocol.Req).Addresses,
 		FilterPID:       msg.Payload.(memcontrolprotocol.Req).PID,
+		FilterHasRange:  msg.Payload.(memcontrolprotocol.Req).HasRange,
+		FilterRange:     msg.Payload.(memcontrolprotocol.Req).Range,
 	}
 
 	next.CacheState = int(cacheStatePreFlushing)

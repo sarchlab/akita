@@ -2,6 +2,7 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/internal/addrfilter"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -109,7 +110,10 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	case memcontrolprotocol.CmdFlush:
-		if cacheState(m.pipeline.comp.State.CacheState) == cacheStateRunning && len(command.Addresses) > 0 {
+		if errStr := command.AddressingError(); errStr != "" {
+			return m.reject(req, errStr)
+		}
+		if cacheState(m.pipeline.comp.State.CacheState) == cacheStateRunning && command.HasAddressFilter() {
 			return m.startMaintenance(req)
 		}
 		// Paused flushes are owned by the flusher.
@@ -130,9 +134,12 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 // A paused cache applies its filter synchronously.
 func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 	request := req.Payload.(memcontrolprotocol.Req)
+	if errStr := request.AddressingError(); errStr != "" {
+		return m.reject(req, errStr)
+	}
 
 	next := &m.pipeline.comp.State
-	if cacheState(next.CacheState) == cacheStateRunning && len(request.Addresses) > 0 {
+	if cacheState(next.CacheState) == cacheStateRunning && request.HasAddressFilter() {
 		return m.startMaintenance(req)
 	}
 	if cacheState(next.CacheState) != cacheStatePaused {
@@ -143,8 +150,7 @@ func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 	}
 
 	spec := m.pipeline.comp.Spec
-	blockSize := uint64(1) << spec.Log2BlockSize
-	invalidateBlocks(next, blockSize, request.Addresses, request.PID)
+	invalidateBlocks(next, addrfilter.FromReq(request, spec.Log2BlockSize), request.PID)
 
 	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdInvalidate,
 		req.Src, req.ID, true, ""))
@@ -155,31 +161,28 @@ func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Running (Enabled).
 func (m *ctrlMiddleware) rejectMustBePaused(req messaging.Msg) bool {
+	return m.reject(req, memcontrolprotocol.ErrMustBePausedOrDrained)
+}
+
+// reject answers the command with a failure.
+func (m *ctrlMiddleware) reject(req messaging.Msg, errStr string) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Payload.(memcontrolprotocol.Req).Command,
-		req.Src, req.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
+		req.Src, req.ID, false, errStr))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 // invalidateBlocks marks every valid directory block matching the filter
-// invalid and clean. An empty address list matches every block address; a
-// zero PID matches every PID. Block addresses are cache-line aligned in
-// Tag, so the requested addresses are aligned to the block before
-// matching.
+// invalid and clean. A zero PID matches every PID. The filter selects the
+// cache lines of the requested addresses or range, or every line.
 func invalidateBlocks(
 	state *state,
-	blockSize uint64,
-	addresses []uint64,
+	filter addrfilter.Filter,
 	pid vm.PID,
 ) {
-	matchAddr := make(map[uint64]bool, len(addresses))
-	for _, a := range addresses {
-		matchAddr[a/blockSize*blockSize] = true
-	}
-
 	for si := range state.DirectoryState.Sets {
 		set := &state.DirectoryState.Sets[si]
 		for wi := range set.Blocks {
@@ -190,7 +193,7 @@ func invalidateBlocks(
 			if pid != 0 && vm.PID(block.PID) != pid {
 				continue
 			}
-			if len(addresses) > 0 && !matchAddr[block.Tag] {
+			if !filter.Matches(block.Tag) {
 				continue
 			}
 

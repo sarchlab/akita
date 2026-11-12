@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -212,6 +213,11 @@ type flushReqState struct {
 	// matches every PID (same convention as Invalidate).
 	FilterAddresses []uint64 `json:"filter_addresses"`
 	FilterPID       vm.PID   `json:"filter_pid"`
+
+	// FilterRange takes the place of FilterAddresses when FilterHasRange is
+	// set: every line that it intersects matches.
+	FilterHasRange bool                            `json:"filter_has_range"`
+	FilterRange    memcontrolprotocol.AddressRange `json:"filter_range"`
 
 	// FlushedRefs records the blocks selected for write-back so that, once
 	// the write-backs complete, exactly those blocks (and no others) are
