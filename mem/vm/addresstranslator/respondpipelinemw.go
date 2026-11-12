@@ -114,7 +114,9 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 // holdTranslated moves the access of a returned translation to the held
 // list. A fault response also marks the page faulted, so that the later
-// accesses to it wait without being translated.
+// accesses to it wait without being translated. The access is older than
+// the accesses that were held while its translation was in flight, and it
+// takes its place before them.
 func (m *respondPipelineMW) holdTranslated(transIdx int, fault bool) {
 	nextState := &m.comp.State
 	trans := &nextState.Transactions[transIdx]
@@ -133,7 +135,7 @@ func (m *respondPipelineMW) holdTranslated(transIdx int, fault bool) {
 		nextState.NumFaults++
 	}
 
-	nextState.HeldReqs = append(nextState.HeldReqs, reqState)
+	nextState.HeldReqs = insertBySeq(nextState.HeldReqs, reqState)
 	nextState.NumHeldReqs++
 
 	trans.IncomingReqs = trans.IncomingReqs[1:]

@@ -229,6 +229,114 @@ func TestRangeReleaseEndsListHoldsAndFaults(t *testing.T) {
 	require.Len(t, h.at.State.HeldReqs, 1)
 }
 
+// addresses returns the addresses of the accesses in a held or replay list.
+func addresses(reqs []incomingReqState) []uint64 {
+	addrs := make([]uint64, 0, len(reqs))
+	for _, r := range reqs {
+		addrs = append(addrs, r.Address)
+	}
+	return addrs
+}
+
+// An access whose translation is in flight at the Hold is older than the
+// accesses that arrive under the Hold. It joins the held list when its
+// translation returns, and a Release must replay it first.
+func TestReleaseReplaysAnAccessHeldLateBeforeTheLaterAccesses(t *testing.T) {
+	h := newHoldHarness(t)
+
+	h.accessAll(0x10040)
+	older, sent := h.translationReq()
+	require.True(t, sent)
+
+	holdID := h.controlRange(memcontrolprotocol.CmdHold, 0x10000, 0x12000)
+	h.tick()
+	_, _, ok := h.ack()
+	require.False(t, ok, "the Hold waits for the translation in flight")
+
+	// The later accesses, to the same page and to another page of the
+	// range, are held at once.
+	h.accessAll(0x10080, 0x11040)
+	require.Equal(t, []uint64{0x10080, 0x11040}, addresses(h.at.State.HeldReqs))
+
+	h.answer(older, false)
+	h.tick()
+	require.Equal(t, []uint64{0x10040, 0x10080, 0x11040}, addresses(h.at.State.HeldReqs),
+		"the older access takes its place before the later ones")
+	require.True(t, h.mustAck(holdID).Success)
+
+	require.True(t, h.mustAck(h.controlRange(memcontrolprotocol.CmdRelease, 0x10000, 0x12000)).Success)
+	replayed := make([]uint64, 0, 3)
+	for range 6 {
+		h.tick()
+		replayed = append(replayed, h.translated()...)
+	}
+	require.Equal(t, []uint64{0x10000, 0x10000, 0x11000}, replayed)
+	require.Equal(t, []uint64{0x10040, 0x10080, 0x11040}, func() []uint64 {
+		addrs := make([]uint64, 0, 3)
+		for _, tr := range h.at.State.Transactions {
+			addrs = append(addrs, addresses(tr.IncomingReqs)...)
+		}
+		return addrs
+	}(), "the accesses are translated again in the order they arrived")
+}
+
+// The order holds across translations that return out of order, a partial
+// Release, a checkpoint, and a later Release of older accesses.
+func TestPartialReleasesKeepTheArrivalOrderAcrossACheckpoint(t *testing.T) {
+	h := newHoldHarness(t)
+
+	// A and B are in flight at the Hold; C and D arrive under it.
+	h.accessAll(0x10040, 0x12040)
+	transA, _ := h.translationReq()
+	transB, _ := h.translationReq()
+	holdID := h.controlRange(memcontrolprotocol.CmdHold, 0x10000, 0x13000)
+	h.tick()
+	h.accessAll(0x11040, 0x12080)
+
+	// B returns before A.
+	h.answer(transB, false)
+	h.tick()
+	h.answer(transA, false)
+	h.tick()
+	require.Equal(t, []uint64{0x10040, 0x12040, 0x11040, 0x12080},
+		addresses(h.at.State.HeldReqs))
+	require.True(t, h.mustAck(holdID).Success)
+
+	// The Release of the last page lets B and D go. Only the control
+	// middleware runs, so they still wait for replay at the checkpoint.
+	releaseID := h.controlRange(memcontrolprotocol.CmdRelease, 0x12000, 0x13000)
+	h.at.Middlewares.Ctrl.Handle(nil)
+	_, rspTo, ok := h.ack()
+	require.True(t, ok)
+	require.Equal(t, releaseID, rspTo)
+	require.Equal(t, []uint64{0x10040, 0x11040}, addresses(h.at.State.HeldReqs))
+	require.Equal(t, []uint64{0x12040, 0x12080}, addresses(h.at.State.ReplayReqs))
+
+	var buf bytes.Buffer
+	require.NoError(t, h.at.SaveCheckpoint(&buf))
+	restored := newHoldHarness(t)
+	require.NoError(t, restored.at.LoadCheckpoint(&buf))
+	require.Equal(t, h.at.State, restored.at.State)
+
+	// The Release of the other pages lets the older A and C go: they are
+	// replayed before and between the accesses released earlier.
+	restored.controlRange(memcontrolprotocol.CmdRelease, 0x10000, 0x12000)
+	restored.at.Middlewares.Ctrl.Handle(nil)
+	require.Equal(t, []uint64{0x10040, 0x12040, 0x11040, 0x12080},
+		addresses(restored.at.State.ReplayReqs))
+
+	replayed := make([]uint64, 0, 4)
+	for range 8 {
+		restored.tick()
+		replayed = append(replayed, restored.translated()...)
+	}
+	require.Equal(t, []uint64{0x10000, 0x12000, 0x11000, 0x12000}, replayed)
+
+	// A new access follows the replayed ones.
+	restored.accessAll(0x13040)
+	require.Equal(t, uint64(4), restored.at.State.Transactions[4].IncomingReqs[0].Seq)
+}
+
 func TestCheckpointKeepsHeldRangesAndPendingRangeHolds(t *testing.T) {
 	h := newHoldHarness(t)
 

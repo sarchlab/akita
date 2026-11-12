@@ -159,6 +159,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	state.HeldRanges = nil
 	state.HeldReqs = nil
 	state.ReplayReqs = nil
+	state.NextReqSeq = 0
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled
@@ -339,7 +340,7 @@ func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
 		if isPageHeld(state, r.PID, r.Address, log2PageSize) {
 			waiting = append(waiting, r)
 		} else {
-			state.ReplayReqs = append(state.ReplayReqs, r)
+			state.ReplayReqs = insertBySeq(state.ReplayReqs, r)
 		}
 	}
 	state.HeldReqs = waiting

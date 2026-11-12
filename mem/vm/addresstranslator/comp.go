@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -64,6 +65,10 @@ type Resources struct{}
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
 	RecvTaskID uint64 `json:"recv_task_id"`
+
+	// Seq numbers the requests in the order they were taken from Top. The
+	// held and replay lists are kept in this order.
+	Seq uint64 `json:"seq"`
 
 	ID    uint64               `json:"id"`
 	Src   messaging.RemotePort `json:"src"`
@@ -169,12 +174,16 @@ type state struct {
 	// the Holds not acknowledged yet. HeldReqs is the held list: the waiting
 	// accesses in arrival order. They use no transaction slot, so accesses to other
 	// pages keep flowing. ReplayReqs are the accesses that a Release let go,
-	// waiting to be sent for translation again.
+	// waiting to be sent for translation again. Both lists are in the order
+	// of incomingReqState.Seq, also when an access joins late: one whose
+	// translation returns after a later access was held, or one that a
+	// later Release lets go. NextReqSeq is the Seq of the next request.
 	HeldPages    map[string]heldPageState `json:"held_pages"`
 	HeldRanges   []heldRangeState         `json:"held_ranges"`
 	PendingHolds []pendingHoldState       `json:"pending_holds"`
 	HeldReqs     []incomingReqState       `json:"held_reqs"`
 	ReplayReqs   []incomingReqState       `json:"replay_reqs"`
+	NextReqSeq   uint64                   `json:"next_req_seq"`
 
 	// NumHeldReqs counts the accesses that ever waited, NumFaults the fault
 	// responses.
@@ -186,6 +195,18 @@ type state struct {
 
 func addrToPageID(addr, log2PageSize uint64) uint64 {
 	return (addr >> log2PageSize) << log2PageSize
+}
+
+// insertBySeq adds req to reqs, a list in the order the requests were taken
+// from Top, and keeps that order. The newest request is appended, so the
+// search starts at the end.
+func insertBySeq(reqs []incomingReqState, req incomingReqState) []incomingReqState {
+	i := len(reqs)
+	for i > 0 && reqs[i-1].Seq > req.Seq {
+		i--
+	}
+
+	return slices.Insert(reqs, i, req)
 }
 
 func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
