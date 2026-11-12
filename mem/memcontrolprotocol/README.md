@@ -45,8 +45,10 @@ nonempty address list. Running
 writeback caches also accept filtered Flush. Other supported Invalidate and
 Flush operations require Pause or Drain. When issued while enabled they return
 `Success: false, Error: ErrMustBePausedOrDrained`. Unsupported verbs
-reply with `Success: false, Error: ErrUnsupported`. A Reset answers the
-Holds that are not acknowledged yet with
+reply with `Success: false, Error: ErrUnsupported`. Holds that share a page
+of a process are acknowledged in arrival order; a Hold of other pages may be
+acknowledged before an earlier Hold, so match the acks by `RspTo`. A Reset
+answers the Holds that are not acknowledged yet with
 `Success: false, Error: ErrCanceledByReset`. A supported Invalidate, Flush,
 Hold, or Release whose addressing is not valid replies with
 `ErrInvalidRange` or `ErrAmbiguousAddressing` in every state.

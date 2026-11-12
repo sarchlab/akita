@@ -2,6 +2,7 @@ package addresstranslator
 
 import (
 	"log"
+	"slices"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -224,8 +225,9 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 // handleHold starts to hold the pages of the request. It does not block the
 // Control port: completePendingHolds acknowledges the Hold once no issued
-// access to the pages is outstanding and no translation of them is in
-// flight.
+// access to the pages is outstanding, no translation of them is in flight,
+// and no earlier Hold of one of them is pending. The pages stay held after
+// the ack, until a Release.
 func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	req := msg.Payload.(memcontrolprotocol.Req)
 	if errStr := req.AddressingError(); errStr != "" {
@@ -254,17 +256,30 @@ func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	return true
 }
 
-// completePendingHolds acknowledges, in arrival order, the Holds whose pages
-// have no access and no translation in flight, and answers the Holds that a
-// Reset canceled with a failure.
+// completePendingHolds acknowledges the Holds whose pages have no access and
+// no translation in flight, and answers the Holds that a Reset canceled with
+// a failure. The Holds of a common page are acknowledged in arrival order: a
+// Hold waits for every earlier Hold of one of its pages that stays pending,
+// also for one that itself only waits for an earlier Hold. A Hold of other
+// pages does not wait for them, so it may be acknowledged before an earlier
+// Hold. The responses of one tick are sent in arrival order, and the Holds
+// that the Control port has no room to answer stay pending.
 func (m *ctrlMiddleware) completePendingHolds() bool {
 	state := &m.comp.State
 	madeProgress := false
 
-	for len(state.PendingHolds) > 0 {
-		hold := state.PendingHolds[0]
-		if !hold.Canceled && m.inFlight(hold) || !m.ctrlPort().CanSend() {
-			return madeProgress
+	// waiting collects, in arrival order, the Holds that stay pending.
+	waiting := state.PendingHolds[:0]
+	for i, hold := range state.PendingHolds {
+		if !m.ctrlPort().CanSend() {
+			waiting = append(waiting, state.PendingHolds[i:]...)
+			break
+		}
+
+		if !hold.Canceled &&
+			(m.inFlight(hold) || slices.ContainsFunc(waiting, hold.overlaps)) {
+			waiting = append(waiting, hold)
+			continue
 		}
 
 		errStr := ""
@@ -274,9 +289,13 @@ func (m *ctrlMiddleware) completePendingHolds() bool {
 
 		m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdHold,
 			hold.Src, hold.ID, !hold.Canceled, errStr))
-		state.PendingHolds = state.PendingHolds[1:]
 		madeProgress = true
 	}
+
+	// The slots after the Holds that stay pending are cleared, so that they
+	// do not keep the page lists of the answered Holds.
+	clear(state.PendingHolds[len(waiting):])
+	state.PendingHolds = waiting
 
 	return madeProgress
 }

@@ -65,6 +65,10 @@ const (
 	// commands while a Hold waits. Legal in any state. Conditional verb
 	// (address translators). Ack is asynchronous: once no issued access to
 	// the pages is outstanding and no translation of them is in flight.
+	// Holds that share a page of a process are acknowledged in the order
+	// they arrived. A Hold that shares no page with the earlier Holds that
+	// still wait is acknowledged before them, so a requester matches the
+	// acks by RspTo. The pages stay held after the ack, until a Release.
 	CmdHold
 
 	// CmdRelease sends the accesses that wait on the pages of Range or Addresses of

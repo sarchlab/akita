@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,14 @@ type holdHarness struct {
 func newHoldHarness(t *testing.T) *holdHarness {
 	t.Helper()
 
+	return newHoldHarnessWithControlBuf(t, ctrlBufSize)
+}
+
+// newHoldHarnessWithControlBuf builds the harness with a Control port that
+// buffers bufSize messages in each direction.
+func newHoldHarnessWithControlBuf(t *testing.T, bufSize int) *holdHarness {
+	t.Helper()
+
 	sim := testsim.New(timing.NewSerialEngine(), false)
 
 	spec := DefaultSpec()
@@ -39,6 +48,10 @@ func newHoldHarness(t *testing.T) *holdHarness {
 		WithSimulation(sim).
 		Build("AddressTranslator")
 	ports := makePorts(sim, "AddressTranslator", topBufSize)
+	ports.Control = twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		Build()
 	at.BindPort("Top", ports.Top)
 	at.BindPort("Bottom", ports.Bottom)
 	at.BindPort("Translation", ports.Translation)
