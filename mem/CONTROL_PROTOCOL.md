@@ -54,8 +54,9 @@ that translate accesses (address translators).
   acknowledges by sending the response when the underlying work is
   finished — Drain when all in-flight transactions have drained, Flush
   when all dirty data has been written back, Hold when no issued access
-  to the held pages is outstanding and no translation of them is in
-  flight.
+  to the held pages is outstanding, no translation of them is in
+  flight, and every earlier Hold of one of the pages has been
+  acknowledged.
 
 ### Why no `PauseAfter`/`InvalidateAfter`/`DiscardInflight`
 
@@ -291,16 +292,38 @@ Error: "must be paused or drained"`.
 - Reset clears them and the held pages, and drains the
   Top/Bottom/Translation ports. The Holds that are not acknowledged yet
   are canceled: after the Reset ack, each is answered with `Success:
-  false, Error: memcontrolprotocol.ErrCanceledByReset`.
+  false, Error: memcontrolprotocol.ErrCanceledByReset`, in arrival order
+  and before the ack of a Hold that arrives after the Reset.
 - Hold marks the pages held. A new access to a held page waits in the
   held list without being translated; an access whose translation
   arrives after the Hold waits too. The held list uses no transaction
   slot, so accesses to other pages keep flowing. The Hold acks once no
-  issued access to the pages is outstanding and no translation of them
-  is in flight. Several Holds may wait at once, and the verbs after a
+  issued access to the pages is outstanding, no translation of them
+  is in flight, and the earlier Holds that share a page with it have
+  acked. Several Holds may wait at once, and the verbs after a
   Hold are processed while it waits. A range Hold holds every page that the
   range intersects. It is kept as an interval (`State.HeldRanges`), and the
-  overlapping intervals of a process are merged.
+  overlapping intervals of a process are merged. The pages stay held after
+  the ack, until a Release.
+- Hold acks keep the arrival order only among the Holds that share a page.
+  Two Holds share a page when they have the same `PID` and select a common
+  page. Pages of the translator's page size (`Spec.Log2PageSize`) are
+  compared, not bytes, for every combination of `Range` and `Addresses`: a
+  range and an address that name different bytes of one page share it, and
+  a range whose `End` is on a page boundary does not share the page that
+  starts there. A range is compared by its first and last page and is never
+  expanded into its pages.
+  - A Hold acks only after every earlier Hold that shares a page with it
+    has acked, also when that earlier Hold is drained itself and only waits
+    for a Hold before it.
+  - A Hold that shares no page with the earlier Holds that still wait acks
+    as soon as its own pages are drained, before them. A requester
+    therefore matches Hold acks by `RspTo`, not by the order of its
+    requests.
+  - A full `Control` port delays the acks, not the Holds: the Holds are
+    still accepted and their pages held, and the delayed acks are sent in
+    arrival order when the port has room. The number of waiting Holds is
+    not limited.
 - Release clears the pages, both held and faulted (a translation
   answered with `addrtransprotocol.Rsp.Fault`), and sends their waiting
   accesses for translation again in arrival order. Releasing a page

@@ -151,8 +151,9 @@ func TestRangeHoldAcksAfterTheAccessesInFlightComplete(t *testing.T) {
 
 	holdID := h.controlRange(memcontrolprotocol.CmdHold, 0x10800, 0x11001)
 	h.tick()
-	// A later Hold of another page is acknowledged after the earlier one.
-	laterID := h.controlAt(memcontrolprotocol.CmdHold, 0x40000)
+	// A later Hold of a page of the range is acknowledged after the range
+	// Hold, also when its own page is drained first.
+	laterID := h.controlAt(memcontrolprotocol.CmdHold, 0x10000)
 	h.tick()
 	_, _, ok := h.ack()
 	require.False(t, ok, "the Hold waits for both accesses")
@@ -162,6 +163,8 @@ func TestRangeHoldAcksAfterTheAccessesInFlightComplete(t *testing.T) {
 	h.tick()
 	_, _, ok = h.ack()
 	require.False(t, ok, "the Hold waits for the translation in flight")
+	require.False(t, h.at.Middlewares.Ctrl.inFlight(h.at.State.PendingHolds[1]),
+		"the later Hold only waits for the earlier one")
 
 	h.answer(pending, false)
 	h.tick()

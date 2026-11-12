@@ -135,7 +135,8 @@ type heldRangeState struct {
 }
 
 // pendingHoldState is a Hold that is not acknowledged yet: an access to one
-// of its pages, or a translation of one, is still in flight. Pages is keyed
+// of its pages, or a translation of one, is still in flight, or an earlier
+// Hold of one of its pages is not acknowledged yet. Pages is keyed
 // by the page address; a range Hold sets HasRange and covers the pages from
 // First to Last instead. A Reset cancels the Hold: it is then answered with
 // memcontrolprotocol.ErrCanceledByReset.
@@ -161,6 +162,51 @@ func (h pendingHoldState) covers(pid vm.PID, page uint64) bool {
 	return h.Pages[page]
 }
 
+// overlaps reports whether the Hold and other hold a page of the same
+// process in common. First, Last, and the keys of Pages are page addresses,
+// so two Holds that name different bytes of one page overlap. A range is
+// compared by its bounds and is never expanded into its pages.
+func (h pendingHoldState) overlaps(other pendingHoldState) bool {
+	if h.PID != other.PID {
+		return false
+	}
+
+	switch {
+	case h.HasRange && other.HasRange:
+		return h.First <= other.Last && other.First <= h.Last
+	case h.HasRange:
+		return other.hasPageIn(h.First, h.Last)
+	case other.HasRange:
+		return h.hasPageIn(other.First, other.Last)
+	}
+
+	// The shorter list is searched in the longer one.
+	few, many := h.Pages, other.Pages
+	if len(many) < len(few) {
+		few, many = many, few
+	}
+
+	for page := range few {
+		if many[page] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasPageIn reports whether a page of the list of the Hold is one of the
+// pages from first to last.
+func (h pendingHoldState) hasPageIn(first, last uint64) bool {
+	for page := range h.Pages {
+		if first <= page && page <= last {
+			return true
+		}
+	}
+
+	return false
+}
+
 // state contains mutable runtime data for the AddressTranslator.
 type state struct {
 	ControlState        controlState         `json:"control_state"`
@@ -171,7 +217,9 @@ type state struct {
 
 	// HeldPages are the pages whose accesses wait, keyed by heldPageKey;
 	// HeldRanges are the page runs that range Holds hold. PendingHolds are
-	// the Holds not acknowledged yet. HeldReqs is the held list: the waiting
+	// the Holds not acknowledged yet, in arrival order: a Hold that is
+	// acknowledged before an earlier one leaves the order of the others
+	// unchanged. HeldReqs is the held list: the waiting
 	// accesses in arrival order. They use no transaction slot, so accesses to other
 	// pages keep flowing. ReplayReqs are the accesses that a Release let go,
 	// waiting to be sent for translation again. Both lists are in the order

@@ -48,7 +48,17 @@ the related data is in `State`:
   flowing. The Hold is acknowledged once no issued access to the pages is
   outstanding and no translation of them is in flight. A TLB fills before
   it responds, so after the ack no walk can refill a TLB with the old
-  translation.
+  translation. The pages stay held after the ack, until a Release.
+- **Hold ack order**: the Holds not acknowledged yet wait in
+  `State.PendingHolds`, in arrival order and without a limit. Two Holds
+  share a page when they have the same `PID` and select a common page of
+  `1 << Log2PageSize` bytes, whether by `Range` or by `Addresses`; pages are
+  compared, not bytes, and a range is never expanded into its pages. A Hold
+  is acknowledged after every earlier Hold that shares a page with it, also
+  when that earlier Hold only waits for another Hold. A Hold that shares no
+  page with the earlier Holds that still wait is acknowledged before them,
+  as soon as its own pages are drained. When the `Control` port has no room
+  the acks wait, and are sent in arrival order later.
 - **Fault**: an `addrtransprotocol.Rsp` with `Fault` set is not used. The
   access waits in the held list and its page is marked faulted, so the
   later accesses to it wait too, without being translated.
