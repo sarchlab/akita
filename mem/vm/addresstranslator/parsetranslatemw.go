@@ -60,14 +60,16 @@ func (m *parseTranslateMW) translate() bool {
 
 	incoming := msgToIncomingReqState(itemI)
 	nextState := &m.comp.State
+	incoming.Seq = nextState.NextReqSeq
 
 	if isPageHeld(nextState, incoming.PID, incoming.Address,
 		m.comp.Spec.Log2PageSize) {
 		// The page is held or faulted: the access waits in the held list
 		// without being translated.
 		incoming.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, itemI)
-		nextState.HeldReqs = append(nextState.HeldReqs, incoming)
+		nextState.HeldReqs = insertBySeq(nextState.HeldReqs, incoming)
 		nextState.NumHeldReqs++
+		nextState.NextReqSeq++
 		m.topPort().RetrieveIncoming()
 
 		return true
@@ -87,6 +89,7 @@ func (m *parseTranslateMW) translate() bool {
 
 	incoming.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, itemI)
 	m.sendTranslation(incoming, transReq)
+	nextState.NextReqSeq++
 	m.topPort().RetrieveIncoming()
 
 	return true
@@ -99,7 +102,7 @@ func (m *parseTranslateMW) replay() bool {
 	req := nextState.ReplayReqs[0]
 
 	if isPageHeld(nextState, req.PID, req.Address, m.comp.Spec.Log2PageSize) {
-		nextState.HeldReqs = append(nextState.HeldReqs, req)
+		nextState.HeldReqs = insertBySeq(nextState.HeldReqs, req)
 		nextState.ReplayReqs = nextState.ReplayReqs[1:]
 
 		return true

@@ -2,11 +2,13 @@ package writethrough
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -704,5 +706,159 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		// Rejected Invalidate must leave the directory intact.
 		block := comp.State.DirectoryState.Sets[setID].Blocks[wayID]
 		require.True(t, block.IsValid)
+	})
+
+	makeRangeReq := func(
+		cmd memcontrolprotocol.Command, pid vm.PID, start, end uint64,
+	) messaging.Msg {
+		req := makeCtrlReq(cmd)
+		req.Payload = memcontrolprotocol.Req{Command: cmd, PID: pid, HasRange: true,
+			Range: memcontrolprotocol.AddressRange{Start: start, End: end}}
+		return req
+	}
+
+	// driveRange is driveCtrl with the tick budget of a lookup per set.
+	driveRange := func(req messaging.Msg) (messaging.Msg, bool) {
+		ctrlPort.Deliver(req)
+		for range 4096 {
+			modelingtest.Tick(comp)
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok && out.RspTo == req.ID {
+				return out, true
+			}
+		}
+		return messaging.Msg{}, false
+	}
+
+	// seedLines seeds lines of pid 1 in distinct sets and returns a lookup
+	// of whether a line is still resident.
+	seedLines := func(t *testing.T, addrs ...uint64) func(addr uint64) bool {
+		t.Helper()
+		sets := map[uint64]int{}
+		used := map[int]bool{}
+		for _, addr := range addrs {
+			sets[addr], _ = seedBlock(addr, vm.PID(1))
+			require.False(t, used[sets[addr]], "test lines must use distinct sets")
+			used[sets[addr]] = true
+		}
+		return func(addr uint64) bool {
+			return comp.State.DirectoryState.Sets[sets[addr]].Blocks[0].IsValid
+		}
+	}
+
+	t.Run("a range Invalidate drops every line it intersects, with unaligned endpoints", func(t *testing.T) {
+		const top = ^uint64(0) &^ (blockSize - 1)
+		lines := []uint64{0, 0x1000, 0x1040, 0x1080, 0x10c0, top}
+		cases := []struct {
+			name       string
+			pid        vm.PID
+			start, end uint64
+			want       []uint64
+		}{
+			{"unaligned inside two lines", 0, 0x1041, 0x1081, []uint64{0x1040, 0x1080}},
+			{"end on a line boundary excludes that line", 1, 0x1040, 0x1080, []uint64{0x1040}},
+			{"one byte", 1, 0x10ff, 0x1100, []uint64{0x10c0}},
+			{"another PID", 2, 0, 0x2000, nil},
+			{"nearly the whole address space", 0, 1, ^uint64(0), lines},
+			{"from the middle to the top", 1, 0x1081, ^uint64(0), []uint64{0x1080, 0x10c0, top}},
+		}
+		for _, tc := range cases {
+			for _, paused := range []bool{true, false} {
+				setup1(t)
+				resident := seedLines(t, lines...)
+				comp.State.IsPaused = paused
+				rsp, found := driveRange(
+					makeRangeReq(memcontrolprotocol.CmdInvalidate, tc.pid, tc.start, tc.end))
+				require.True(t, found, "%s (paused %v)", tc.name, paused)
+				require.True(t, rsp.Payload.(memcontrolprotocol.Rsp).Success)
+				for _, line := range lines {
+					require.Equal(t, !slices.Contains(tc.want, line), resident(line),
+						"%s (paused %v): line %#x", tc.name, paused, line)
+				}
+				require.Zero(t, comp.State.Maintenance.Command)
+				require.Equal(t, paused, comp.State.IsPaused)
+			}
+		}
+	})
+
+	t.Run("a running range Invalidate is bounded by the sets and survives a checkpoint", func(t *testing.T) {
+		setup1(t)
+		resident := seedLines(t, 0x1000, 1<<40)
+		inv := makeRangeReq(memcontrolprotocol.CmdInvalidate, 0, 0, ^uint64(0))
+		ctrlPort.Deliver(inv)
+		modelingtest.Tick(comp)
+		op := &comp.State.Maintenance
+		require.True(t, op.HasRange)
+		require.True(t, op.SweepSets)
+		require.LessOrEqual(t, len(op.Lines)+op.LookupsInFlight, comp.Spec.NumSets,
+			"the range must not be expanded into its lines")
+
+		// A read of a line in the range waits for the ACK.
+		read := makeRead(1 << 40)
+		topPort.Deliver(read)
+		for range 4 {
+			modelingtest.Tick(comp)
+		}
+		require.Len(t, op.Deferred, 1)
+
+		var saved bytes.Buffer
+		require.NoError(t, comp.SaveCheckpoint(&saved))
+		want := *op
+		*op = maintenance.State{}
+		require.NoError(t, comp.LoadCheckpoint(&saved))
+		require.Equal(t, want, *op)
+
+		var ack messaging.Msg
+		for i := 0; i < 4096 && ack.ID == 0; i++ {
+			modelingtest.Tick(comp)
+			ack, _ = ctrlPort.RetrieveOutgoing()
+		}
+		require.Equal(t, inv.ID, ack.RspTo)
+		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
+		require.False(t, resident(0x1000))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		fetches := captureBottomReads()
+		require.Len(t, fetches, 1, "the held read must miss after the invalidation")
+		require.Equal(t, uint64(1<<40), fetches[0].Payload.(memprotocol.ReadReq).Address)
+	})
+
+	t.Run("rejects invalid and ambiguous range addressing in every state", func(t *testing.T) {
+		type AR = memcontrolprotocol.AddressRange
+		cases := []struct {
+			name string
+			req  memcontrolprotocol.Req
+			want string
+		}{
+			{"empty zero range", memcontrolprotocol.Req{HasRange: true}, memcontrolprotocol.ErrInvalidRange},
+			{"empty range", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 64, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"reversed range", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 128, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"range without HasRange", memcontrolprotocol.Req{Range: AR{Start: 0, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"range and addresses", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 0, End: 64},
+				Addresses: []uint64{0}}, memcontrolprotocol.ErrAmbiguousAddressing},
+		}
+		for _, tc := range cases {
+			for _, cmd := range []memcontrolprotocol.Command{
+				memcontrolprotocol.CmdInvalidate, memcontrolprotocol.CmdFlush} {
+				for _, paused := range []bool{true, false} {
+					setup1(t)
+					resident := seedLines(t, 0)
+					comp.State.IsPaused = paused
+					req := makeCtrlReq(cmd)
+					payload := tc.req
+					payload.Command = cmd
+					req.Payload = payload
+					rsp, found := driveCtrl(req)
+					require.True(t, found, tc.name)
+					require.Equal(t, req.ID, rsp.RspTo)
+					require.Equal(t, memcontrolprotocol.Rsp{Command: cmd, Error: tc.want}, rsp.Payload, tc.name)
+					require.True(t, resident(0))
+					require.Zero(t, comp.State.Maintenance.Command)
+				}
+			}
+		}
 	})
 }

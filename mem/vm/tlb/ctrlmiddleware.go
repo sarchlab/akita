@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/mem/internal/addrfilter"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -137,6 +138,9 @@ func (m *ctrlMiddleware) performCtrlPause(msg messaging.Msg) bool {
 // is paused or drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 	request := msg.Payload.(memcontrolprotocol.Req)
+	if errStr := request.AddressingError(); errStr != "" {
+		return m.reject(msg, errStr)
+	}
 
 	state := &m.comp.State
 	// Invalidate is only legal once the TLB is fully paused. While it is
@@ -149,7 +153,8 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec, request.Addresses, request.PID)
+	invalidateEntries(state,
+		addrfilter.FromReq(request, m.comp.Spec.Log2PageSize), request.PID)
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
@@ -161,11 +166,16 @@ func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
 func (m *ctrlMiddleware) rejectMustBePaused(msg messaging.Msg) bool {
+	return m.reject(msg, memcontrolprotocol.ErrMustBePausedOrDrained)
+}
+
+// reject answers the command with a failure.
+func (m *ctrlMiddleware) reject(msg messaging.Msg, errStr string) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
 	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Payload.(memcontrolprotocol.Req).Command,
-		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
+		msg.Src, msg.ID, false, errStr))
 	m.controlPort().RetrieveIncoming()
 	return true
 }
@@ -173,15 +183,9 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg messaging.Msg) bool {
 // invalidateEntries marks every cached page matching the filter invalid.
 func invalidateEntries(
 	state *state,
-	spec Spec,
-	addresses []uint64,
+	filter addrfilter.Filter,
 	pid vm.PID,
 ) {
-	matchAddr := make(map[uint64]bool, len(addresses))
-	for _, a := range addresses {
-		matchAddr[a/spec.pageSize()*spec.pageSize()] = true
-	}
-
 	for si := range state.Sets {
 		set := &state.Sets[si]
 		for wi := range set.Blocks {
@@ -192,7 +196,7 @@ func invalidateEntries(
 			if pid != 0 && page.PID != pid {
 				continue
 			}
-			if len(addresses) > 0 && !matchAddr[page.VAddr] {
+			if !filter.Matches(page.VAddr) {
 				continue
 			}
 			page.Valid = false

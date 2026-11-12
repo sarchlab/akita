@@ -143,6 +143,72 @@ func RunContract(
 	}
 
 	runLifecycleInvariants(t, name, build, matrix)
+	runAddressingChecks(t, name, build, matrix)
+}
+
+// runAddressingChecks sends each address-consuming verb with addressing that
+// is not valid. A component that supports the verb rejects the request with
+// the addressing error, in the enabled state too; a component that does not
+// support the verb still answers unsupported.
+func runAddressingChecks(
+	t *testing.T,
+	name string,
+	build BuildFunc,
+	matrix VerbSupport,
+) {
+	t.Helper()
+
+	verbs := []memcontrolprotocol.Command{
+		memcontrolprotocol.CmdInvalidate, memcontrolprotocol.CmdFlush,
+		memcontrolprotocol.CmdHold, memcontrolprotocol.CmdRelease,
+	}
+	reqs := []struct {
+		label string
+		req   memcontrolprotocol.Req
+		want  string
+	}{
+		{"empty-range", memcontrolprotocol.Req{HasRange: true},
+			memcontrolprotocol.ErrInvalidRange},
+		{"reversed-range", memcontrolprotocol.Req{HasRange: true,
+			Range: memcontrolprotocol.AddressRange{Start: 2, End: 1}},
+			memcontrolprotocol.ErrInvalidRange},
+		{"range-without-flag", memcontrolprotocol.Req{
+			Range: memcontrolprotocol.AddressRange{Start: 1, End: 2}},
+			memcontrolprotocol.ErrInvalidRange},
+		{"range-and-addresses", memcontrolprotocol.Req{HasRange: true,
+			Range:     memcontrolprotocol.AddressRange{Start: 1, End: 2},
+			Addresses: []uint64{1}},
+			memcontrolprotocol.ErrAmbiguousAddressing},
+	}
+
+	for _, cmd := range verbs {
+		for _, r := range reqs {
+			t.Run(fmt.Sprintf("%s/%v-%s", name, cmd, r.label), func(t *testing.T) {
+				h := build()
+				defer teardown(h)
+
+				msg := newControlReq(h, cmd)
+				payload := r.req
+				payload.Command = cmd
+				msg.Payload = payload
+				h.Ctrl.Deliver(msg)
+
+				rsp, ok := drainForRsp(h, maxTicks)
+				if !ok {
+					t.Fatalf("no response to %v with %s", cmd, r.label)
+				}
+
+				want := memcontrolprotocol.Rsp{Command: cmd, Error: r.want}
+				if !matrix.Supports(cmd) {
+					want.Error = memcontrolprotocol.ErrUnsupported
+				}
+				if rsp.Payload != want || rsp.RspTo != msg.ID {
+					t.Errorf("got %+v (RspTo %d), want %+v (RspTo %d)",
+						rsp.Payload, rsp.RspTo, want, msg.ID)
+				}
+			})
+		}
+	}
 }
 
 // runLifecycleInvariants checks properties that single-verb round trips

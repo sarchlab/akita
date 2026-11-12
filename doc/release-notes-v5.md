@@ -62,7 +62,13 @@ Tick event implementation paths change; rebuild checkpoints from older builds.
 `memcontrolprotocol.State` and its constants are removed: components define
 private execution states. Zero is now an invalid `Command`, rejected as
 unsupported. DRAM's control-state migration preserves its behavior and all its
-configuration fields. Progress-bar fields and mutex become private; use
+configuration fields. `memcontrolprotocol.Req` gains `HasRange` and `Range`, a
+half-open byte range `[Start, End)` that selects every cache line or page it
+intersects, for Invalidate, Flush, Hold, and Release. Existing requests keep
+their meaning. `Req.Addresses` is deprecated: v6 will address by range only.
+A request with an empty or reversed range, a range without `HasRange`, or both
+a range and addresses is rejected with `ErrInvalidRange` or
+`ErrAmbiguousAddressing`. Progress-bar fields and mutex become private; use
 `Snapshot()` for read access and the existing update methods for counters.
 The JSON shape is preserved, start time is populated, reads are synchronized,
 and completing an already-removed bar is safe. Monitoring no longer registers

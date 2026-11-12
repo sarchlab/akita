@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -65,6 +66,10 @@ type Resources struct{}
 type incomingReqState struct {
 	RecvTaskID uint64 `json:"recv_task_id"`
 
+	// Seq numbers the requests in the order they were taken from Top. The
+	// held and replay lists are kept in this order.
+	Seq uint64 `json:"seq"`
+
 	ID    uint64               `json:"id"`
 	Src   messaging.RemotePort `json:"src"`
 	Dst   messaging.RemotePort `json:"dst"`
@@ -120,16 +125,40 @@ type heldPageState struct {
 	Faulted bool   `json:"faulted"`
 }
 
+// heldRangeState is a run of pages, from First to Last (both page addresses,
+// both inclusive), that a range Hold holds. A range is kept as an interval
+// and never expanded into its pages.
+type heldRangeState struct {
+	PID   vm.PID `json:"pid"`
+	First uint64 `json:"first"`
+	Last  uint64 `json:"last"`
+}
+
 // pendingHoldState is a Hold that is not acknowledged yet: an access to one
 // of its pages, or a translation of one, is still in flight. Pages is keyed
-// by the page address. A Reset cancels the Hold: it is then answered with
+// by the page address; a range Hold sets HasRange and covers the pages from
+// First to Last instead. A Reset cancels the Hold: it is then answered with
 // memcontrolprotocol.ErrCanceledByReset.
 type pendingHoldState struct {
 	ID       uint64               `json:"id"`
 	Src      messaging.RemotePort `json:"src"`
 	PID      vm.PID               `json:"pid"`
 	Pages    map[uint64]bool      `json:"pages"`
+	HasRange bool                 `json:"has_range"`
+	First    uint64               `json:"first"`
+	Last     uint64               `json:"last"`
 	Canceled bool                 `json:"canceled"`
+}
+
+// covers reports whether the Hold is of the page at address page of pid.
+func (h pendingHoldState) covers(pid vm.PID, page uint64) bool {
+	if h.PID != pid {
+		return false
+	}
+	if h.HasRange {
+		return h.First <= page && page <= h.Last
+	}
+	return h.Pages[page]
 }
 
 // state contains mutable runtime data for the AddressTranslator.
@@ -141,14 +170,20 @@ type state struct {
 	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
 
 	// HeldPages are the pages whose accesses wait, keyed by heldPageKey;
-	// PendingHolds are the Holds not acknowledged yet. HeldReqs is the held list: the waiting accesses
-	// in arrival order. They use no transaction slot, so accesses to other
+	// HeldRanges are the page runs that range Holds hold. PendingHolds are
+	// the Holds not acknowledged yet. HeldReqs is the held list: the waiting
+	// accesses in arrival order. They use no transaction slot, so accesses to other
 	// pages keep flowing. ReplayReqs are the accesses that a Release let go,
-	// waiting to be sent for translation again.
+	// waiting to be sent for translation again. Both lists are in the order
+	// of incomingReqState.Seq, also when an access joins late: one whose
+	// translation returns after a later access was held, or one that a
+	// later Release lets go. NextReqSeq is the Seq of the next request.
 	HeldPages    map[string]heldPageState `json:"held_pages"`
+	HeldRanges   []heldRangeState         `json:"held_ranges"`
 	PendingHolds []pendingHoldState       `json:"pending_holds"`
 	HeldReqs     []incomingReqState       `json:"held_reqs"`
 	ReplayReqs   []incomingReqState       `json:"replay_reqs"`
+	NextReqSeq   uint64                   `json:"next_req_seq"`
 
 	// NumHeldReqs counts the accesses that ever waited, NumFaults the fault
 	// responses.
@@ -160,6 +195,18 @@ type state struct {
 
 func addrToPageID(addr, log2PageSize uint64) uint64 {
 	return (addr >> log2PageSize) << log2PageSize
+}
+
+// insertBySeq adds req to reqs, a list in the order the requests were taken
+// from Top, and keeps that order. The newest request is appended, so the
+// search starts at the end.
+func insertBySeq(reqs []incomingReqState, req incomingReqState) []incomingReqState {
+	i := len(reqs)
+	for i > 0 && reqs[i-1].Seq > req.Seq {
+		i--
+	}
+
+	return slices.Insert(reqs, i, req)
 }
 
 func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
@@ -310,6 +357,13 @@ func heldPageKey(pid vm.PID, vAddr, log2PageSize uint64) string {
 
 // isPageHeld reports whether the accesses to the page of vAddr must wait.
 func isPageHeld(state *state, pid vm.PID, vAddr, log2PageSize uint64) bool {
+	page := addrToPageID(vAddr, log2PageSize)
+	for _, r := range state.HeldRanges {
+		if r.PID == pid && r.First <= page && page <= r.Last {
+			return true
+		}
+	}
+
 	if len(state.HeldPages) == 0 {
 		return false
 	}
@@ -317,6 +371,58 @@ func isPageHeld(state *state, pid vm.PID, vAddr, log2PageSize uint64) bool {
 	_, ok := state.HeldPages[heldPageKey(pid, vAddr, log2PageSize)]
 
 	return ok
+}
+
+// holdRange marks the pages from first to last of process pid held. The
+// ranges of a process that overlap are merged, so that repeating a Hold does
+// not grow the state.
+func holdRange(state *state, pid vm.PID, first, last uint64) {
+	kept := state.HeldRanges[:0]
+	for _, r := range state.HeldRanges {
+		if r.PID != pid || r.Last < first || last < r.First {
+			kept = append(kept, r)
+			continue
+		}
+
+		first, last = min(first, r.First), max(last, r.Last)
+	}
+
+	state.HeldRanges = append(kept,
+		heldRangeState{PID: pid, First: first, Last: last})
+}
+
+// releasePages ends the Hold and the faults of the pages from first to last
+// of process pid. A held range that is released in part keeps its other
+// pages.
+func releasePages(state *state, pid vm.PID, first, last, log2PageSize uint64) {
+	if first == last {
+		delete(state.HeldPages, heldPageKey(pid, first, log2PageSize))
+	} else {
+		for key, p := range state.HeldPages {
+			if p.PID == pid && first <= p.VAddr && p.VAddr <= last {
+				delete(state.HeldPages, key)
+			}
+		}
+	}
+
+	pageSize := uint64(1) << log2PageSize
+	var kept []heldRangeState
+	for _, r := range state.HeldRanges {
+		if r.PID != pid || r.Last < first || last < r.First {
+			kept = append(kept, r)
+			continue
+		}
+
+		if r.First < first {
+			kept = append(kept,
+				heldRangeState{PID: pid, First: r.First, Last: first - pageSize})
+		}
+		if last < r.Last {
+			kept = append(kept,
+				heldRangeState{PID: pid, First: last + pageSize, Last: r.Last})
+		}
+	}
+	state.HeldRanges = kept
 }
 
 // holdPage marks the page of vAddr held (by a Hold) or faulted.

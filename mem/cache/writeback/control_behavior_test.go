@@ -2,11 +2,13 @@ package writeback
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/cache/internal/maintenance"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -905,5 +907,292 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.False(t, flushBlock.IsDirty, "flushed block must be clean after write-back")
 		require.True(t, keepBlock.IsValid)
 		require.True(t, keepBlock.IsDirty, "unfiltered dirty block must stay dirty")
+	})
+
+	makeRangeCtrlReq := func(
+		cmd memcontrolprotocol.Command,
+		start, end uint64,
+	) messaging.Msg {
+		req := makeCtrlReq(cmd)
+		req.Payload = memcontrolprotocol.Req{Command: cmd, HasRange: true,
+			Range: memcontrolprotocol.AddressRange{Start: start, End: end}}
+		return req
+	}
+
+	// runControl ticks until the response to req, answering every Bottom
+	// write. It returns the response and the addresses written back.
+	runControl := func(t *testing.T, req messaging.Msg) (memcontrolprotocol.Rsp, []uint64) {
+		t.Helper()
+		var written []uint64
+		for range 4096 {
+			modelingtest.Tick(comp)
+			for {
+				out, ok := botPort.RetrieveOutgoing()
+				if !ok {
+					break
+				}
+				write, ok := out.Payload.(memprotocol.WriteReq)
+				require.True(t, ok)
+				written = append(written, write.Address)
+				botPort.Deliver(messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+					ID: sim.NewID(), Src: messaging.RemotePort("LowerCache"),
+					Dst: botPort.AsRemote(), RspTo: out.ID})
+			}
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
+				require.Equal(t, req.ID, out.RspTo)
+				rsp := out.Payload.(memcontrolprotocol.Rsp)
+				require.Equal(t, req.Payload.(memcontrolprotocol.Req).Command, rsp.Command)
+				return rsp, written
+			}
+		}
+		t.Fatal("timed out waiting for the control response")
+		return memcontrolprotocol.Rsp{}, nil
+	}
+
+	doControl := func(t *testing.T, req messaging.Msg) (memcontrolprotocol.Rsp, []uint64) {
+		t.Helper()
+		ctrlPort.Deliver(req)
+		return runControl(t, req)
+	}
+
+	// residentLines installs dirty lines in distinct sets and returns a
+	// lookup of each line's block.
+	residentLines := func(t *testing.T, addrs ...uint64) func(addr uint64) *cache.BlockState {
+		t.Helper()
+		sets := map[uint64]int{}
+		used := map[int]bool{}
+		for i, addr := range addrs {
+			sets[addr] = residentDirtyBlock(addr, byte(i+1))
+			require.False(t, used[sets[addr]], "test lines must use distinct sets")
+			used[sets[addr]] = true
+		}
+		return func(addr uint64) *cache.BlockState {
+			return &comp.State.DirectoryState.Sets[sets[addr]].Blocks[0]
+		}
+	}
+
+	t.Run("a range selects every line it intersects, with unaligned endpoints", func(t *testing.T) {
+		lines := []uint64{0x1000, 0x1040, 0x1080, 0x10c0}
+		cases := []struct {
+			name       string
+			start, end uint64
+			want       []uint64
+		}{
+			{"unaligned inside two lines", 0x1041, 0x1081, []uint64{0x1040, 0x1080}},
+			{"end on a line boundary excludes that line", 0x1040, 0x1080, []uint64{0x1040}},
+			{"one byte", 0x10ff, 0x1100, []uint64{0x10c0}},
+			{"no resident line", 0x2000, 0x3000, nil},
+		}
+		for _, tc := range cases {
+			for _, running := range []bool{false, true} {
+				setup1(t)
+				block := residentLines(t, lines...)
+				if !running {
+					comp.State.CacheState = int(cacheStatePaused)
+				}
+				rsp, written := doControl(t,
+					makeRangeCtrlReq(memcontrolprotocol.CmdInvalidate, tc.start, tc.end))
+				require.True(t, rsp.Success, rsp.Error)
+				require.Empty(t, written, "Invalidate must not write back")
+				for _, line := range lines {
+					require.Equal(t, !slices.Contains(tc.want, line), block(line).IsValid,
+						"%s (running %v): line %#x", tc.name, running, line)
+				}
+
+				setup1(t)
+				block = residentLines(t, lines...)
+				if !running {
+					comp.State.CacheState = int(cacheStatePaused)
+				}
+				rsp, written = doControl(t,
+					makeRangeCtrlReq(memcontrolprotocol.CmdFlush, tc.start, tc.end))
+				require.True(t, rsp.Success, rsp.Error)
+				require.ElementsMatch(t, tc.want, written, "%s (running %v)", tc.name, running)
+				for _, line := range lines {
+					require.True(t, block(line).IsValid)
+					require.Equal(t, !slices.Contains(tc.want, line), block(line).IsDirty,
+						"%s (running %v): line %#x", tc.name, running, line)
+				}
+			}
+		}
+	})
+
+	t.Run("a running range command visits its lines like the same address list", func(t *testing.T) {
+		requestsPerCycle = 1
+		t.Cleanup(func() { requestsPerCycle = 4 })
+		ticksToACK := func(makeReq func() messaging.Msg) int {
+			setup1(t)
+			residentLines(t, 0x1000, 0x1040, 0x1080)
+			ctrlPort.Deliver(makeReq())
+			for i := 1; i < 200; i++ {
+				modelingtest.Tick(comp)
+				if _, ok := ctrlPort.RetrieveOutgoing(); ok {
+					for si := range comp.State.DirectoryState.Sets {
+						require.False(t, comp.State.DirectoryState.Sets[si].Blocks[0].IsValid)
+					}
+					return i
+				}
+			}
+			t.Fatal("timed out waiting for Invalidate ACK")
+			return 0
+		}
+		list := ticksToACK(func() messaging.Msg {
+			return makeFilteredCtrlReq(memcontrolprotocol.CmdInvalidate,
+				[]uint64{0x1000, 0x1040, 0x1080})
+		})
+		ranged := ticksToACK(func() messaging.Msg {
+			return makeRangeCtrlReq(memcontrolprotocol.CmdInvalidate, 0x1001, 0x1081)
+		})
+		require.Equal(t, list, ranged)
+	})
+
+	t.Run("a running range near the whole address space sweeps the sets once", func(t *testing.T) {
+		setup1(t)
+		const top = ^uint64(0) &^ (blockSize - 1)
+		lines := []uint64{0, 0x1040, 1 << 40, top}
+		block := residentLines(t, lines...)
+		block(0x1040).PID = 7
+
+		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
+		inv.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 7,
+			HasRange: true, Range: memcontrolprotocol.AddressRange{Start: 1, End: ^uint64(0)}}
+		ctrlPort.Deliver(inv)
+		modelingtest.Tick(comp)
+		op := &comp.State.Maintenance
+		require.True(t, op.SweepSets)
+		require.LessOrEqual(t, len(op.Lines)+op.LookupsInFlight, comp.Spec.NumSets,
+			"the range must not be expanded into its lines")
+		require.Empty(t, op.Tags)
+
+		rsp, _ := runControl(t, inv)
+		require.True(t, rsp.Success, rsp.Error)
+		require.False(t, block(0x1040).IsValid)
+		for _, line := range []uint64{0, 1 << 40, top} {
+			require.True(t, block(line).IsValid, "another PID's line %#x", line)
+		}
+
+		// With the PID wildcard the sweep reaches the first and the last
+		// line of the address space.
+		rsp, written := doControl(t,
+			makeRangeCtrlReq(memcontrolprotocol.CmdFlush, 1, ^uint64(0)))
+		require.True(t, rsp.Success, rsp.Error)
+		require.ElementsMatch(t, []uint64{0, 1 << 40, top}, written)
+		require.Zero(t, comp.State.Maintenance.Command)
+	})
+
+	t.Run("a running range command holds accesses to its lines across a checkpoint", func(t *testing.T) {
+		setup1(t)
+		const addr = uint64(0x1000)
+		older := makeRead(addr + 0x40)
+		topPort.Deliver(older)
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		fetch, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok)
+
+		inv := makeRangeCtrlReq(memcontrolprotocol.CmdInvalidate, addr+1, addr+0x41)
+		ctrlPort.Deliver(inv)
+		later := makeRead(addr)
+		topPort.Deliver(later)
+		topPort.Deliver(makeRead(addr + 0x80))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		unrelated, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok, "a line after the range must not be held")
+		require.Equal(t, addr+0x80, unrelated.Payload.(memprotocol.ReadReq).Address)
+		_, ok = ctrlPort.PeekOutgoing()
+		require.False(t, ok, "invalidate overtook the older fill of a line in the range")
+		require.Len(t, comp.State.Maintenance.Deferred, 1)
+
+		var saved bytes.Buffer
+		require.NoError(t, comp.SaveCheckpoint(&saved))
+		want := comp.State.Maintenance
+		comp.State.Maintenance = maintenance.State{}
+		require.NoError(t, comp.LoadCheckpoint(&saved))
+		require.Equal(t, want, comp.State.Maintenance)
+		require.True(t, comp.State.Maintenance.HasRange)
+
+		botPort.Deliver(makeFillRsp(fetch))
+		for range 32 {
+			modelingtest.Tick(comp)
+		}
+		reply, ok := topPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, older.ID, reply.RspTo)
+		ack, ok := ctrlPort.RetrieveOutgoing()
+		require.True(t, ok)
+		require.Equal(t, inv.ID, ack.RspTo)
+		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
+		refetch, ok := botPort.RetrieveOutgoing()
+		require.True(t, ok, "the held read must miss after the invalidation")
+		require.Equal(t, addr, refetch.Payload.(memprotocol.ReadReq).Address)
+	})
+
+	t.Run("a paused range Flush keeps its range across a checkpoint", func(t *testing.T) {
+		setup1(t)
+		block := residentLines(t, 0x1000, 0x1040, 0x1080)
+		comp.State.CacheState = int(cacheStatePaused)
+		flush := makeRangeCtrlReq(memcontrolprotocol.CmdFlush, 0x1040, 0x1041)
+		ctrlPort.Deliver(flush)
+		modelingtest.Tick(comp)
+		require.True(t, comp.State.HasProcessingFlush)
+		require.Empty(t, comp.State.FlusherBlockToEvictRefs, "the lines are selected after the checkpoint")
+
+		var saved bytes.Buffer
+		require.NoError(t, comp.SaveCheckpoint(&saved))
+		comp.State.ProcessingFlush = flushReqState{}
+		require.NoError(t, comp.LoadCheckpoint(&saved))
+		restored := comp.State.ProcessingFlush.Msg.Payload.(memcontrolprotocol.Req)
+		require.Equal(t, flush.Payload, restored, "the request payload must round-trip")
+
+		rsp, written := runControl(t, flush)
+		require.True(t, rsp.Success, rsp.Error)
+		require.Equal(t, []uint64{0x1040}, written)
+		require.True(t, block(0x1000).IsDirty)
+		require.True(t, block(0x1080).IsDirty)
+	})
+
+	t.Run("rejects invalid and ambiguous range addressing in every state", func(t *testing.T) {
+		type AR = memcontrolprotocol.AddressRange
+		cases := []struct {
+			name string
+			req  memcontrolprotocol.Req
+			want string
+		}{
+			{"empty zero range", memcontrolprotocol.Req{HasRange: true}, memcontrolprotocol.ErrInvalidRange},
+			{"empty range", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 64, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"reversed range", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 128, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"range without HasRange", memcontrolprotocol.Req{Range: AR{Start: 0, End: 64}},
+				memcontrolprotocol.ErrInvalidRange},
+			{"range and addresses", memcontrolprotocol.Req{HasRange: true, Range: AR{Start: 0, End: 64},
+				Addresses: []uint64{0}}, memcontrolprotocol.ErrAmbiguousAddressing},
+		}
+		for _, tc := range cases {
+			for _, cmd := range []memcontrolprotocol.Command{
+				memcontrolprotocol.CmdInvalidate, memcontrolprotocol.CmdFlush} {
+				for _, st := range []cacheState{cacheStateRunning, cacheStatePaused} {
+					setup1(t)
+					block := residentLines(t, 0)
+					comp.State.CacheState = int(st)
+					req := makeCtrlReq(cmd)
+					payload := tc.req
+					payload.Command = cmd
+					req.Payload = payload
+					ctrlPort.Deliver(req)
+					rsp, written := runControl(t, req)
+					require.False(t, rsp.Success, tc.name)
+					require.Equal(t, tc.want, rsp.Error, tc.name)
+					require.Empty(t, written)
+					require.True(t, block(0).IsValid && block(0).IsDirty)
+					require.Equal(t, st, cacheState(comp.State.CacheState))
+					require.Zero(t, comp.State.Maintenance.Command)
+					require.False(t, comp.State.HasProcessingFlush)
+				}
+			}
+		}
 	})
 }

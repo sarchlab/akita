@@ -47,19 +47,19 @@ const (
 	CmdReset
 
 	// CmdInvalidate drops entries from the agent's private cache state
-	// without writeback. A running data cache accepts a nonempty Addresses
-	// filter and replies after processing those lines. In a paused agent
+	// without writeback. A running data cache accepts an address filter (Range
+	// or nonempty Addresses) and replies after processing those lines. In a paused agent
 	// Invalidate is synchronous. PID zero matches every address space.
 	CmdInvalidate
 
 	// CmdFlush writes back dirty private state to backing memory. Clean
-	// entries remain valid. Running writeback caches require a nonempty
-	// Addresses filter. Other supported Flush operations require Pause or
+	// entries remain valid. Running writeback caches require an address
+	// filter (Range or nonempty Addresses). Other supported Flush operations require Pause or
 	// Drain. The ACK follows completion of matching writebacks.
 	CmdFlush
 
-	// CmdHold stops the accesses to the pages at Addresses (page-aligned
-	// virtual addresses) of process PID: a new access to them waits, and
+	// CmdHold stops the accesses to the pages that Range intersects, or to the
+	// pages at Addresses (virtual addresses), of process PID: a new access to them waits, and
 	// so does an access whose translation arrives after the Hold. Other
 	// pages are not affected, and the component keeps processing control
 	// commands while a Hold waits. Legal in any state. Conditional verb
@@ -67,7 +67,7 @@ const (
 	// the pages is outstanding and no translation of them is in flight.
 	CmdHold
 
-	// CmdRelease sends the accesses that wait on the pages at Addresses of
+	// CmdRelease sends the accesses that wait on the pages of Range or Addresses of
 	// process PID for translation again, in the order they arrived. It
 	// ends a Hold of the pages and also releases the accesses that wait on
 	// a translation fault. Releasing a page that is not held is not an
@@ -76,11 +76,73 @@ const (
 	CmdRelease
 )
 
+// AddressRange is the half-open byte interval [Start, End). It must not be
+// empty: End is greater than Start. A range selects every cache line or page
+// that it intersects, so its endpoints need no alignment. End is exclusive,
+// so a range cannot include the byte at the highest address.
+type AddressRange struct {
+	Start uint64
+	End   uint64
+}
+
+// Bounds returns the addresses of the first and the last unit that r
+// intersects, where a unit is an aligned block of 1<<log2UnitSize bytes (a
+// cache line or a page). Both bounds are inclusive, so they do not overflow.
+// r must be valid.
+func (r AddressRange) Bounds(log2UnitSize uint64) (first, last uint64) {
+	return r.Start >> log2UnitSize << log2UnitSize,
+		(r.End - 1) >> log2UnitSize << log2UnitSize
+}
+
 // Req is the unified control request for all memory agents.
+//
+// Range (with HasRange) and a nonempty Addresses are alternatives. A receiver
+// that consumes the addresses of the verb rejects a request with both, a
+// request with an empty or reversed Range, and a request that sets Range
+// without HasRange; see AddressingError. A request with neither keeps the
+// meaning of an empty Addresses.
 type Req struct {
-	Command   Command
-	Addresses []uint64 // Invalidate / Flush filter (empty = all entries); Hold / Release pages.
-	PID       vm.PID   // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
+	Command Command
+
+	// Addresses is the Invalidate / Flush filter (empty = all entries) and
+	// the Hold / Release pages.
+	//
+	// Deprecated: use HasRange and Range. Akita v6 will address by range
+	// only and remove Addresses.
+	Addresses []uint64
+
+	PID vm.PID // Invalidate / Flush filter (zero = all PIDs); Hold / Release process.
+
+	// HasRange selects Range as the Invalidate / Flush filter and the Hold /
+	// Release pages: every line or page that Range intersects. Range must
+	// be the zero value when HasRange is false.
+	HasRange bool
+	Range    AddressRange
+}
+
+// HasAddressFilter reports whether the request names addresses, by Range or
+// by a nonempty Addresses.
+func (r Req) HasAddressFilter() bool {
+	return r.HasRange || len(r.Addresses) > 0
+}
+
+// AddressingError returns the Rsp.Error for a request whose addressing is
+// not valid, or an empty string. A receiver checks it for the verbs whose
+// addresses it consumes, before any other legality check of the verb.
+func (r Req) AddressingError() string {
+	if !r.HasRange {
+		if r.Range != (AddressRange{}) {
+			return ErrInvalidRange
+		}
+		return ""
+	}
+	if r.Range.End <= r.Range.Start {
+		return ErrInvalidRange
+	}
+	if len(r.Addresses) > 0 {
+		return ErrAmbiguousAddressing
+	}
+	return ""
 }
 
 // Rsp is the unified response to a Req.

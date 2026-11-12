@@ -12,7 +12,12 @@ protocol reference.
 ## What this package provides
 
 - **Messages and roles** — `Req`, `Rsp`, `Command`, and requester/responder roles.
-- **Error strings** — `ErrUnsupported`, `ErrMustBePausedOrDrained`, and `ErrCanceledByReset`.
+- **Addressing** — `AddressRange`, the half-open byte range `[Start, End)` of
+  `Req.Range`, selected by `Req.HasRange`. It selects every cache line or page
+  that it intersects. `Req.Addresses` is deprecated; v6 will address by range
+  only. `Req.AddressingError` is the check that receivers apply.
+- **Error strings** — `ErrUnsupported`, `ErrMustBePausedOrDrained`,
+  `ErrCanceledByReset`, `ErrInvalidRange`, and `ErrAmbiguousAddressing`.
 - Zero is not a valid `Command`; receivers reject it as unsupported.
 
 Component states are private implementation details. The protocol specifies
@@ -35,13 +40,16 @@ Four are **universal** (every agent supports them); two are
 A **sync** verb is acked in the same tick it is received; an **async**
 verb (Drain, Flush) is acked when the underlying work completes.
 
-Running data caches accept Invalidate with a nonempty address filter. Running
+Running data caches accept Invalidate with an address filter: a range or a
+nonempty address list. Running
 writeback caches also accept filtered Flush. Other supported Invalidate and
 Flush operations require Pause or Drain. When issued while enabled they return
 `Success: false, Error: ErrMustBePausedOrDrained`. Unsupported verbs
 reply with `Success: false, Error: ErrUnsupported`. A Reset answers the
 Holds that are not acknowledged yet with
-`Success: false, Error: ErrCanceledByReset`.
+`Success: false, Error: ErrCanceledByReset`. A supported Invalidate, Flush,
+Hold, or Release whose addressing is not valid replies with
+`ErrInvalidRange` or `ErrAmbiguousAddressing` in every state.
 
 ## Support matrix
 
