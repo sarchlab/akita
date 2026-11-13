@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/nvlink"
@@ -19,7 +18,6 @@ func main() {
 	for i := 0; i < 9; i++ {
 		for j := i + 1; j < 9; j++ {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
-			rand.Seed(1)
 
 			s := acceptance.NewSimulation()
 			engine := s.Engine()

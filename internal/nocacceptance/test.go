@@ -4,6 +4,7 @@ import (
 	"log"
 	"math/rand"
 	"reflect"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -31,11 +32,20 @@ type Test struct {
 	msgs              []messaging.Msg
 	receivedMsgs      []messaging.Msg
 	receivedMsgsTable map[uint64]bool
+
+	// rng generates the traffic. It is owned by the test, not the global
+	// math/rand source, because rand.Seed is a no-op since Go 1.24 and the
+	// traffic must be the same on every run.
+	rng *rand.Rand
+
+	// receiveLock guards the received-message bookkeeping, which agents
+	// update from concurrent events when the parallel engine runs the test.
+	receiveLock sync.Mutex
 }
 
 // NewTest creates a new test.
 func NewTest() *Test {
-	t := &Test{}
+	t := &Test{rng: rand.New(rand.NewSource(1))}
 	t.receivedMsgsTable = make(map[uint64]bool)
 
 	return t
@@ -50,24 +60,24 @@ func (t *Test) RegisterAgent(agent *Agent) {
 // destination port.
 func (t *Test) GenerateMsgs(n uint64) {
 	for i := uint64(0); i < n; i++ {
-		srcAgentID := rand.Intn(len(t.agents))
+		srcAgentID := t.rng.Intn(len(t.agents))
 		srcAgent := t.agents[srcAgentID]
-		srcPortID := rand.Intn(len(srcAgent.AgentPorts))
+		srcPortID := t.rng.Intn(len(srcAgent.AgentPorts))
 		srcPort := srcAgent.AgentPorts[srcPortID]
 
-		dstAgentID := rand.Intn(len(t.agents))
+		dstAgentID := t.rng.Intn(len(t.agents))
 		for dstAgentID == srcAgentID {
-			dstAgentID = rand.Intn(len(t.agents))
+			dstAgentID = t.rng.Intn(len(t.agents))
 		}
 
 		dstAgent := t.agents[dstAgentID]
-		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
+		dstPortID := t.rng.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
 		msg := messaging.Msg{ID: srcAgent.NewID(),
 			Src:          srcPort.AsRemote(),
 			Dst:          dstPort.AsRemote(),
-			TrafficBytes: rand.Intn(4096),
+			TrafficBytes: t.rng.Intn(4096),
 			Payload:      TrafficMsg{Data: []byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}},
 		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
@@ -84,6 +94,9 @@ func (t *Test) receiveMsg(meta messaging.Msg, recvPort messaging.Port) {
 	if meta.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
+
+	t.receiveLock.Lock()
+	defer t.receiveLock.Unlock()
 
 	if _, found := t.receivedMsgsTable[meta.ID]; found {
 		panic("msg is double delivered")
