@@ -5,7 +5,9 @@
 package tracecompare
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -23,9 +25,10 @@ const (
 	// Exact requires the same tasks, milestones, and tags with the same IDs.
 	Exact Mode = iota
 
-	// IgnoreIDs requires the same multiset of tasks, where each task is
+	// IgnoreIDs requires the same task forest up to renaming IDs: each task is
 	// identified by its content (kind, what, location, start and end time,
-	// milestones, and tags) together with the content of its parent task.
+	// milestones, and tags) together with the structure and content of its
+	// whole subtree.
 	IgnoreIDs
 )
 
@@ -236,25 +239,66 @@ func (t *trace) exactKeys() map[string]int {
 	return keys
 }
 
-// idFreeKeys describes every task by its content and its parent's content.
+// idFreeKeys describes every task by its content and a hash of its whole
+// subtree, so the comparison is a rooted-forest isomorphism check: two traces
+// match exactly when they are the same task forest up to renaming IDs.
 // Milestones and tags are folded into their task's content.
 func (t *trace) idFreeKeys() map[string]int {
-	contents := make(map[uint64]string, len(t.tasks))
+	children := make(map[uint64][]uint64)
 	for id, tk := range t.tasks {
-		contents[id] = t.content(tk) + t.children(id)
+		if _, ok := t.tasks[tk.parentID]; ok && tk.parentID != id {
+			children[tk.parentID] = append(children[tk.parentID], id)
+		}
 	}
 
+	hashes := make(map[uint64]string, len(t.tasks))
 	keys := make(map[string]int, len(t.tasks))
-	for id, tk := range t.tasks {
-		parent, ok := contents[tk.parentID]
-		if !ok {
-			parent = "<none>"
-		}
 
-		keys[fmt.Sprintf("task {%s} parent {%s}", contents[id], parent)]++
+	for id, tk := range t.tasks {
+		h := t.subtreeHash(id, children, hashes, map[uint64]bool{})
+		keys[fmt.Sprintf("task {%s} subtree %s",
+			t.content(tk)+t.children(id), h[:16])]++
 	}
 
 	return keys
+}
+
+// subtreeHash returns a hash of a task's content and the sorted hashes of its
+// children, so it identifies the subtree up to ID renaming. It memoizes in
+// hashes; visiting guards against malformed traces with parent cycles.
+func (t *trace) subtreeHash(
+	id uint64,
+	children map[uint64][]uint64,
+	hashes map[uint64]string,
+	visiting map[uint64]bool,
+) string {
+	if h, ok := hashes[id]; ok {
+		return h
+	}
+
+	if visiting[id] {
+		return "cycle"
+	}
+	visiting[id] = true
+
+	childHashes := make([]string, 0, len(children[id]))
+	for _, c := range children[id] {
+		childHashes = append(childHashes, t.subtreeHash(c, children, hashes, visiting))
+	}
+	sort.Strings(childHashes)
+
+	sum := sha256.New()
+	sum.Write([]byte(t.content(t.tasks[id]) + t.children(id)))
+	for _, c := range childHashes {
+		sum.Write([]byte{0})
+		sum.Write([]byte(c))
+	}
+
+	h := hex.EncodeToString(sum.Sum(nil))
+	hashes[id] = h
+	delete(visiting, id)
+
+	return h
 }
 
 func (t *trace) content(tk task) string {

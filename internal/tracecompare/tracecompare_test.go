@@ -127,3 +127,36 @@ func TestReparentingIsReportedWithoutIDs(t *testing.T) {
 		t.Fatal("expected the parent change to be reported")
 	}
 }
+
+func TestChildReassignmentBetweenIdenticalParentsIsReported(t *testing.T) {
+	// P1 and P2 (IDs 1 and 3) have identical content: same what, times,
+	// location (odd IDs), and milestone. Only their children differ.
+	a := writeTrace(t, "a.sqlite3", []taskRow{
+		{1, 0, "P", 0, 10}, {3, 0, "P", 0, 10},
+		{5, 1, "Write", 1, 5}, {7, 3, "Flush", 1, 5},
+	}, 100)
+	b := writeTrace(t, "b.sqlite3", []taskRow{
+		{1, 0, "P", 0, 10}, {3, 0, "P", 0, 10},
+		{5, 1, "Write", 1, 5}, {7, 1, "Flush", 1, 5},
+	}, 100)
+
+	if r := mustCompare(t, a, b, IgnoreIDs); r.Equal() {
+		t.Fatal("expected the child reassignment to be reported")
+	}
+}
+
+func TestRenumberedForestWithIdenticalParentsMatches(t *testing.T) {
+	// The same forest as above (each P has one child), with IDs swapped.
+	a := writeTrace(t, "a.sqlite3", []taskRow{
+		{1, 0, "P", 0, 10}, {3, 0, "P", 0, 10},
+		{5, 1, "Write", 1, 5}, {7, 3, "Flush", 1, 5},
+	}, 100)
+	b := writeTrace(t, "b.sqlite3", []taskRow{
+		{3, 0, "P", 0, 10}, {1, 0, "P", 0, 10},
+		{5, 3, "Write", 1, 5}, {7, 1, "Flush", 1, 5},
+	}, 200)
+
+	if r := mustCompare(t, a, b, IgnoreIDs); !r.Equal() {
+		t.Fatalf("expected a match, got %d diffs: %v", r.NumDiffs, r.Diffs)
+	}
+}
