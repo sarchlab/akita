@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/mesh"
@@ -14,7 +13,6 @@ import (
 
 func main() {
 	flag.Parse()
-	rand.Seed(1)
 
 	// In case of a panic, do not exit the program, but sleep.
 	// defer func() {

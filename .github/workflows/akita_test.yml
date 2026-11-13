@@ -143,6 +143,35 @@ jobs:
         working-directory: ./noc/acceptance
         run: python3 acceptance_test.py
 
+  determinism_test:
+    # Serial runs must repeat exactly, and parallel runs must match serial runs
+    # once task IDs are removed (issue #86). A second step runs small parallel
+    # simulations under the race detector.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [akita_build_lint_test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.0
+          # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
+          # between jobs, so setup-go's dependency cache is redundant. It was
+          # also failing auth and burning ~20 min / ~2 GB restoring a stale
+          # archive at 1-2 MB/s. Disable it.
+          cache: false
+      - name: Ensure Python3
+        run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: go generate ./...
+      - name: Serial determinism and serial/parallel consistency
+        run: python3 internal/tracecompare/determinism_test.py
+      - name: Parallel engine under the race detector
+        run: python3 internal/tracecompare/determinism_test.py --race
+
   mem_acceptance_test:
     runs-on: Github-Large-1
     timeout-minutes: 60

@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 
 	acceptance "github.com/sarchlab/akita/v5/internal/nocacceptance"
 	"github.com/sarchlab/akita/v5/noc/internal/endpoint"
@@ -16,7 +15,6 @@ import (
 
 func main() {
 	flag.Parse()
-	rand.Seed(1)
 
 	s := acceptance.NewSimulation()
 	engine := s.Engine()

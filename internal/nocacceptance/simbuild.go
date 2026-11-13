@@ -12,6 +12,10 @@ import (
 var traceFlag = flag.Bool("trace", false,
 	"Collect a vis trace (plus simulator source and topology) into trace.sqlite3")
 
+// parallelFlag runs the simulation on the parallel engine, so the determinism
+// CI job can compare its trace against a serial run.
+var parallelFlag = flag.Bool("parallel", false, "Run with the parallel engine")
+
 // NewSimulation builds the Simulation that every acceptance main runs on, so
 // the network's components register with a real simulation object. Monitoring
 // is disabled to keep the runs headless. With -trace the simulation records a
@@ -22,6 +26,10 @@ var traceFlag = flag.Bool("trace", false,
 // the run finishes so the recording is flushed and closed.
 func NewSimulation() *sim.Simulation {
 	b := sim.MakeBuilder()
+
+	if *parallelFlag {
+		b = b.WithParallelEngine()
+	}
 
 	if *traceFlag {
 		b = b.WithVisTracingOnStart().WithOutputPath("trace" + ".sqlite3")
