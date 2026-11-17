@@ -34,7 +34,12 @@ const (
 	Blocked                    // NACK now; the requester translates again after the driver releases it.
 )
 
-// Rsp answers one Req through messaging.Msg.RspTo.
+// Rsp answers one Req through messaging.Msg.RspTo. Resolved supplies a mapping
+// already safe for the requester to use. An MMU drains outstanding fault
+// decisions before acknowledging a control command covering the page. A handler
+// must answer the fault before waiting for that ACK. When installation or
+// migration is needed, reply Blocked, coordinate Hold and mapping updates,
+// then Release the requester to translate again.
 type Rsp struct {
 	Result  Result
 	Mapping vm.Page

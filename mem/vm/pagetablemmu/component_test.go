@@ -337,6 +337,7 @@ func TestCheckpointWithPendingDeviceDecision(t *testing.T) {
 
 func TestInvalidateRangeDropsOnlyOverlappingPrefixes(t *testing.T) {
 	spec := baseSpec()
+	spec.FilterBuckets = 64
 	r := newRig(t, spec, nil, false)
 	r.root(r.mmu)
 	const far = uint64(1) << 39
@@ -356,7 +357,8 @@ func TestInvalidateRangeDropsOnlyOverlappingPrefixes(t *testing.T) {
 		r.traffic.Items = nil
 		r.translate(tc.va, 2)
 		r.run()
-		r.recv(r.request)
+		require.Zero(t, r.policy.IncomingBuf().Size(), "still-mapped page must walk locally")
+		require.False(t, r.recv(r.request).Payload.(at.Rsp).Fault)
 		require.Len(t, r.reads(r.mmu.Ports.Memory), tc.reads)
 	}
 }

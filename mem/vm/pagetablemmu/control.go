@@ -163,7 +163,7 @@ func (m *controlMiddleware) maintain(u *update) {
 		bank.invalidate(u.Request.PID, c.Spec.prefix(lo, level), c.Spec.prefix(hi, level))
 	}
 	u.Stage = ack
-	if len(c.State.Filter) > 0 {
+	if len(c.State.Filter) > 0 && u.Request.Command != pt.Invalidate {
 		u.Stage = filterUpdate
 	}
 }

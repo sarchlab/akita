@@ -86,8 +86,14 @@ func (m *walkMiddleware) maintainFilter(now timing.VTimeInPicoSec, remaining *in
 	switch u.Request.Command {
 	case pt.Map, pt.Remap:
 		u.MoreFilter = c.State.insertHint(u, c.Spec)
-	case pt.Unmap, pt.Invalidate, pt.Teardown:
-		u.MoreFilter = c.State.removeHint(u, c.Spec)
+	case pt.Unmap:
+		c.State.removeHint(u.Request.PID, u.Request.VAddr>>c.Spec.Log2PageSize)
+	case pt.Teardown:
+		if c.State.Filter[u.FilterCursor].PID == u.Request.PID {
+			c.State.Filter[u.FilterCursor] = fingerprint{}
+		}
+		u.FilterCursor++
+		u.MoreFilter = u.FilterCursor < uint64(len(c.State.Filter))
 	}
 	u.Due = m.due(now, c.Spec.FilterLatency)
 	u.Stage = filterDelay
@@ -120,23 +126,12 @@ func (s *state) insertHint(u *update, spec Spec) bool {
 	return true
 }
 
-func (s *state) removeHint(u *update, spec Spec) bool {
-	lo, hi := u.vpnRange(spec)
-	if u.Request.Command == pt.Teardown || hi-lo >= uint64(len(s.Filter)) {
-		// A large range is cheaper to flush conservatively by PID.
-		if s.Filter[u.FilterCursor].PID == u.Request.PID {
-			s.Filter[u.FilterCursor] = fingerprint{}
-		}
-		u.FilterCursor++
-		return u.FilterCursor < uint64(len(s.Filter))
-	}
-	f, a, b := s.candidates(u.Request.PID, lo+u.FilterCursor)
+func (s *state) removeHint(pid vm.PID, vpn uint64) {
+	f, a, b := s.candidates(pid, vpn)
 	if s.Filter[a] == f {
 		s.Filter[a] = fingerprint{}
 	}
 	if s.Filter[b] == f {
 		s.Filter[b] = fingerprint{}
 	}
-	u.FilterCursor++
-	return u.FilterCursor <= hi-lo
 }

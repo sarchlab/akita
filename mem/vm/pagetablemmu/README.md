@@ -51,9 +51,10 @@ Every incoming translation or fault uses the original PID and VA to walk the
 receiver's own root. On a miss the instance sends `HasMapping=false` to its
 fault handler. With `ConsultRemote`, a mapping whose owner differs from the
 requesting device goes to the handler with `HasMapping=true`. Otherwise a
-found mapping is immediately usable. The returned `Resolved` mapping can be
-remote. `Blocked` returns an ordinary translation NACK carrying the original
-PID and page base, which existing TLBs use to drain their MSHR.
+found mapping is immediately usable. A handler returns `Resolved` when its
+mapping is already safe to use, including for remote access. `Blocked`
+returns an ordinary translation NACK carrying the original PID and page base,
+which existing TLBs use to drain their MSHR.
 
 Walks merge on PID and VPN. Pending decisions also match the requesting
 device. Admission and output arbitration each get `AdmissionWidth` slots per
@@ -61,17 +62,23 @@ cycle. Input remains on the port when either the walk array or the matching
 waiter list is full. A completed entry remains occupied while replies wait
 for a port. Each accepted message receives its own response ID and `RspTo`.
 After a NACK, a new translation starts a new transaction. The driver owns
-placement, terminal unmapped diagnostics, Hold/Release and migration. A driver
-choosing migration answers `Blocked` before it waits for Hold acknowledgments.
+placement, terminal unmapped diagnostics, Hold/Release and migration.
+
+A fault handler must answer each outstanding fault before waiting for a
+control ACK covering that page. The command waits for the fault decision to
+drain. If servicing the fault requires installation or migration, reply
+`Blocked` first, coordinate Hold and its ACKs, complete the mapping updates
+and invalidation, then Release the waiting accesses.
 
 ## Page tables and updates
 
 Set the same `Log2PageSize` on every translation component. Page-table nodes
-always occupy 4 KiB and contain 512 little-endian, 8-byte entries. Walks index successive nine-bit VPN slices, with zero extension above
-the virtual address width. A hierarchy can have one to eight levels and must
-cover every configured VPN bit. For example, append a fourth bank to `Banks` for five levels.
-A 57-bit VA and 4 KiB pages then use all root index bits. With a 48-bit VA
-the fifth level has a fixed root index of zero.
+always occupy 4 KiB and contain 512 little-endian, 8-byte entries. Walks
+index successive nine-bit VPN slices, with zero extension above the virtual
+address width. A hierarchy can have one to eight levels and must cover every
+configured VPN bit. For example, append a fourth bank to `Banks` for five
+levels. A 57-bit VA and 4 KiB pages then use all root index bits. With a
+48-bit VA the fifth level has a fixed root index of zero.
 
 Bit 0 marks a valid PTE. A valid internal entry contains its aligned child
 address with bit 0 set. A leaf sets bit 1, stores the physical frame number
@@ -86,13 +93,18 @@ zeroed address space. After its ACK, issue `Map` with a page-aligned
 `VAddr` and `Mapping` containing the aligned data PAddr, owner and policy
 flags. The component derives page size, validity, VA and PID. `Remap` and
 `Unmap` require an existing leaf. `Invalidate` takes an aligned starting
-VA and positive page-multiple size in bytes. `Teardown` applies to the
-entire PID. Each response correlates to its command and carries an empty
-`Error` on success.
+VA and positive page-multiple size in bytes. It drops overlapping STC
+prefixes and preserves the routing filter's hints for installed pages.
+`Teardown` applies to the entire PID. Each response correlates to its command
+and carries an empty `Error` on success.
 
 A command protects its own affected pages from admission and waits for active
-walks and fault replies on those pages to drain. Walks on other ranges can
-continue. Each instance serializes its own commands. The updater reads the
+walks and fault replies on those pages to drain. An already admitted walk on
+another range can continue. Each input port admits requests in FIFO order,
+so a protected request at the head delays later requests on that port. The
+other input port can still admit independent work.
+
+Each instance serializes its own commands. The updater reads the
 existing path from memory, reserves the whole missing chain before modifying
 it, and zeroes each child before publishing its parent pointer. Zeroing uses
 writes of up to 64 bytes, split at line and memory-route boundaries. Each
@@ -127,9 +139,10 @@ for experiments and have no hardware calibration.
   SRAM latency. The default is one operation per cycle, one cycle of latency
   and four displacements. An unresolved collision may discard a fingerprint.
   A negative bypasses the local walk and a positive still checks PTE memory.
-  Both false negatives and false positives can add fallback traffic.
-  Large invalidations may discard extra hints for the same PID. Enable the
-  filter only on instances backed by a complete downstream mapping authority.
+  Both false negatives and false positives can add fallback traffic. Unmap
+  removes the matching hint and teardown clears the PID's entries. Enable
+  the filter only on instances backed by a complete downstream mapping
+  authority.
 
 The integration tests wire real buffered ports, a memory controller and
 storage. They include a two-MMU topology, a real TLB NACK/retry, timed STC

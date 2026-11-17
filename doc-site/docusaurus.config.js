@@ -7,6 +7,7 @@ import path from 'node:path';
 // Keep these shared links readable on GitHub and resolve them to site routes
 // during the build. All other unresolved Markdown targets remain errors.
 const crossPluginRoutes = new Map([
+  ['mem/vm/pagetablemmu/README.md', '/packages/mem/vm/pagetablemmu/'],
   ['sim/tasks/README.md', '/packages/tasks/'],
   ['sim/tasks/tracing/README.md', '/packages/tasks/tracing/'],
   ['doc/tutorial/checkpointing.md', '/tutorial/checkpointing'],
