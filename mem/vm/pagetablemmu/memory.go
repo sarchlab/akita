@@ -1,0 +1,260 @@
+package pagetablemmu
+
+import (
+	"encoding/binary"
+	"fmt"
+
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
+	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
+)
+
+type memoryMiddleware struct{ c *Comp }
+
+func (m *memoryMiddleware) Handle(_ timing.Event) bool {
+	c := m.c
+	progress := false
+	for range c.Spec.MemoryWidth {
+		msg, ok := c.Ports.Memory.RetrieveIncoming()
+		if !ok {
+			break
+		}
+		m.receive(msg)
+		progress = true
+	}
+	for range c.Spec.MemoryWidth {
+		if !c.Ports.Memory.CanSend() {
+			break
+		}
+		if c.State.PreferUpdate && m.issueUpdate() {
+			c.State.PreferUpdate = false
+		} else if m.issueWalk() {
+			c.State.PreferUpdate = true
+		} else if m.issueUpdate() {
+			c.State.PreferUpdate = false
+		} else {
+			break
+		}
+		progress = true
+	}
+	return progress
+}
+
+func (m *memoryMiddleware) issueWalk() bool {
+	c := m.c
+	for n := range c.State.Walks {
+		i := (c.State.NextMemoryWalk + n) % len(c.State.Walks)
+		w := &c.State.Walks[i]
+		if w.Stage != readReady {
+			continue
+		}
+		addr := c.Spec.pteAddress(w.Table, w.VPN, w.Level)
+		w.MemoryID, w.MemoryTask = m.send(w.PID, addr, nil, w.Waiters[0].Task)
+		w.Stage = readPending
+		c.State.NextMemoryWalk = (i + 1) % len(c.State.Walks)
+		return true
+	}
+	return false
+}
+
+func (m *memoryMiddleware) issueUpdate() bool {
+	c := m.c
+	u := &c.State.Update
+	if u.ID == 0 || u.MemoryID != 0 {
+		return false
+	}
+	r := u.Request
+	addr := c.Spec.pteAddress(u.Table, r.VAddr>>c.Spec.Log2PageSize, u.Level)
+	var data []byte
+	switch u.Stage {
+	case probe:
+	case zeroRoot, zeroChild:
+		node := r.Root
+		if u.Stage == zeroChild {
+			node = u.Nodes[u.Child]
+		}
+		addr = node + u.ZeroOffset
+		data = make([]byte, c.Spec.zeroWidth(addr))
+	case linkChild:
+		data = binary.LittleEndian.AppendUint64(nil, u.Nodes[u.Child]|validBit)
+	case writeLeaf:
+		var word uint64
+		if r.Command != pt.Unmap {
+			word = c.Spec.encodeLeaf(r.Mapping)
+		}
+		data = binary.LittleEndian.AppendUint64(nil, word)
+	default:
+		return false
+	}
+	u.MemoryID, u.MemoryTask = m.send(r.PID, addr, data, u.Task)
+	return true
+}
+
+// Zero a node in bursts up to one 64-byte line; a request never crosses a
+// line or changes memory route partway through its payload.
+func (s Spec) zeroWidth(addr uint64) uint64 {
+	n := uint64(64) - addr%64
+	m := s.Memory
+	if len(m.Destinations) > 1 {
+		n = min(n, m.InterleavingSize-addr%m.InterleavingSize)
+	}
+	if m.RangeHigh != 0 {
+		if addr < m.RangeLow {
+			n = min(n, m.RangeLow-addr)
+		} else if addr < m.RangeHigh {
+			n = min(n, m.RangeHigh-addr)
+		}
+	}
+	return n
+}
+
+func (m *memoryMiddleware) send(pid vm.PID, addr uint64, data []byte, parent uint64) (uint64, uint64) {
+	c := m.c
+	p := c.Ports.Memory
+	msg := messaging.Msg{ID: c.NewID(), Src: p.AsRemote(), Dst: c.Spec.Memory.Find(addr), TrafficBytes: 12,
+		Payload: memprotocol.ReadReq{PID: pid, Address: addr, AccessByteSize: pteBytes}}
+	if data != nil {
+		msg.Payload = memprotocol.WriteReq{PID: pid, Address: addr, Data: data}
+		msg.TrafficBytes += len(data)
+	}
+	task := c.TaskTracker().StartReqOut(c, msg, parent)
+	p.Send(msg)
+	return msg.ID, task
+}
+
+func (m *memoryMiddleware) receive(msg messaging.Msg) {
+	c := m.c
+	u := &c.State.Update
+	if msg.RspTo == 0 {
+		panic("pagetablemmu: expected a memory response")
+	}
+	if msg.RspTo == u.MemoryID {
+		c.TaskTracker().EndReqOut(u.MemoryTask)
+		u.MemoryID = 0
+		if u.Stage == probe {
+			m.updateProbe(u, readWord(msg))
+		} else {
+			if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
+				panic("pagetablemmu: expected write ACK")
+			}
+			m.written(u)
+		}
+		return
+	}
+	for i := range c.State.Walks {
+		w := &c.State.Walks[i]
+		if w.Stage == readPending && w.MemoryID == msg.RspTo {
+			c.TaskTracker().EndReqOut(w.MemoryTask)
+			w.MemoryID = 0
+			m.walkRead(w, readWord(msg))
+			return
+		}
+	}
+	panic("pagetablemmu: unmatched memory response")
+}
+
+func readWord(msg messaging.Msg) uint64 {
+	data := msg.Payload.(memprotocol.DataReadyRsp).Data
+	if len(data) != pteBytes {
+		panic("pagetablemmu: expected one 8-byte PTE")
+	}
+	return binary.LittleEndian.Uint64(data)
+}
+
+func (m *memoryMiddleware) child(word uint64, pid vm.PID) uint64 {
+	addr := word &^ uint64(validBit)
+	owner, ok := m.c.State.Owners[addr]
+	if !ok || owner != pid || addr%nodeBytes != 0 {
+		panic("pagetablemmu: malformed or unowned child PTE")
+	}
+	return addr
+}
+
+func (m *memoryMiddleware) walkRead(w *walk, word uint64) {
+	spec := m.c.Spec
+	w.Stage = walkDone
+	if word&validBit == 0 {
+		return
+	}
+	if w.Level == len(spec.Banks) {
+		if word&leafBit == 0 {
+			panic("pagetablemmu: expected a leaf PTE")
+		}
+		w.Page = spec.decodeLeaf(word, w.PID, w.VPN)
+		return
+	}
+	w.Table = m.child(word, w.PID)
+	w.Stage = readReady
+	if len(m.c.State.Banks[w.Level]) > 0 {
+		w.Stage = fillReady
+	}
+	w.Level++
+}
+
+func (m *memoryMiddleware) updateProbe(u *update, word uint64) {
+	c := m.c
+	valid := word&validBit != 0
+	if u.Level == len(c.Spec.Banks) {
+		switch {
+		case valid && word&leafBit == 0:
+			panic("pagetablemmu: expected leaf PTE")
+		case valid && u.Request.Command == pt.Map:
+			u.reject(fmt.Errorf("page already mapped"))
+		case !valid && u.Request.Command != pt.Map:
+			u.reject(fmt.Errorf("page is unmapped"))
+		default:
+			u.Stage = writeLeaf
+		}
+		return
+	}
+	if valid {
+		u.Table = m.child(word, u.Request.PID)
+		u.Level++
+		return
+	}
+	if u.Request.Command != pt.Map {
+		u.reject(fmt.Errorf("page is unmapped"))
+		return
+	}
+	nodes, ok := c.State.reserve(c.Spec, u.Request.PID, len(c.Spec.Banks)-u.Level)
+	if !ok {
+		u.reject(fmt.Errorf("page-table node pool exhausted"))
+		return
+	}
+	u.Nodes, u.Stage = nodes, zeroChild
+}
+
+func (m *memoryMiddleware) written(u *update) {
+	switch u.Stage {
+	case zeroRoot, zeroChild:
+		node := u.Request.Root
+		if u.Stage == zeroChild {
+			node = u.Nodes[u.Child]
+		}
+		u.ZeroOffset += m.c.Spec.zeroWidth(node + u.ZeroOffset)
+		if u.ZeroOffset != nodeBytes {
+			return
+		}
+		u.ZeroOffset = 0
+		if u.Stage == zeroRoot {
+			m.c.State.Roots[u.Request.PID] = node
+			u.Stage = ack
+		} else {
+			u.Stage = linkChild
+		}
+	case linkChild:
+		u.Level++
+		u.Table = u.Nodes[u.Child]
+		u.Child++
+		u.Stage = zeroChild
+		if u.Child == len(u.Nodes) {
+			u.Stage = writeLeaf
+		}
+	case writeLeaf:
+		u.Stage = maintain
+	default:
+		panic("pagetablemmu: write ACK in invalid phase")
+	}
+}

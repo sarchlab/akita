@@ -114,8 +114,12 @@ Custom ports are allowed with compatible connections; NoC accepts only
 Capacity, returning nil only for an absent buffer. Hooks and milestones stay on
 Port. Wire remains deferred under #496.
 
-Page tables are concrete `*vm.PageTable` resources. MMU/GMMU validate page size
-at Initialize. Memory payload consumers switch on concrete read/write requests;
+The fixed-latency MMU/GMMU use concrete `*vm.PageTable` resources and validate
+page size at Initialize. The [memory-backed MMU](../mem/vm/pagetablemmu/README.md)
+stores PTE bytes in the attached memory hierarchy. Its State owns the roots,
+reserved-node allocator, walk cache, fault correlation and in-flight updates.
+Its Spec routes memory and page faults. A platform configures and wires the
+same component for GPU-local translation and IOMMU fallback. Memory payload consumers switch on concrete read/write requests;
 there is no AccessReq/AccessRsp abstraction. Component models retain custom hooks
 but do not export a shared modeling.Component interface.
 The networkconnector, mesh, pcie, and nvlink packages use

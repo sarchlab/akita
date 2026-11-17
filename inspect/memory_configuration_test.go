@@ -56,3 +56,32 @@ func TestMMUCachePeerAddressesInSpec(t *testing.T) {
 	require.NotContains(t, fields, "UpModulePort")
 	t.Log("inspector exposes low_module and up_module in Spec with no Resources fields")
 }
+
+func TestPageTableMMUSchema(t *testing.T) {
+	definitions, errs := inspect.Inspect(inspect.Options{Dir: ".."}, "./mem/vm/pagetablemmu")
+	require.Empty(t, errs)
+	require.Len(t, definitions, 1)
+	d := definitions[0]
+	require.Empty(t, d.Resources)
+	fields := map[string]schema.Field{}
+	for _, f := range d.Spec {
+		fields[f.Name] = f
+	}
+	require.Len(t, fields["Banks"].Default, 3)
+	require.Len(t, fields["Banks"].Fields, 2)
+	require.Equal(t, "fault_handler", fields["FaultHandler"].JSONName)
+	require.Equal(t, "memory", fields["Memory"].JSONName)
+	roles := map[string]string{}
+	for _, p := range d.Ports {
+		require.Len(t, p.Roles, 1)
+		roles[p.Name] = p.Roles[0].Protocol + "." + p.Roles[0].Role
+	}
+	const m = "github.com/sarchlab/akita/v5/mem/"
+	require.Equal(t, map[string]string{
+		"Top":       m + "vm/addrtransprotocol.responder",
+		"PageFault": m + "vm/pagefaultprotocol.requester",
+		"FaultIn":   m + "vm/pagefaultprotocol.responder",
+		"Memory":    m + "memprotocol.requester",
+		"Control":   m + "vm/pagetableprotocol.responder",
+	}, roles)
+}

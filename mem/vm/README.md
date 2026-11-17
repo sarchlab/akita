@@ -58,12 +58,15 @@ type Req struct {
 
 // Response: carries the resolved Page
 type Rsp struct {
-    Page Page
+    Page  Page
+    Fault bool
 }
 ```
 
-Page migration is coordinated between the MMU and the driver via
-`PageMigrationReqToDriver` and `PageMigrationRspFromDriver`.
+The fixed-latency MMU can issue the legacy one-way `addrtransprotocol.PageFault`
+notification. The [memory-backed MMU](pagetablemmu/README.md) uses a separate
+request/response fault protocol to obtain either a usable mapping or a NACK
+decision.
 
 ## Address Translation Flow
 
@@ -90,8 +93,9 @@ Application (virtual address)
 | Package | Description |
 |---|---|
 | **tlb** | Translation Lookaside Buffer — caches recent virtual-to-physical translations per process. Handles TLB hits locally and forwards misses to the MMU. |
+| **pagetablemmu** | Memory-backed radix walks, internal prefix cache, timed mapping updates and fault forwarding. |
 | **mmu** | Memory Management Unit — performs page table walks and manages page allocation. Supports auto-allocation for unmapped pages. |
-| **gmmu** | GPU Memory Management Unit — specialized MMU for GPU-side page table walks. Reads page table entries from memory via the bottom port. |
+| **gmmu** | GPU Memory Management Unit — specialized MMU for GPU-side fixed-latency walks using a shared page table and downstream translation requests. |
 | **addresstranslator** | Sits between a compute unit and memory. Translates virtual addresses in `memprotocol.ReadReq`/`memprotocol.WriteReq` to physical addresses before forwarding to the memory hierarchy. |
 | **mmuCache** | Caches translation results between the TLB and MMU to reduce page walk traffic. |
 | **lruset** | LRU set implementation used by the TLB for replacement decisions. |

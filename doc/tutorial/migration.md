@@ -1435,3 +1435,16 @@ Wait for the earlier copy's completion before submitting a dependent copy.
 The source and destination addresses still require alignment to their respective
 granularities. A transfer size can end partway through a chunk. The final read
 and write now stop at the requested byte count, preserving adjacent bytes.
+
+
+## Opting into memory-backed page walks
+
+Applications using `mmu`, `gmmu` and `mmuCache` can continue to build their
+fixed-latency hierarchy. To model PTE traffic, build
+`mem/vm/pagetablemmu.Comp`, reserve its node pool in the physical address
+plan, and wire its memory and fault ports. Existing TLBs and address
+translators use its ordinary translation port. The component owns its split
+translation cache internally. Install mappings through the control protocol
+and wait for ACKs before using them. A platform that handles remote placement
+must answer the new request/response fault protocol and coordinate its own
+Hold and Release. See the [configuration example and protocol contracts](../../mem/vm/pagetablemmu/README.md).
