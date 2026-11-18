@@ -1438,8 +1438,9 @@ and write now stop at the requested byte count, preserving adjacent bytes.
 
 ## Opting into memory-backed page walks
 
-Applications using `mmu`, `gmmu` and `mmuCache` can continue to build their
-fixed-latency hierarchy. To model PTE traffic, build
+The `mmu`, `gmmu` and `mmuCache` packages are deprecated. Existing
+applications can still use them for a fixed-latency hierarchy. To model PTE
+traffic, build
 `mem/vm/pagetablemmu.Comp`, reserve its node pool in the physical address
 plan, and wire its memory and fault ports. Existing TLBs and address
 translators use its ordinary translation port. The component owns its split
