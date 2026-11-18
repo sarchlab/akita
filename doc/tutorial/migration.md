@@ -1435,3 +1435,26 @@ Wait for the earlier copy's completion before submitting a dependent copy.
 The source and destination addresses still require alignment to their respective
 granularities. A transfer size can end partway through a chunk. The final read
 and write now stop at the requested byte count, preserving adjacent bytes.
+
+## Opting into memory-backed page walks
+
+The `mmu`, `gmmu` and `mmuCache` packages are deprecated. Existing
+applications can still use them for a fixed-latency hierarchy. To model PTE
+traffic, build
+`mem/vm/pagetablemmu.Comp`, reserve its node pool in the physical address
+plan, and wire its memory and fault ports. Existing TLBs and address
+translators use its ordinary translation port. The component owns its split
+translation cache internally. Install mappings through the control protocol
+and wait for ACKs before using them. If PTE writes traverse cache lines
+smaller than 64 bytes, set `MaxZeroWriteSize` to the smallest line size on
+that path.
+
+The fault handler must answer an outstanding fault before waiting for any
+control ACK covering that page. The command drains outstanding decisions
+before updating the mapping. Use `Resolved` for an already usable mapping,
+including a remote mapping. This completes the active translation. The
+platform can install a reusable PTE separately for future walks. If the
+access must wait for migration or a usable mapping, reply `Blocked`,
+coordinate Hold and the required updates, then Release the access to
+translate again. See the
+[configuration example and protocol contracts](../../mem/vm/pagetablemmu/README.md).
