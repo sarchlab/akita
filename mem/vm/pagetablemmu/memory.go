@@ -8,10 +8,16 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type memoryMiddleware struct{ c *Comp }
+
+const (
+	maxZeroWrites           = 8
+	defaultMaxZeroWriteSize = 64
+)
 
 func (m *memoryMiddleware) Handle(_ timing.Event) bool {
 	c := m.c
@@ -51,6 +57,8 @@ func (m *memoryMiddleware) issueWalk() bool {
 			continue
 		}
 		addr := c.Spec.pteAddress(w.Table, w.VPN, w.Level)
+		w.markWaiters(c, tasks.MilestoneKindHardwareResource, "PTE issue")
+		w.SkipFill = false
 		w.MemoryID, w.MemoryTask = m.send(w.PID, addr, nil, w.Waiters[0].Task)
 		w.Stage = readPending
 		c.State.NextMemoryWalk = (i + 1) % len(c.State.Walks)
@@ -71,12 +79,7 @@ func (m *memoryMiddleware) issueUpdate() bool {
 	switch u.Stage {
 	case probe:
 	case zeroRoot, zeroChild:
-		node := r.Root
-		if u.Stage == zeroChild {
-			node = u.Nodes[u.Child]
-		}
-		addr = node + u.ZeroOffset
-		data = make([]byte, c.Spec.zeroWidth(addr))
+		return m.issueZero(u)
 	case linkChild:
 		data = binary.LittleEndian.AppendUint64(nil, u.Nodes[u.Child]|validBit)
 	case writeLeaf:
@@ -88,14 +91,40 @@ func (m *memoryMiddleware) issueUpdate() bool {
 	default:
 		return false
 	}
+	u.mark(c.TaskTracker(), tasks.MilestoneKindHardwareResource, "PTE issue")
 	u.MemoryID, u.MemoryTask = m.send(r.PID, addr, data, u.Task)
 	return true
 }
 
-// Zero a node in bursts up to one 64-byte line; a request never crosses a
-// line or changes memory route partway through its payload.
+func (m *memoryMiddleware) issueZero(u *update) bool {
+	if len(u.ZeroWrites) == maxZeroWrites || u.ZeroOffset == nodeBytes {
+		return false
+	}
+	node := u.Request.Root
+	if u.Stage == zeroChild {
+		node = u.Nodes[u.Child]
+	}
+	if u.ZeroOffset == 0 {
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindHardwareResource, "PTE issue")
+	}
+	addr := node + u.ZeroOffset
+	width := m.c.Spec.zeroWidth(addr)
+	id, task := m.send(u.Request.PID, addr, make([]byte, width), u.Task)
+	if u.ZeroWrites == nil {
+		u.ZeroWrites = make(map[uint64]uint64, maxZeroWrites)
+	}
+	u.ZeroWrites[id] = task
+	u.ZeroOffset += width
+	return true
+}
+
+// A zeroing write stays within one aligned transfer and one memory route.
 func (s Spec) zeroWidth(addr uint64) uint64 {
-	n := uint64(64) - addr%64
+	width := s.MaxZeroWriteSize
+	if width == 0 {
+		width = defaultMaxZeroWriteSize
+	}
+	n := width - addr%width
 	m := s.Memory
 	if len(m.Destinations) > 1 {
 		n = min(n, m.InterleavingSize-addr%m.InterleavingSize)
@@ -130,22 +159,13 @@ func (m *memoryMiddleware) receive(msg messaging.Msg) {
 	if msg.RspTo == 0 {
 		panic("pagetablemmu: expected a memory response")
 	}
-	if msg.RspTo == u.MemoryID {
-		c.TaskTracker().EndReqOut(u.MemoryTask)
-		u.MemoryID = 0
-		if u.Stage == probe {
-			m.updateProbe(u, readWord(msg))
-		} else {
-			if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
-				panic("pagetablemmu: expected write ACK")
-			}
-			m.written(u)
-		}
+	if m.receiveUpdate(u, msg) {
 		return
 	}
 	for i := range c.State.Walks {
 		w := &c.State.Walks[i]
 		if w.Stage == readPending && w.MemoryID == msg.RspTo {
+			w.markWaiters(c, tasks.MilestoneKindData, c.Ports.Memory.Name())
 			c.TaskTracker().EndReqOut(w.MemoryTask)
 			w.MemoryID = 0
 			m.walkRead(w, readWord(msg))
@@ -153,6 +173,28 @@ func (m *memoryMiddleware) receive(msg messaging.Msg) {
 		}
 	}
 	panic("pagetablemmu: unmatched memory response")
+}
+
+func (m *memoryMiddleware) receiveUpdate(u *update, msg messaging.Msg) bool {
+	task, zero := u.ZeroWrites[msg.RspTo]
+	if zero {
+		delete(u.ZeroWrites, msg.RspTo)
+	} else if msg.RspTo == u.MemoryID {
+		task, u.MemoryID = u.MemoryTask, 0
+	} else {
+		return false
+	}
+	m.c.TaskTracker().EndReqOut(task)
+	if u.Stage == probe {
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindData, m.c.Ports.Memory.Name())
+		m.updateProbe(u, readWord(msg))
+	} else {
+		if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
+			panic("pagetablemmu: expected write ACK")
+		}
+		m.written(u)
+	}
+	return true
 }
 
 func readWord(msg messaging.Msg) uint64 {
@@ -187,7 +229,7 @@ func (m *memoryMiddleware) walkRead(w *walk, word uint64) {
 	}
 	w.Table = m.child(word, w.PID)
 	w.Stage = readReady
-	if len(m.c.State.Banks[w.Level]) > 0 {
+	if !w.SkipFill && len(m.c.State.Banks[w.Level]) > 0 {
 		w.Stage = fillReady
 	}
 	w.Level++
@@ -229,22 +271,19 @@ func (m *memoryMiddleware) updateProbe(u *update, word uint64) {
 func (m *memoryMiddleware) written(u *update) {
 	switch u.Stage {
 	case zeroRoot, zeroChild:
-		node := u.Request.Root
-		if u.Stage == zeroChild {
-			node = u.Nodes[u.Child]
-		}
-		u.ZeroOffset += m.c.Spec.zeroWidth(node + u.ZeroOffset)
-		if u.ZeroOffset != nodeBytes {
+		if u.ZeroOffset != nodeBytes || len(u.ZeroWrites) != 0 {
 			return
 		}
 		u.ZeroOffset = 0
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindDependency, "node zeroing")
 		if u.Stage == zeroRoot {
-			m.c.State.Roots[u.Request.PID] = node
+			m.c.State.Roots[u.Request.PID] = u.Request.Root
 			u.Stage = ack
 		} else {
 			u.Stage = linkChild
 		}
 	case linkChild:
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindSubTask, "publish child")
 		u.Level++
 		u.Table = u.Nodes[u.Child]
 		u.Child++
@@ -253,6 +292,7 @@ func (m *memoryMiddleware) written(u *update) {
 			u.Stage = writeLeaf
 		}
 	case writeLeaf:
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindSubTask, "write leaf")
 		u.Stage = maintain
 	default:
 		panic("pagetablemmu: write ACK in invalid phase")

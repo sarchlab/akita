@@ -52,7 +52,9 @@ receiver's own root. On a miss the instance sends `HasMapping=false` to its
 fault handler. With `ConsultRemote`, a mapping whose owner differs from the
 requesting device goes to the handler with `HasMapping=true`. Otherwise a
 found mapping is immediately usable. A handler returns `Resolved` when its
-mapping is already safe to use, including for remote access. `Blocked`
+mapping is already safe to use, including for remote access. This completes
+the current translation. The platform can separately install a reusable PTE
+for later walks. `Blocked`
 returns an ordinary translation NACK carrying the original PID and page base,
 which existing TLBs use to drain their MSHR.
 
@@ -66,9 +68,10 @@ placement, terminal unmapped diagnostics, Hold/Release and migration.
 
 A fault handler must answer each outstanding fault before waiting for a
 control ACK covering that page. The command waits for the fault decision to
-drain. If servicing the fault requires installation or migration, reply
-`Blocked` first, coordinate Hold and its ACKs, complete the mapping updates
-and invalidation, then Release the waiting accesses.
+drain. For an already usable remote page, reply `Resolved` before waiting
+for the optional `Map` ACK. If the access must wait for migration or a usable
+mapping, reply `Blocked` first, coordinate Hold and its ACKs, complete the
+mapping updates and invalidation, then Release the waiting accesses.
 
 ## Page tables and updates
 
@@ -92,11 +95,14 @@ Send a `pagetableprotocol.RegisterRoot` command with a PID and a free
 zeroed address space. After its ACK, issue `Map` with a page-aligned
 `VAddr` and `Mapping` containing the aligned data PAddr, owner and policy
 flags. The component derives page size, validity, VA and PID. `Remap` and
-`Unmap` require an existing leaf. `Invalidate` takes an aligned starting
-VA and positive page-multiple size in bytes. It drops overlapping STC
-prefixes and preserves the routing filter's hints for installed pages.
-`Teardown` applies to the entire PID. Each response correlates to its command
-and carries an empty `Error` on success.
+`Unmap` require an existing leaf. All three leaf operations preserve cached
+non-leaf pointers, including prefixes shared by neighboring pages. `Invalidate`
+takes an aligned starting VA and positive page-multiple size in bytes.
+It drops overlapping STC prefixes and preserves the routing filter's hints
+for installed pages. A neighboring walk can finish using a pointer it was
+already fetching, but that pending read or fill cannot restore the invalidated
+entry. `Teardown` drops every prefix for the PID. Each response correlates to
+its command and carries an empty `Error` on success.
 
 A command protects its own affected pages from admission and waits for active
 walks and fault replies on those pages to drain. An already admitted walk on
@@ -106,11 +112,17 @@ other input port can still admit independent work.
 
 Each instance serializes its own commands. The updater reads the
 existing path from memory, reserves the whole missing chain before modifying
-it, and zeroes each child before publishing its parent pointer. Zeroing uses
-writes of up to 64 bytes, split at line and memory-route boundaries. Each
-update memory operation waits for its ACK. Control acknowledges after physical
-writes and internal cache/filter maintenance. Coordinate external TLB
-invalidation and access quiescence at the platform level.
+it, and zeroes each new node using aligned bursts. `MaxZeroWriteSize` accepts
+8, 16, 32 or 64 bytes. The default and an omitted or zero value use 64 bytes.
+For a cache with smaller lines, set the limit to the smallest line size on
+the PTE path. Each write stays within that aligned block and the current
+memory route. Up to eight zeroing writes for one node can be
+outstanding. They share the memory issue width with walks. The MMU waits for
+every write ACK before registering the root or issuing the parent pointer
+write. Subsequent pointer and leaf updates wait for the preceding operation's
+ACK. Control acknowledges after physical writes and internal cache/filter
+maintenance. The platform coordinates TLB shootdowns and access quiescence
+when changing leaf translations.
 
 A failed map, including pool exhaustion, leaves earlier mappings and pool
 ownership intact. Unmap clears a leaf and retains its intermediate nodes.
@@ -138,11 +150,21 @@ for experiments and have no hardware calibration.
   Inserts use a bounded sequence of displacements, each with the configured
   SRAM latency. The default is one operation per cycle, one cycle of latency
   and four displacements. An unresolved collision may discard a fingerprint.
-  A negative bypasses the local walk and a positive still checks PTE memory.
-  Both false negatives and false positives can add fallback traffic. Unmap
-  removes the matching hint and teardown clears the PID's entries. Enable
-  the filter only on instances backed by a complete downstream mapping
-  authority.
+  Two mapped VPNs in the same PID can share a fingerprint in the same bucket.
+  Insertion keeps one copy, so unmapping either page can remove the other
+  page's hint. A negative bypasses the local walk. The downstream authority
+  must hold the complete mappings so it can translate a page even after this
+  false negative. A positive still checks PTE memory. Teardown clears the
+  PID's entries.
+
+With simulation task tracking enabled, each incoming translation, forwarded
+fault and control command has its own request task. Coalesced waiters share
+the initiating request's filter or prefix lookup pipeline and PTE reads.
+Their milestones distinguish waiting for shared work from performing it.
+Fault response milestones apply to the requesting device's waiters. Control
+milestones identify protected walks draining, the final zeroing ACK for each
+node, and acknowledged pointer and leaf writes. Each physical request has a
+separate child task, including overlapping zeroing writes.
 
 The integration tests wire real buffered ports, a memory controller and
 storage. They include a two-MMU topology, a real TLB NACK/retry, timed STC

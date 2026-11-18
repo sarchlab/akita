@@ -39,6 +39,8 @@ type Spec struct {
 	AdmissionWidth int `json:"admission_width" akita:"min=1"`
 	// Maximum PTE requests issued and replies consumed per cycle, each.
 	MemoryWidth int `json:"memory_width" akita:"min=1"`
+	// Aligned byte boundary for node zeroing writes: 8, 16, 32 or 64. Zero uses 64.
+	MaxZeroWriteSize uint64 `json:"max_zero_write_size" akita:"min=0,max=64"`
 	// Parallel prefix probes admitted per bank per cycle.
 	LookupWidth int `json:"lookup_width" akita:"min=1"`
 	// Pointer fills admitted per bank per cycle.
@@ -77,12 +79,12 @@ type Ports struct {
 }
 
 type waiter struct {
+	requestTrace
 	ID      uint64
 	Src     messaging.RemotePort
 	VA      uint64
 	Device  uint64
 	FaultIn bool
-	Task    uint64
 }
 
 // A decision lives only while this device has waiters for the active walk.
@@ -96,6 +98,7 @@ type decision struct {
 type walk struct {
 	Stage     walkStage
 	FilterHit bool
+	SkipFill  bool // Explicit invalidation crossed this non-leaf read or queued fill.
 
 	PID        vm.PID
 	VPN        uint64
@@ -106,6 +109,7 @@ type walk struct {
 	Due        timing.VTimeInPicoSec
 	MemoryID   uint64
 	MemoryTask uint64
+	LookupTask uint64
 	Page       vm.Page
 }
 
@@ -124,25 +128,27 @@ const (
 )
 
 type update struct {
-	Request      pagetableprotocol.Req
-	ID           uint64
-	Src          messaging.RemotePort
-	Task         uint64
-	Stage        updateStage
-	Error        string
-	Level        int
-	Table        uint64
-	MemoryID     uint64
-	MemoryTask   uint64
-	Nodes        []uint64 // Pre-reserved chain below the first missing pointer.
-	Child        int      // Index within Nodes being initialized.
-	ZeroOffset   uint64
-	FilterCursor uint64
-	Kicks        int
-	Displaced    fingerprint
-	Alternate    uint64
-	MoreFilter   bool
-	Due          timing.VTimeInPicoSec
+	requestTrace
+	Request        pagetableprotocol.Req
+	ID             uint64
+	Src            messaging.RemotePort
+	WaitedForWalks bool
+	Stage          updateStage
+	Error          string
+	Level          int
+	Table          uint64
+	MemoryID       uint64
+	MemoryTask     uint64
+	Nodes          []uint64          // Pre-reserved chain below the first missing pointer.
+	Child          int               // Index within Nodes being initialized.
+	ZeroOffset     uint64            // Next byte to issue in the current node.
+	ZeroWrites     map[uint64]uint64 // Outstanding zero-write message IDs to tracing tasks.
+	FilterCursor   uint64
+	Kicks          int
+	Displaced      fingerprint
+	Alternate      uint64
+	MoreFilter     bool
+	Due            timing.VTimeInPicoSec
 }
 
 type state struct {

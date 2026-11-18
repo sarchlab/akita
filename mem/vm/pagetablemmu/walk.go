@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/pagefaultprotocol"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -64,7 +65,7 @@ func (m *walkMiddleware) admit(faultIn bool) bool {
 	}
 	w.Waiters = append(w.Waiters, waiter{
 		ID: msg.ID, Src: msg.Src, VA: va, Device: device, FaultIn: faultIn,
-		Task: c.TaskTracker().StartReqIn(c, msg),
+		requestTrace: startRequest(c, msg),
 	})
 	return true
 }
@@ -110,6 +111,7 @@ func (m *walkMiddleware) advance(now timing.VTimeInPicoSec) bool {
 			if now < w.Due {
 				continue
 			}
+			w.finishLookupTask(c, ".prefix_lookup")
 			w.Stage = readReady
 		case fillReady:
 			level := w.Level - 1
@@ -117,6 +119,7 @@ func (m *walkMiddleware) advance(now timing.VTimeInPicoSec) bool {
 				continue
 			}
 			fills[level]++
+			w.markWaiters(c, tasks.MilestoneKindHardwareResource, "prefix fill")
 			c.State.Banks[level].fill(w.PID, c.Spec.prefix(w.VPN, level), w.Table, c.Spec.Banks[level].NumWays)
 			w.Stage = readReady
 		default:
@@ -145,6 +148,7 @@ func (m *walkMiddleware) startLookup(w *walk, now timing.VTimeInPicoSec) {
 		return
 	}
 	w.Table = root
+	w.startLookupTask(c, ".prefix_lookup")
 	for level, bank := range c.State.Banks {
 		if table, ok := bank.lookup(w.PID, c.Spec.prefix(w.VPN, level)); ok {
 			w.Level, w.Table = level+1, table

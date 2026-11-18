@@ -71,6 +71,12 @@ func TestPageTableMMUSchema(t *testing.T) {
 	require.Len(t, fields["Banks"].Fields, 2)
 	require.Equal(t, "fault_handler", fields["FaultHandler"].JSONName)
 	require.Equal(t, "memory", fields["Memory"].JSONName)
+	width := fields["MaxZeroWriteSize"]
+	require.Equal(t, "max_zero_write_size", width.JSONName)
+	require.EqualValues(t, 64, width.Default)
+	require.Equal(t, float64(0), *width.Min)
+	require.Equal(t, float64(64), *width.Max)
+	require.Contains(t, width.Doc, "8, 16, 32 or 64")
 	roles := map[string]string{}
 	for _, p := range d.Ports {
 		require.Len(t, p.Roles, 1)

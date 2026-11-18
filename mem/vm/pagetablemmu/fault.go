@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/pagefaultprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
 func (m *walkMiddleware) respond() bool {
@@ -61,6 +62,7 @@ func (m *walkMiddleware) forward(w *walk, wait waiter) bool {
 	req := messaging.Msg{ID: c.NewID(), Src: p.AsRemote(), Dst: c.Spec.FaultHandler, Payload: pagefaultprotocol.Req{
 		PID: w.PID, VAddr: wait.VA, DeviceID: wait.Device, HasMapping: w.Page.Valid, Mapping: w.Page}}
 	task := c.TaskTracker().StartReqOut(c, req, wait.Task)
+	w.markDecision(c, wait.Device, tasks.MilestoneKindHardwareResource)
 	w.Decisions = append(w.Decisions, decision{Device: wait.Device, ID: req.ID, Task: task})
 	p.Send(req)
 	return true
@@ -92,6 +94,7 @@ func (m *walkMiddleware) receiveDecision() bool {
 				panic("pagetablemmu: invalid fault result")
 			}
 			d.Response = rsp
+			w.markDecision(c, d.Device, tasks.MilestoneKindTranslation)
 			c.TaskTracker().EndReqOut(d.Task)
 			return true
 		}

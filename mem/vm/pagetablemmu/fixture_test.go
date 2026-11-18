@@ -70,7 +70,12 @@ func baseSpec() Spec {
 
 func newRig(t *testing.T, local Spec, authoritative *Spec, withTLB bool) *rig {
 	t.Helper()
-	r := &rig{t: t, s: sim.MakeBuilder().Build()}
+	return newRigWithSimulation(t, sim.MakeBuilder().Build(), local, authoritative, withTLB)
+}
+
+func newRigWithSimulation(t *testing.T, s *sim.Simulation, local Spec, authoritative *Spec, withTLB bool) *rig {
+	t.Helper()
+	r := &rig{t: t, s: s}
 	r.s.Engine().RegisterHandler("Inject", r)
 	r.bus = direct.NewConnection("Bus", r.s, timing.GHz)
 	r.traffic.s = r.s

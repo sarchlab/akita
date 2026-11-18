@@ -2,6 +2,7 @@ package pagetablemmu
 
 import (
 	"encoding/binary"
+	"maps"
 	"path/filepath"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -126,22 +128,33 @@ func TestCheckpointDuringNodePublication(t *testing.T) {
 	spec := baseSpec()
 	spec.Banks = append(spec.Banks, BankSpec{NumSets: 1, NumWays: 1}) // 48 VA bits with fixed top index.
 	path := filepath.Join(t.TempDir(), "mid-map.tar.gz")
-	r := newRig(t, spec, nil, false)
+	r := newTrackedRig(t, spec)
 	r.root(r.mmu)
 	cmd := pt.Req{Command: pt.Map, PID: 7, VAddr: 0x7000, Mapping: vm.Page{PAddr: 0x80000}}
 	id := r.send(r.ctrl, "Local.Control", cmd, 0)
 	engine := r.s.Engine().(*timing.SerialEngine)
 	require.NoError(t, engine.RunUntil(engine.CurrentTime()+50000))
 	require.Equal(t, zeroChild, r.mmu.State.Update.Stage)
+	require.Greater(t, len(r.mmu.State.Update.ZeroWrites), 1)
+	controlTask := r.mmu.State.Update.Task
+	pending := maps.Clone(r.mmu.State.Update.ZeroWrites)
 	require.Zero(t, r.ctrl.IncomingBuf().Size())
 	require.NoError(t, r.s.SaveCheckpoint(path))
 	r.traffic.Items = nil
 	r.run()
 	acknowledgment := r.recv(r.ctrl)
 	require.Equal(t, id, acknowledgment.RspTo)
-	restored := newRig(t, spec, nil, false)
+	restored := newTrackedRig(t, spec)
 	require.NoError(t, restored.s.LoadCheckpoint(path))
+	require.Equal(t, pending, restored.mmu.State.Update.ZeroWrites)
+	trace := newMMUTrace(restored)
 	restored.run()
+	for msgID, taskID := range pending {
+		write := trace.ended[taskID]
+		require.Equal(t, tasks.KindReqOut, write.Kind)
+		require.Equal(t, msgID, write.MsgID)
+		require.Equal(t, controlTask, write.ParentID)
+	}
 	require.Equal(t, acknowledgment, restored.recv(restored.ctrl))
 	require.Equal(t, r.traffic.Items, restored.traffic.Items)
 	require.Equal(t, r.mmu.State, restored.mmu.State)
@@ -363,6 +376,55 @@ func TestInvalidateRangeDropsOnlyOverlappingPrefixes(t *testing.T) {
 	}
 }
 
+func TestLeafUpdatesPreserveNeighborPrefix(t *testing.T) {
+	r := newRig(t, baseSpec(), nil, false)
+	r.root(r.mmu)
+	r.install(r.mmu, 0x4000, 0x80000, 2)
+	checkWalk := func(reads int) {
+		t.Helper()
+		r.traffic.Items = nil
+		r.translate(0x4000, 2)
+		r.run()
+		require.Equal(t, uint64(0x80000), r.recv(r.request).Payload.(at.Rsp).Page.PAddr)
+		require.Len(t, r.reads(r.mmu.Ports.Memory), reads)
+	}
+	checkWalk(4)
+	for _, cmd := range []pt.Command{pt.Map, pt.Remap, pt.Unmap} {
+		require.Empty(t, r.cmd(r.mmu, pt.Req{Command: cmd, PID: 7, VAddr: 0x5000,
+			Mapping: vm.Page{PAddr: 0x81000 + uint64(cmd)*4096, DeviceID: 2}}))
+		checkWalk(1)
+	}
+	require.Empty(t, r.cmd(r.mmu, pt.Req{Command: pt.Invalidate, PID: 7, VAddr: 0x5000, Size: 4096}))
+	checkWalk(4)
+}
+
+func TestInvalidateWhileNeighborIsReadingPrefix(t *testing.T) {
+	spec := baseSpec()
+	spec.Banks = spec.Banks[:1]
+	spec.VABits = 30
+	r := newRig(t, spec, nil, false)
+	r.root(r.mmu)
+	r.install(r.mmu, 0x4000, 0x80000, 2)
+	r.install(r.mmu, 0x5000, 0x81000, 2)
+	r.translate(0x5000, 2)
+	engine := r.s.Engine().(*timing.SerialEngine)
+	for range 20 {
+		require.NoError(t, engine.RunUntil(spec.Freq.NextTick(engine.CurrentTime())))
+		if r.mmu.State.Walks[0].Stage == readPending {
+			break
+		}
+	}
+	require.Equal(t, readPending, r.mmu.State.Walks[0].Stage)
+	require.Equal(t, 0, r.mmu.State.Walks[0].Level)
+	require.Empty(t, r.cmd(r.mmu, pt.Req{Command: pt.Invalidate, PID: 7, VAddr: 0x4000, Size: 4096}))
+	require.Equal(t, uint64(0x81000), r.recv(r.request).Payload.(at.Rsp).Page.PAddr)
+	r.traffic.Items = nil
+	r.translate(0x4000, 2)
+	r.run()
+	require.Equal(t, uint64(0x80000), r.recv(r.request).Payload.(at.Rsp).Page.PAddr)
+	require.Len(t, r.reads(r.mmu.Ports.Memory), 2)
+}
+
 type arbiterObserver struct {
 	c                        *Comp
 	WalkGrants, UpdateGrants int
@@ -373,7 +435,7 @@ func (o *arbiterObserver) Func(h hooking.HookCtx) {
 		return
 	}
 	u := &o.c.State.Update
-	if u.Stage != zeroChild || u.MemoryID != 0 {
+	if u.Stage != zeroChild || u.ZeroOffset == nodeBytes || len(u.ZeroWrites) == maxZeroWrites {
 		return
 	}
 	for i := range o.c.State.Walks {
@@ -416,8 +478,7 @@ func TestWalkAndUpdateShareMemoryIssue(t *testing.T) {
 	require.Equal(t, 16, r.request.IncomingBuf().Size())
 	require.Empty(t, r.recv(r.ctrl).Payload.(pt.Rsp).Error)
 	require.Positive(t, observer.UpdateGrants, "update must win an issue slot with walks ready")
-	// When the update issues a write, it must wait for the real memory ACK.
-	// Walks continue during those intervals, well before map completion.
+	require.Positive(t, observer.WalkGrants, "walks must win an issue slot with zero writes ready")
 	seenWalk := false
 	seenWriteAfterWalk := false
 	last := timing.VTimeInPicoSec(0)
