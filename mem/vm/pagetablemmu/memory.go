@@ -14,7 +14,10 @@ import (
 
 type memoryMiddleware struct{ c *Comp }
 
-const maxZeroWrites = 8
+const (
+	maxZeroWrites           = 8
+	defaultMaxZeroWriteSize = 64
+)
 
 func (m *memoryMiddleware) Handle(_ timing.Event) bool {
 	c := m.c
@@ -115,10 +118,13 @@ func (m *memoryMiddleware) issueZero(u *update) bool {
 	return true
 }
 
-// Zero a node in bursts up to one 64-byte line; a request never crosses a
-// line or changes memory route partway through its payload.
+// A zeroing write stays within one aligned transfer and one memory route.
 func (s Spec) zeroWidth(addr uint64) uint64 {
-	n := uint64(64) - addr%64
+	width := s.MaxZeroWriteSize
+	if width == 0 {
+		width = defaultMaxZeroWriteSize
+	}
+	n := width - addr%width
 	m := s.Memory
 	if len(m.Destinations) > 1 {
 		n = min(n, m.InterleavingSize-addr%m.InterleavingSize)

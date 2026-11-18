@@ -112,8 +112,11 @@ other input port can still admit independent work.
 
 Each instance serializes its own commands. The updater reads the
 existing path from memory, reserves the whole missing chain before modifying
-it, and zeroes each new node using writes of up to 64 bytes, split at line
-and memory-route boundaries. Up to eight zeroing writes for one node can be
+it, and zeroes each new node using aligned bursts. `MaxZeroWriteSize` accepts
+8, 16, 32 or 64 bytes. The default and an omitted or zero value use 64 bytes.
+For a cache with smaller lines, set the limit to the smallest line size on
+the PTE path. Each write stays within that aligned block and the current
+memory route. Up to eight zeroing writes for one node can be
 outstanding. They share the memory issue width with walks. The MMU waits for
 every write ACK before registering the root or issuing the parent pointer
 write. Subsequent pointer and leaf updates wait for the preceding operation's

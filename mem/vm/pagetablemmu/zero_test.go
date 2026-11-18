@@ -13,17 +13,38 @@ import (
 )
 
 func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
-	spec := baseSpec()
+	for _, tc := range []struct {
+		name                   string
+		limit, stripe, payload uint64
+	}{
+		{"default", DefaultSpec().MaxZeroWriteSize, 0, 64},
+		{"omitted", 0, 0, 64},
+		{"32-byte lines", 32, 0, 32},
+		{"32-byte lines with wide stripes", 32, 128, 32},
+		{"32-byte stripes", 64, 32, 32},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := baseSpec()
+			spec.MaxZeroWriteSize = tc.limit
+			spec.Memory.Destinations = []messaging.RemotePort{"Client.Policy"}
+			if tc.stripe > 0 {
+				spec.Memory.Destinations = append(spec.Memory.Destinations, "Client.Requests")
+				spec.Memory.InterleavingSize = tc.stripe
+			}
+			checkNodePublication(t, spec, tc.payload)
+		})
+	}
+}
+
+func checkNodePublication(t *testing.T, spec Spec, payload uint64) {
+	t.Helper()
 	spec.Banks, spec.VABits = spec.Banks[:1], 30
 	spec.MemoryWidth = 16
-	// The two test ports stand in for 32-byte interleaved memory banks.
-	spec.Memory.Destinations = []messaging.RemotePort{"Client.Policy", "Client.Requests"}
-	spec.Memory.InterleavingSize = 32
 	r := newTrackedRig(t, spec)
 	trace := newMMUTrace(r)
 	root := spec.PoolBase
 	rootID := r.send(r.ctrl, "Local.Control", pt.Req{Command: pt.RegisterRoot, PID: 7, Root: root}, 0)
-	lastACK := r.holdFirstZeroWrite(root)
+	lastACK := r.holdFirstZeroWrite(root, payload)
 	rootWrite := trace.request(t, lastACK.ID, tasks.KindReqOut)
 	require.NotContains(t, trace.ended, rootWrite.ID)
 	require.NotContains(t, r.mmu.State.Roots, vm.PID(7))
@@ -40,7 +61,7 @@ func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
 	require.Equal(t, memprotocol.ReadReq{PID: 7, Address: root, AccessByteSize: pteBytes}, probe.Payload)
 	r.send(r.policy, probe.Src, memprotocol.DataReadyRsp{Data: make([]byte, pteBytes)}, probe.ID)
 	child := root + nodeBytes
-	lastACK = r.holdFirstZeroWrite(child)
+	lastACK = r.holdFirstZeroWrite(child, payload)
 	childWrite := trace.request(t, lastACK.ID, tasks.KindReqOut)
 	require.NotContains(t, trace.ended, childWrite.ID)
 	r.send(r.policy, lastACK.Src, memprotocol.WriteDoneRsp{}, lastACK.ID)
@@ -64,9 +85,8 @@ func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
 
 // Retain the first write while acknowledging the rest of each window in
 // reverse order. Check every address, payload, destination and window size.
-func (r *rig) holdFirstZeroWrite(node uint64) messaging.Msg {
+func (r *rig) holdFirstZeroWrite(node, width uint64) messaging.Msg {
 	r.t.Helper()
-	const width = uint64(32)
 	var held messaging.Msg
 	for offset := uint64(0); offset < nodeBytes; {
 		r.run()
@@ -78,7 +98,7 @@ func (r *rig) holdFirstZeroWrite(node uint64) messaging.Msg {
 		var batch []messaging.Msg
 		for range count {
 			port := r.policy
-			if offset/width%2 == 1 {
+			if r.mmu.Spec.Memory.Find(node+offset) == r.request.AsRemote() {
 				port = r.request
 			}
 			msg := r.recv(port)
@@ -103,4 +123,28 @@ func (r *rig) holdFirstZeroWrite(node uint64) messaging.Msg {
 	require.Zero(r.t, r.policy.IncomingBuf().Size()+r.request.IncomingBuf().Size(), "a dependent write published early")
 	require.Zero(r.t, r.ctrl.IncomingBuf().Size(), "command acknowledged before the held zero write")
 	return held
+}
+
+func TestZeroWriteSizeGeometry(t *testing.T) {
+	spec := baseSpec()
+	for _, size := range []uint64{0, 8, 16, 32, 64} {
+		spec.MaxZeroWriteSize = size
+		require.NoError(t, spec.validate())
+	}
+	for _, size := range []uint64{1, 4, 12, 24, 48, 65, 128} {
+		spec.MaxZeroWriteSize = size
+		require.ErrorContains(t, spec.validate(), "MaxZeroWriteSize")
+	}
+
+	// A route boundary can split a 32-byte block. The next write must still
+	// stop at the original line boundary even when the new route continues.
+	spec.MaxZeroWriteSize = 32
+	spec.Memory.RangeLow, spec.Memory.RangeHigh = spec.PoolBase+16, spec.PoolBase+40
+	spec.Memory.Fallback = "Other.Top"
+	require.NoError(t, spec.validate())
+	offset := uint64(0)
+	for _, want := range []uint64{16, 16, 8, 24} {
+		require.Equal(t, want, spec.zeroWidth(spec.PoolBase+offset))
+		offset += want
+	}
 }

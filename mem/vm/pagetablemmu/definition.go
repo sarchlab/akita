@@ -20,6 +20,7 @@ func DefaultSpec() Spec {
 		MaxWaitersPerEntry: 8,
 		AdmissionWidth:     2,
 		MemoryWidth:        1,
+		MaxZeroWriteSize:   defaultMaxZeroWriteSize,
 		LookupWidth:        1,
 		FillWidth:          1,
 		LookupLatency:      2,
@@ -78,6 +79,9 @@ func (s Spec) validateFilter() error {
 }
 
 func (s Spec) validateGeometry() error {
+	if n := s.MaxZeroWriteSize; n != 0 && (n < pteBytes || n > defaultMaxZeroWriteSize || n&(n-1) != 0) {
+		return fmt.Errorf("MaxZeroWriteSize must be 0, 8, 16, 32 or 64 bytes")
+	}
 	if s.VABits > 64 || s.Log2PageSize >= s.VABits || len(s.Banks) >= maxLevels {
 		return fmt.Errorf("invalid virtual address geometry")
 	}

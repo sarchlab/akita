@@ -39,6 +39,8 @@ type Spec struct {
 	AdmissionWidth int `json:"admission_width" akita:"min=1"`
 	// Maximum PTE requests issued and replies consumed per cycle, each.
 	MemoryWidth int `json:"memory_width" akita:"min=1"`
+	// Aligned byte boundary for node zeroing writes: 8, 16, 32 or 64. Zero uses 64.
+	MaxZeroWriteSize uint64 `json:"max_zero_write_size" akita:"min=0,max=64"`
 	// Parallel prefix probes admitted per bank per cycle.
 	LookupWidth int `json:"lookup_width" akita:"min=1"`
 	// Pointer fills admitted per bank per cycle.

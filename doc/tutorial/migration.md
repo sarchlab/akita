@@ -1444,7 +1444,9 @@ fixed-latency hierarchy. To model PTE traffic, build
 plan, and wire its memory and fault ports. Existing TLBs and address
 translators use its ordinary translation port. The component owns its split
 translation cache internally. Install mappings through the control protocol
-and wait for ACKs before using them.
+and wait for ACKs before using them. If PTE writes traverse cache lines
+smaller than 64 bytes, set `MaxZeroWriteSize` to the smallest line size on
+that path.
 
 The fault handler must answer an outstanding fault before waiting for any
 control ACK covering that page. The command drains outstanding decisions
