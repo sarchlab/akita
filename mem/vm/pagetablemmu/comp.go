@@ -96,6 +96,7 @@ type decision struct {
 type walk struct {
 	Stage     walkStage
 	FilterHit bool
+	SkipFill  bool // Explicit invalidation crossed this non-leaf read or queued fill.
 
 	PID        vm.PID
 	VPN        uint64
@@ -134,9 +135,10 @@ type update struct {
 	Table        uint64
 	MemoryID     uint64
 	MemoryTask   uint64
-	Nodes        []uint64 // Pre-reserved chain below the first missing pointer.
-	Child        int      // Index within Nodes being initialized.
-	ZeroOffset   uint64
+	Nodes        []uint64          // Pre-reserved chain below the first missing pointer.
+	Child        int               // Index within Nodes being initialized.
+	ZeroOffset   uint64            // Next byte to issue in the current node.
+	ZeroWrites   map[uint64]uint64 // Outstanding zero-write message IDs to tracing tasks.
 	FilterCursor uint64
 	Kicks        int
 	Displaced    fingerprint

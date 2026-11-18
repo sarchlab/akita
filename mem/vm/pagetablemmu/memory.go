@@ -13,6 +13,8 @@ import (
 
 type memoryMiddleware struct{ c *Comp }
 
+const maxZeroWrites = 8
+
 func (m *memoryMiddleware) Handle(_ timing.Event) bool {
 	c := m.c
 	progress := false
@@ -51,6 +53,7 @@ func (m *memoryMiddleware) issueWalk() bool {
 			continue
 		}
 		addr := c.Spec.pteAddress(w.Table, w.VPN, w.Level)
+		w.SkipFill = false
 		w.MemoryID, w.MemoryTask = m.send(w.PID, addr, nil, w.Waiters[0].Task)
 		w.Stage = readPending
 		c.State.NextMemoryWalk = (i + 1) % len(c.State.Walks)
@@ -71,12 +74,7 @@ func (m *memoryMiddleware) issueUpdate() bool {
 	switch u.Stage {
 	case probe:
 	case zeroRoot, zeroChild:
-		node := r.Root
-		if u.Stage == zeroChild {
-			node = u.Nodes[u.Child]
-		}
-		addr = node + u.ZeroOffset
-		data = make([]byte, c.Spec.zeroWidth(addr))
+		return m.issueZero(u)
 	case linkChild:
 		data = binary.LittleEndian.AppendUint64(nil, u.Nodes[u.Child]|validBit)
 	case writeLeaf:
@@ -89,6 +87,25 @@ func (m *memoryMiddleware) issueUpdate() bool {
 		return false
 	}
 	u.MemoryID, u.MemoryTask = m.send(r.PID, addr, data, u.Task)
+	return true
+}
+
+func (m *memoryMiddleware) issueZero(u *update) bool {
+	if len(u.ZeroWrites) == maxZeroWrites || u.ZeroOffset == nodeBytes {
+		return false
+	}
+	node := u.Request.Root
+	if u.Stage == zeroChild {
+		node = u.Nodes[u.Child]
+	}
+	addr := node + u.ZeroOffset
+	width := m.c.Spec.zeroWidth(addr)
+	id, task := m.send(u.Request.PID, addr, make([]byte, width), u.Task)
+	if u.ZeroWrites == nil {
+		u.ZeroWrites = make(map[uint64]uint64, maxZeroWrites)
+	}
+	u.ZeroWrites[id] = task
+	u.ZeroOffset += width
 	return true
 }
 
@@ -130,17 +147,7 @@ func (m *memoryMiddleware) receive(msg messaging.Msg) {
 	if msg.RspTo == 0 {
 		panic("pagetablemmu: expected a memory response")
 	}
-	if msg.RspTo == u.MemoryID {
-		c.TaskTracker().EndReqOut(u.MemoryTask)
-		u.MemoryID = 0
-		if u.Stage == probe {
-			m.updateProbe(u, readWord(msg))
-		} else {
-			if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
-				panic("pagetablemmu: expected write ACK")
-			}
-			m.written(u)
-		}
+	if m.receiveUpdate(u, msg) {
 		return
 	}
 	for i := range c.State.Walks {
@@ -153,6 +160,27 @@ func (m *memoryMiddleware) receive(msg messaging.Msg) {
 		}
 	}
 	panic("pagetablemmu: unmatched memory response")
+}
+
+func (m *memoryMiddleware) receiveUpdate(u *update, msg messaging.Msg) bool {
+	task, zero := u.ZeroWrites[msg.RspTo]
+	if zero {
+		delete(u.ZeroWrites, msg.RspTo)
+	} else if msg.RspTo == u.MemoryID {
+		task, u.MemoryID = u.MemoryTask, 0
+	} else {
+		return false
+	}
+	m.c.TaskTracker().EndReqOut(task)
+	if u.Stage == probe {
+		m.updateProbe(u, readWord(msg))
+	} else {
+		if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
+			panic("pagetablemmu: expected write ACK")
+		}
+		m.written(u)
+	}
+	return true
 }
 
 func readWord(msg messaging.Msg) uint64 {
@@ -187,7 +215,7 @@ func (m *memoryMiddleware) walkRead(w *walk, word uint64) {
 	}
 	w.Table = m.child(word, w.PID)
 	w.Stage = readReady
-	if len(m.c.State.Banks[w.Level]) > 0 {
+	if !w.SkipFill && len(m.c.State.Banks[w.Level]) > 0 {
 		w.Stage = fillReady
 	}
 	w.Level++
@@ -229,17 +257,12 @@ func (m *memoryMiddleware) updateProbe(u *update, word uint64) {
 func (m *memoryMiddleware) written(u *update) {
 	switch u.Stage {
 	case zeroRoot, zeroChild:
-		node := u.Request.Root
-		if u.Stage == zeroChild {
-			node = u.Nodes[u.Child]
-		}
-		u.ZeroOffset += m.c.Spec.zeroWidth(node + u.ZeroOffset)
-		if u.ZeroOffset != nodeBytes {
+		if u.ZeroOffset != nodeBytes || len(u.ZeroWrites) != 0 {
 			return
 		}
 		u.ZeroOffset = 0
 		if u.Stage == zeroRoot {
-			m.c.State.Roots[u.Request.PID] = node
+			m.c.State.Roots[u.Request.PID] = u.Request.Root
 			u.Stage = ack
 		} else {
 			u.Stage = linkChild

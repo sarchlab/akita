@@ -35,11 +35,13 @@ const (
 )
 
 // Rsp answers one Req through messaging.Msg.RspTo. Resolved supplies a mapping
-// already safe for the requester to use. An MMU drains outstanding fault
-// decisions before acknowledging a control command covering the page. A handler
-// must answer the fault before waiting for that ACK. When installation or
-// migration is needed, reply Blocked, coordinate Hold and mapping updates,
-// then Release the requester to translate again.
+// already safe for the requester to use and completes the current translation.
+// The platform may separately install a reusable PTE for later walks. An MMU
+// drains outstanding decisions before acknowledging a control command covering
+// the page, so the handler must answer before waiting for any covering control
+// ACK, including a Map ACK for a reusable remote mapping.
+// If the access must wait for migration or a usable mapping, reply Blocked,
+// coordinate Hold and mapping updates, then Release the requester.
 type Rsp struct {
 	Result  Result
 	Mapping vm.Page

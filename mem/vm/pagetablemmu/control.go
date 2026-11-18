@@ -158,13 +158,44 @@ func (m *controlMiddleware) begin(u *update) {
 
 func (m *controlMiddleware) maintain(u *update) {
 	c := m.c
-	lo, hi := u.vpnRange(c.Spec)
-	for level, bank := range c.State.Banks {
-		bank.invalidate(u.Request.PID, c.Spec.prefix(lo, level), c.Spec.prefix(hi, level))
+	if u.Request.Command == pt.Invalidate || u.Request.Command == pt.Teardown {
+		lo, hi := u.vpnRange(c.Spec)
+		for level, bank := range c.State.Banks {
+			bank.invalidate(u.Request.PID, c.Spec.prefix(lo, level), c.Spec.prefix(hi, level))
+		}
+		// A neighboring walk may still have a read or fill for a shared prefix.
+		// It can use the returned pointer, but must not refill the invalidated bank.
+		for i := range c.State.Walks {
+			w := &c.State.Walks[i]
+			if w.PID == u.Request.PID {
+				w.invalidateFill(c.Spec, lo, hi)
+			}
+		}
 	}
 	u.Stage = ack
 	if len(c.State.Filter) > 0 && u.Request.Command != pt.Invalidate {
 		u.Stage = filterUpdate
+	}
+}
+
+func (w *walk) invalidateFill(spec Spec, lo, hi uint64) {
+	level := w.Level
+	switch w.Stage {
+	case readPending:
+		if level == len(spec.Banks) {
+			return
+		}
+	case fillReady:
+		level-- // The read has advanced to the child, its parent fill is queued.
+	default:
+		return
+	}
+	prefix := spec.prefix(w.VPN, level)
+	if prefix >= spec.prefix(lo, level) && prefix <= spec.prefix(hi, level) {
+		w.SkipFill = true
+		if w.Stage == fillReady {
+			w.Stage = readReady
+		}
 	}
 }
 

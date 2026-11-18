@@ -1448,8 +1448,10 @@ and wait for ACKs before using them.
 
 The fault handler must answer an outstanding fault before waiting for any
 control ACK covering that page. The command drains outstanding decisions
-before updating the mapping. Use `Resolved` for an already usable mapping.
-If the fault requires a mapping installation or migration, reply `Blocked`,
+before updating the mapping. Use `Resolved` for an already usable mapping,
+including a remote mapping. This completes the active translation. The
+platform can install a reusable PTE separately for future walks. If the
+access must wait for migration or a usable mapping, reply `Blocked`,
 coordinate Hold and the required updates, then Release the access to
 translate again. See the
 [configuration example and protocol contracts](../../mem/vm/pagetablemmu/README.md).
