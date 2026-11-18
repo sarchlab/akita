@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -53,6 +54,7 @@ func (m *memoryMiddleware) issueWalk() bool {
 			continue
 		}
 		addr := c.Spec.pteAddress(w.Table, w.VPN, w.Level)
+		w.markWaiters(c, tasks.MilestoneKindHardwareResource, "PTE issue")
 		w.SkipFill = false
 		w.MemoryID, w.MemoryTask = m.send(w.PID, addr, nil, w.Waiters[0].Task)
 		w.Stage = readPending
@@ -86,6 +88,7 @@ func (m *memoryMiddleware) issueUpdate() bool {
 	default:
 		return false
 	}
+	u.mark(c.TaskTracker(), tasks.MilestoneKindHardwareResource, "PTE issue")
 	u.MemoryID, u.MemoryTask = m.send(r.PID, addr, data, u.Task)
 	return true
 }
@@ -97,6 +100,9 @@ func (m *memoryMiddleware) issueZero(u *update) bool {
 	node := u.Request.Root
 	if u.Stage == zeroChild {
 		node = u.Nodes[u.Child]
+	}
+	if u.ZeroOffset == 0 {
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindHardwareResource, "PTE issue")
 	}
 	addr := node + u.ZeroOffset
 	width := m.c.Spec.zeroWidth(addr)
@@ -153,6 +159,7 @@ func (m *memoryMiddleware) receive(msg messaging.Msg) {
 	for i := range c.State.Walks {
 		w := &c.State.Walks[i]
 		if w.Stage == readPending && w.MemoryID == msg.RspTo {
+			w.markWaiters(c, tasks.MilestoneKindData, c.Ports.Memory.Name())
 			c.TaskTracker().EndReqOut(w.MemoryTask)
 			w.MemoryID = 0
 			m.walkRead(w, readWord(msg))
@@ -173,6 +180,7 @@ func (m *memoryMiddleware) receiveUpdate(u *update, msg messaging.Msg) bool {
 	}
 	m.c.TaskTracker().EndReqOut(task)
 	if u.Stage == probe {
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindData, m.c.Ports.Memory.Name())
 		m.updateProbe(u, readWord(msg))
 	} else {
 		if _, ok := msg.Payload.(memprotocol.WriteDoneRsp); !ok {
@@ -261,6 +269,7 @@ func (m *memoryMiddleware) written(u *update) {
 			return
 		}
 		u.ZeroOffset = 0
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindDependency, "node zeroing")
 		if u.Stage == zeroRoot {
 			m.c.State.Roots[u.Request.PID] = u.Request.Root
 			u.Stage = ack
@@ -268,6 +277,7 @@ func (m *memoryMiddleware) written(u *update) {
 			u.Stage = linkChild
 		}
 	case linkChild:
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindSubTask, "publish child")
 		u.Level++
 		u.Table = u.Nodes[u.Child]
 		u.Child++
@@ -276,6 +286,7 @@ func (m *memoryMiddleware) written(u *update) {
 			u.Stage = writeLeaf
 		}
 	case writeLeaf:
+		u.mark(m.c.TaskTracker(), tasks.MilestoneKindSubTask, "write leaf")
 		u.Stage = maintain
 	default:
 		panic("pagetablemmu: write ACK in invalid phase")

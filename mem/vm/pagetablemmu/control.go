@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -35,7 +36,7 @@ func (m *controlMiddleware) Handle(_ timing.Event) bool {
 		if !ok {
 			return false
 		}
-		*u = update{ID: msg.ID, Src: msg.Src, Request: msg.Payload.(pt.Req), Task: c.TaskTracker().StartReqIn(c, msg)}
+		*u = update{ID: msg.ID, Src: msg.Src, Request: msg.Payload.(pt.Req), requestTrace: startRequest(c, msg)}
 		if err := m.validate(u.Request); err != nil {
 			u.reject(err)
 		}
@@ -45,8 +46,12 @@ func (m *controlMiddleware) Handle(_ timing.Event) bool {
 	case drain:
 		for _, w := range c.State.Walks {
 			if w.Stage != free && u.protects(c.Spec, w.PID, w.VPN) {
+				u.WaitedForWalks = true
 				return false
 			}
+		}
+		if u.WaitedForWalks {
+			u.mark(c.TaskTracker(), tasks.MilestoneKindDependency, "drain walks")
 		}
 		m.begin(u)
 	case maintain:

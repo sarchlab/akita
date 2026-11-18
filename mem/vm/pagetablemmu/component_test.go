@@ -2,6 +2,7 @@ package pagetablemmu
 
 import (
 	"encoding/binary"
+	"maps"
 	"path/filepath"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -126,7 +128,7 @@ func TestCheckpointDuringNodePublication(t *testing.T) {
 	spec := baseSpec()
 	spec.Banks = append(spec.Banks, BankSpec{NumSets: 1, NumWays: 1}) // 48 VA bits with fixed top index.
 	path := filepath.Join(t.TempDir(), "mid-map.tar.gz")
-	r := newRig(t, spec, nil, false)
+	r := newTrackedRig(t, spec)
 	r.root(r.mmu)
 	cmd := pt.Req{Command: pt.Map, PID: 7, VAddr: 0x7000, Mapping: vm.Page{PAddr: 0x80000}}
 	id := r.send(r.ctrl, "Local.Control", cmd, 0)
@@ -134,16 +136,25 @@ func TestCheckpointDuringNodePublication(t *testing.T) {
 	require.NoError(t, engine.RunUntil(engine.CurrentTime()+50000))
 	require.Equal(t, zeroChild, r.mmu.State.Update.Stage)
 	require.Greater(t, len(r.mmu.State.Update.ZeroWrites), 1)
+	controlTask := r.mmu.State.Update.Task
+	pending := maps.Clone(r.mmu.State.Update.ZeroWrites)
 	require.Zero(t, r.ctrl.IncomingBuf().Size())
 	require.NoError(t, r.s.SaveCheckpoint(path))
 	r.traffic.Items = nil
 	r.run()
 	acknowledgment := r.recv(r.ctrl)
 	require.Equal(t, id, acknowledgment.RspTo)
-	restored := newRig(t, spec, nil, false)
+	restored := newTrackedRig(t, spec)
 	require.NoError(t, restored.s.LoadCheckpoint(path))
-	require.Greater(t, len(restored.mmu.State.Update.ZeroWrites), 1)
+	require.Equal(t, pending, restored.mmu.State.Update.ZeroWrites)
+	trace := newMMUTrace(restored)
 	restored.run()
+	for msgID, taskID := range pending {
+		write := trace.ended[taskID]
+		require.Equal(t, tasks.KindReqOut, write.Kind)
+		require.Equal(t, msgID, write.MsgID)
+		require.Equal(t, controlTask, write.ParentID)
+	}
 	require.Equal(t, acknowledgment, restored.recv(restored.ctrl))
 	require.Equal(t, r.traffic.Items, restored.traffic.Items)
 	require.Equal(t, r.mmu.State, restored.mmu.State)

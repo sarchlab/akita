@@ -154,6 +154,15 @@ for experiments and have no hardware calibration.
   false negative. A positive still checks PTE memory. Teardown clears the
   PID's entries.
 
+With simulation task tracking enabled, each incoming translation, forwarded
+fault and control command has its own request task. Coalesced waiters share
+the initiating request's filter or prefix lookup pipeline and PTE reads.
+Their milestones distinguish waiting for shared work from performing it.
+Fault response milestones apply to the requesting device's waiters. Control
+milestones identify protected walks draining, the final zeroing ACK for each
+node, and acknowledged pointer and leaf writes. Each physical request has a
+separate child task, including overlapping zeroing writes.
+
 The integration tests wire real buffered ports, a memory controller and
 storage. They include a two-MMU topology, a real TLB NACK/retry, timed STC
 contention, pool reuse, and checkpoint replay during node initialization.

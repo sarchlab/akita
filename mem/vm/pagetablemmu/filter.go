@@ -48,6 +48,7 @@ func (m *walkMiddleware) probeFilter(w *walk, now timing.VTimeInPicoSec, width *
 		}
 		*width--
 		w.Stage = filterPending
+		w.startLookupTask(m.c, ".filter_lookup")
 		w.Due = m.due(now, m.c.Spec.FilterLatency)
 		w.FilterHit = m.c.State.filterContains(w.PID, w.VPN)
 		return true
@@ -55,6 +56,7 @@ func (m *walkMiddleware) probeFilter(w *walk, now timing.VTimeInPicoSec, width *
 	if now < w.Due {
 		return false
 	}
+	w.finishLookupTask(m.c, ".filter_lookup")
 	w.Stage = walkDone
 	if w.FilterHit {
 		w.Stage = lookupReady

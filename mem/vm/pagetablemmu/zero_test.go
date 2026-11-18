@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	pt "github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tasks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,13 +19,17 @@ func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
 	// The two test ports stand in for 32-byte interleaved memory banks.
 	spec.Memory.Destinations = []messaging.RemotePort{"Client.Policy", "Client.Requests"}
 	spec.Memory.InterleavingSize = 32
-	r := newRig(t, spec, nil, false)
+	r := newTrackedRig(t, spec)
+	trace := newMMUTrace(r)
 	root := spec.PoolBase
 	rootID := r.send(r.ctrl, "Local.Control", pt.Req{Command: pt.RegisterRoot, PID: 7, Root: root}, 0)
 	lastACK := r.holdFirstZeroWrite(root)
+	rootWrite := trace.request(t, lastACK.ID, tasks.KindReqOut)
+	require.NotContains(t, trace.ended, rootWrite.ID)
 	require.NotContains(t, r.mmu.State.Roots, vm.PID(7))
 	r.send(r.policy, lastACK.Src, memprotocol.WriteDoneRsp{}, lastACK.ID)
 	r.run()
+	require.Equal(t, trace.request(t, rootID, tasks.KindReqIn).ID, trace.ended[rootWrite.ID].ParentID)
 	require.Equal(t, rootID, r.recv(r.ctrl).RspTo)
 	require.Equal(t, root, r.mmu.State.Roots[7])
 
@@ -36,6 +41,8 @@ func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
 	r.send(r.policy, probe.Src, memprotocol.DataReadyRsp{Data: make([]byte, pteBytes)}, probe.ID)
 	child := root + nodeBytes
 	lastACK = r.holdFirstZeroWrite(child)
+	childWrite := trace.request(t, lastACK.ID, tasks.KindReqOut)
+	require.NotContains(t, trace.ended, childWrite.ID)
 	r.send(r.policy, lastACK.Src, memprotocol.WriteDoneRsp{}, lastACK.ID)
 	// Only the parent pointer may issue next. The leaf must wait for its ACK.
 	for _, want := range []struct{ addr, word uint64 }{{root, child | validBit}, {child, spec.encodeLeaf(page)}} {
@@ -52,6 +59,7 @@ func TestNodePublicationWaitsForEveryZeroACK(t *testing.T) {
 	msg := r.recv(r.ctrl)
 	require.Equal(t, mapID, msg.RspTo)
 	require.Empty(t, msg.Payload.(pt.Rsp).Error)
+	require.Equal(t, trace.request(t, mapID, tasks.KindReqIn).ID, trace.ended[childWrite.ID].ParentID)
 }
 
 // Retain the first write while acknowledging the rest of each window in
