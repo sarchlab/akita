@@ -123,17 +123,39 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 // maxMsgOutBufSize limits the number of messages buffered before flit
 // conversion. This prevents the serialisable state from growing
-// unboundedly.
+// unboundedly. Links wider than this limit use their width instead, so that
+// the buffer cannot cap throughput.
 const maxMsgOutBufSize = 16
 
+// prepareMsg takes messages from the device ports in round passes: each pass
+// takes at most one message from each port, in port order, so that one port's
+// backlog is not drained before the next port is served. A message is at least
+// one flit, so NumOutputChannels passes are enough to fill the link.
 func (m *outgoingMW) prepareMsg() bool {
 	madeProgress := false
+
+	for pass := 0; pass < m.comp.Spec.NumOutputChannels; pass++ {
+		if !m.takeOneMsgFromEachPort() {
+			break
+		}
+
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
+// takeOneMsgFromEachPort runs one round pass and reports whether it took any
+// message.
+func (m *outgoingMW) takeOneMsgFromEachPort() bool {
+	madeProgress := false
 	state := &m.comp.State
+	bufLimit := max(maxMsgOutBufSize, m.comp.Spec.NumOutputChannels)
 
 	for i := 0; i < len(m.devicePorts); i++ {
 		// Backpressure: stop accepting new messages when the outgoing
 		// message buffer is already large enough.
-		if len(state.MsgOutBuf) >= maxMsgOutBufSize {
+		if len(state.MsgOutBuf) >= bufLimit {
 			break
 		}
 
@@ -152,7 +174,9 @@ func (m *outgoingMW) prepareMsg() bool {
 }
 
 // maxFlitsToBuffer limits the number of flits held in FlitsToSend at once.
-// This prevents the serialisable state from growing unboundedly.
+// This prevents the serialisable state from growing unboundedly. Links wider
+// than this limit use their width instead, so that the buffer cannot cap
+// throughput.
 const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
@@ -160,6 +184,7 @@ func (m *outgoingMW) prepareFlits() bool {
 	spec := m.comp.Spec
 	state := &m.comp.State
 	networkPortRemote := m.networkPort().AsRemote()
+	flitLimit := max(maxFlitsToBuffer, spec.NumOutputChannels)
 
 	for {
 		if len(state.MsgOutBuf) == 0 {
@@ -168,7 +193,7 @@ func (m *outgoingMW) prepareFlits() bool {
 
 		// Apply backpressure: don't convert more messages to flits while
 		// the flit send buffer is already large.
-		if len(state.FlitsToSend) >= maxFlitsToBuffer {
+		if len(state.FlitsToSend) >= flitLimit {
 			return madeProgress
 		}
 
