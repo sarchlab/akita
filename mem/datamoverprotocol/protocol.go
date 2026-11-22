@@ -33,7 +33,16 @@ const (
 type Rsp struct {
 }
 
-// Req is a data move request.
+// Req is a data move request. Source and destination ranges that share backing
+// memory must be disjoint, because the mover streams forward and an overlapping
+// copy can overwrite bytes it has not read yet while still reporting completion.
+//
+// A partial write is a full-unit read-merge-write in the destination memory, and
+// that merge is not atomic across components. While a partial write is in
+// flight, every access to that aligned destination unit must go through the same
+// memory controller or be otherwise serialized. With controllers that share one
+// mem.Storage and interleave more finely than the unit, or with parallel direct
+// storage writes to that unit, a neighboring update can be lost.
 type Req struct {
 	SrcAddress uint64
 	DstAddress uint64

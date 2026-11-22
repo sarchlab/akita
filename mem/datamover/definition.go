@@ -3,6 +3,7 @@ package datamover
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -37,6 +38,23 @@ func validateSpec(spec Spec) error {
 	}
 	if err := spec.Outside.Validate(); err != nil {
 		return err
+	}
+	if err := validateRoutingAlignment("inside", spec.Inside, spec.InsideByteGranularity); err != nil {
+		return err
+	}
+	return validateRoutingAlignment("outside", spec.Outside, spec.OutsideByteGranularity)
+}
+
+// validateRoutingAlignment requires the active mapper boundaries to align to
+// the side's granularity, because each request is routed by its aligned unit
+// base and must not straddle a boundary.
+func validateRoutingAlignment(side string, m mem.AddressMapper, granularity uint64) error {
+	if granularity == 0 {
+		return nil
+	}
+	if len(m.Destinations) > 1 && m.InterleavingSize%granularity != 0 ||
+		m.RangeHigh != 0 && (m.RangeLow%granularity != 0 || m.RangeHigh%granularity != 0) {
+		return fmt.Errorf("%s routing boundaries must align to %d bytes", side, granularity)
 	}
 	return nil
 }

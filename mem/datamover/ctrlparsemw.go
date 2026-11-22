@@ -61,8 +61,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		}
 	}
 	srcWidth := resolveByteGranularity(m.comp.Spec, req.SrcSide)
-	addressMustBeAligned(req.SrcAddress, srcWidth)
-	addressMustBeAligned(req.DstAddress, resolveByteGranularity(m.comp.Spec, req.DstSide))
+	// Reject an invalid destination side before admission.
+	resolveByteGranularity(m.comp.Spec, req.DstSide)
 
 	m.topPort().AddIncomingMilestone(tasks.Reason(tasks.MilestoneKindHardwareResource, m.comp.Name()+".transaction"))
 	m.topPort().RetrieveIncoming()
@@ -79,7 +79,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		NextWriteAddr: req.DstAddress,
 		PendingRead:   make(map[uint64]pendingReadState),
 		PendingWrite:  make(map[uint64]uint64),
-		Buffer:        bufferState{Granularity: srcWidth},
+		Buffer:        bufferState{Offset: alignDown(req.SrcAddress, srcWidth), Granularity: srcWidth},
 		RecvTaskID:    m.comp.TaskTracker().StartReqIn(m.comp, msg),
 	})
 	return true

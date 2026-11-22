@@ -30,12 +30,47 @@ Each tick the mover can issue one source read and one destination write and
 consume one data response and one write acknowledgment. It issues reads in
 admission order and writes from the oldest move with a ready chunk. Each copy
 has its own sliding buffer; all copies share the read window set by `BufferSize`.
-Source chunks occupy the window from read issue until their data is sent to the
-destination. A read may start when its first byte fits. For a 65-byte window
-and 64-byte source granularity, two reads can be outstanding. Size the window
-to hold the source chunks needed for a destination write. Short final reads and
-writes transfer only the remaining bytes. Source and destination start addresses
-must be aligned to their respective granularities. Responses return on Top in
+Source units occupy the window from read issue until their last requested byte
+is sent to the destination, including over-fetched bytes. A read may start when
+its first byte fits. For a 65-byte window and 64-byte source granularity, two
+reads can be outstanding. The oldest copy that still has destination writes to
+issue may exceed the window only for the source units its next write needs, so
+an unaligned copy cannot stall on a small window. A copy with all writes issued
+and only acknowledgments pending no longer gates this exception, so a later copy
+may use it.
+
+Source and destination addresses may have any byte offset. Every memory request
+is an aligned request of that side's full granularity. Reads discard bytes
+outside the requested range. A destination unit that is only partly covered,
+including an aligned copy's short tail, is written as a full unit with
+`DirtyMask` marking exactly the requested bytes; a fully covered unit has no
+mask. The destination memory must honor `DirtyMask`.
+
+A partial write is a full-unit read-merge-write in the destination memory, and
+that merge is not atomic across components. While a partial write is in flight,
+every access to that aligned destination unit must go through the same memory
+controller or be otherwise serialized. With controllers that share one
+`mem.Storage` and interleave more finely than the unit, or with parallel direct
+storage writes to that unit, a neighboring update can be lost.
+
+Each attached memory must accept a request of that side's full granularity. For
+`mem/dram`, `TransactionQueueSize` must exceed the number of bursts touched by
+one mover request, or the controller panics. If it does not, reduce the mover
+granularity or increase the queue size.
+
+The full aligned units touched on both sides must fit in backing storage, even
+when the requested bytes end earlier. A unit that extends past capacity panics
+in `mem.Storage`, on the source read or on the destination's masked merge, and
+the serial engine returns that failure from `Run`.
+
+Source and destination ranges that share backing memory must be disjoint,
+because the mover streams forward and an overlapping copy can overwrite bytes it
+has not read yet while still reporting completion. For example, with 64 B units
+and `BufferSize` 1, a 192-byte copy from address 1 to address 130 is invalid.
+
+Initialization rejects an active `InterleavingSize`, `RangeLow`, or `RangeHigh`
+that is not a multiple of that side's granularity, because requests are routed
+by their aligned unit base. Responses return on Top in
 admission order after each copy's writes have been acknowledged.
 
 ## Key Types

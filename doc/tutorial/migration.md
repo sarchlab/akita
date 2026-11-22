@@ -1432,9 +1432,26 @@ When constructing a `datamover.Spec` literal, set this field explicitly.
 Zero or negative values panic during initialization. Larger limits allow
 independent copies with the same source and destination sides to overlap.
 Wait for the earlier copy's completion before submitting a dependent copy.
-The source and destination addresses still require alignment to their respective
-granularities. A transfer size can end partway through a chunk. The final read
-and write now stop at the requested byte count, preserving adjacent bytes.
+Source and destination addresses may have arbitrary byte offsets. Every memory
+request is an aligned request of that side's full granularity, including for a
+short tail. Partly covered destination units are written with `DirtyMask`
+marking exactly the requested bytes, so the destination memory must honor
+`DirtyMask` to preserve adjacent bytes. The full aligned units touched on both
+sides must fit in backing storage. Each side's active interleaving size and
+range bounds must be multiples of its granularity; initialization rejects other
+mappers. Source and destination ranges that share backing memory must be
+disjoint, because the mover streams forward and an overlapping copy can
+overwrite bytes it has not read yet while still reporting completion.
+A partial write is a full-unit read-merge-write in the destination memory, and
+that merge is not atomic across components. While a partial write is in flight,
+every access to that aligned destination unit must go through the same memory
+controller or be otherwise serialized. With controllers that share one
+`mem.Storage` and interleave more finely than the unit, or with parallel direct
+storage writes to that unit, a neighboring update can be lost.
+Each attached memory must accept a request of that side's full granularity. For
+`mem/dram`, `TransactionQueueSize` must exceed the number of bursts touched by
+one mover request, or the controller panics. If it does not, reduce the mover
+granularity or increase the queue size.
 
 ## Opting into memory-backed page walks
 
