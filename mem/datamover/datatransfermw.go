@@ -54,32 +54,34 @@ func (m *dataTransferMW) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
-// All copies share the read window. As in the serial mover, a source chunk
-// may start while its first byte fits; the reservation lasts until its last
-// byte is written. Issue reads in admission order.
+// All copies share the read window, counted in whole source units. As in the
+// serial mover, a unit may start while its first byte fits; the reservation
+// lasts until its last requested byte is written. Issue reads in admission
+// order. The oldest unfinished copy may exceed the window for the units its
+// next write needs, because an unaligned write can span more source units than
+// the window holds and would otherwise never become ready.
 func (m *dataTransferMW) readFromSrc() bool {
 	transfers := m.comp.State.Transactions
 	var used uint64
 	var trans *dataMoverTransactionState
 	for i := range transfers {
 		t := &transfers[i]
-		issued := t.NextReadAddr - t.SrcAddress
-		used += issued - t.Buffer.Offset
-		if trans == nil && issued < t.ByteSize {
+		used += reservedBytes(t)
+		if trans == nil && t.NextReadAddr-t.SrcAddress < t.ByteSize {
 			trans = t
 		}
 	}
-	if trans == nil || used >= m.comp.Spec.BufferSize {
+	if trans == nil || (used >= m.comp.Spec.BufferSize && !m.neededForOldestWrite(trans)) {
 		return false
 	}
-	addr := trans.NextReadAddr
-	width := min(trans.Buffer.Granularity, trans.ByteSize-(addr-trans.SrcAddress))
+	granularity := trans.Buffer.Granularity
+	addr := alignDown(trans.NextReadAddr, granularity)
 	srcP := m.portFor(trans.SrcSide)
 
 	req := messaging.Msg{Payload: memprotocol.ReadReq{
 		Address: addr,
 
-		AccessByteSize: width,
+		AccessByteSize: granularity,
 		PID:            0},
 		ID: m.comp.NewID(),
 
@@ -96,10 +98,45 @@ func (m *dataTransferMW) readFromSrc() bool {
 	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	srcP.Send(req)
 
-	trans.NextReadAddr += width
-	trans.PendingRead[req.ID] = pendingReadState{TaskID: taskID, Offset: addr - trans.SrcAddress}
+	remaining := trans.ByteSize - (trans.NextReadAddr - trans.SrcAddress)
+	trans.NextReadAddr += min(granularity-trans.NextReadAddr%granularity, remaining)
+	trans.PendingRead[req.ID] = pendingReadState{TaskID: taskID, Offset: addr}
 
 	return true
+}
+
+// reservedBytes returns the whole source units issued and not yet released.
+func reservedBytes(t *dataMoverTransactionState) uint64 {
+	if t.NextReadAddr == t.SrcAddress {
+		return 0
+	}
+	return alignUp(t.NextReadAddr, t.Buffer.Granularity) - t.Buffer.Offset
+}
+
+// neededForOldestWrite reports whether trans is the oldest copy with unwritten
+// bytes and its next read holds a byte of its next destination write.
+func (m *dataTransferMW) neededForOldestWrite(trans *dataMoverTransactionState) bool {
+	transfers := m.comp.State.Transactions
+	for i := range transfers {
+		t := &transfers[i]
+		if t.NextWriteAddr-t.DstAddress >= t.ByteSize {
+			continue
+		}
+		if t != trans {
+			return false
+		}
+		srcAddr, count := m.nextWriteSpan(t)
+		return t.NextReadAddr-srcAddr < count
+	}
+	return false
+}
+
+// nextWriteSpan returns the source address and byte count of the requested
+// bytes that fall in the next destination unit.
+func (m *dataTransferMW) nextWriteSpan(t *dataMoverTransactionState) (uint64, uint64) {
+	granularity := resolveByteGranularity(m.comp.Spec, t.DstSide)
+	written := t.NextWriteAddr - t.DstAddress
+	return t.SrcAddress + written, min(granularity-t.NextWriteAddr%granularity, t.ByteSize-written)
 }
 
 // Match the returned request ID to its owner. Unmatched responses can
@@ -140,12 +177,11 @@ func (m *dataTransferMW) writeToDst() bool {
 	}
 	for i := range transfers {
 		trans := &transfers[i]
-		offset := trans.NextWriteAddr - trans.DstAddress
-		if offset >= trans.ByteSize {
+		if trans.NextWriteAddr-trans.DstAddress >= trans.ByteSize {
 			continue
 		}
-		width := min(resolveByteGranularity(m.comp.Spec, trans.DstSide), trans.ByteSize-offset)
-		data, ready := bufferExtractData(&trans.Buffer, offset, width)
+		srcAddr, count := m.nextWriteSpan(trans)
+		data, ready := bufferExtractData(&trans.Buffer, srcAddr, count)
 		if ready {
 			m.sendWrite(dstP, trans, data)
 			return true
@@ -154,32 +190,47 @@ func (m *dataTransferMW) writeToDst() bool {
 	return false
 }
 
-func (m *dataTransferMW) sendWrite(dstP messaging.Port, trans *dataMoverTransactionState, data []byte) {
-	req := messaging.Msg{Payload: memprotocol.WriteReq{
-		Address: trans.NextWriteAddr,
-		Data:    data,
+// fullUnitWrite places payload in the aligned destination unit containing addr.
+// A fully covered unit has no mask; otherwise the mask marks exactly payload.
+func fullUnitWrite(addr, granularity uint64, payload []byte) memprotocol.WriteReq {
+	unit := alignDown(addr, granularity)
+	if uint64(len(payload)) == granularity {
+		return memprotocol.WriteReq{Address: unit, Data: payload}
+	}
+	head := addr - unit
+	data := make([]byte, granularity)
+	copy(data[head:], payload)
+	mask := make([]bool, granularity)
+	for i := range payload {
+		mask[head+uint64(i)] = true
+	}
+	return memprotocol.WriteReq{Address: unit, Data: data, DirtyMask: mask}
+}
 
-		PID: 0},
+func (m *dataTransferMW) sendWrite(dstP messaging.Port, trans *dataMoverTransactionState, payload []byte) {
+	granularity := resolveByteGranularity(m.comp.Spec, trans.DstSide)
+	write := fullUnitWrite(trans.NextWriteAddr, granularity, payload)
+	req := messaging.Msg{Payload: write,
 		ID: m.comp.NewID(),
 
 		Src: dstP.AsRemote(),
-		Dst: m.mapperFor(trans.DstSide).Find(trans.NextWriteAddr),
+		Dst: m.mapperFor(trans.DstSide).Find(write.Address),
 
-		TrafficBytes: len(data) + 12,
+		TrafficBytes: len(write.Data) + 12,
 	}
 
 	taskID := m.comp.TaskTracker().StartReqOut(m.comp, req, trans.RecvTaskID)
 	dstP.Send(req)
 
-	trans.NextWriteAddr += uint64(len(data))
+	trans.NextWriteAddr += uint64(len(payload))
 	trans.PendingWrite[req.ID] = taskID
 	written := trans.NextWriteAddr - trans.DstAddress
 	if written == trans.ByteSize {
-		// Release the final source chunk even when it is shorter than the granularity.
+		// Release the final source unit even when the copy ends inside it.
 		trans.Buffer.Chunks = nil
-		trans.Buffer.Offset = written
+		trans.Buffer.Offset = alignUp(trans.SrcAddress+written, trans.Buffer.Granularity)
 	} else {
-		bufferMoveOffsetForwardTo(&trans.Buffer, written)
+		bufferMoveOffsetForwardTo(&trans.Buffer, trans.SrcAddress+written)
 	}
 }
 

@@ -30,12 +30,19 @@ Each tick the mover can issue one source read and one destination write and
 consume one data response and one write acknowledgment. It issues reads in
 admission order and writes from the oldest move with a ready chunk. Each copy
 has its own sliding buffer; all copies share the read window set by `BufferSize`.
-Source chunks occupy the window from read issue until their data is sent to the
-destination. A read may start when its first byte fits. For a 65-byte window
-and 64-byte source granularity, two reads can be outstanding. Size the window
-to hold the source chunks needed for a destination write. Short final reads and
-writes transfer only the remaining bytes. Source and destination start addresses
-must be aligned to their respective granularities. Responses return on Top in
+Source units occupy the window from read issue until their last requested byte
+is sent to the destination, including over-fetched bytes. A read may start when
+its first byte fits. For a 65-byte window and 64-byte source granularity, two
+reads can be outstanding. The oldest unfinished copy may exceed the window only
+for the source units its next destination write needs, so an unaligned copy
+cannot stall on a small window.
+
+Source and destination addresses may have any byte offset. Every memory request
+is an aligned request of that side's full granularity. Reads discard bytes
+outside the requested range. A destination unit that is only partly covered,
+including an aligned copy's short tail, is written as a full unit with
+`DirtyMask` marking exactly the requested bytes; a fully covered unit has no
+mask. The destination memory must honor `DirtyMask`. Responses return on Top in
 admission order after each copy's writes have been acknowledged.
 
 ## Key Types

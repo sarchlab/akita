@@ -64,21 +64,25 @@ type dataChunk struct {
 	Valid bool   `json:"valid"`
 }
 
-// bufferState is the serializable representation of a buffer.
+// bufferState is the serializable representation of a buffer. Offset is the
+// aligned source address of the first chunk.
 type bufferState struct {
 	Offset      uint64      `json:"offset"`
 	Granularity uint64      `json:"granularity"`
 	Chunks      []dataChunk `json:"chunks"`
 }
 
-// A returned read supplies its payload; retain its buffer offset and trace task.
+// A returned read supplies its payload; retain its aligned source address and
+// trace task.
 type pendingReadState struct {
 	TaskID uint64 `json:"task_id"`
 	Offset uint64 `json:"offset"`
 }
 
 // dataMoverTransactionState is the serializable representation of a
-// dataMoverTransaction.
+// dataMoverTransaction. NextReadAddr and NextWriteAddr are the next requested
+// bytes not yet covered by an issued request; memory requests themselves use
+// the aligned unit containing that byte.
 type dataMoverTransactionState struct {
 	RecvTaskID uint64 `json:"recv_task_id"`
 
@@ -112,6 +116,14 @@ func addressMustBeAligned(addr, granularity uint64) {
 	if addr%granularity != 0 {
 		log.Panicf("address %d must be aligned to %d", addr, granularity)
 	}
+}
+
+func alignDown(addr, granularity uint64) uint64 {
+	return addr - addr%granularity
+}
+
+func alignUp(addr, granularity uint64) uint64 {
+	return addr + (granularity-addr%granularity)%granularity
 }
 
 // bufferAddData adds data to the buffer at the given offset.
