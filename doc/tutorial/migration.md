@@ -1448,6 +1448,10 @@ every access to that aligned destination unit must go through the same memory
 controller or be otherwise serialized. With controllers that share one
 `mem.Storage` and interleave more finely than the unit, or with parallel direct
 storage writes to that unit, a neighboring update can be lost.
+Each attached memory must accept a request of that side's full granularity. For
+`mem/dram`, `TransactionQueueSize` must exceed the number of bursts touched by
+one mover request, or the controller panics. If it does not, reduce the mover
+granularity or increase the queue size.
 
 ## Opting into memory-backed page walks
 
