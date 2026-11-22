@@ -42,7 +42,15 @@ is an aligned request of that side's full granularity. Reads discard bytes
 outside the requested range. A destination unit that is only partly covered,
 including an aligned copy's short tail, is written as a full unit with
 `DirtyMask` marking exactly the requested bytes; a fully covered unit has no
-mask. The destination memory must honor `DirtyMask`. Responses return on Top in
+mask. The destination memory must honor `DirtyMask`.
+
+The full aligned units touched on both sides must fit in backing storage, even
+when the requested bytes end earlier. A unit that extends past capacity panics
+in `mem.Storage`, on the source read or on the destination's masked merge, and
+the serial engine returns that failure from `Run`.
+Initialization rejects an active `InterleavingSize`, `RangeLow`, or `RangeHigh`
+that is not a multiple of that side's granularity, because requests are routed
+by their aligned unit base. Responses return on Top in
 admission order after each copy's writes have been acknowledged.
 
 ## Key Types

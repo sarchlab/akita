@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/simplebankedmemory"
@@ -56,6 +57,20 @@ func buildOffsetBankedMem(sim *testsim.Simulation, storage *mem.Storage, name st
 	return comp.Ports.Top
 }
 
+func buildOffsetDRAM(sim *testsim.Simulation, storage *mem.Storage, name string) messaging.Port {
+	comp := modeling.MakeBuilder[*dram.Comp](dram.DefaultSpec()).
+		WithSimulation(sim).
+		WithResources(dram.Resources{Storage: storage}).
+		Build(name)
+	for _, slot := range []string{"Top", "Control"} {
+		comp.BindPort(slot, twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
+	}
+	return comp.Ports.Top
+}
+
 // forEachOffsetMemory runs body with each memory model as source and destination.
 func forEachOffsetMemory(t *testing.T, body func(t *testing.T, buildMem offsetMemBuilder)) {
 	t.Helper()
@@ -67,11 +82,18 @@ func newOffsetRig(
 	t *testing.T, buildMem offsetMemBuilder, insideWidth, outsideWidth, window uint64, limit int,
 ) *offsetRig {
 	t.Helper()
+	return newOffsetRigWithCapacity(t, buildMem, mem.MB, insideWidth, outsideWidth, window, limit)
+}
+
+func newOffsetRigWithCapacity(
+	t *testing.T, buildMem offsetMemBuilder, capacity, insideWidth, outsideWidth, window uint64, limit int,
+) *offsetRig {
+	t.Helper()
 	engine := timing.NewSerialEngine()
 	sim := testsim.New(engine, false)
 	agent := newDriverPort(sim, "Agent.Top", 16)
 
-	storage := mem.MakeStorageBuilder().WithSimulation(sim).WithCapacity(mem.MB)
+	storage := mem.MakeStorageBuilder().WithSimulation(sim).WithCapacity(capacity)
 	insideStorage := storage.Build("InsideStorage")
 	outsideStorage := storage.Build("OutsideStorage")
 	insideTop := buildMem(sim, insideStorage, "InsideMem")
@@ -117,6 +139,18 @@ func offsetPattern(salt byte) []byte {
 	return data
 }
 
+func (r *offsetRig) deliver(srcSide, dstSide datamoverprotocol.Side, c offsetCopy) uint64 {
+	id := r.sim.NewID()
+	r.mover.Ports.Top.Deliver(messaging.Msg{
+		ID: id, Src: r.agent.AsRemote(), Dst: r.mover.Ports.Top.AsRemote(),
+		Payload: datamoverprotocol.Req{
+			SrcAddress: c.src, DstAddress: c.dst, ByteSize: c.size,
+			SrcSide: srcSide, DstSide: dstSide,
+		},
+	})
+	return id
+}
+
 // runCopies performs copies and checks every destination byte: requested bytes
 // hold source data and all others keep their original value.
 func (r *offsetRig) runCopies(t *testing.T, srcSide, dstSide datamoverprotocol.Side, copies []offsetCopy) {
@@ -131,14 +165,7 @@ func (r *offsetRig) runCopies(t *testing.T, srcSide, dstSide datamoverprotocol.S
 
 	ids := make([]uint64, len(copies))
 	for i, c := range copies {
-		ids[i] = r.sim.NewID()
-		r.mover.Ports.Top.Deliver(messaging.Msg{
-			ID: ids[i], Src: r.agent.AsRemote(), Dst: r.mover.Ports.Top.AsRemote(),
-			Payload: datamoverprotocol.Req{
-				SrcAddress: c.src, DstAddress: c.dst, ByteSize: c.size,
-				SrcSide: srcSide, DstSide: dstSide,
-			},
-		})
+		ids[i] = r.deliver(srcSide, dstSide, c)
 		copy(want[c.dst:c.dst+c.size], src[c.src:c.src+c.size])
 	}
 	require.NoError(t, r.engine.Run())
@@ -345,4 +372,99 @@ func TestSmallWindowFetchesOnlyNextWriteSpan(t *testing.T) {
 	// may be exceeded by one unit but no further.
 	mover := offsetHandRig(t, 64, 1, offsetCopy{64 + 32, 1024, 256})
 	require.Len(t, drainReads(t, mover.Ports.Outside), 2)
+}
+
+func TestUnalignedCopiesThroughDRAM(t *testing.T) {
+	for _, c := range []offsetCopy{
+		{64, 1024, 100},           // short tail
+		{64 + 20, 1024 + 20, 108}, // unaligned head
+		{64 + 5, 1024 + 39, 300},  // both, with different offsets
+		{64 + 10, 1024 + 30, 12},  // inside one unit
+	} {
+		for _, d := range [][2]datamoverprotocol.Side{
+			{datamoverprotocol.SideOutside, datamoverprotocol.SideInside},
+			{datamoverprotocol.SideInside, datamoverprotocol.SideOutside},
+		} {
+			t.Run(fmt.Sprintf("%d_%d_%d_%s", c.src, c.dst, c.size, d[0]), func(t *testing.T) {
+				r := newOffsetRig(t, buildOffsetDRAM, 64, 64, 2048, 1)
+				r.runCopies(t, d[0], d[1], []offsetCopy{c})
+			})
+		}
+	}
+}
+
+func TestZeroWindowWriteSpansManySourceUnits(t *testing.T) {
+	// Each 64-byte destination write needs five 16-byte source units.
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		r := newOffsetRig(t, buildMem, 64, 16, 0, 1)
+		r.runCopies(t, datamoverprotocol.SideOutside, datamoverprotocol.SideInside,
+			[]offsetCopy{{16 + 5, 1024, 128}})
+	})
+}
+
+func TestFullUnitsMustFitInStorage(t *testing.T) {
+	const beyondCapacity = "accessing physical address beyond the storage capacity"
+	out, in := datamoverprotocol.SideOutside, datamoverprotocol.SideInside
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		// Bytes 940-999 fit in a 1000-byte storage, but unit 960-1023 does not.
+		for name, c := range map[string]offsetCopy{
+			"source":      {940, 128, 60},
+			"destination": {128, 940, 60},
+		} {
+			t.Run(name, func(t *testing.T) {
+				r := newOffsetRigWithCapacity(t, buildMem, 1000, 64, 64, 2048, 1)
+				r.deliver(out, in, c)
+				require.ErrorContains(t, r.engine.Run(), beyondCapacity)
+			})
+		}
+		t.Run("units ending at capacity", func(t *testing.T) {
+			r := newOffsetRigWithCapacity(t, buildMem, 1024, 64, 64, 2048, 1)
+			src := offsetPattern(0x5a)[:1024]
+			r.storage[out].Write(0, src)
+			r.deliver(out, in, offsetCopy{940, 950, 60})
+			require.NoError(t, r.engine.Run())
+			require.Equal(t, src[940:1000], r.storage[in].Read(950, 60))
+			require.Equal(t, make([]byte, 14), r.storage[in].Read(1010, 14))
+		})
+	})
+}
+
+func TestRoutingBoundariesMustAlign(t *testing.T) {
+	two := []messaging.RemotePort{"A", "B"}
+	one := []messaging.RemotePort{"A"}
+	cases := []struct {
+		name   string
+		mapper mem.AddressMapper
+		valid  bool
+	}{
+		{"interleaving multiple of unit", mem.AddressMapper{Destinations: two, InterleavingSize: 128}, true},
+		{"interleaving equals unit", mem.AddressMapper{Destinations: two, InterleavingSize: 64}, true},
+		{"GPU memory interleaving", mem.AddressMapper{Destinations: two, InterleavingSize: 4 * mem.GB}, true},
+		{"aligned range", mem.AddressMapper{Destinations: one, RangeLow: 64, RangeHigh: 128, Fallback: "F"}, true},
+		{"unused interleaving", mem.AddressMapper{Destinations: one, InterleavingSize: 100}, true},
+		{"interleaving inside unit", mem.AddressMapper{Destinations: two, InterleavingSize: 32}, false},
+		{"interleaving not multiple", mem.AddressMapper{Destinations: two, InterleavingSize: 96}, false},
+		{"range low inside unit", mem.AddressMapper{Destinations: one, RangeLow: 80, RangeHigh: 128, Fallback: "F"}, false},
+		{"range high inside unit", mem.AddressMapper{Destinations: one, RangeLow: 64, RangeHigh: 96, Fallback: "F"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			valid := mem.AddressMapper{Destinations: one}
+			for _, spec := range []Spec{
+				{MaxTransactions: 1, InsideByteGranularity: 64, OutsideByteGranularity: 16,
+					Inside: c.mapper, Outside: valid},
+				{MaxTransactions: 1, InsideByteGranularity: 16, OutsideByteGranularity: 64,
+					Inside: valid, Outside: c.mapper},
+			} {
+				err := validateSpec(spec)
+				if c.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(t, err, "routing boundaries must align")
+				}
+			}
+		})
+	}
 }
