@@ -57,9 +57,11 @@ func (m *dataTransferMW) Handle(_ timing.Event) bool {
 // All copies share the read window, counted in whole source units. As in the
 // serial mover, a unit may start while its first byte fits; the reservation
 // lasts until its last requested byte is written. Issue reads in admission
-// order. The oldest unfinished copy may exceed the window for the units its
-// next write needs, because an unaligned write can span more source units than
-// the window holds and would otherwise never become ready.
+// order. The oldest copy that still has destination writes to issue may exceed
+// the window for the units its next write needs, because an unaligned write can
+// span more source units than the window holds and would otherwise never become
+// ready. A copy with all writes issued and only acknowledgments pending no
+// longer gates this exception, so a later copy may use it.
 func (m *dataTransferMW) readFromSrc() bool {
 	transfers := m.comp.State.Transactions
 	var used uint64
@@ -113,8 +115,8 @@ func reservedBytes(t *dataMoverTransactionState) uint64 {
 	return alignUp(t.NextReadAddr, t.Buffer.Granularity) - t.Buffer.Offset
 }
 
-// neededForOldestWrite reports whether trans is the oldest copy with unwritten
-// bytes and its next read holds a byte of its next destination write.
+// neededForOldestWrite reports whether trans is the oldest copy that still has
+// destination writes to issue and its next read holds a byte of its next write.
 func (m *dataTransferMW) neededForOldestWrite(trans *dataMoverTransactionState) bool {
 	transfers := m.comp.State.Transactions
 	for i := range transfers {

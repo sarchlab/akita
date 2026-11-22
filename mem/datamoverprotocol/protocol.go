@@ -33,7 +33,9 @@ const (
 type Rsp struct {
 }
 
-// Req is a data move request.
+// Req is a data move request. Source and destination ranges that share backing
+// memory must be disjoint, because the mover streams forward and an overlapping
+// copy can overwrite bytes it has not read yet while still reporting completion.
 type Req struct {
 	SrcAddress uint64
 	DstAddress uint64

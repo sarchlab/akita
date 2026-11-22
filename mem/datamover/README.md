@@ -33,9 +33,11 @@ has its own sliding buffer; all copies share the read window set by `BufferSize`
 Source units occupy the window from read issue until their last requested byte
 is sent to the destination, including over-fetched bytes. A read may start when
 its first byte fits. For a 65-byte window and 64-byte source granularity, two
-reads can be outstanding. The oldest unfinished copy may exceed the window only
-for the source units its next destination write needs, so an unaligned copy
-cannot stall on a small window.
+reads can be outstanding. The oldest copy that still has destination writes to
+issue may exceed the window only for the source units its next write needs, so
+an unaligned copy cannot stall on a small window. A copy with all writes issued
+and only acknowledgments pending no longer gates this exception, so a later copy
+may use it.
 
 Source and destination addresses may have any byte offset. Every memory request
 is an aligned request of that side's full granularity. Reads discard bytes
@@ -48,6 +50,12 @@ The full aligned units touched on both sides must fit in backing storage, even
 when the requested bytes end earlier. A unit that extends past capacity panics
 in `mem.Storage`, on the source read or on the destination's masked merge, and
 the serial engine returns that failure from `Run`.
+
+Source and destination ranges that share backing memory must be disjoint,
+because the mover streams forward and an overlapping copy can overwrite bytes it
+has not read yet while still reporting completion. For example, with 64 B units
+and `BufferSize` 1, a 192-byte copy from address 1 to address 130 is invalid.
+
 Initialization rejects an active `InterleavingSize`, `RangeLow`, or `RangeHigh`
 that is not a multiple of that side's granularity, because requests are routed
 by their aligned unit base. Responses return on Top in

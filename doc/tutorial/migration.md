@@ -1439,7 +1439,9 @@ marking exactly the requested bytes, so the destination memory must honor
 `DirtyMask` to preserve adjacent bytes. The full aligned units touched on both
 sides must fit in backing storage. Each side's active interleaving size and
 range bounds must be multiples of its granularity; initialization rejects other
-mappers.
+mappers. Source and destination ranges that share backing memory must be
+disjoint, because the mover streams forward and an overlapping copy can
+overwrite bytes it has not read yet while still reporting completion.
 
 ## Opting into memory-backed page walks
 
