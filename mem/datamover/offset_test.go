@@ -9,8 +9,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/simplebankedmemory"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -31,27 +33,57 @@ type offsetRig struct {
 	storage map[datamoverprotocol.Side]*mem.Storage
 }
 
-func newOffsetRig(t *testing.T, insideWidth, outsideWidth, window uint64, limit int) *offsetRig {
+// offsetMemBuilder builds a memory backed by storage and returns its Top port.
+type offsetMemBuilder func(sim *testsim.Simulation, storage *mem.Storage, name string) messaging.Port
+
+func buildOffsetIdealMem(sim *testsim.Simulation, storage *mem.Storage, name string) messaging.Port {
+	spec := idealmemcontroller.DefaultSpec()
+	spec.Latency = 10
+	return buildIdealMem(sim, spec, storage, name).Ports.Top
+}
+
+func buildOffsetBankedMem(sim *testsim.Simulation, storage *mem.Storage, name string) messaging.Port {
+	comp := modeling.MakeBuilder[*simplebankedmemory.Comp](simplebankedmemory.DefaultSpec()).
+		WithSimulation(sim).
+		WithResources(simplebankedmemory.Resources{Storage: storage}).
+		Build(name)
+	for _, slot := range []string{"Top", "Control"} {
+		comp.BindPort(slot, twowaybuffered.MakeBuilder().
+			WithSimulation(sim).
+			WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
+			Build())
+	}
+	return comp.Ports.Top
+}
+
+// forEachOffsetMemory runs body with each memory model as source and destination.
+func forEachOffsetMemory(t *testing.T, body func(t *testing.T, buildMem offsetMemBuilder)) {
+	t.Helper()
+	t.Run("idealmemcontroller", func(t *testing.T) { body(t, buildOffsetIdealMem) })
+	t.Run("simplebankedmemory", func(t *testing.T) { body(t, buildOffsetBankedMem) })
+}
+
+func newOffsetRig(
+	t *testing.T, buildMem offsetMemBuilder, insideWidth, outsideWidth, window uint64, limit int,
+) *offsetRig {
 	t.Helper()
 	engine := timing.NewSerialEngine()
 	sim := testsim.New(engine, false)
 	agent := newDriverPort(sim, "Agent.Top", 16)
 
-	memSpec := idealmemcontroller.DefaultSpec()
-	memSpec.Latency = 10
 	storage := mem.MakeStorageBuilder().WithSimulation(sim).WithCapacity(mem.MB)
 	insideStorage := storage.Build("InsideStorage")
 	outsideStorage := storage.Build("OutsideStorage")
-	insideMem := buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
-	outsideMem := buildIdealMem(sim, memSpec, outsideStorage, "OutsideMem")
+	insideTop := buildMem(sim, insideStorage, "InsideMem")
+	outsideTop := buildMem(sim, outsideStorage, "OutsideMem")
 
 	spec := DefaultSpec()
 	spec.MaxTransactions = limit
 	spec.BufferSize = window
 	spec.InsideByteGranularity = insideWidth
 	spec.OutsideByteGranularity = outsideWidth
-	spec.Inside.Destinations = []messaging.RemotePort{insideMem.Ports.Top.AsRemote()}
-	spec.Outside.Destinations = []messaging.RemotePort{outsideMem.Ports.Top.AsRemote()}
+	spec.Inside.Destinations = []messaging.RemotePort{insideTop.AsRemote()}
+	spec.Outside.Destinations = []messaging.RemotePort{outsideTop.AsRemote()}
 	mover := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("DataMover")
 	ports := makePorts(sim, "DataMover", 16, 64, 64, 16)
 	mover.BindPort("Top", ports.Top)
@@ -62,7 +94,7 @@ func newOffsetRig(t *testing.T, insideWidth, outsideWidth, window uint64, limit 
 	conn := direct.NewConnection("Conn", sim, timing.GHz)
 	for _, p := range []messaging.Port{
 		agent, mover.Ports.Top, mover.Ports.Inside, mover.Ports.Outside,
-		insideMem.Ports.Top, outsideMem.Ports.Top,
+		insideTop, outsideTop,
 	} {
 		conn.BindPort(p)
 	}
@@ -144,24 +176,30 @@ func TestUnalignedCopiesPreserveData(t *testing.T) {
 		{datamoverprotocol.SideOutside, datamoverprotocol.SideInside},
 		{datamoverprotocol.SideInside, datamoverprotocol.SideOutside},
 	}
-	for _, rg := range ranges {
-		for _, w := range widths {
-			for _, d := range directions {
-				name := fmt.Sprintf("%s/in%d_out%d/%s_to_%s", rg.name, w[0], w[1], d[0], d[1])
-				t.Run(name, func(t *testing.T) {
-					r := newOffsetRig(t, w[0], w[1], 2048, 1)
-					r.runCopies(t, d[0], d[1], []offsetCopy{rg.copy})
-				})
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		for _, rg := range ranges {
+			for _, w := range widths {
+				for _, d := range directions {
+					name := fmt.Sprintf("%s/in%d_out%d/%s_to_%s", rg.name, w[0], w[1], d[0], d[1])
+					t.Run(name, func(t *testing.T) {
+						r := newOffsetRig(t, buildMem, w[0], w[1], 2048, 1)
+						r.runCopies(t, d[0], d[1], []offsetCopy{rg.copy})
+					})
+				}
 			}
 		}
-	}
+	})
 }
 
 func TestUnalignedSameSideCopy(t *testing.T) {
-	for _, side := range []datamoverprotocol.Side{datamoverprotocol.SideInside, datamoverprotocol.SideOutside} {
-		r := newOffsetRig(t, 64, 64, 2048, 1)
-		r.runCopies(t, side, side, []offsetCopy{{64 + 5, 4096 + 39, 300}})
-	}
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		for _, side := range []datamoverprotocol.Side{datamoverprotocol.SideInside, datamoverprotocol.SideOutside} {
+			r := newOffsetRig(t, buildMem, 64, 64, 2048, 1)
+			r.runCopies(t, side, side, []offsetCopy{{64 + 5, 4096 + 39, 300}})
+		}
+	})
 }
 
 func TestConcurrentUnalignedCopies(t *testing.T) {
@@ -172,20 +210,26 @@ func TestConcurrentUnalignedCopies(t *testing.T) {
 		// Shares a destination unit with the first copy's tail.
 		{3072 + 7, 4096 + 208, 40},
 	}
-	for _, limit := range []int{1, 2, 4} {
-		for _, window := range []uint64{1, 64, 128, 4096} {
-			t.Run(fmt.Sprintf("limit%d_window%d", limit, window), func(t *testing.T) {
-				r := newOffsetRig(t, 64, 64, window, limit)
-				r.runCopies(t, datamoverprotocol.SideOutside, datamoverprotocol.SideInside, copies)
-			})
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		for _, limit := range []int{1, 2, 4} {
+			for _, window := range []uint64{1, 64, 128, 4096} {
+				t.Run(fmt.Sprintf("limit%d_window%d", limit, window), func(t *testing.T) {
+					r := newOffsetRig(t, buildMem, 64, 64, window, limit)
+					r.runCopies(t, datamoverprotocol.SideOutside, datamoverprotocol.SideInside, copies)
+				})
+			}
 		}
-	}
+	})
 }
 
 func TestZeroSizeUnalignedCopyCompletes(t *testing.T) {
-	r := newOffsetRig(t, 64, 64, 2048, 1)
-	r.runCopies(t, datamoverprotocol.SideOutside, datamoverprotocol.SideInside,
-		[]offsetCopy{{13, 1024 + 27, 0}})
+	forEachOffsetMemory(t, func(t *testing.T, buildMem offsetMemBuilder) {
+		t.Helper()
+		r := newOffsetRig(t, buildMem, 64, 64, 2048, 1)
+		r.runCopies(t, datamoverprotocol.SideOutside, datamoverprotocol.SideInside,
+			[]offsetCopy{{13, 1024 + 27, 0}})
+	})
 }
 
 // offsetHandRig drives the mover one tick at a time with unconnected ports.
