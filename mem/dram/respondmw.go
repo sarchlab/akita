@@ -71,8 +71,7 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	m.comp.Resources.Storage.Write(
-		transactionGlobalAddress(t), t.WriteMsg.Payload.(memprotocol.WriteReq).Data)
+	m.storeWrite(t.WriteMsg.Payload.(memprotocol.WriteReq))
 
 	writeDone := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 		ID:           m.comp.NewID(),
@@ -92,6 +91,24 @@ func (m *respondMW) finalizeWriteTrans(
 	state.CompletedWrites++
 	m.removeTransaction(state, i)
 	return true
+}
+
+// storeWrite commits a write to storage. A nil DirtyMask writes every byte;
+// otherwise only bytes whose mask entry is true are updated.
+func (m *respondMW) storeWrite(req memprotocol.WriteReq) {
+	storage := m.comp.Resources.Storage
+	if req.DirtyMask == nil {
+		storage.Write(req.Address, req.Data)
+		return
+	}
+
+	merged := storage.Read(req.Address, uint64(len(req.Data)))
+	for i := range req.Data {
+		if req.DirtyMask[i] {
+			merged[i] = req.Data[i]
+		}
+	}
+	storage.Write(req.Address, merged)
 }
 
 func (m *respondMW) finalizeReadTrans(
