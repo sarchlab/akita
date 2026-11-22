@@ -131,10 +131,12 @@ func newOffsetRigWithCapacity(
 	}
 }
 
+// offsetPattern mixes the address bits above the low byte with an odd
+// multiplier, so bytes a multiple of 256 apart differ within the region.
 func offsetPattern(salt byte) []byte {
 	data := make([]byte, offsetTestRegion)
 	for i := range data {
-		data[i] = byte(i*7) ^ salt
+		data[i] = byte(i*7) ^ byte((i>>8)*0x9d) ^ salt
 	}
 	return data
 }

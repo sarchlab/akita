@@ -46,6 +46,13 @@ including an aligned copy's short tail, is written as a full unit with
 `DirtyMask` marking exactly the requested bytes; a fully covered unit has no
 mask. The destination memory must honor `DirtyMask`.
 
+A partial write is a full-unit read-merge-write in the destination memory, and
+that merge is not atomic across components. While a partial write is in flight,
+every access to that aligned destination unit must go through the same memory
+controller or be otherwise serialized. With controllers that share one
+`mem.Storage` and interleave more finely than the unit, or with parallel direct
+storage writes to that unit, a neighboring update can be lost.
+
 The full aligned units touched on both sides must fit in backing storage, even
 when the requested bytes end earlier. A unit that extends past capacity panics
 in `mem.Storage`, on the source read or on the destination's masked merge, and
