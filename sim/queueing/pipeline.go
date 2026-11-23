@@ -237,7 +237,7 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 
 	moved = p.advanceStages(tracked, blocked) || moved
 	if moved || !intact {
-		writeGen, writeVersion = p.invalidateStages(writeGen, writeVersion)
+		_, writeVersion = p.invalidateStages(writeGen, writeVersion)
 	}
 	if tracked {
 		p.seenGen = writeVersion
