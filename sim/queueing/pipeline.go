@@ -22,6 +22,9 @@ type Pipeline[T any] struct {
 	width     int
 	numStages int
 	stages    []PipelineStage[T]
+	// stageZero counts the items at stage 0. It is derived from stages and is
+	// excluded from checkpoints.
+	stageZero int
 	// occupancy is scratch space rebuilt from stages on every advance. It is
 	// not simulation state and is excluded from checkpoints.
 	occupancy []bool
@@ -50,19 +53,13 @@ func (p *Pipeline[T]) Stages() []PipelineStage[T] {
 // Clear removes all items from the pipeline.
 func (p *Pipeline[T]) Clear() {
 	p.stages = nil
+	p.stageZero = 0
 	p.occupancy = nil
 }
 
 // CanAccept returns true if there is at least one free lane at stage 0.
 func (p *Pipeline[T]) CanAccept() bool {
-	occupied := 0
-	for i := range p.stages {
-		if p.stages[i].Stage == 0 {
-			occupied++
-		}
-	}
-
-	return occupied < p.width
+	return p.stageZero < p.width
 }
 
 // Accept inserts an item into the first stage of the pipeline. It occupies
@@ -71,6 +68,26 @@ func (p *Pipeline[T]) CanAccept() bool {
 // pipeline equals NumStages ticks. Accept panics when stage 0 is full; callers
 // must check CanAccept before inserting.
 func (p *Pipeline[T]) Accept(item T) {
+	if p.stageZero >= p.width {
+		panic("pipeline has no free input lane")
+	}
+
+	lane := 0
+	if p.stageZero > 0 {
+		lane = p.firstFreeLane()
+	}
+
+	p.stages = append(p.stages, PipelineStage[T]{
+		Lane:  lane,
+		Stage: 0,
+		Item:  item,
+	})
+	p.stageZero++
+}
+
+// firstFreeLane returns the lowest lane that is free at stage 0. The caller
+// must ensure that one exists.
+func (p *Pipeline[T]) firstFreeLane() int {
 	// Use a fixed-size bitset on the stack for small widths,
 	// fall back to a slice for larger ones.
 	var usedSmall [16]bool
@@ -82,29 +99,20 @@ func (p *Pipeline[T]) Accept(item T) {
 		used = make([]bool, p.width)
 	}
 
-	for i := range p.stages {
+	// Newly accepted items sit at the back, so stop once all are found.
+	for i, left := len(p.stages)-1, p.stageZero; left > 0; i-- {
 		if p.stages[i].Stage == 0 {
 			used[p.stages[i].Lane] = true
+			left--
 		}
 	}
 
 	lane := 0
-	for lane < p.width {
-		if !used[lane] {
-			break
-		}
+	for used[lane] {
 		lane++
 	}
 
-	if lane == p.width {
-		panic("pipeline has no free input lane")
-	}
-
-	p.stages = append(p.stages, PipelineStage[T]{
-		Lane:  lane,
-		Stage: 0,
-		Item:  item,
-	})
+	return lane
 }
 
 // Tick advances the pipeline by one cycle. Items at the last stage are pushed
@@ -120,6 +128,7 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	}
 
 	moved := false
+	blocked := false
 	lastStage := p.numStages - 1
 
 	// Phase 1: Try to output items at the last stage.
@@ -133,17 +142,41 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 			p.stages[i] = p.stages[n-1]
 			n--
 			moved = true
+		} else {
+			blocked = true
 		}
 	}
 
 	p.stages = p.stages[:n]
 
-	// Phase 2: Advance remaining items from high stage to low.
-	if n > 0 {
+	// Phase 2: A blocked output can stall items behind it, so advance from
+	// high stage to low. A pipeline without stages never advances.
+	if blocked || p.numStages <= 0 {
 		moved = p.advanceItems() || moved
+		p.stageZero = p.countStageZero()
+
+		return moved
 	}
 
-	return moved
+	// With the last stage empty, every remaining item has a free slot ahead.
+	for i := range p.stages {
+		p.stages[i].Stage++
+	}
+	p.stageZero = 0
+
+	return moved || n > 0
+}
+
+// countStageZero returns the number of items at stage 0.
+func (p *Pipeline[T]) countStageZero() int {
+	count := 0
+	for i := range p.stages {
+		if p.stages[i].Stage == 0 {
+			count++
+		}
+	}
+
+	return count
 }
 
 // advanceItems processes all pipeline items, advancing them toward higher
