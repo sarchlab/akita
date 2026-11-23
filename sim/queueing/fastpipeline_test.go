@@ -358,6 +358,24 @@ func TestFastPipelineAdmission(t *testing.T) {
 	})
 }
 
+func TestFastPipelineNextPushTimeBetweenEdges(t *testing.T) {
+	clock := &pipelineClock{now: 1500}
+	p := MakeFastPipeline[int](1, 2, 1*timing.GHz, clock)
+
+	due, ok := p.NextPushTime()
+	require.True(t, ok)
+	require.Equal(t, timing.VTimeInPicoSec(1500), due, "a free lane fits now, not at the past edge")
+
+	p.Push(1)
+	require.False(t, p.CanPush())
+	due, ok = p.NextPushTime()
+	require.True(t, ok)
+	require.Equal(t, timing.VTimeInPicoSec(2000), due, "the lane frees at its next edge")
+
+	clock.now = due
+	require.True(t, p.CanPush())
+}
+
 func TestFastPipelineNextReadyTime(t *testing.T) {
 	p, clock := newTestPipeline(2, 4)
 	_, ok := p.NextReadyTime()
@@ -461,6 +479,8 @@ func TestFastPipelineRejectsInvalidUse(t *testing.T) {
 	clock := &pipelineClock{}
 	require.Panics(t, func() { MakeFastPipeline[int](1, 0, testPipelineFreq, clock) })
 	require.Panics(t, func() { MakeFastPipeline[int](1, 1, 0, clock) })
+	require.Panics(t, func() { MakeFastPipeline[int](1, 1, 1001*timing.GHz, clock) })
+	require.NotPanics(t, func() { MakeFastPipeline[int](1, 1, 1000*timing.GHz, clock) })
 	require.Panics(t, func() { MakeFastPipeline[int](1, 1, testPipelineFreq, nil) })
 
 	p, moved := newTestPipeline(1, 1)
@@ -562,13 +582,19 @@ func TestFastPipelineJSONRejectsEntriesOutsideGeometry(t *testing.T) {
 		"progress": `{"width":1,"num_stages":2,"freq":1000,"entries":[{"lane":0,"progress":3,"item":1}]}`,
 		"occupancy": `{"width":1,"num_stages":1,"freq":1000,"entries":[` +
 			`{"lane":0,"progress":1,"item":1},{"lane":0,"progress":0,"item":2}]}`,
-		"frequency": `{"width":1,"num_stages":2,"entries":[]}`,
+		"frequency":   `{"width":1,"num_stages":2,"entries":[]}`,
+		"above 1 THz": `{"width":1,"num_stages":2,"freq":1001000000000,"entries":[]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var p FastPipeline[int]
 			require.Error(t, json.Unmarshal([]byte(data), &p))
 		})
 	}
+
+	var p FastPipeline[int]
+	require.NoError(t, json.Unmarshal(
+		[]byte(`{"width":1,"num_stages":2,"freq":1000000000000,"entries":[]}`), &p),
+		"1 THz is the directory step clock's rate")
 }
 
 func TestFastPipelineJSONRejectsPushPipelineSnapshot(t *testing.T) {
@@ -788,7 +814,7 @@ func TestFastPipelineMatchesSteppedReference(t *testing.T) {
 
 			heads := ref.readyHeads()
 			leaving := heads[:rng.Intn(len(heads)+1)]
-			got := []int{}
+			got := make([]int, 0, len(leaving))
 			for range leaving {
 				item, ok := p.Pop()
 				require.True(t, ok, "seed %d cycle %d", seed, cycle)

@@ -33,6 +33,12 @@ func TestRebindStateIgnoresStateWithoutHook(t *testing.T) {
 	RebindState(&plainState{}, &component)
 }
 
+func TestRebindStateIgnoresFieldNamedLikeHook(t *testing.T) {
+	component := 7
+
+	RebindState(&struct{ AfterCheckpointLoad int }{}, &component)
+}
+
 func TestRebindStateRejectsValueReceiver(t *testing.T) {
 	defer func() {
 		if recover() == nil {

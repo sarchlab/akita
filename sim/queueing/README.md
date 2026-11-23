@@ -179,7 +179,7 @@ if due, ok := pipe.NextReadyTime(); ok {
 | `UpdateReady(update func(T) T)` | Apply idempotent work to every ready lane head, oldest first, keeping results attached while blocked |
 | `DrainReady(sink Sink[T]) bool` | Move ready heads into a sink, oldest first, while it has room; true if any moved |
 | `NextReadyTime() (timing.VTimeInPicoSec, bool)` | Earliest future clock edge at which a lane head becomes ready, assuming no further pops; already-ready heads are excluded |
-| `NextPushTime() (timing.VTimeInPicoSec, bool)` | Earliest time `CanPush` holds without a pop; false when all lanes are full |
+| `NextPushTime() (timing.VTimeInPicoSec, bool)` | Earliest time `CanPush` holds without a pop: the current time if a lane is free, otherwise the next clock edge if one frees there; false when all lanes are full |
 | `Pause()` / `Resume()` | Stop item progress at the end of the previous cycle; resume with the current cycle as the first that counts. Both deadlines report false while paused |
 | `BindClock(clock timing.TimeTeller)` | Reattach the clock after a checkpoint load |
 | `Stages() []PipelineStage[T]` | Copy of occupancy with lane identity, oldest pushed first; does not change the pipeline |
@@ -203,5 +203,7 @@ if due, ok := pipe.NextReadyTime(); ok {
   queue unless the component keeps one with `DrainReady`: the pipeline's own
   capacity is exactly `width * numStages`.
 - `numStages` must be positive. A zero-latency stage bypasses its pipeline.
+- `freq` must be positive and at most 1 THz, the fastest clock with a
+  whole-picosecond period.
 - A push `Pipeline` snapshot cannot be restored into a `FastPipeline`. Loading
   one reports an error rather than dropping its in-flight items.

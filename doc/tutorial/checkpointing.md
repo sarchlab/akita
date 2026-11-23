@@ -180,6 +180,13 @@ in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.
 Every field of either struct needs a distinct JSON name: `encoding/json`
 silently drops colliding fields, so `Build` rejects them.
 
+Restore replaces `State` with a freshly decoded value and does not rerun
+`Initialize`. If `State` holds a runtime-only dependency that its JSON omits,
+such as the clock of a `queueing.FastPipeline`, define the optional
+pointer-receiver method `AfterCheckpointLoad(c *Comp)` on `State` and reattach
+the dependency there. The component model calls it after each successful load.
+See the [queueing checkpoint example](https://github.com/sarchlab/akita/blob/main/sim/queueing/README.md#checkpointing).
+
 ### The builder validates this for you — loudly
 
 `modeling.MakeBuilder[*Comp](DefaultSpec())…Build(name)` runs `ValidateSpec`/`ValidateState` and
