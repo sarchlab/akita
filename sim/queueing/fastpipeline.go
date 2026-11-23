@@ -96,6 +96,14 @@ func (p *FastPipeline[T]) AdvanceTo(cycle uint64) {
 	}
 }
 
+// StepTo advances to cycle, or by one cycle if cycle is not ahead of the
+// pipeline. A stage that runs several steps in one clock cycle, or a harness
+// that delivers repeated ticks at one time, therefore still moves one step per
+// call.
+func (p *FastPipeline[T]) StepTo(cycle uint64) {
+	p.AdvanceTo(max(cycle, p.cycle+1))
+}
+
 // SkipTo moves the pipeline's clock to cycle without advancing any item, so the
 // skipped cycles do not count. Use it to resume after a freeze. It panics if
 // cycle is earlier than the last synchronized cycle.
@@ -232,6 +240,25 @@ func (p *FastPipeline[T]) PopLane(lane int) (T, bool) {
 	}
 
 	return item, true
+}
+
+// DrainReady moves ready lane heads into sink, oldest accepted first, while it
+// has room and reports whether any moved. A head that does not fit stays ready
+// in its lane. Each lane delivers at most one item per cycle.
+func (p *FastPipeline[T]) DrainReady(sink Sink[T]) bool {
+	moved := false
+	for sink.CanPush() {
+		lane, ok := p.ReadyLane()
+		if !ok {
+			break
+		}
+
+		item, _ := p.PopLane(lane)
+		sink.Push(item)
+		moved = true
+	}
+
+	return moved
 }
 
 // readyIndex returns the entry index of lane's head if that head is ready.

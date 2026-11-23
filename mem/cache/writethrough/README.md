@@ -52,7 +52,7 @@ handles the commands on the `Control` port (see [Ports](#ports)).
   `Spec.ByteSize()` reports its byte capacity. An empty
   `WritePolicy` means `write-around`.
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
-  flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
+  flat `Transactions` list, the directory/bank `queueing.Buffer`/`FastPipeline`
   stages, the pause and drain flags, and the in-progress control command.
 - **Resources** — the backing `*mem.Storage` (required; at least `Spec.ByteSize()`
   bytes). Destinations and mapping choices are immutable Spec configuration:
@@ -131,7 +131,9 @@ use `NumReqPerCycle`; the directory output queue uses `DirectoryWidth`, and each
 bank output queue uses `BankWidth`. Queue sizes are calculated at initialization
 and have no public override. These sizes hold one processing batch and may
 stall under contention. Geometry and widths must be positive; pipeline latencies
-must be nonnegative.
+must be nonnegative, and a latency of zero bypasses that pipeline. The cache
+sleeps while transactions only travel through its pipelines and ticks again
+when one is ready; pipeline time stops while it is paused.
 
 `NumSets` and `NumWays` define geometry. `NumMSHREntries` remains the public
 capacity for outstanding cache-line misses; it is separate from the internal

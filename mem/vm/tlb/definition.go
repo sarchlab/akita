@@ -30,9 +30,10 @@ func (s *state) Initialize(c *Comp) {
 	*s = state{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(spec.NumSets, spec.NumWays),
-		Pipeline: queueing.MakePipeline[pipelineTLBReqState](
+		// A zero-latency lookup bypasses the pipeline, which stays empty.
+		Pipeline: queueing.MakeFastPipeline[pipelineTLBReqState](
 			spec.NumReqPerCycle,
-			spec.Latency),
+			max(spec.Latency, 1)),
 
 		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](spec.NumReqPerCycle),
 	}

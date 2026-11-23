@@ -49,10 +49,10 @@ func TestMSHRStage(t *testing.T) {
 			},
 			MSHRStageBuf:       queueing.MakeBuffer[int](4),
 			WriteBufferBuf:     queueing.MakeBuffer[int](4),
-			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPipeline:        queueing.MakeFastPipeline[int](4, 1),
 			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
-			BankPipelines: []queueing.Pipeline[int]{
-				queueing.MakePipeline[int](4, 10),
+			BankPipelines: []queueing.FastPipeline[int]{
+				queueing.MakeFastPipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),

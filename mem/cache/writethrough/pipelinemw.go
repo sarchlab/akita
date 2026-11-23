@@ -64,15 +64,93 @@ func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
 }
 
 // Handle advances the cache pipeline by one cycle unless the cache is paused.
+// When the cycle makes no progress, the cache sleeps until a pipeline item is
+// due.
 func (m *pipelineMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
-	madeProgress := false
+	cycle := m.currentCycle()
 
-	if !next.IsPaused {
-		madeProgress = m.runPipeline() || madeProgress
+	if next.IsPaused {
+		m.freezePipelines(cycle)
+		return false
+	}
+	m.resumePipelines(cycle)
+
+	madeProgress := m.runPipeline()
+	if !madeProgress {
+		m.scheduleWake()
 	}
 
 	return madeProgress
+}
+
+// currentCycle returns the clock cycle of the current simulation time.
+func (m *pipelineMW) currentCycle() uint64 {
+	return m.comp.Spec.Freq.Cycle(m.comp.CurrentTime())
+}
+
+// freezePipelines stops pipeline time at the end of the cycle before cycle: the
+// tick that observes the pause does no pipeline work.
+func (m *pipelineMW) freezePipelines(cycle uint64) {
+	next := &m.comp.State
+	if next.PipelinesFrozen {
+		return
+	}
+	next.PipelinesFrozen = true
+
+	for i := range next.BankPipelines {
+		if p := &next.BankPipelines[i]; cycle > p.Cycle() {
+			p.AdvanceTo(cycle - 1)
+		}
+	}
+	if cycle > next.DirPipeline.Cycle() {
+		next.DirPipeline.AdvanceTo(cycle)
+	}
+}
+
+// resumePipelines discards the paused cycles, so this tick is the first cycle
+// of pipeline work after the freeze.
+func (m *pipelineMW) resumePipelines(cycle uint64) {
+	next := &m.comp.State
+	if !next.PipelinesFrozen {
+		return
+	}
+	next.PipelinesFrozen = false
+
+	for i := range next.BankPipelines {
+		if p := &next.BankPipelines[i]; cycle > p.Cycle() {
+			p.SkipTo(cycle - 1)
+		}
+	}
+	if cycle > next.DirPipeline.Cycle() {
+		next.DirPipeline.SkipTo(cycle)
+	}
+}
+
+// scheduleWake asks for a tick at the next cycle a pipeline item becomes ready.
+// Work blocked on anything else resumes through a port notification or through
+// the progress of the stage that unblocks it.
+func (m *pipelineMW) scheduleWake() {
+	next := &m.comp.State
+	wake, found := uint64(0), false
+	consider := func(cycle uint64) {
+		if !found || cycle < wake {
+			wake, found = cycle, true
+		}
+	}
+
+	for i := range next.BankPipelines {
+		if due, ok := next.BankPipelines[i].NextReadyCycle(); ok {
+			consider(due)
+		}
+	}
+	if due, ok := next.DirPipeline.NextReadyCycle(); ok {
+		consider(due - 1)
+	}
+
+	if found {
+		m.comp.TickAt(timing.VTimeInPicoSec(wake) * m.comp.Spec.Freq.Period())
+	}
 }
 
 func (m *pipelineMW) runPipeline() bool {

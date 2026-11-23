@@ -37,7 +37,8 @@ func (s *bankStage) tickPipeline() bool {
 	bankPipeline := &next.BankPipelines[s.bankID]
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 
-	return bankPipeline.Tick(bankPostBuf)
+	bankPipeline.StepTo(s.cache.currentCycle())
+	return bankPipeline.DrainReady(bankPostBuf)
 }
 
 func (s *bankStage) extractFromBuf() bool {
@@ -48,8 +49,10 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
+	bypass := s.cache.comp.Spec.BankLatency == 0
 	bankPipeline := &next.BankPipelines[s.bankID]
-	if !bankPipeline.CanAccept() {
+	if bypass && !next.BankPostBufs[s.bankID].CanPush() ||
+		!bypass && !bankPipeline.CanAccept() {
 		return false
 	}
 
@@ -66,7 +69,11 @@ func (s *bankStage) extractFromBuf() bool {
 		What:     s.cache.comp.Name() + ".bank",
 	})
 
-	bankPipeline.Accept(transIdx)
+	if bypass {
+		next.BankPostBufs[s.bankID].Push(transIdx)
+	} else {
+		bankPipeline.Accept(transIdx)
+	}
 
 	return true
 }

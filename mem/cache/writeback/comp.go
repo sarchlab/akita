@@ -105,14 +105,17 @@ type state struct {
 	WriteBufferBuf        queueing.Buffer[int]   `json:"write_buffer_buf"`
 
 	// Directory pipeline + post-buf
-	DirPipeline        queueing.Pipeline[int] `json:"dir_pipeline"`
-	DirPostPipelineBuf queueing.Buffer[int]   `json:"dir_post_pipeline_buf"`
+	DirPipeline        queueing.FastPipeline[int] `json:"dir_pipeline"`
+	DirPostPipelineBuf queueing.Buffer[int]       `json:"dir_post_pipeline_buf"`
 
 	// Bank pipeline + post-buf + counters
-	BankPipelines                   []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostPipelineBufs            []queueing.Buffer[int]   `json:"bank_post_pipeline_bufs"`
-	BankInflightTransCounts         []int                    `json:"bank_inflight_trans_counts"`
-	BankDownwardInflightTransCounts []int                    `json:"bank_downward_inflight_trans_counts"`
+	BankPipelines                   []queueing.FastPipeline[int] `json:"bank_pipelines"`
+	BankPostPipelineBufs            []queueing.Buffer[int]       `json:"bank_post_pipeline_bufs"`
+	BankInflightTransCounts         []int                        `json:"bank_inflight_trans_counts"`
+	BankDownwardInflightTransCounts []int                        `json:"bank_downward_inflight_trans_counts"`
+
+	// PipelinesFrozen records that pipeline time stopped when the cache paused.
+	PipelinesFrozen bool `json:"pipelines_frozen"`
 
 	// Write buffer stage
 	PendingEvictionIndices  []int `json:"pending_eviction_indices"`

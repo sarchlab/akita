@@ -76,15 +76,15 @@ type routedFlit struct {
 
 // portComplexState is the serializable state of one port complex.
 type portComplexState struct {
-	LocalPortName    string                        `json:"local_port_name"`
-	RemotePort       messaging.RemotePort          `json:"remote_port"`
-	NumInputChannel  int                           `json:"num_input_channel"`
-	NumOutputChannel int                           `json:"num_output_channel"`
-	Latency          int                           `json:"latency"`
-	PipelineWidth    int                           `json:"pipeline_width"`
-	Pipeline         queueing.Pipeline[routedFlit] `json:"pipeline"`
-	RouteBuffer      queueing.Buffer[routedFlit]   `json:"route_buffer"`
-	ForwardBuffer    queueing.Buffer[routedFlit]   `json:"forward_buffer"`
+	LocalPortName    string                            `json:"local_port_name"`
+	RemotePort       messaging.RemotePort              `json:"remote_port"`
+	NumInputChannel  int                               `json:"num_input_channel"`
+	NumOutputChannel int                               `json:"num_output_channel"`
+	Latency          int                               `json:"latency"`
+	PipelineWidth    int                               `json:"pipeline_width"`
+	Pipeline         queueing.FastPipeline[routedFlit] `json:"pipeline"`
+	RouteBuffer      queueing.Buffer[routedFlit]       `json:"route_buffer"`
+	ForwardBuffer    queueing.Buffer[routedFlit]       `json:"forward_buffer"`
 	// SendOutBuffer holds routedFlits (not bare Flits) so the in-switch "flit"
 	// task can stay open until the flit is actually sent out the port, charging
 	// the time the flit waits here for the output link.
