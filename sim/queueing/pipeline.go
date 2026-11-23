@@ -1,5 +1,7 @@
 package queueing
 
+import "sync/atomic"
+
 // PipelineStage represents a single item occupying a lane and stage in a
 // pipeline. It is a plain data record used to inspect pipeline occupancy.
 type PipelineStage[T any] struct {
@@ -22,8 +24,16 @@ type Pipeline[T any] struct {
 	width     int
 	numStages int
 	stages    []PipelineStage[T]
-	// stageZero counts the items at stage 0. It is derived from stages and is
-	// excluded from checkpoints.
+	// stageGen counts writes to the stages storage and is shared by Go copies
+	// of this value. It is nil until the first insertion or restore, and stays
+	// nil for restored stages that do not form valid slots.
+	stageGen *atomic.Uint64
+	// seenGen is the stageGen value after this copy's latest write. A copy that
+	// falls behind may view slots another copy rewrote, so it stops trusting
+	// stageZero and the fast advance until Clear or restore replaces its stages.
+	seenGen uint64
+	// stageZero counts the items at stage 0 while this copy is tracked. It is
+	// derived from stages and is excluded from checkpoints.
 	stageZero int
 	// occupancy is scratch space rebuilt from stages on every advance. It is
 	// not simulation state and is excluded from checkpoints.
@@ -53,13 +63,38 @@ func (p *Pipeline[T]) Stages() []PipelineStage[T] {
 // Clear removes all items from the pipeline.
 func (p *Pipeline[T]) Clear() {
 	p.stages = nil
+	p.stageGen = nil
+	p.seenGen = 0
 	p.stageZero = 0
 	p.occupancy = nil
 }
 
+// tracked reports whether no other copy has written the stages since this
+// copy last did, so stageZero and the slot invariants can be relied on.
+func (p *Pipeline[T]) tracked() bool {
+	return p.stageGen != nil && p.seenGen == p.stageGen.Load()
+}
+
+// recordStageWrite tells other copies that the shared stages have changed. A
+// copy that was already behind stays untracked.
+func (p *Pipeline[T]) recordStageWrite(tracked bool) {
+	if p.stageGen == nil {
+		return
+	}
+
+	gen := p.stageGen.Add(1)
+	if tracked {
+		p.seenGen = gen
+	}
+}
+
 // CanAccept returns true if there is at least one free lane at stage 0.
 func (p *Pipeline[T]) CanAccept() bool {
-	return p.stageZero < p.width
+	if p.tracked() {
+		return p.stageZero < p.width
+	}
+
+	return p.countStageZero() < p.width
 }
 
 // Accept inserts an item into the first stage of the pipeline. It occupies
@@ -68,13 +103,24 @@ func (p *Pipeline[T]) CanAccept() bool {
 // pipeline equals NumStages ticks. Accept panics when stage 0 is full; callers
 // must check CanAccept before inserting.
 func (p *Pipeline[T]) Accept(item T) {
-	if p.stageZero >= p.width {
+	// Without backing storage, no other copy can alias this insertion.
+	if p.stageGen == nil && cap(p.stages) == 0 {
+		p.stageGen = new(atomic.Uint64)
+		p.seenGen = 0
+		p.stageZero = 0
+	}
+
+	tracked := p.tracked()
+	if tracked && p.stageZero >= p.width {
 		panic("pipeline has no free input lane")
 	}
 
 	lane := 0
-	if p.stageZero > 0 {
-		lane = p.firstFreeLane()
+	if !tracked || p.stageZero > 0 {
+		lane = p.firstFreeLane(tracked)
+	}
+	if lane == p.width {
+		panic("pipeline has no free input lane")
 	}
 
 	p.stages = append(p.stages, PipelineStage[T]{
@@ -82,12 +128,15 @@ func (p *Pipeline[T]) Accept(item T) {
 		Stage: 0,
 		Item:  item,
 	})
-	p.stageZero++
+	if tracked {
+		p.stageZero++
+	}
+	p.recordStageWrite(tracked)
 }
 
-// firstFreeLane returns the lowest lane that is free at stage 0. The caller
-// must ensure that one exists.
-func (p *Pipeline[T]) firstFreeLane() int {
+// firstFreeLane returns the lowest lane that is free at stage 0, or p.width
+// when every lane is occupied.
+func (p *Pipeline[T]) firstFreeLane(tracked bool) int {
 	// Use a fixed-size bitset on the stack for small widths,
 	// fall back to a slice for larger ones.
 	var usedSmall [16]bool
@@ -99,8 +148,13 @@ func (p *Pipeline[T]) firstFreeLane() int {
 		used = make([]bool, p.width)
 	}
 
-	// Newly accepted items sit at the back, so stop once all are found.
-	for i, left := len(p.stages)-1, p.stageZero; left > 0; i-- {
+	// Newly accepted items sit at the back, so a tracked pipeline can stop once
+	// all are found.
+	left := len(p.stages)
+	if tracked {
+		left = p.stageZero
+	}
+	for i := len(p.stages) - 1; i >= 0 && left > 0; i-- {
 		if p.stages[i].Stage == 0 {
 			used[p.stages[i].Lane] = true
 			left--
@@ -108,7 +162,7 @@ func (p *Pipeline[T]) firstFreeLane() int {
 	}
 
 	lane := 0
-	for used[lane] {
+	for lane < p.width && used[lane] {
 		lane++
 	}
 
@@ -127,6 +181,7 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		return false
 	}
 
+	tracked := p.tracked()
 	moved := false
 	blocked := false
 	lastStage := p.numStages - 1
@@ -149,22 +204,28 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 
 	p.stages = p.stages[:n]
 
-	// Phase 2: A blocked output can stall items behind it, so advance from
-	// high stage to low. A pipeline without stages never advances.
-	if blocked || p.numStages <= 0 {
+	// Phase 2: With the last stage empty, every remaining item of a tracked
+	// pipeline has a free slot ahead. Otherwise a blocked output or aliased slot
+	// can stall items, so advance from high stage to low. A pipeline without
+	// stages never advances.
+	if tracked && !blocked && p.numStages > 0 {
+		for i := range p.stages {
+			p.stages[i].Stage++
+		}
+		p.stageZero = 0
+		moved = moved || n > 0
+	} else if n > 0 {
 		moved = p.advanceItems() || moved
-		p.stageZero = p.countStageZero()
-
-		return moved
+		if tracked {
+			p.stageZero = p.countStageZero()
+		}
 	}
 
-	// With the last stage empty, every remaining item has a free slot ahead.
-	for i := range p.stages {
-		p.stages[i].Stage++
+	if moved {
+		p.recordStageWrite(tracked)
 	}
-	p.stageZero = 0
 
-	return moved || n > 0
+	return moved
 }
 
 // countStageZero returns the number of items at stage 0.

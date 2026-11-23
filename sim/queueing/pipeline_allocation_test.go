@@ -9,13 +9,15 @@ import (
 
 func fullPipeline(width, stages int) Pipeline[int] {
 	p := MakePipeline[int](width, stages)
+	items := make([]PipelineStage[int], 0, width*stages)
 	for stage := 0; stage < stages; stage++ {
 		for lane := 0; lane < width; lane++ {
-			p.stages = append(p.stages, PipelineStage[int]{
+			items = append(items, PipelineStage[int]{
 				Lane: lane, Stage: stage, Item: stage*width + lane,
 			})
 		}
 	}
+	p.restoreStages(items)
 	return p
 }
 
