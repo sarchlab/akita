@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -20,12 +19,12 @@ import (
 // control_contract_test.go.
 //
 // Unlike the ideal memory controller, this component has no single
-// in-flight slice; work lives spread across per-bank pipelines and
-// post-pipeline buffers. Quiescence is therefore checked per bank via
+// in-flight slice; work lives spread across per-bank pipelines.
+// Quiescence is therefore checked per bank via
 // bankIsQuiescent.
 func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 	var (
-		engine   timing.Engine
+		clock    *milestoneClock
 		sim      *testsim.Simulation
 		storage  *mem.Storage
 		comp     *Comp
@@ -78,8 +77,8 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
-		sim = testsim.New(engine, false)
+		clock = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = testsim.New(clock, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	}
@@ -95,8 +94,8 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 
 		// Tick a couple of times so dispatchMW routes the reads into the
 		// bank pipelines, putting real work in flight.
-		modelingtest.Tick(comp)
-		modelingtest.Tick(comp)
+		tickNextCycle(comp, clock)
+		tickNextCycle(comp, clock)
 		require.False(t, allBanksQuiescent())
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -106,7 +105,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			modelingtest.Tick(comp)
+			tickNextCycle(comp, clock)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -144,7 +143,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			modelingtest.Tick(comp)
+			tickNextCycle(comp, clock)
 		}
 
 		// The request is neither consumed nor turned into work, and no
@@ -163,8 +162,8 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 			setup1(t)
 
 			topPort.Deliver(makeRead(0))
-			modelingtest.Tick(comp)
-			modelingtest.Tick(comp)
+			tickNextCycle(comp, clock)
+			tickNextCycle(comp, clock)
 			require.False(t, allBanksQuiescent())
 
 			comp.State.ControlState = startState
@@ -175,7 +174,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				modelingtest.Tick(comp)
+				tickNextCycle(comp, clock)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
 						rsp = out
@@ -196,7 +195,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 			// No leftover completion is produced from the wiped-out read.
 			completion := false
 			for range 8 {
-				modelingtest.Tick(comp)
+				tickNextCycle(comp, clock)
 				for {
 					out, ok := topPort.RetrieveOutgoing()
 					if !ok {
@@ -229,7 +228,7 @@ func TestSimpleBankedMemoryControlBehavior(t *testing.T) {
 
 		var rsps []messaging.Msg
 		for range 16 {
-			modelingtest.Tick(comp)
+			tickNextCycle(comp, clock)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {

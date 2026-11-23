@@ -267,9 +267,10 @@ Error: "must be paused or drained"`.
   command queues, and per-bank states, and resets the refresh counters.
 
 **`simplebankedmemory`** — `Universal`; `State.ControlState`.
-- Drain acks once every bank is quiescent (its pipeline is empty and its
-  post-pipeline buffer is empty).
-- Reset rebuilds all banks (fresh pipelines and buffers).
+- Drain acks once every bank's pipeline is empty, including requests whose
+  responses are blocked in the final stage.
+- Pause freezes pipeline time; the paused cycles do not count toward latency.
+- Reset rebuilds all banks (fresh pipelines).
 
 ### Virtual-memory agents
 
