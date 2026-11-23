@@ -41,12 +41,22 @@ func (m *respondPipelineMW) Handle(_ timing.Event) bool {
 
 	spec := m.comp.Spec
 
+	// Each batch ends when its queue is empty or its head is blocked. The two
+	// batches read different ports, so one stalling does not stop the other.
 	for range spec.NumReqPerCycle {
-		madeProgress = m.respond() || madeProgress
+		if !m.respond() {
+			break
+		}
+
+		madeProgress = true
 	}
 
 	for range spec.NumReqPerCycle {
-		madeProgress = m.parseTranslation() || madeProgress
+		if !m.parseTranslation() {
+			break
+		}
+
+		madeProgress = true
 	}
 
 	return madeProgress
@@ -82,13 +92,13 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return true
 	}
 
-	translatedReq := createTranslatedReq(m.comp.NewID, reqState, content.Page,
-		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Spec.Bottom)
-
 	if !m.bottomPort().CanSend() {
 		return false
 	}
+
+	translatedReq := createTranslatedReq(m.comp.NewID, reqState, content.Page,
+		spec.Log2PageSize, m.bottomPort().AsRemote(),
+		m.comp.Spec.Bottom)
 
 	sendTaskID := m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 	m.bottomPort().Send(translatedReq)
@@ -189,11 +199,14 @@ func (m *respondPipelineMW) respond() bool {
 
 	var (
 		reqFromTopState reqToBottomState
-		rspToTop        messaging.Msg
+		rspPayload      any
+		trafficBytes    int
 	)
 
 	reqInBottom := false
 
+	// The arrival milestone is recorded even when Top is blocked. The response
+	// and its ID are created only once it can be sent.
 	switch content := rspI.Payload.(type) {
 	case memprotocol.DataReadyRsp:
 		rsp := rspI
@@ -201,14 +214,8 @@ func (m *respondPipelineMW) respond() bool {
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = messaging.Msg{ID: m.comp.NewID(),
-				Src:          m.topPort().AsRemote(),
-				Dst:          reqFromTopState.ReqFromTopSrc,
-				RspTo:        reqFromTopState.ReqFromTopID,
-				TrafficBytes: len(content.Data) + 4,
-				Payload: memprotocol.DataReadyRsp{
-					Data: content.Data,
-				}}
+			trafficBytes = len(content.Data) + 4
+			rspPayload = memprotocol.DataReadyRsp{Data: content.Data}
 			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tasks.MilestoneKindData,
@@ -221,12 +228,8 @@ func (m *respondPipelineMW) respond() bool {
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = messaging.Msg{ID: m.comp.NewID(),
-				Src:          m.topPort().AsRemote(),
-				Dst:          reqFromTopState.ReqFromTopSrc,
-				RspTo:        reqFromTopState.ReqFromTopID,
-				TrafficBytes: 4,
-				Payload:      memprotocol.WriteDoneRsp{}}
+			trafficBytes = 4
+			rspPayload = memprotocol.WriteDoneRsp{}
 			m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 				TaskID: reqFromTopState.RecvTaskID,
 				Kind:   tasks.MilestoneKindSubTask,
@@ -242,7 +245,13 @@ func (m *respondPipelineMW) respond() bool {
 			return false
 		}
 
-		m.topPort().Send(rspToTop)
+		m.topPort().Send(messaging.Msg{ID: m.comp.NewID(),
+			Src:          m.topPort().AsRemote(),
+			Dst:          reqFromTopState.ReqFromTopSrc,
+			RspTo:        reqFromTopState.ReqFromTopID,
+			TrafficBytes: trafficBytes,
+			Payload:      rspPayload,
+		})
 
 		m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 			TaskID: reqFromTopState.RecvTaskID,

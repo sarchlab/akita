@@ -18,14 +18,22 @@ type bankStage struct {
 func (s *bankStage) Tick() (madeProgress bool) {
 	spec := s.cache.comp.Spec
 
+	// A failed finalizeTrans has scanned every post-pipeline entry, and neither
+	// phase changes its own gates when it fails, so a repeat cannot succeed.
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = s.finalizeTrans() || madeProgress
+		if !s.finalizeTrans() {
+			break
+		}
+		madeProgress = true
 	}
 
 	madeProgress = s.tickPipeline() || madeProgress
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = s.pullFromBuf() || madeProgress
+		if !s.pullFromBuf() {
+			break
+		}
+		madeProgress = true
 	}
 
 	return madeProgress
@@ -50,12 +58,16 @@ func (s *bankStage) pullFromBuf() bool {
 	next := &s.cache.comp.State
 	spec := s.cache.comp.Spec
 
+	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
+	if wbBuf.Size() == 0 && next.DirToBankBufs[s.bankID].Size() == 0 {
+		return false
+	}
+
 	if !s.canAcceptIntoPipeline(*next) {
 		return false
 	}
 
 	// Check write buffer to bank buffer first
-	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
 	if wbBuf.Size() > 0 {
 		transIdx, _ := wbBuf.Pop()
 		s.acceptIntoPipeline(next, spec, transIdx)

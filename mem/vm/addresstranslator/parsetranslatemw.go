@@ -33,15 +33,19 @@ func (m *parseTranslateMW) Handle(_ timing.Event) bool {
 	switch m.comp.State.ControlState {
 	case controlStateEnabled:
 		for range m.comp.Spec.NumReqPerCycle {
-			madeProgress = m.translate() || madeProgress
-		}
-	case controlStateDraining:
-		for range m.comp.Spec.NumReqPerCycle {
-			if len(m.comp.State.ReplayReqs) == 0 {
+			if !m.translate() {
 				break
 			}
 
-			madeProgress = m.replay() || madeProgress
+			madeProgress = true
+		}
+	case controlStateDraining:
+		for range m.comp.Spec.NumReqPerCycle {
+			if len(m.comp.State.ReplayReqs) == 0 || !m.replay() {
+				break
+			}
+
+			madeProgress = true
 		}
 	}
 
@@ -75,11 +79,11 @@ func (m *parseTranslateMW) translate() bool {
 		return true
 	}
 
-	transReq := m.translationReq(incoming)
-
 	if !m.translationPort().CanSend() {
 		return false
 	}
+
+	transReq := m.translationReq(incoming)
 
 	// The translation request is on its way: the at-head wait to send it on the
 	// Translation port — counted on the incoming-buffer task since the request
@@ -108,11 +112,11 @@ func (m *parseTranslateMW) replay() bool {
 		return true
 	}
 
-	transReq := m.translationReq(req)
-
 	if !m.translationPort().CanSend() {
 		return false
 	}
+
+	transReq := m.translationReq(req)
 
 	m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 		TaskID: req.RecvTaskID,
