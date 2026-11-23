@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
@@ -12,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -48,6 +50,13 @@ func (r *sleepRig) Func(ctx hooking.HookCtx) {
 	case messaging.HookPosPortMsgSend:
 		r.sends = append(r.sends, cycle)
 	}
+}
+
+// tickCycle moves the test clock to the next edge and ticks c once.
+func tickCycle(engine timing.Engine, c *Comp) bool {
+	engine.(*testsim.Clock).Step(c.Spec.Freq)
+
+	return modelingtest.Tick(c)
 }
 
 func newSleepRig(t *testing.T, latency, topOutgoing int) *sleepRig {
@@ -135,6 +144,32 @@ func TestTLBSleepsDuringLookupLatency(t *testing.T) {
 	rsp, ok := lazy.top.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, uint64(0x1000)<<8, rsp.Payload.(addrtransprotocol.Rsp).Page.PAddr)
+}
+
+// TestFirstTickAtEdgeZeroMatchesForcedTicks starts the TLB with TickAt(0).
+func TestFirstTickAtEdgeZeroMatchesForcedTicks(t *testing.T) {
+	for _, latency := range []int{1, 2, 7} {
+		run := func(forceTicks bool) *sleepRig {
+			r := newSleepRig(t, latency, 8)
+			r.top.Deliver(messaging.Msg{
+				ID: r.sim.NewID(), Src: "Requester", Dst: r.top.AsRemote(),
+				Payload: addrtransprotocol.Req{PID: 1, VAddr: 0x1000, DeviceID: 1},
+			})
+			r.comp.TickAt(0)
+			if forceTicks {
+				for cycle := uint64(1); cycle < 30; cycle++ {
+					r.comp.TickAt(timing.VTimeInPicoSec(cycle) * r.comp.Spec.Freq.Period())
+				}
+			}
+			require.NoError(t, r.engine.Run())
+			return r
+		}
+
+		lazy, eager := run(false), run(true)
+
+		require.Len(t, lazy.sends, 1, "latency %d", latency)
+		require.Equal(t, eager.sends, lazy.sends, "latency %d", latency)
+	}
 }
 
 func TestTLBResumesBlockedLookupOnce(t *testing.T) {

@@ -3,9 +3,9 @@ package writeback
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/internal/memcontroltest"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -23,7 +23,7 @@ func (c *ccNoopConn) NotifySend(_ messaging.Port)      {}
 
 func TestControlContract(t *testing.T) {
 	build := func() *memcontroltest.Harness {
-		sim := akitasim.MakeBuilder().Build()
+		sim := testsim.New(testsim.NewClock(), false)
 
 		storage := mem.NewStorage(1 * mem.MB)
 

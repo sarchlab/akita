@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -105,7 +104,7 @@ func TestTLBControlBehavior(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
+		engine = testsim.NewClock()
 		sim = testsim.New(engine, false)
 		build()
 	}
@@ -130,7 +129,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		var bottomReqs []messaging.Msg
 		for i := 0; i < 64 &&
 			(len(tlbComp.State.MSHREntries) < n || len(bottomReqs) < n); i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			for {
 				out, ok := bottomPort.RetrieveOutgoing()
 				if !ok {
@@ -153,7 +152,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		var drainRsp messaging.Msg
 		drainFound := false
 		for range 5 {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 					Command == memcontrolprotocol.CmdDrain {
@@ -177,7 +176,7 @@ func TestTLBControlBehavior(t *testing.T) {
 
 		completed := 0
 		for i := 0; i < 256 && !drainFound; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -217,7 +216,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		var bottomReq messaging.Msg
 		got := false
 		for i := 0; i < 64 && !got; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				_, got = out.Payload.(addrtransprotocol.Req)
 				bottomReq = out
@@ -230,7 +229,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 		for i := 0; i < 8 && tlbComp.State.TLBState != tlbStateDrain; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 		}
 		require.Equal(t, tlbStateDrain, tlbComp.State.TLBState)
 
@@ -238,7 +237,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		// forward, it stays queued on Top, and Drain must not ack.
 		topPort.Deliver(makeLookup(0x5000))
 		for range 8 {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			_, present0 := bottomPort.RetrieveOutgoing()
 			require.False(t, present0)
 			_, present1 := controlPort.RetrieveOutgoing()
@@ -253,7 +252,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		bottomPort.Deliver(makeBottomRsp(bottomReq))
 		drainFound := false
 		for i := 0; i < 256 && !drainFound; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			for {
 				if _, ok := topPort.RetrieveOutgoing(); !ok {
 					break
@@ -280,7 +279,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		var reqA messaging.Msg
 		gotA := false
 		for i := 0; i < 64 && !gotA; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				_, gotA = out.Payload.(addrtransprotocol.Req)
 				reqA = out
@@ -293,7 +292,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		controlPort.Deliver(rst)
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.Payload.(memcontrolprotocol.Rsp); ok && r.
 					Command == memcontrolprotocol.CmdReset {
@@ -309,7 +308,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		var reqB messaging.Msg
 		gotB := false
 		for i := 0; i < 64 && !gotB; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				_, gotB = out.Payload.(addrtransprotocol.Req)
 				reqB = out
@@ -322,7 +321,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		// dropped: no Top response, and the new request's MSHR entry survives.
 		bottomPort.Deliver(makeBottomRsp(reqA))
 		for range 8 {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			_, present4 := topPort.RetrieveOutgoing()
 			require.False(t, present4)
 		}
@@ -335,7 +334,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		bottomPort.Deliver(makeBottomRsp(reqB))
 		answered := false
 		for i := 0; i < 64 && !answered; i++ {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.Payload.(addrtransprotocol.Rsp); ok {
 					answered = true
@@ -352,7 +351,7 @@ func TestTLBControlBehavior(t *testing.T) {
 		topPort.Deliver(makeLookup(0x0))
 
 		for range 5 {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing is
@@ -373,7 +372,7 @@ func TestTLBControlBehavior(t *testing.T) {
 			// Get one miss in flight: an MSHR entry and a forwarded bottom req.
 			topPort.Deliver(makeLookup(0x0))
 			for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
-				modelingtest.Tick(tlbComp)
+				tickCycle(engine, tlbComp)
 			}
 			require.False(t, mshrIsEmpty(tlbComp.State.MSHREntries))
 
@@ -385,7 +384,7 @@ func TestTLBControlBehavior(t *testing.T) {
 			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				modelingtest.Tick(tlbComp)
+				tickCycle(engine, tlbComp)
 				if out, ok := controlPort.RetrieveOutgoing(); ok {
 					_, found = out.Payload.(memcontrolprotocol.Rsp)
 					rsp = out
@@ -422,7 +421,7 @@ func TestTLBControlBehavior(t *testing.T) {
 
 		var rsps []messaging.Msg
 		for range 32 {
-			modelingtest.Tick(tlbComp)
+			tickCycle(engine, tlbComp)
 			for {
 				out, ok := controlPort.RetrieveOutgoing()
 				if !ok {

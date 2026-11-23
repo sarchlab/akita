@@ -19,7 +19,7 @@ func TestCalculatedOutputQueueStallsAndDrains(t *testing.T) {
 			c.State.Pipeline.Accept(pipelineTLBReqState{})
 		}
 		step := func() {
-			c.State.Pipeline.StepTo(c.State.Pipeline.Cycle() + 1)
+			c.State.Pipeline.AdvanceTo(c.State.Pipeline.Cycle() + 1)
 			c.State.Pipeline.DrainReady(&c.State.BufferItems)
 		}
 		step()

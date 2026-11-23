@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -12,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -50,6 +52,13 @@ func (r *sleepRig) Func(ctx hooking.HookCtx) {
 	case messaging.HookPosPortMsgSend:
 		r.sends = append(r.sends, cycle)
 	}
+}
+
+// tickCycle moves the test clock to the next edge and ticks c once.
+func tickCycle(engine timing.Engine, c *Comp) bool {
+	engine.(*testsim.Clock).Step(c.Spec.Freq)
+
+	return modelingtest.Tick(c)
 }
 
 func sleepSpec() Spec {
@@ -169,6 +178,36 @@ func TestCacheSleepsDuringBankTraversal(t *testing.T) {
 	rsp, ok := lazy.top.RetrieveOutgoing()
 	require.True(t, ok)
 	requireLine(t, rsp, 7)
+}
+
+// TestFirstTickAtEdgeZeroMatchesForcedTicks starts the cache with TickAt(0).
+func TestFirstTickAtEdgeZeroMatchesForcedTicks(t *testing.T) {
+	for _, c := range []struct{ dirLatency, bankLatency int }{{1, 1}, {3, 7}, {5, 2}} {
+		run := func(forceTicks bool) *sleepRig {
+			spec := sleepSpec()
+			spec.DirLatency, spec.BankLatency = c.dirLatency, c.bankLatency
+			r := newSleepRig(t, spec, 8)
+			r.top.Deliver(messaging.Msg{
+				ID: r.sim.NewID(), Src: "Agent", Dst: r.top.AsRemote(), TrafficBytes: 12,
+				Payload: memprotocol.ReadReq{Address: 0x40, AccessByteSize: 64},
+			})
+			r.comp.TickAt(0)
+			r.fill(20, 7)
+			if forceTicks {
+				for cycle := uint64(1); cycle < 60; cycle++ {
+					r.comp.TickAt(timing.VTimeInPicoSec(cycle) * spec.Freq.Period())
+				}
+			}
+			require.NoError(t, r.engine.Run())
+			return r
+		}
+
+		lazy, eager := run(false), run(true)
+
+		require.Len(t, lazy.sends, 1, "%+v", c)
+		require.Equal(t, eager.sends, lazy.sends, "%+v", c)
+		require.Less(t, len(lazy.ticks), len(eager.ticks), "%+v", c)
+	}
 }
 
 func TestCacheResumesBlockedCompletionOnce(t *testing.T) {

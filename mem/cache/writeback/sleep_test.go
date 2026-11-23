@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -12,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -48,6 +50,13 @@ func (r *sleepRig) Func(ctx hooking.HookCtx) {
 	case messaging.HookPosPortMsgSend:
 		r.sends = append(r.sends, cycle)
 	}
+}
+
+// tickCycle moves the test clock to the next edge and ticks c once.
+func tickCycle(engine timing.Engine, c *Comp) bool {
+	engine.(*testsim.Clock).Step(c.Spec.Freq)
+
+	return modelingtest.Tick(c)
 }
 
 func sleepSpec() Spec {
@@ -158,6 +167,39 @@ func TestCacheSleepsDuringBankTraversal(t *testing.T) {
 	require.Len(t, data, 64)
 	for _, b := range data {
 		require.Equal(t, byte(7), b)
+	}
+}
+
+// TestFirstTickAtEdgeZeroMatchesForcedTicks starts the cache with TickAt(0). The
+// directory takes NumReqPerCycle steps per cycle, so its latencies include values
+// that this width does not divide.
+func TestFirstTickAtEdgeZeroMatchesForcedTicks(t *testing.T) {
+	for _, c := range []struct{ requests, dirLatency, bankLatency int }{
+		{1, 3, 7}, {2, 3, 7}, {3, 5, 4}, {3, 7, 1}, {4, 6, 9}, {4, 1, 2},
+	} {
+		run := func(forceTicks bool) *sleepRig {
+			spec := sleepSpec()
+			spec.NumReqPerCycle, spec.DirLatency, spec.BankLatency = c.requests, c.dirLatency, c.bankLatency
+			r := newSleepRig(t, spec, 8)
+			r.top.Deliver(messaging.Msg{
+				ID: r.sim.NewID(), Src: "Agent", Dst: r.top.AsRemote(), TrafficBytes: 76,
+				Payload: memprotocol.WriteReq{Address: 0x40, Data: make([]byte, 64)},
+			})
+			r.comp.TickAt(0)
+			if forceTicks {
+				for cycle := uint64(1); cycle < 60; cycle++ {
+					r.comp.TickAt(timing.VTimeInPicoSec(cycle) * spec.Freq.Period())
+				}
+			}
+			require.NoError(t, r.engine.Run())
+			return r
+		}
+
+		lazy, eager := run(false), run(true)
+
+		require.Len(t, lazy.sends, 1, "%+v", c)
+		require.Equal(t, eager.sends, lazy.sends, "%+v", c)
+		require.Less(t, len(lazy.ticks), len(eager.ticks), "%+v", c)
 	}
 }
 

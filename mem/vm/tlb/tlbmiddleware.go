@@ -100,7 +100,7 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) tickPipeline() bool {
 	next := &m.comp.State
-	next.Pipeline.StepTo(m.currentCycle())
+	next.Pipeline.AdvanceTo(m.currentCycle())
 	return next.Pipeline.DrainReady(&next.BufferItems)
 }
 

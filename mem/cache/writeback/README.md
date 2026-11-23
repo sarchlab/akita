@@ -58,7 +58,7 @@ type Spec struct {
     NumReqPerCycle      int         // Requests processed per cycle
     Log2BlockSize       uint64      // Cache line size = 1 << Log2BlockSize
     BankLatency         int         // Cycles per bank read/write
-    DirLatency          int         // Cycles for directory lookup
+    DirLatency          int         // Directory steps; NumReqPerCycle steps run per cycle
     NumWays    int         // Ways per set
     NumBanks            int         // Positive number of banks
     NumMSHREntries        int         // MSHR capacity

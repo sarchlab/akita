@@ -69,6 +69,44 @@ func TestSwitchSleepsWhileFlitsTravel(t *testing.T) {
 	require.Less(t, counter.ticks, 12, "the switch must not tick while a flit only travels")
 }
 
+type sendCycleRecorder struct {
+	engine *timing.SerialEngine
+	freq   timing.Freq
+	cycles []uint64
+}
+
+func (r *sendCycleRecorder) Func(ctx hooking.HookCtx) {
+	if ctx.Pos == messaging.HookPosPortMsgSend {
+		r.cycles = append(r.cycles, r.freq.Cycle(r.engine.CurrentTime()))
+	}
+}
+
+// TestFirstTickAtEdgeZeroMatchesForcedTicks starts the switch with TickAt(0)
+// while a flit is already waiting at its input.
+func TestFirstTickAtEdgeZeroMatchesForcedTicks(t *testing.T) {
+	for _, latency := range []int{1, 2, 5} {
+		run := func(forceTicks bool) []uint64 {
+			sw, ports, engine := sleepSwitch(t, latency)
+			rec := &sendCycleRecorder{engine: engine, freq: sw.Spec.Freq}
+			ports[1].AcceptHook(rec)
+			ports[0].Deliver(messaging.Msg{ID: 1, Payload: packetization.Flit{Dst: "Destination"}})
+			sw.TickAt(0)
+			if forceTicks {
+				for cycle := uint64(1); cycle < 30; cycle++ {
+					sw.TickAt(timing.VTimeInPicoSec(cycle) * sw.Spec.Freq.Period())
+				}
+			}
+			require.NoError(t, engine.Run())
+			return rec.cycles
+		}
+
+		sparse, forced := run(false), run(true)
+
+		require.Len(t, sparse, 1, "latency %d", latency)
+		require.Equal(t, forced, sparse, "latency %d", latency)
+	}
+}
+
 func TestSwitchWakesBlockedPipelineAfterBackpressure(t *testing.T) {
 	const latency = 5
 	sw, ports, engine := sleepSwitch(t, latency)
