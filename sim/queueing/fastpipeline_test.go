@@ -135,16 +135,43 @@ func TestFastPipelineLanesBackpressureIndependently(t *testing.T) {
 func TestFastPipelineUpdateStaysAttachedWhileBlocked(t *testing.T) {
 	p := MakeFastPipeline[int](1, 1)
 	p.Accept(1)
-	require.False(t, p.UpdateLane(0, 5), "an item cannot be updated before it is ready")
+	p.UpdateReady(func(int) int {
+		require.Fail(t, "an item cannot be updated before it is ready")
+		return 0
+	})
 
 	p.AdvanceTo(1)
-	require.True(t, p.UpdateLane(0, 7))
+	p.UpdateReady(func(int) int { return 7 })
 	p.AdvanceTo(1000)
 
 	item, ok := p.PeekLane(0)
 	require.True(t, ok)
 	require.Equal(t, 7, item)
 	require.Equal(t, 1, p.Size())
+}
+
+func TestFastPipelineUpdateReadyVisitsEachReadyHeadOldestFirst(t *testing.T) {
+	p := MakeFastPipeline[int](3, 2)
+	p.Accept(10) // lane 0
+	p.Accept(20) // lane 1
+	p.AdvanceTo(1)
+	p.Accept(11) // behind 10 in lane 0
+	p.Accept(21) // behind 20 in lane 1
+	p.Accept(30) // lane 2, not ready until cycle 3
+	p.AdvanceTo(2)
+
+	visited := []int{}
+	p.UpdateReady(func(item int) int {
+		visited = append(visited, item)
+		return item + 1
+	})
+	require.Equal(t, []int{10, 20}, visited)
+
+	item, ok := p.PeekLane(1)
+	require.True(t, ok)
+	require.Equal(t, 21, item)
+	_, ok = p.PeekLane(2)
+	require.False(t, ok)
 }
 
 func TestFastPipelineAdmission(t *testing.T) {
@@ -241,21 +268,29 @@ func TestFastPipelineNextReadyCycle(t *testing.T) {
 	require.Equal(t, uint64(14), due)
 
 	p.AdvanceTo(20)
-	due, ok = p.NextReadyCycle()
-	require.True(t, ok)
-	require.Equal(t, uint64(20), due, "a blocked item is due now")
+	_, ok = p.NextReadyCycle()
+	require.False(t, ok, "heads that are already ready are not future work")
 
 	_, ok = p.PopLane(0)
 	require.True(t, ok)
 	due, ok = p.NextReadyCycle()
 	require.True(t, ok)
-	require.Equal(t, uint64(20), due, "the other lane is still ready")
-
-	_, ok = p.PopLane(1)
-	require.True(t, ok)
-	due, ok = p.NextReadyCycle()
-	require.True(t, ok)
 	require.Equal(t, uint64(21), due, "a follower leaves the cycle after its predecessor")
+}
+
+func TestFastPipelineNextReadyCycleSeesPastABlockedHead(t *testing.T) {
+	p := MakeFastPipeline[int](2, 4)
+	p.Accept(0) // lane 0
+	p.AdvanceTo(1)
+	p.Accept(1) // behind item 0
+	p.Accept(2) // lane 1
+	p.AdvanceTo(4)
+
+	_, ready := p.PeekLane(0)
+	require.True(t, ready)
+	due, ok := p.NextReadyCycle()
+	require.True(t, ok)
+	require.Equal(t, uint64(5), due, "lane 1's head is still on its way")
 }
 
 func TestFastPipelineSkipToFreezesItems(t *testing.T) {

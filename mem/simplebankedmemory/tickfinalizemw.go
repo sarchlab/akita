@@ -33,12 +33,13 @@ func (m *tickFinalizeMW) finalizeBanks() bool {
 	state := &m.comp.State
 
 	for i := range state.Banks {
-		for {
-			progress := m.finalizeSingle(&state.Banks[i])
-			if !progress {
-				break
-			}
+		b := &state.Banks[i]
 
+		// Storage effects do not depend on response-port availability: every
+		// ready lane head commits, oldest first, before any response is sent.
+		b.Pipeline.UpdateReady(m.commit)
+
+		for m.respondOldest(b) {
 			madeProgress = true
 		}
 	}
@@ -46,43 +47,53 @@ func (m *tickFinalizeMW) finalizeBanks() bool {
 	return madeProgress
 }
 
-// finalizeSingle completes the bank's oldest ready request. A request whose
-// response cannot be sent stays in its lane's final stage, already committed.
-func (m *tickFinalizeMW) finalizeSingle(b *bankState) bool {
+// commit performs a ready request's storage access once. The result stays with
+// the item in its lane's final stage until its response is sent.
+func (m *tickFinalizeMW) commit(item bankPipelineItemState) bankPipelineItemState {
+	if item.Committed {
+		return item
+	}
+
+	if item.IsRead {
+		req := item.ReadMsg.Payload.(memprotocol.ReadReq)
+		item.ReadData = m.comp.Resources.Storage.Read(req.Address, req.AccessByteSize)
+	} else {
+		m.commitWrite(item.WriteMsg.Payload.(memprotocol.WriteReq))
+	}
+	item.Committed = true
+
+	return item
+}
+
+func (m *tickFinalizeMW) commitWrite(req memprotocol.WriteReq) {
+	if req.DirtyMask == nil {
+		m.comp.Resources.Storage.Write(req.Address, req.Data)
+		return
+	}
+
+	data := m.comp.Resources.Storage.Read(req.Address, uint64(len(req.Data)))
+	for i := range req.Data {
+		if req.DirtyMask[i] {
+			data[i] = req.Data[i]
+		}
+	}
+
+	m.comp.Resources.Storage.Write(req.Address, data)
+}
+
+// respondOldest sends the response of the bank's oldest ready request and
+// removes it from its lane. A request whose response cannot be sent stays in
+// its lane's final stage.
+func (m *tickFinalizeMW) respondOldest(b *bankState) bool {
+	if !m.topPort().CanSend() {
+		return false
+	}
+
 	lane, ok := b.Pipeline.ReadyLane()
 	if !ok {
 		return false
 	}
 	item, _ := b.Pipeline.PeekLane(lane)
-
-	if item.IsRead {
-		return m.finalizeRead(b, lane, &item)
-	}
-
-	return m.finalizeWrite(b, lane, &item)
-}
-
-func (m *tickFinalizeMW) finalizeRead(
-	b *bankState,
-	lane int,
-	item *bankPipelineItemState,
-) bool {
-	readReq := item.ReadMsg
-
-	if !item.Committed {
-		data := m.comp.Resources.Storage.Read(
-			readReq.Payload.(memprotocol.ReadReq).Address, readReq.Payload.(memprotocol.ReadReq).AccessByteSize)
-
-		item.ReadData = data
-		item.Committed = true
-
-		// Keep the committed state with the item while it waits to respond.
-		b.Pipeline.UpdateLane(lane, *item)
-	}
-
-	if !m.topPort().CanSend() {
-		return false
-	}
 
 	// The item is leaving the bank pipeline (it is ready at the head of its
 	// lane and about to be popped). Attribute the pipeline
@@ -91,17 +102,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	// same-time dedup.
 	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
 
-	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{
-		Data: item.ReadData},
-		ID:    m.comp.NewID(),
-		Src:   m.topPort().AsRemote(),
-		Dst:   readReq.Src,
-		RspTo: readReq.ID,
-
-		TrafficBytes: len(item.ReadData) + 4,
-	}
-
-	m.topPort().Send(rsp)
+	m.topPort().Send(m.makeResponse(&item))
 
 	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
@@ -110,57 +111,26 @@ func (m *tickFinalizeMW) finalizeRead(
 	return true
 }
 
-func (m *tickFinalizeMW) finalizeWrite(
-	b *bankState,
-	lane int,
-	item *bankPipelineItemState,
-) bool {
-	writeReq := item.WriteMsg
+func (m *tickFinalizeMW) makeResponse(item *bankPipelineItemState) messaging.Msg {
+	if item.IsRead {
+		return messaging.Msg{Payload: memprotocol.DataReadyRsp{
+			Data: item.ReadData},
+			ID:    m.comp.NewID(),
+			Src:   m.topPort().AsRemote(),
+			Dst:   item.ReadMsg.Src,
+			RspTo: item.ReadMsg.ID,
 
-	if !item.Committed {
-		addr := writeReq.Payload.(memprotocol.WriteReq).Address
-
-		if writeReq.Payload.(memprotocol.WriteReq).DirtyMask == nil {
-			m.comp.Resources.Storage.Write(addr, writeReq.Payload.(memprotocol.WriteReq).Data)
-		} else {
-			data := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Payload.(memprotocol.WriteReq).Data)))
-
-			for i := range writeReq.Payload.(memprotocol.WriteReq).Data {
-				if writeReq.Payload.(memprotocol.WriteReq).DirtyMask[i] {
-					data[i] = writeReq.Payload.(memprotocol.WriteReq).Data[i]
-				}
-			}
-
-			m.comp.Resources.Storage.Write(addr, data)
+			TrafficBytes: len(item.ReadData) + 4,
 		}
-
-		item.Committed = true
-		b.Pipeline.UpdateLane(lane, *item)
 	}
 
-	if !m.topPort().CanSend() {
-		return false
-	}
-
-	// See finalizeRead: attribute the bank-pipeline traversal as work on
-	// req_in at pipeline exit, before the response send and EndReqIn.
-	m.finishPipeline(item.RecvTaskID, item.PipelineTaskID)
-
-	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+	return messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
 		ID:           m.comp.NewID(),
 		Src:          m.topPort().AsRemote(),
-		Dst:          writeReq.Src,
-		RspTo:        writeReq.ID,
+		Dst:          item.WriteMsg.Src,
+		RspTo:        item.WriteMsg.ID,
 		TrafficBytes: 4,
 	}
-
-	m.topPort().Send(rsp)
-
-	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
-
-	b.Pipeline.PopLane(lane)
-
-	return true
 }
 
 // finishPipeline attributes the bank-pipeline traversal to the request's req_in

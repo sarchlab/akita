@@ -1293,6 +1293,8 @@ The `queueing` package provides generic buffer and pipeline value types. V4's in
 | A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakePipeline[int](width, numStages)`; `Tick(sink)` moves completed items into a sink, such as a buffer |
 | A buffer has a name and hook positions | A buffer has neither; a component's State field already names it |
 
+A component that should sleep while items travel can use the pull-based `queueing.FastPipeline[T]` instead of a `Pipeline` and post-pipeline buffer. See the [`queueing` README](../../sim/queueing/README.md).
+
 ```go
 // V4
 buffer := sim.NewBuffer("MyBuffer", 100)

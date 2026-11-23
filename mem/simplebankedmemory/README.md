@@ -24,9 +24,11 @@ Requests traverse the following stages:
    configurable stride (`2 ^ BankSelectorLog2InterleaveSize` bytes).
 3. **Pipeline traversal** — Banks compute how far in-flight requests moved from
    the elapsed cycles, so the component does not tick while they travel.
-4. **Completion** — When a request is ready, a read gathers its data from the
-   backing `mem.Storage` or a write commits the modified bytes, exactly once.
-   Both generate responses once the `Top` port has space to send.
+4. **Completion** — When a request reaches the head of its lane and is ready, a
+   read gathers its data from the backing `mem.Storage` or a write commits the
+   modified bytes, exactly once and whether or not the `Top` port is full. Ready
+   lane heads commit oldest first. Each keeps its result in its lane until the
+   `Top` port has space for its response.
 
 Let `D = max(BankPipelineDepth × StageLatency, 1)`. A request accepted in cycle
 `c` responds in cycle `c + D` when nothing blocks it, one cycle sooner than the
@@ -39,10 +41,10 @@ The memory ticks only when it can act: at the next completion, at the next
 admission for a queued request, and on port activity. It does not tick while a
 full port blocks all progress; the port wakes it when space frees up.
 
-For a quick approximation, the achievable peak bandwidth is
-`NumBanks × BankPipelineWidth × (1 / StageLatency) × Freq`. To keep sequential
-traffic saturated, configure more banks than the pipeline latency so a stream of
-requests can occupy different banks while earlier ones are still in flight.
+The ideal peak rate is `NumBanks × BankPipelineWidth × Freq` requests per
+second; multiply by the bytes per request for bandwidth. `StageLatency` adds
+pipeline depth, not an admission interval. The achieved rate also depends on how
+traffic spreads across banks and on port bandwidth.
 
 ## Key Types
 
