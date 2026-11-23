@@ -28,9 +28,10 @@ type Pipeline[T any] struct {
 	// of this value. It is nil until the first insertion or restore, and stays
 	// nil for restored stages that do not form valid slots.
 	stageGen *atomic.Uint64
-	// seenGen is the stageGen value after this copy's latest write. A copy that
-	// falls behind may view slots another copy rewrote, so it stops trusting
-	// stageZero and the fast advance until Clear or restore replaces its stages.
+	// seenGen is the stageGen value after this copy's latest completed write. A
+	// copy that falls behind may view slots another copy rewrote, so it stops
+	// trusting stageZero and the fast advance until Clear or restore replaces
+	// its stages. Tick updates it only after its sink calls return normally.
 	seenGen uint64
 	// stageZero counts the items at stage 0 while this copy is tracked. It is
 	// derived from stages and is excluded from checkpoints.
@@ -86,6 +87,23 @@ func (p *Pipeline[T]) recordStageWrite(tracked bool) {
 	if tracked {
 		p.seenGen = gen
 	}
+}
+
+// invalidateStages advances the shared generation without updating seenGen, so
+// every copy stops trusting its cache. It returns the generation Tick may adopt
+// on normal completion. If another write intervened, it returns the prior
+// token, which is stale and keeps the receiver untracked.
+func (p *Pipeline[T]) invalidateStages(start *atomic.Uint64, trusted uint64) uint64 {
+	if p.stageGen == nil {
+		return trusted
+	}
+
+	gen := p.stageGen.Add(1)
+	if p.stageGen == start && gen == trusted+1 {
+		return gen
+	}
+
+	return trusted
 }
 
 // CanAccept returns true if there is at least one free lane at stage 0.
@@ -181,7 +199,9 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		return false
 	}
 
-	tracked := p.tracked()
+	startedTracked := p.tracked()
+	startGen, startSeen := p.stageGen, p.seenGen
+	trustedGen := startSeen
 	moved := false
 	blocked := false
 	lastStage := p.numStages - 1
@@ -194,6 +214,11 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		}
 		if sink.CanPush() {
 			sink.Push(s.Item)
+			// A later sink call can observe or interrupt this swap, so invalidate
+			// every cache first and leave seenGen behind until Tick returns.
+			if !moved {
+				trustedGen = p.invalidateStages(startGen, trustedGen)
+			}
 			p.stages[i] = p.stages[n-1]
 			n--
 			moved = true
@@ -203,26 +228,47 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	}
 
 	p.stages = p.stages[:n]
+	published := moved
 
-	// Phase 2: With the last stage empty, every remaining item of a tracked
-	// pipeline has a free slot ahead. Otherwise a blocked output or aliased slot
-	// can stall items, so advance from high stage to low. A pipeline without
-	// stages never advances.
+	// A sink call may have replaced this value or written through a copy.
+	intact := p.stageGen == startGen && p.seenGen == startSeen
+	tracked := startedTracked && intact && startGen.Load() == trustedGen
+
+	moved = p.advanceStages(tracked, blocked) || moved
+	if moved && !published {
+		trustedGen = p.invalidateStages(startGen, trustedGen)
+	}
+
+	if !intact {
+		p.invalidateStages(startGen, trustedGen)
+	} else if startedTracked {
+		p.seenGen = trustedGen
+	}
+
+	return moved
+}
+
+// advanceStages runs the second phase of Tick. With the last stage empty, every
+// remaining item of a tracked pipeline has a free slot ahead. Otherwise a
+// blocked output or aliased slot can stall items, so advance from high stage to
+// low. A pipeline without stages never advances.
+func (p *Pipeline[T]) advanceStages(tracked, blocked bool) bool {
 	if tracked && !blocked && p.numStages > 0 {
 		for i := range p.stages {
 			p.stages[i].Stage++
 		}
 		p.stageZero = 0
-		moved = moved || n > 0
-	} else if n > 0 {
-		moved = p.advanceItems() || moved
-		if tracked {
-			p.stageZero = p.countStageZero()
-		}
+
+		return len(p.stages) > 0
 	}
 
-	if moved {
-		p.recordStageWrite(tracked)
+	if len(p.stages) == 0 {
+		return false
+	}
+
+	moved := p.advanceItems()
+	if tracked {
+		p.stageZero = p.countStageZero()
 	}
 
 	return moved

@@ -164,6 +164,88 @@ func TestPipelineLiveValueStaysTracked(t *testing.T) {
 	require.False(t, full.CanAccept())
 }
 
+// callbackSink accepts every item and runs onCanPush before each admission.
+type callbackSink struct {
+	calls     int
+	onCanPush func(call int)
+	pushed    []int
+}
+
+func (s *callbackSink) CanPush() bool {
+	s.calls++
+	if s.onCanPush != nil {
+		s.onCanPush(s.calls)
+	}
+	return true
+}
+
+func (s *callbackSink) Push(item int) { s.pushed = append(s.pushed, item) }
+
+func TestPipelineSinkPanicAfterSwapInvalidatesAdmission(t *testing.T) {
+	p := MakePipeline[int](2, 2)
+	p.Accept(1)
+	p.Accept(2)
+	p.Tick(nopSink[int]{})
+	p.Accept(3)
+	q := p
+
+	// The first output swaps item 3 over item 2 and leaves the slice unshortened.
+	want := []PipelineStage[int]{
+		{Lane: 0, Stage: 1, Item: 1},
+		{Lane: 0, Stage: 0, Item: 3},
+		{Lane: 0, Stage: 0, Item: 3},
+	}
+	sink := &callbackSink{onCanPush: func(call int) {
+		if call == 2 {
+			require.Equal(t, want, p.Stages())
+			require.False(t, p.CanAccept(), "a later sink call sees the swap")
+			panic("sink failed")
+		}
+	}}
+	require.PanicsWithValue(t, "sink failed", func() { p.Tick(sink) })
+	require.Equal(t, []int{2}, sink.pushed)
+
+	for name, view := range map[string]*Pipeline[int]{"receiver": &p, "copy": &q} {
+		require.Equal(t, want, view.Stages(), name)
+		require.False(t, view.CanAccept(), name)
+		restored := restoredCopy(t, *view)
+		require.False(t, restored.CanAccept(), name)
+	}
+
+	// The duplicate occupies lane 0 twice, leaving lane 1 open as it always did.
+	p.Accept(4)
+	require.Equal(t, PipelineStage[int]{Lane: 1, Stage: 0, Item: 4}, p.Stages()[3])
+}
+
+func TestPipelineSinkPanicBeforeWriteKeepsCache(t *testing.T) {
+	p := fullPipeline(2, 2)
+	q := p
+	sink := &callbackSink{onCanPush: func(int) { panic("sink failed") }}
+	require.Panics(t, func() { p.Tick(sink) })
+
+	require.True(t, p.tracked())
+	require.True(t, q.tracked())
+	require.False(t, p.CanAccept())
+}
+
+func TestPipelineCopyWriteDuringTickIsNotAdopted(t *testing.T) {
+	p := MakePipeline[int](2, 2)
+	p.Accept(1)
+	p.Accept(2)
+	p.Tick(nopSink[int]{})
+	q := p
+
+	// The copy writes before the receiver's first swap publishes its own write.
+	sink := &callbackSink{onCanPush: func(call int) {
+		if call == 1 {
+			q.Accept(3)
+		}
+	}}
+	require.True(t, p.Tick(sink))
+	require.False(t, p.tracked())
+	require.True(t, p.CanAccept())
+}
+
 func TestPipelineEmptyReaderCopyDoesNotRaceOwner(t *testing.T) {
 	p := MakePipeline[int](1, 2)
 	sink := MakeBuffer[int](1)
