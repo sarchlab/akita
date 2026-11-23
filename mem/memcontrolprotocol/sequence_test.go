@@ -3,6 +3,7 @@ package memcontrolprotocol_test
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -10,12 +11,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,9 +29,14 @@ import (
 // progress.
 type stepper func() bool
 
-// stepperOf returns a stepper that ticks c with modelingtest.Tick.
-func stepperOf[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M]) stepper {
-	return func() bool { return modelingtest.Tick(c) }
+// stepperOf returns a stepper that moves clock to its next 1 GHz edge and ticks
+// c with modelingtest.Tick.
+func stepperOf[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M], clock *testsim.Clock) stepper {
+	return func() bool {
+		clock.Step(timing.GHz)
+
+		return modelingtest.Tick(c)
+	}
 }
 
 // driveCtrl delivers a control verb and ticks until its ack returns,
@@ -71,7 +77,8 @@ func driveCtrl(
 // address) -> Enable, and confirm only the filtered entry was dropped (it
 // now misses to Bottom) while the other still hits.
 func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
-	sim := akitasim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, false)
 
 	remote := messaging.RemotePort("MMU")
 
@@ -95,7 +102,7 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 		WithSpec(twowaybuffered.Spec{IncomingCapacity: 16, OutgoingCapacity: 16}).
 		Build())
 
-	tick := stepperOf(comp)
+	tick := stepperOf(comp, clock)
 
 	top := comp.Ports.Top
 	bottom := comp.Ports.Bottom
@@ -232,8 +239,8 @@ func lookupMisses(
 // installs two dirty blocks and confirms each verb's externally visible
 // effect.
 func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
-	comp, storage, ctrl, bottom := buildWritebackForSequence(t)
-	tick := stepperOf(comp)
+	comp, clock, storage, ctrl, bottom := buildWritebackForSequence(t)
+	tick := stepperOf(comp, clock)
 
 	setA := installDirtyBlock(t, comp, storage, 0x0, 0xAA)
 	setB := installDirtyBlock(t, comp, storage, 0x40, 0xBB)
@@ -380,10 +387,11 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 // Control and Bottom ports the sequence test drives.
 func buildWritebackForSequence(
 	t *testing.T,
-) (*writeback.Comp, *mem.Storage, messaging.Port, messaging.Port) {
+) (*writeback.Comp, *testsim.Clock, *mem.Storage, messaging.Port, messaging.Port) {
 	t.Helper()
 
-	sim := akitasim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, false)
 
 	storage := mem.NewStorage(1 * mem.MB)
 
@@ -426,7 +434,7 @@ func buildWritebackForSequence(
 	}
 	require.NoError(t, sim.Initialize())
 
-	return comp, storage, ctrl, bottom
+	return comp, clock, storage, ctrl, bottom
 }
 
 // installDirtyBlock seats a valid+dirty block holding addr at way 0 of its
