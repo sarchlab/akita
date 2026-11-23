@@ -39,19 +39,17 @@ func (m *middlewares) Initialize(c *Comp) {
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},
+		Wake:         &wakeMW{comp: c},
 	}
 }
 
 // buildInitialBanks returns the empty banks of the memory named name.
 func buildInitialBanks(name string, spec Spec) []bankState {
+	width, numStages := bankPipelineShape(spec)
 	banks := make([]bankState, spec.NumBanks)
 	for i := range banks {
 		banks[i] = bankState{
-			Pipeline: queueing.MakePipeline[bankPipelineItemState](
-				spec.BankPipelineWidth,
-				spec.BankPipelineDepth*spec.StageLatency),
-
-			PostPipelineBuf: queueing.MakeBuffer[bankPipelineItemState](spec.PostPipelineBufSize),
+			Pipeline: queueing.MakeFastPipeline[bankPipelineItemState](width, numStages),
 		}
 	}
 
