@@ -191,6 +191,12 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 		}
 	})
 
+	t.Run("State field may use the checkpoint hook name", func(t *testing.T) {
+		if _, ok := byPkg[fixturePath("checkpointloadfield")]; !ok {
+			t.Fatal("a field named AfterCheckpointLoad is not the optional hook")
+		}
+	})
+
 	t.Run("non-component DefaultSpec is ignored", func(t *testing.T) {
 		if _, found := byPkg[fixturePath("missingcomp")]; found {
 			t.Fatal("DefaultSpec without Comp must not declare a component")

@@ -65,22 +65,29 @@ type FastPipeline[T any] struct {
 
 // MakeFastPipeline creates a pipeline with the given width (lanes) and number
 // of stages. freq converts the clock's time to cycles and is ordinarily the
-// owner's frequency; clock is ordinarily the owner. numStages and freq must be
-// positive and clock non-nil. A pipeline with no lanes never accepts.
+// owner's frequency; clock is ordinarily the owner. numStages must be positive,
+// freq must be positive and at most 1 THz, and clock must be non-nil. A pipeline
+// with no lanes never accepts.
 func MakeFastPipeline[T any](
 	width, numStages int, freq timing.Freq, clock timing.TimeTeller,
 ) FastPipeline[T] {
 	if numStages < 1 {
 		panic("fast pipeline must have at least one stage")
 	}
-	if freq == 0 {
-		panic("fast pipeline must have a nonzero frequency")
+	if !hasPicosecondPeriod(freq) {
+		panic(fmt.Sprintf("fast pipeline frequency %d must have a nonzero picosecond period", freq))
 	}
 	if clock == nil {
 		panic("fast pipeline must have a clock")
 	}
 
 	return FastPipeline[T]{width: width, numStages: numStages, freq: freq, clock: clock}
+}
+
+// hasPicosecondPeriod reports whether freq has a nonzero period in whole
+// picoseconds, which converting between time and cycles requires.
+func hasPicosecondPeriod(freq timing.Freq) bool {
+	return freq != 0 && freq.Period() != 0
 }
 
 // BindClock sets the time source. Checkpoints do not save it, so the owner
@@ -98,19 +105,27 @@ func (p *FastPipeline[T]) Size() int {
 	return len(p.entries)
 }
 
-// currentCycle returns the clock's cycle. It panics without a clock or if the
-// clock is earlier than the last synchronized cycle.
-func (p *FastPipeline[T]) currentCycle() uint64 {
+// now reads the clock once and returns its time and cycle. It panics without a
+// clock or if the clock is earlier than the last synchronized cycle.
+func (p *FastPipeline[T]) now() (timing.VTimeInPicoSec, uint64) {
 	if p.clock == nil {
 		panic("fast pipeline has no clock; call BindClock after decoding")
 	}
 
-	now := p.freq.Cycle(p.clock.CurrentTime())
-	if now < p.cycle {
-		panic(fmt.Sprintf("fast pipeline cannot move from cycle %d back to %d", p.cycle, now))
+	at := p.clock.CurrentTime()
+	cycle := p.freq.Cycle(at)
+	if cycle < p.cycle {
+		panic(fmt.Sprintf("fast pipeline cannot move from cycle %d back to %d", p.cycle, cycle))
 	}
 
-	return now
+	return at, cycle
+}
+
+// currentCycle returns the clock's cycle.
+func (p *FastPipeline[T]) currentCycle() uint64 {
+	_, cycle := p.now()
+
+	return cycle
 }
 
 // elapsed returns the cycles that count toward progress since the last
@@ -206,7 +221,12 @@ func (p *FastPipeline[T]) admission() (lane int, nextCycle bool) {
 		return 0, false
 	}
 
-	elapsed := p.elapsed()
+	return p.admissionAfter(p.elapsed())
+}
+
+// admissionAfter is admission for a pipeline with lanes, once elapsed more
+// cycles have counted.
+func (p *FastPipeline[T]) admissionAfter(elapsed uint64) (lane int, nextCycle bool) {
 	counts := p.scratch()
 	for i := range p.entries {
 		counts[p.entries[i].Lane]++
@@ -379,20 +399,22 @@ func (p *FastPipeline[T]) NextReadyTime() (timing.VTimeInPicoSec, bool) {
 }
 
 // NextPushTime returns the earliest time at which CanPush becomes true without
-// any further pop: the current cycle or the next one. It returns false when
-// every lane is full, because only a pop can then release space; wait for
-// NextReadyTime and pop instead. It also returns false while paused.
+// any further pop: the clock's current time if a lane is free now, or the next
+// clock edge if a lane frees up there. It returns false when every lane is
+// full, because only a pop can then release space; wait for NextReadyTime and
+// pop instead. It also returns false while paused.
 func (p *FastPipeline[T]) NextPushTime() (timing.VTimeInPicoSec, bool) {
-	if p.paused {
+	if p.paused || p.width <= 0 {
 		return 0, false
 	}
 
-	lane, nextCycle := p.admission()
+	at, cycle := p.now()
+	lane, nextCycle := p.admissionAfter(cycle - p.cycle)
 	switch {
 	case lane >= 0:
-		return p.cycleTime(p.currentCycle()), true
+		return at, true
 	case nextCycle:
-		return p.cycleTime(p.currentCycle() + 1), true
+		return p.cycleTime(cycle + 1), true
 	default:
 		return 0, false
 	}

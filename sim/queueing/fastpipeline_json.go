@@ -37,8 +37,9 @@ func (p FastPipeline[T]) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON restores a pipeline from its JSON form and leaves its clock as
 // it was. It reports an error for a push Pipeline snapshot, whose "stages" would
-// otherwise be dropped, for a configured pipeline without a frequency, and for
-// entries that do not fit the saved geometry. On error p is unchanged.
+// otherwise be dropped, for a configured pipeline whose frequency has no nonzero
+// picosecond period, and for entries that do not fit the saved geometry. On
+// error p is unchanged.
 func (p *FastPipeline[T]) UnmarshalJSON(data []byte) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
@@ -53,8 +54,8 @@ func (p *FastPipeline[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
 	}
-	if s.NumStages > 0 && s.Freq == 0 {
-		return errors.New("fast pipeline: snapshot has no frequency")
+	if s.NumStages > 0 && !hasPicosecondPeriod(s.Freq) {
+		return fmt.Errorf("fast pipeline: snapshot frequency %d has no nonzero picosecond period", s.Freq)
 	}
 
 	counts := make(map[int]int, min(len(s.Entries), max(s.Width, 0)))
