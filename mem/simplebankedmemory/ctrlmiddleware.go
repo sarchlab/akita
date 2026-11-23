@@ -18,21 +18,20 @@ func (m *ctrlMiddleware) topPort() messaging.Port {
 	return m.comp.Ports.Top
 }
 
-func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
+func (m *ctrlMiddleware) Handle(e timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
 	// Control port and is handled once the component settles.
 	if m.comp.State.ControlState != controlStateDraining {
-		madeProgress = m.handleIncoming() || madeProgress
+		madeProgress = m.handleIncoming(m.comp.Spec.Freq.Cycle(e.Time())) || madeProgress
 	}
 	return madeProgress
 }
 
 // completePendingDrain finalizes a Drain when no bank has work in
-// flight. A bank is quiescent when its pipeline reports empty and its
-// post-pipeline buffer is empty.
+// flight. A bank is quiescent when its pipeline is empty.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
 	if state.ControlState != controlStateDraining {
@@ -56,10 +55,30 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 }
 
 func bankIsQuiescent(b *bankState) bool {
-	return len(b.Pipeline.Stages()) == 0 && b.PostPipelineBuf.Size() == 0
+	return b.Pipeline.Size() == 0
 }
 
-func (m *ctrlMiddleware) handleIncoming() bool {
+// freezeBanks stops pipeline time at the end of the cycle before cycle: the
+// tick that handles a Pause does no pipeline work.
+func (m *ctrlMiddleware) freezeBanks(cycle uint64) {
+	for i := range m.comp.State.Banks {
+		if p := &m.comp.State.Banks[i].Pipeline; cycle > p.Cycle() {
+			p.AdvanceTo(cycle - 1)
+		}
+	}
+}
+
+// resumeBanks discards the paused cycles, so the tick that handles an Enable is
+// the first cycle of pipeline work after the freeze.
+func (m *ctrlMiddleware) resumeBanks(cycle uint64) {
+	for i := range m.comp.State.Banks {
+		if p := &m.comp.State.Banks[i].Pipeline; cycle > p.Cycle() {
+			p.SkipTo(cycle - 1)
+		}
+	}
+}
+
+func (m *ctrlMiddleware) handleIncoming(cycle uint64) bool {
 	msg, ok := m.ctrlPort().PeekIncoming()
 	if !ok {
 		return false
@@ -73,11 +92,11 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 
 	switch req.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdPause:
-		return m.handlePause(req)
+		return m.handlePause(req, cycle)
 	case memcontrolprotocol.CmdDrain:
-		return m.handleDrain(req)
+		return m.handleDrain(req, cycle)
 	case memcontrolprotocol.CmdEnable:
-		return m.handleEnable(req)
+		return m.handleEnable(req, cycle)
 	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	default:
@@ -85,9 +104,12 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
+func (m *ctrlMiddleware) handlePause(req messaging.Msg, cycle uint64) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
+	}
+	if m.comp.State.ControlState != controlStatePaused {
+		m.freezeBanks(cycle)
 	}
 	m.comp.State.ControlState = controlStatePaused
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
@@ -96,9 +118,12 @@ func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
+func (m *ctrlMiddleware) handleEnable(req messaging.Msg, cycle uint64) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
+	}
+	if m.comp.State.ControlState == controlStatePaused {
+		m.resumeBanks(cycle)
 	}
 	m.comp.State.ControlState = controlStateEnabled
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
@@ -107,8 +132,11 @@ func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
+func (m *ctrlMiddleware) handleDrain(req messaging.Msg, cycle uint64) bool {
 	state := &m.comp.State
+	if state.ControlState == controlStatePaused {
+		m.resumeBanks(cycle)
+	}
 	state.ControlState = controlStateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
@@ -143,9 +171,8 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 }
 
 // endInflightTasks completes the req_in tracing task and closes the open
-// pipeline subtask of every request still in a bank pipeline or post-pipeline
-// buffer, so a hard Reset that rebuilds the banks leaves no
-// started-never-ended task. The memory is
+// pipeline subtask of every request still in a bank pipeline, so a hard Reset
+// that rebuilds the banks leaves no started-never-ended task. The memory is
 // a leaf, so there is no downstream req_out. Mirrors the completion in
 // tickFinalizeMW.finishPipeline + EndReqIn.
 func (m *ctrlMiddleware) endInflightTasks() {
@@ -153,9 +180,6 @@ func (m *ctrlMiddleware) endInflightTasks() {
 		bank := &m.comp.State.Banks[i]
 		for _, stage := range bank.Pipeline.Stages() {
 			m.endItemTasks(stage.Item)
-		}
-		for _, item := range bank.PostPipelineBuf.Elements() {
-			m.endItemTasks(item)
 		}
 	}
 }

@@ -15,13 +15,17 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 	return m.comp.Ports.Top
 }
 
-func (m *tickFinalizeMW) Handle(_ timing.Event) bool {
+func (m *tickFinalizeMW) Handle(e timing.Event) bool {
 	if m.comp.State.ControlState == controlStatePaused {
 		return false
 	}
-	madeProgress := m.finalizeBanks()
-	madeProgress = m.tickPipelines() || madeProgress
-	return madeProgress
+
+	cycle := m.comp.Spec.Freq.Cycle(e.Time())
+	for i := range m.comp.State.Banks {
+		m.comp.State.Banks[i].Pipeline.AdvanceTo(cycle)
+	}
+
+	return m.finalizeBanks()
 }
 
 func (m *tickFinalizeMW) finalizeBanks() bool {
@@ -42,21 +46,25 @@ func (m *tickFinalizeMW) finalizeBanks() bool {
 	return madeProgress
 }
 
+// finalizeSingle completes the bank's oldest ready request. A request whose
+// response cannot be sent stays in its lane's final stage, already committed.
 func (m *tickFinalizeMW) finalizeSingle(b *bankState) bool {
-	item, ok := bufferPeek(*b)
+	lane, ok := b.Pipeline.ReadyLane()
 	if !ok {
 		return false
 	}
+	item, _ := b.Pipeline.PeekLane(lane)
 
 	if item.IsRead {
-		return m.finalizeRead(b, &item)
+		return m.finalizeRead(b, lane, &item)
 	}
 
-	return m.finalizeWrite(b, &item)
+	return m.finalizeWrite(b, lane, &item)
 }
 
 func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
+	lane int,
 	item *bankPipelineItemState,
 ) bool {
 	readReq := item.ReadMsg
@@ -68,16 +76,16 @@ func (m *tickFinalizeMW) finalizeRead(
 		item.ReadData = data
 		item.Committed = true
 
-		// Update the buffer head with the committed state.
-		b.PostPipelineBuf.UpdateFront(*item)
+		// Keep the committed state with the item while it waits to respond.
+		b.Pipeline.UpdateLane(lane, *item)
 	}
 
 	if !m.topPort().CanSend() {
 		return false
 	}
 
-	// The item has just left the bank pipeline (it is at the head of
-	// PostPipelineBuf and about to be dequeued). Attribute the pipeline
+	// The item is leaving the bank pipeline (it is ready at the head of its
+	// lane and about to be popped). Attribute the pipeline
 	// traversal as work on req_in before the response send and before
 	// EndReqIn, so the same-tick complete does not absorb it via the
 	// same-time dedup.
@@ -97,13 +105,14 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
-	bufferPop(b)
+	b.Pipeline.PopLane(lane)
 
 	return true
 }
 
 func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
+	lane int,
 	item *bankPipelineItemState,
 ) bool {
 	writeReq := item.WriteMsg
@@ -126,7 +135,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		}
 
 		item.Committed = true
-		b.PostPipelineBuf.UpdateFront(*item)
+		b.Pipeline.UpdateLane(lane, *item)
 	}
 
 	if !m.topPort().CanSend() {
@@ -149,7 +158,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
-	bufferPop(b)
+	b.Pipeline.PopLane(lane)
 
 	return true
 }
@@ -171,15 +180,4 @@ func (m *tickFinalizeMW) finishPipeline(recvTaskID, pipelineTaskID uint64) {
 	if pipelineTaskID != 0 {
 		m.comp.TaskTracker().EndTask(pipelineTaskID)
 	}
-}
-
-func (m *tickFinalizeMW) tickPipelines() bool {
-	madeProgress := false
-	state := &m.comp.State
-
-	for i := range state.Banks {
-		madeProgress = pipelineTick(&state.Banks[i]) || madeProgress
-	}
-
-	return madeProgress
 }

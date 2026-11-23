@@ -10,8 +10,9 @@ bandwidth and latency for the common case.
 
 The component exposes a single `Top` port. All clients share this port, and the
 internal logic determines which bank serves each request. Each bank owns a
-configurable pipeline (width, depth, per-stage latency) and a post-pipeline
-buffer that holds completed items until responses can be delivered.
+configurable pipeline (width, depth, per-stage latency). A completed request
+stays in the final stage of its lane, with its committed data, until its
+response can be delivered.
 
 Requests traverse the following stages:
 
@@ -21,11 +22,22 @@ Requests traverse the following stages:
    the port buffer and dispatches them into the selected bank's pipeline. With
    the default `"interleaved"` selector, addresses are interleaved by a
    configurable stride (`2 ^ BankSelectorLog2InterleaveSize` bytes).
-3. **Pipeline traversal** — Banks simulate execution latency by advancing all
-   in-flight pipeline slots every tick.
-4. **Completion** — When items exit the pipeline, reads gather their data from
-   the backing `mem.Storage` while writes commit the modified bytes. Both
-   generate responses once the `Top` port has space to send.
+3. **Pipeline traversal** — Banks compute how far in-flight requests moved from
+   the elapsed cycles, so the component does not tick while they travel.
+4. **Completion** — When a request is ready, a read gathers its data from the
+   backing `mem.Storage` or a write commits the modified bytes, exactly once.
+   Both generate responses once the `Top` port has space to send.
+
+Let `D = max(BankPipelineDepth × StageLatency, 1)`. A request accepted in cycle
+`c` responds in cycle `c + D` when nothing blocks it, one cycle sooner than the
+former pipeline-plus-buffer model at positive latency. Each lane holds at most
+`D` requests, and the last stage is the only output holding capacity. A blocked
+response holds its lane, which eventually stops that bank from admitting and
+leaves requests queued in the `Top` port.
+
+The memory ticks only when it can act: at the next completion, at the next
+admission for a queued request, and on port activity. It does not tick while a
+full port blocks all progress; the port wakes it when space frees up.
 
 For a quick approximation, the achievable peak bandwidth is
 `NumBanks × BankPipelineWidth × (1 / StageLatency) × Freq`. To keep sequential
@@ -35,27 +47,29 @@ requests can occupy different banks while earlier ones are still in flight.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, bank geometry, pipeline shape,
-  post-pipeline buffer depth, capacity, and bank selection.
-- `State` — mutable runtime data: the per-bank pipelines and post-pipeline
-  buffers.
+  capacity, and bank selection.
+- `State` — mutable runtime data: the per-bank pipelines.
 - `Resources` — shared wiring; holds the backing `*mem.Storage`, which is
   required.
 - `Ports` — the `Top` and `Control` ports.
-- `Middlewares` — `Ctrl` (control commands), `TickFinalize` (commits and
-  responds to requests leaving the bank pipelines, then advances the
-  pipelines), and `Dispatch` (moves incoming requests into their banks), run in
-  that order every cycle.
+- `Middlewares` — `Ctrl` (control commands), `TickFinalize` (brings the
+  pipelines to the current cycle, then commits and responds to ready requests),
+  `Dispatch` (moves incoming requests into their banks), and `Wake` (schedules
+  the next cycle with work), run in that order on every tick.
 - `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ```go
 type Spec struct {
-    Freq                timing.Freq // Operating frequency
-    NumBanks            int         // Number of banks
-    BankPipelineWidth   int         // Items entering a bank pipeline per tick
-    BankPipelineDepth   int         // Pipeline stages per bank
-    StageLatency        int         // Cycles per pipeline stage
-    PostPipelineBufSize int         // Post-pipeline buffer depth per bank
+    Freq              timing.Freq // Operating frequency
+    NumBanks          int         // Number of banks
+    BankPipelineWidth int         // Items entering a bank pipeline per cycle
+    BankPipelineDepth int         // Pipeline stages per bank
+    StageLatency      int         // Cycles per pipeline stage
+
+    // Deprecated: ignored for every value; kept for source and JSON
+    // compatibility.
+    PostPipelineBufSize int
 
     BankSelectorLog2InterleaveSize uint64 // log2 of the bank interleave stride
 
@@ -65,6 +79,16 @@ type Spec struct {
     BankAddressConversion BankAddressConversion
 }
 ```
+
+`PostPipelineBufSize` no longer has any effect, including zero and negative
+values. There is no separate output buffer: bank capacity and backpressure come
+from the pipeline shape above. A configuration that relied on a large buffer to
+absorb blocked responses now backpressures sooner, and one whose small buffer
+limited a wide bank's completion rate is no longer limited by it. Checkpoints
+saved with the former push pipeline fail to load with an error.
+
+With no pipeline latency (`BankPipelineDepth` or `StageLatency` is zero), a
+request responds one cycle after it is accepted.
 
 The memory uses **global storage**: a request's address indexes the backing
 store directly, with no storage address conversion. Bank selection, by default,
@@ -123,7 +147,6 @@ topPort := memCtrl.Ports.Top
 | Banks | 4 |
 | Bank pipeline width / depth | 1 / 1 |
 | Stage latency | 10 cycles |
-| Post-pipeline buffer | 1 |
 | Capacity | 4 GB |
 | Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
 

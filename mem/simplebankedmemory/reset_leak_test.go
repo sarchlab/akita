@@ -44,9 +44,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// Admit one read. A single Tick lets dispatchMW route it into the bank
 	// pipeline, opening req_in (StartReqIn) and the pipeline subtask. The
 	// pipeline latency (BankPipelineDepth*StageLatency = 10) far exceeds one
-	// tick, so the item is still in flight: it has not reached PostPipelineBuf
-	// and so has not been finalized/completed. The memory is a leaf, so there is
-	// no downstream req_out.
+	// tick, so the item is still in flight and has not been finalized/completed.
+	// The memory is a leaf, so there is no downstream req_out.
 	read := makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
 	topPort.Deliver(read)
 	modelingtest.Tick(comp)
