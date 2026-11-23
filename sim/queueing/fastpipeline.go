@@ -29,8 +29,9 @@ type fastPipelineEntry[T any] struct {
 // Drive it in this order in each observed cycle:
 //
 //  1. AdvanceTo(cycle).
-//  2. Pull with ReadyLane, PeekLane, UpdateLane, and PopLane. Leave an item in
-//     place to apply backpressure.
+//  2. Apply completion work to every ready lane head with UpdateReady, then
+//     pull with ReadyLane, PeekLane, and PopLane. Leave an item in place to
+//     apply backpressure.
 //  3. Admit with CanAccept and Accept.
 //  4. Ask NextReadyCycle and NextAcceptCycle when to come back.
 //
@@ -190,16 +191,26 @@ func (p *FastPipeline[T]) PeekLane(lane int) (T, bool) {
 	return p.entries[i].Item, true
 }
 
-// UpdateLane replaces the ready item at the head of lane and reports whether
-// one existed. Use it to keep completed work attached while backpressured.
-func (p *FastPipeline[T]) UpdateLane(lane int, item T) bool {
-	i, ok := p.readyIndex(lane)
-	if !ok {
-		return false
+// UpdateReady replaces every ready lane head, oldest accepted first, with the
+// result of update. Use it to keep completed work attached while backpressured.
+// update runs again on a head that stays in place, so it must be idempotent,
+// and it must not call back into the pipeline.
+func (p *FastPipeline[T]) UpdateReady(update func(T) T) {
+	if len(p.entries) == 0 {
+		return
 	}
-	p.entries[i].Item = item
 
-	return true
+	seen := p.scratch()
+	for i := range p.entries {
+		e := &p.entries[i]
+		if seen[e.Lane] != 0 {
+			continue
+		}
+		seen[e.Lane] = 1
+		if e.Progress == p.numStages {
+			e.Item = update(e.Item)
+		}
+	}
 }
 
 // PopLane removes and returns the ready item at the head of lane. The next item
@@ -234,9 +245,10 @@ func (p *FastPipeline[T]) readyIndex(lane int) (int, bool) {
 	return 0, false
 }
 
-// NextReadyCycle returns the earliest cycle at which a lane head is ready,
-// assuming no further pops. It returns the current cycle if one is ready now,
-// and false when the pipeline is empty.
+// NextReadyCycle returns the earliest future cycle at which a lane head becomes
+// ready, assuming no further pops. Heads that are already ready are excluded, so
+// a head waiting on backpressure does not hide another lane's later head. It
+// returns false when no lane head is still on its way.
 func (p *FastPipeline[T]) NextReadyCycle() (uint64, bool) {
 	if len(p.entries) == 0 {
 		return 0, false
@@ -251,9 +263,12 @@ func (p *FastPipeline[T]) NextReadyCycle() (uint64, bool) {
 			continue
 		}
 		seen[e.Lane] = 1
-		if wait := p.numStages - e.Progress; !found || wait < best {
+		if wait := p.numStages - e.Progress; wait > 0 && (!found || wait < best) {
 			best, found = wait, true
 		}
+	}
+	if !found {
+		return 0, false
 	}
 
 	return p.cycle + uint64(best), true

@@ -1,6 +1,7 @@
 package simplebankedmemory
 
 import (
+	"bytes"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -338,6 +339,155 @@ func TestBlockedResponseKeepsCommittedStateAndSleeps(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newWideBlockedRig builds one bank of two 4-stage lanes whose Top output is
+// already full, with distinct data at the first three request addresses.
+func newWideBlockedRig(t *testing.T) *wakeRig {
+	t.Helper()
+
+	spec := wakeSpec(4)
+	spec.NumBanks = 1
+	spec.BankPipelineWidth = 2
+	r := newWakeRig(t, spec, 1)
+	for i, value := range []byte{0x11, 0x22, 0x33} {
+		r.storage.Write(uint64(i*readSize), bytes.Repeat([]byte{value}, readSize))
+	}
+	r.top.Send(messaging.Msg{
+		Payload: memprotocol.WriteDoneRsp{},
+		ID:      r.sim.NewID(), Src: r.top.AsRemote(), Dst: "Agent",
+	})
+	r.sends, r.rspTo = nil, nil
+
+	return r
+}
+
+// deliverStaggered makes lane heads ready at different cycles: request 0 enters
+// lane 0 at 6, then request 1 follows it and request 2 enters lane 1 at 7. The
+// heads are ready at 10 and 11.
+func (r *wakeRig) deliverStaggered() []uint64 {
+	first, second, third := r.read(0), r.read(1), r.read(2)
+	r.at(5, func() { r.top.Deliver(first) })
+	r.at(7, func() {
+		r.top.Deliver(second)
+		r.top.Deliver(third)
+	})
+
+	return []uint64{first.ID, second.ID, third.ID}
+}
+
+func committedFlags(b *bankState) []bool {
+	stages := b.Pipeline.Stages()
+	flags := make([]bool, len(stages))
+	for i, s := range stages {
+		flags[i] = s.Item.Committed
+	}
+
+	return flags
+}
+
+func (r *wakeRig) overwriteRequestData(value byte) {
+	r.storage.Write(0, bytes.Repeat([]byte{value}, 3*readSize))
+}
+
+func requireReadData(t *testing.T, msg messaging.Msg, ok bool, value byte) {
+	t.Helper()
+
+	require.True(t, ok)
+	require.Equal(t, bytes.Repeat([]byte{value}, readSize), msg.Payload.(memprotocol.DataReadyRsp).Data)
+}
+
+func TestWideBankCommitsSimultaneousHeadsWhileBlocked(t *testing.T) {
+	r := newWideBlockedRig(t)
+	first, second := r.read(0), r.read(1)
+	r.at(5, func() {
+		r.top.Deliver(first)
+		r.top.Deliver(second)
+	})
+	r.at(50, func() {
+		require.Equal(t, []bool{true, true}, committedFlags(&r.comp.State.Banks[0]))
+		r.overwriteRequestData(0xEE)
+	})
+	r.at(100, func() { r.top.RetrieveOutgoing() }) // the prefilled message
+	r.at(110, func() {
+		msg, ok := r.top.RetrieveOutgoing()
+		requireReadData(t, msg, ok, 0x11)
+	})
+
+	require.NoError(t, r.engine.Run())
+
+	msg, ok := r.top.RetrieveOutgoing()
+	requireReadData(t, msg, ok, 0x22)
+	require.Equal(t, []uint64{101, 111}, r.sends)
+	require.Equal(t, []uint64{first.ID, second.ID}, r.rspTo)
+	require.Equal(t, []uint64{6, 7, 10, 101, 102, 111, 112}, r.ticks)
+}
+
+func TestWideBankCommitsStaggeredHeadsWhileBlocked(t *testing.T) {
+	r := newWideBlockedRig(t)
+	ids := r.deliverStaggered()
+	r.at(50, func() {
+		// Both lane heads committed; the item behind the first head did not.
+		require.Equal(t, []bool{true, false, true}, committedFlags(&r.comp.State.Banks[0]))
+		r.overwriteRequestData(0xEE)
+	})
+	r.at(100, func() { r.top.RetrieveOutgoing() }) // the prefilled message
+	r.at(110, func() {
+		msg, ok := r.top.RetrieveOutgoing()
+		requireReadData(t, msg, ok, 0x11)
+	})
+	r.at(120, func() {
+		// Request 1 became its lane's head after the overwrite.
+		msg, ok := r.top.RetrieveOutgoing()
+		requireReadData(t, msg, ok, 0xEE)
+	})
+
+	require.NoError(t, r.engine.Run())
+
+	msg, ok := r.top.RetrieveOutgoing()
+	requireReadData(t, msg, ok, 0x33)
+	require.Equal(t, []uint64{101, 111, 121}, r.sends)
+	require.Equal(t, ids, r.rspTo)
+	require.Equal(t, []uint64{6, 7, 8, 10, 11, 101, 102, 111, 112, 121, 122}, r.ticks)
+}
+
+func TestWideBankKeepsReadyWriteThroughReset(t *testing.T) {
+	r := newWideBlockedRig(t)
+	written := bytes.Repeat([]byte{0x77}, readSize)
+	first, second := r.read(0), r.read(1)
+	write := messaging.Msg{
+		Payload: memprotocol.WriteReq{Address: 2 * readSize, Data: written},
+		ID:      r.sim.NewID(), Src: "Agent", Dst: r.top.AsRemote(),
+	}
+	r.at(5, func() { r.top.Deliver(first) })
+	r.at(7, func() {
+		r.top.Deliver(second)
+		r.top.Deliver(write)
+	})
+	r.control(20, memcontrolprotocol.CmdReset)
+
+	require.NoError(t, r.engine.Run())
+
+	require.Equal(t, written, r.storage.Read(2*readSize, readSize))
+	require.Empty(t, r.sends)
+	require.True(t, r.quiescent())
+}
+
+func TestCheckpointKeepsFutureLaneWakeWhileHeadIsBlocked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+	src := newWideBlockedRig(t)
+	src.deliverStaggered()
+	require.NoError(t, src.engine.RunUntil(cycleEdge(src.comp.Spec, 10)))
+	require.Equal(t, []bool{true, false, false}, committedFlags(&src.comp.State.Banks[0]))
+	require.NoError(t, src.sim.SaveCheckpoint(path))
+
+	resumed := newWideBlockedRig(t)
+	require.NoError(t, resumed.sim.LoadCheckpoint(path))
+	require.NoError(t, resumed.engine.Run())
+
+	require.Equal(t, []uint64{11}, resumed.ticks)
+	require.Equal(t, []bool{true, false, true}, committedFlags(&resumed.comp.State.Banks[0]))
+	require.Empty(t, resumed.sends)
 }
 
 func TestPauseFreezesPipelineTime(t *testing.T) {

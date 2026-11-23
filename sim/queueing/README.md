@@ -125,6 +125,7 @@ pipe := queueing.MakeFastPipeline[MyItem](4, 3) // 4 lanes, 3 stages
 
 // In each observed cycle, in this order:
 pipe.AdvanceTo(cycle)
+pipe.UpdateReady(complete) // idempotent work on every ready lane head
 
 for {
     lane, ok := pipe.ReadyLane()
@@ -140,7 +141,7 @@ if pipe.CanAccept() {
     pipe.Accept(next)
 }
 
-if due, ok := pipe.NextReadyCycle(); ok && due > cycle {
+if due, ok := pipe.NextReadyCycle(); ok {
     scheduleTickAt(due)
 }
 ```
@@ -155,9 +156,9 @@ if due, ok := pipe.NextReadyCycle(); ok && due > cycle {
 | `Accept(item T)` | Insert at stage 0 of the lowest free lane; panics if none |
 | `ReadyLane() (int, bool)` | Lane of the oldest accepted ready item |
 | `PeekLane(lane int) (T, bool)` | Read the ready head of a lane |
-| `UpdateLane(lane int, item T) bool` | Replace the ready head, keeping results attached while blocked |
+| `UpdateReady(update func(T) T)` | Apply idempotent work to every ready lane head, oldest first, keeping results attached while blocked |
 | `PopLane(lane int) (T, bool)` | Remove the ready head of a lane |
-| `NextReadyCycle() (uint64, bool)` | Earliest cycle a lane head is ready, assuming no further pops |
+| `NextReadyCycle() (uint64, bool)` | Earliest future cycle a lane head becomes ready, assuming no further pops; already-ready heads are excluded |
 | `NextAcceptCycle() (uint64, bool)` | Earliest cycle `CanAccept` holds without a pop; false when all lanes are full |
 | `Stages() []PipelineStage[T]` | Copy of occupancy, oldest accepted first |
 | `Cycle() uint64` / `Size() int` / `Clear()` | Synchronized cycle, resident count, remove all items |

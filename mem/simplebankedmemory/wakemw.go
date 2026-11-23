@@ -6,9 +6,11 @@ import "github.com/sarchlab/akita/v5/sim/timing"
 // sleeps while requests traverse its pipelines. It runs last, after this tick's
 // completions and admissions.
 //
-// It schedules nothing for work only a port can unblock: a ready response
-// waiting on a full Top port resumes on NotifyPortFree, and a new request or
-// control command arrives through NotifyRecv.
+// A lane head that becomes ready later still needs a tick to commit, even while
+// another lane's response waits. It schedules nothing for work only a port can
+// unblock: a committed response waiting on a full Top port resumes on
+// NotifyPortFree, and a new request or control command arrives through
+// NotifyRecv.
 type wakeMW struct {
 	comp *Comp
 }
