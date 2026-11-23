@@ -1,0 +1,17 @@
+// Package badcheckpointload declares a checkpoint hook with the wrong signature.
+package badcheckpointload
+
+import (
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/event"
+)
+
+type Spec struct{ N int }
+type State struct{ Count int }
+type Ports struct{}
+type Middlewares struct{}
+type Comp = event.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+func DefaultSpec() Spec { return Spec{} }
+
+func (*State) AfterCheckpointLoad() {}

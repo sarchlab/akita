@@ -46,10 +46,10 @@ func TestDirectory(t *testing.T) {
 			BankBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),
 			},
-			DirPipeline: queueing.MakePipeline[int](4, 2),
+			DirPipeline: stageDirPipeline(4, 2),
 			DirPostBuf:  queueing.MakeBuffer[int](4),
-			BankPipelines: []queueing.Pipeline[int]{
-				queueing.MakePipeline[int](4, 10),
+			BankPipelines: []queueing.FastPipeline[int]{
+				stageBankPipeline(4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),

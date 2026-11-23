@@ -18,14 +18,14 @@ func (m *ctrlMiddleware) topPort() messaging.Port {
 	return m.comp.Ports.Top
 }
 
-func (m *ctrlMiddleware) Handle(e timing.Event) bool {
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
 	// Control port and is handled once the component settles.
 	if m.comp.State.ControlState != controlStateDraining {
-		madeProgress = m.handleIncoming(m.comp.Spec.Freq.Cycle(e.Time())) || madeProgress
+		madeProgress = m.handleIncoming() || madeProgress
 	}
 	return madeProgress
 }
@@ -58,27 +58,23 @@ func bankIsQuiescent(b *bankState) bool {
 	return b.Pipeline.Size() == 0
 }
 
-// freezeBanks stops pipeline time at the end of the cycle before cycle: the
-// tick that handles a Pause does no pipeline work.
-func (m *ctrlMiddleware) freezeBanks(cycle uint64) {
+// freezeBanks stops pipeline time at the end of the previous cycle: the tick
+// that handles a Pause does no pipeline work.
+func (m *ctrlMiddleware) freezeBanks() {
 	for i := range m.comp.State.Banks {
-		if p := &m.comp.State.Banks[i].Pipeline; cycle > p.Cycle() {
-			p.AdvanceTo(cycle - 1)
-		}
+		m.comp.State.Banks[i].Pipeline.Pause()
 	}
 }
 
 // resumeBanks discards the paused cycles, so the tick that handles an Enable is
 // the first cycle of pipeline work after the freeze.
-func (m *ctrlMiddleware) resumeBanks(cycle uint64) {
+func (m *ctrlMiddleware) resumeBanks() {
 	for i := range m.comp.State.Banks {
-		if p := &m.comp.State.Banks[i].Pipeline; cycle > p.Cycle() {
-			p.SkipTo(cycle - 1)
-		}
+		m.comp.State.Banks[i].Pipeline.Resume()
 	}
 }
 
-func (m *ctrlMiddleware) handleIncoming(cycle uint64) bool {
+func (m *ctrlMiddleware) handleIncoming() bool {
 	msg, ok := m.ctrlPort().PeekIncoming()
 	if !ok {
 		return false
@@ -92,11 +88,11 @@ func (m *ctrlMiddleware) handleIncoming(cycle uint64) bool {
 
 	switch req.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdPause:
-		return m.handlePause(req, cycle)
+		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
-		return m.handleDrain(req, cycle)
+		return m.handleDrain(req)
 	case memcontrolprotocol.CmdEnable:
-		return m.handleEnable(req, cycle)
+		return m.handleEnable(req)
 	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	default:
@@ -104,12 +100,12 @@ func (m *ctrlMiddleware) handleIncoming(cycle uint64) bool {
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req messaging.Msg, cycle uint64) bool {
+func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	if m.comp.State.ControlState != controlStatePaused {
-		m.freezeBanks(cycle)
+		m.freezeBanks()
 	}
 	m.comp.State.ControlState = controlStatePaused
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
@@ -118,12 +114,12 @@ func (m *ctrlMiddleware) handlePause(req messaging.Msg, cycle uint64) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req messaging.Msg, cycle uint64) bool {
+func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	if m.comp.State.ControlState == controlStatePaused {
-		m.resumeBanks(cycle)
+		m.resumeBanks()
 	}
 	m.comp.State.ControlState = controlStateEnabled
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
@@ -132,10 +128,10 @@ func (m *ctrlMiddleware) handleEnable(req messaging.Msg, cycle uint64) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req messaging.Msg, cycle uint64) bool {
+func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
 	if state.ControlState == controlStatePaused {
-		m.resumeBanks(cycle)
+		m.resumeBanks()
 	}
 	state.ControlState = controlStateDraining
 	state.CurrentCmdID = req.ID
@@ -153,7 +149,7 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 
 	state := &m.comp.State
 	m.endInflightTasks()
-	state.Banks = buildInitialBanks(m.comp.Name(), m.comp.Spec)
+	state.Banks = buildInitialBanks(m.comp)
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = controlStateEnabled

@@ -64,16 +64,38 @@ Head removal is O(1); indexed removal shifts the entries after the removed item.
 Buffers and pipelines require serialized access. `CanPush`, `CanAccept`, and
 peek operations do not reserve capacity or entries.
 
+`FastPipeline[T]` shares the `CanPush`, `Push`, `Peek`, and `Pop` names, so moving
+between the two reads the same at the call site.
+
 ### Checkpointing
 
 `Buffer[T]`, `Pipeline[T]`, and `FastPipeline[T]` implement
 `MarshalJSON`/`UnmarshalJSON`, so their
 full contents are captured when a component's `State` is checkpointed — no extra
-work is needed as long as the element type `T` itself serializes. For background
-on making a component, message, or event checkpointable, see
+work is needed as long as the element type `T` itself serializes. A
+`FastPipeline`'s clock is the one exception: it is not saved, and loading decodes
+State into a fresh value, so the component rebinds it:
+
+```go
+func (s *state) AfterCheckpointLoad(c *Comp) {
+    s.Pipeline.BindClock(c)
+}
+```
+
+For background on making a component, message, or event checkpointable, see
 [`doc/tutorial/checkpointing.md`](../../doc/tutorial/checkpointing.md).
 
 ## Pipeline[T]
+
+**Deprecated:** use [`FastPipeline[T]`](#fastpipelinet). `Pipeline[T]` and
+`MakePipeline` remain available for existing models, and no Akita component uses
+them. To migrate a `Pipeline` that drains into a post-pipeline buffer, construct
+it with the owner's frequency and clock, replace `pipe.Tick(&buf)` with
+`pipe.DrainReady(&buf)`, rename `CanAccept`/`Accept` to `CanPush`/`Push`, rebind
+the clock in `AfterCheckpointLoad`, and call `TickAt` with `NextReadyTime`. The
+buffer keeps its capacity. Items that complete in the same cycle now enter it
+oldest first, and a component that sleeps no longer runs per-tick work on the
+cycles it skips.
 
 A multi-lane, multi-stage pipeline that models fixed-latency processing. Items
 enter at stage 0 and advance one stage per tick until they exit the last stage
@@ -114,35 +136,35 @@ madeProgress := pipe.Tick(&post)
 
 ## FastPipeline[T]
 
-A multi-lane, multi-stage pipeline with no engine dependency and no sink. The
-consumer pulls ready items from the final stage and can leave them there to
-apply backpressure. `AdvanceTo` jumps over any number of cycles at a cost
-proportional to the resident items, so a component can sleep until the next
-cycle that matters.
+A multi-lane, multi-stage pipeline embedded by value in component state, with
+no component, builder, or Spec of its own and no sink. It reads time from an
+injected read-only clock, ordinarily its owner, and items catch up lazily at a
+cost proportional to the resident items, so a component can sleep until the next
+cycle that matters. The pipeline never schedules events: its owner asks when to
+come back and calls `TickAt`.
 
 ```go
-pipe := queueing.MakeFastPipeline[MyItem](4, 3) // 4 lanes, 3 stages
+// In State.Initialize: 4 lanes, 3 stages, the owner's frequency and clock.
+s.Pipe = queueing.MakeFastPipeline[MyItem](4, 3, c.Spec.Freq, c)
 
-// In each observed cycle, in this order:
-pipe.AdvanceTo(cycle)
+// In each tick, in this order:
 pipe.UpdateReady(complete) // idempotent work on every ready lane head
 
-for {
-    lane, ok := pipe.ReadyLane()
-    if !ok || !output.CanSend() {
+for output.CanSend() {
+    item, ok := pipe.Peek()
+    if !ok {
         break
     }
-    item, _ := pipe.PeekLane(lane)
     output.Send(item)
-    pipe.PopLane(lane)
+    pipe.Pop() // only after the output accepted the item
 }
 
-if pipe.CanAccept() {
-    pipe.Accept(next)
+if pipe.CanPush() {
+    pipe.Push(next)
 }
 
-if due, ok := pipe.NextReadyCycle(); ok {
-    scheduleTickAt(due)
+if due, ok := pipe.NextReadyTime(); ok {
+    c.TickAt(due)
 }
 ```
 
@@ -150,23 +172,24 @@ if due, ok := pipe.NextReadyCycle(); ok {
 
 | Method | Description |
 |--------|-------------|
-| `AdvanceTo(cycle uint64)` | Bring all items forward; panics if cycle moves backward |
-| `SkipTo(cycle uint64)` | Move the clock without advancing items, to resume after a freeze |
-| `CanAccept() bool` | True if a lane has stage 0 free in this cycle |
-| `Accept(item T)` | Insert at stage 0 of the lowest free lane; panics if none |
-| `ReadyLane() (int, bool)` | Lane of the oldest accepted ready item |
-| `PeekLane(lane int) (T, bool)` | Read the ready head of a lane |
+| `CanPush() bool` | True if a lane has stage 0 free in this cycle |
+| `Push(item T)` | Insert at stage 0 of the lowest free lane; panics if none |
+| `Peek() (T, bool)` | Read the oldest pushed ready item |
+| `Pop() (T, bool)` | Remove the oldest pushed ready item |
 | `UpdateReady(update func(T) T)` | Apply idempotent work to every ready lane head, oldest first, keeping results attached while blocked |
-| `PopLane(lane int) (T, bool)` | Remove the ready head of a lane |
-| `NextReadyCycle() (uint64, bool)` | Earliest future cycle a lane head becomes ready, assuming no further pops; already-ready heads are excluded |
-| `NextAcceptCycle() (uint64, bool)` | Earliest cycle `CanAccept` holds without a pop; false when all lanes are full |
-| `Stages() []PipelineStage[T]` | Copy of occupancy, oldest accepted first |
-| `Cycle() uint64` / `Size() int` / `Clear()` | Synchronized cycle, resident count, remove all items |
+| `DrainReady(sink Sink[T]) bool` | Move ready heads into a sink, oldest first, while it has room; true if any moved |
+| `NextReadyTime() (timing.VTimeInPicoSec, bool)` | Earliest future clock edge at which a lane head becomes ready, assuming no further pops; already-ready heads are excluded |
+| `NextPushTime() (timing.VTimeInPicoSec, bool)` | Earliest time `CanPush` holds without a pop: the current time if a lane is free, otherwise the next clock edge if one frees there; false when all lanes are full |
+| `Pause()` / `Resume()` | Stop item progress at the end of the previous cycle; resume with the current cycle as the first that counts. Both deadlines report false while paused |
+| `BindClock(clock timing.TimeTeller)` | Reattach the clock after a checkpoint load |
+| `Stages() []PipelineStage[T]` | Copy of occupancy with lane identity, oldest pushed first; does not change the pipeline |
+| `Size() int` / `Clear()` | Resident count; remove all items, keeping the clock position and any pause |
 
 ### Timing
 
-- An item accepted in cycle `c` is ready in cycle `c + numStages`, the same
-  latency as `Pipeline`.
+- An item pushed in cycle `c` is ready in cycle `c + numStages`, the same
+  latency as `Pipeline`. Every call on one clock edge sees the same cycle.
+- A clock moving backward panics.
 - Each lane is an independent FIFO that holds at most `numStages` items, and
   delivers and accepts at most one item per cycle. A blocked lane does not hold
   back another lane.
@@ -174,9 +197,13 @@ if due, ok := pipe.NextReadyCycle(); ok {
   by one stage, so a full lane can accept in that cycle. An item that already
   moved in this cycle does not move again, and the next item in the lane is not
   ready until the next cycle.
-- `ReadyLane` picks the oldest accepted item, which makes cross-lane order
-  deterministic. A consumer may instead pop any ready lane directly.
+- `Peek` and `Pop` pick the oldest pushed ready head, which makes cross-lane
+  order deterministic. Lanes are private and only `Stages` reports them.
 - Unlike a `Pipeline` draining into a `Buffer`, there is no separate output
-  queue: capacity is exactly `width * numStages`.
+  queue unless the component keeps one with `DrainReady`: the pipeline's own
+  capacity is exactly `width * numStages`.
+- `numStages` must be positive. A zero-latency stage bypasses its pipeline.
+- `freq` must be positive and at most 1 THz, the fastest clock with a
+  whole-picosecond period.
 - A push `Pipeline` snapshot cannot be restored into a `FastPipeline`. Loading
   one reports an error rather than dropping its in-flight items.

@@ -1283,17 +1283,17 @@ configuration, or call `AsRemote()` after binding.
 
 ## 9. Queueing
 
-The `queueing` package provides generic buffer and pipeline value types. V4's interface/implementation pattern (`sim.Buffer`, `pipelining.Pipeline`) is replaced by `queueing.Buffer[T]` and `queueing.Pipeline[T]`, created with `MakeBuffer` and `MakePipeline`. Both are values, so they embed directly in a component's State, and they serialize to JSON for checkpoints.
+The `queueing` package provides generic buffer and pipeline value types. V4's interface/implementation pattern (`sim.Buffer`, `pipelining.Pipeline`) is replaced by `queueing.Buffer[T]` and `queueing.FastPipeline[T]`, created with `MakeBuffer` and `MakeFastPipeline`. Both are values, so they embed directly in a component's State, and they serialize to JSON for checkpoints. The push-based `queueing.Pipeline[T]` and `MakePipeline` still work but are deprecated.
 
 ### Key Changes from V4 to V5
 
 | V4 | V5 |
 |---|---|
 | `sim.NewBuffer("MyBuffer", 100)`, returning the `sim.Buffer` interface | `queueing.MakeBuffer[int](100)`, returning a `queueing.Buffer[int]` value |
-| A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakePipeline[int](width, numStages)`; `Tick(sink)` moves completed items into a sink, such as a buffer |
+| A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakeFastPipeline[int](width, numStages, freq, clock)`; items move with the injected clock, and the consumer pulls ready items with `Peek` and `Pop` or drains them into a buffer with `DrainReady(sink)` |
 | A buffer has a name and hook positions | A buffer has neither; a component's State field already names it |
 
-A component that should sleep while items travel can use the pull-based `queueing.FastPipeline[T]` instead of a `Pipeline` and post-pipeline buffer. See `sim/queueing/README.md` in the Akita repository.
+A component sleeps while items travel by calling `TickAt` with `NextReadyTime`. To migrate an existing `Pipeline`, construct it with the owner's frequency and clock, replace `pipe.Tick(&buf)` with `pipe.DrainReady(&buf)`, and rename `CanAccept`/`Accept` to `CanPush`/`Push`; the buffer keeps its capacity, and items completing in the same cycle enter it oldest first. The clock is not checkpointed, so the component's State rebinds it with `BindClock` in a pointer-receiver `AfterCheckpointLoad(c *Comp)` method. A sleeping component skips per-tick work, so round-robin state that advances each tick can pick a different winner than before. `FastPipeline` requires at least one stage, so a zero-latency stage must bypass it. A checkpoint holding a push `Pipeline` reports an error when loaded into a `FastPipeline` rather than dropping in-flight items. See `sim/queueing/README.md` in the Akita repository.
 
 ```go
 // V4
@@ -1301,7 +1301,7 @@ buffer := sim.NewBuffer("MyBuffer", 100)
 
 // V5
 buffer := queueing.MakeBuffer[int](100)
-pipeline := queueing.MakePipeline[int](1, 5) // 1 lane, 5 stages
+pipeline := queueing.MakeFastPipeline[int](1, 5, c.Spec.Freq, c) // 1 lane, 5 stages
 ```
 
 ### V5 Component Integration
@@ -1310,9 +1310,9 @@ When building V5 components, use `queueing` value types (not pointers) with gene
 
 ```go
 type MyComponentState struct {
-    InputBuffer  queueing.Buffer[int]   `json:"input_buffer"`
-    Pipeline     queueing.Pipeline[int] `json:"pipeline"`
-    OutputBuffer queueing.Buffer[int]   `json:"output_buffer"`
+    InputBuffer  queueing.Buffer[int]       `json:"input_buffer"`
+    Pipeline     queueing.FastPipeline[int] `json:"pipeline"`
+    OutputBuffer queueing.Buffer[int]       `json:"output_buffer"`
 }
 ```
 

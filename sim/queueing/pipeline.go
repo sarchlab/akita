@@ -20,6 +20,9 @@ type Sink[T any] interface {
 // Pipeline is a generic multi-lane, multi-stage pipeline. Its state is
 // encapsulated; callers drive it through Accept/Tick and inspect it through
 // the accessors.
+//
+// Deprecated: Use FastPipeline, which lets a component sleep while items travel.
+// FastPipeline.DrainReady moves ready items into a post-pipeline buffer.
 type Pipeline[T any] struct {
 	width     int
 	numStages int
@@ -44,6 +47,8 @@ type Pipeline[T any] struct {
 // MakePipeline creates a pipeline with the given width (lanes) and number of
 // stages. It returns a value so the pipeline can be embedded directly in a
 // component's state.
+//
+// Deprecated: Use MakeFastPipeline.
 func MakePipeline[T any](width, numStages int) Pipeline[T] {
 	return Pipeline[T]{
 		width:     width,

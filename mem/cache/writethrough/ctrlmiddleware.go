@@ -150,8 +150,12 @@ func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	spec := m.comp.Spec
 
 	next.DirBuf.Clear()
+	next.DirPipeline.Clear()
+	next.DirPostBuf.Clear()
 	for i := range next.BankBufs {
 		next.BankBufs[i].Clear()
+		next.BankPipelines[i].Clear()
+		next.BankPostBufs[i].Clear()
 	}
 	cache.DirectoryReset(
 		&next.DirectoryState, spec.NumSets, spec.NumWays,

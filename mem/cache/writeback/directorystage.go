@@ -13,19 +13,21 @@ type directoryStage struct {
 	cache *pipelineMW
 }
 
+// Tick runs NumReqPerCycle times per cycle, and each run moves the directory
+// clock one step. A transaction is admitted before the step of the same run.
 func (ds *directoryStage) Tick() (madeProgress bool) {
+	next := &ds.cache.comp.State
+	step := ds.cache.dirAdmissionStep(ds.cache.currentCycle())
+
+	next.DirStep = step
 	madeProgress = ds.acceptNewTransaction() || madeProgress
 
-	madeProgress = ds.tickPipeline() || madeProgress
+	next.DirStep = step + 1
+	madeProgress = next.DirPipeline.DrainReady(&next.DirPostPipelineBuf) || madeProgress
 
 	madeProgress = ds.processTransaction() || madeProgress
 
 	return madeProgress
-}
-
-func (ds *directoryStage) tickPipeline() bool {
-	next := &ds.cache.comp.State
-	return next.DirPipeline.Tick(&next.DirPostPipelineBuf)
 }
 
 func (ds *directoryStage) processTransaction() bool {
@@ -100,11 +102,11 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			next.DirStageBuf.Pop()
 			madeProgress = true
 		} else {
-			if !next.DirPipeline.CanAccept() {
+			if !next.DirPipeline.CanPush() {
 				break
 			}
 			ds.startDirPipeline(transIdx)
-			next.DirPipeline.Accept(transIdx)
+			next.DirPipeline.Push(transIdx)
 			next.DirStageBuf.Pop()
 			madeProgress = true
 		}

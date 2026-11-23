@@ -3,13 +3,12 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
 // TestResetEndsInflightTracingTasks drives a translation lookup into the TLB so
@@ -19,7 +18,8 @@ import (
 // asserts every open task is ended, i.e. a mid-flight Reset leaves no
 // started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) {
-	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, true)
 
 	remotePort := messaging.RemotePort("MMU")
 
@@ -65,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// fetch sent; do not answer the fetch.
 	bottomSent := false
 	for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
-		modelingtest.Tick(tlbComp)
+		tickCycle(clock, tlbComp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.Payload.(addrtransprotocol.Req); ok {
 				bottomSent = true
@@ -96,7 +96,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 
 	acked := false
 	for i := 0; i < 64; i++ {
-		modelingtest.Tick(tlbComp)
+		tickCycle(clock, tlbComp)
 		if msg, ok := controlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 				Command == memcontrolprotocol.CmdReset {

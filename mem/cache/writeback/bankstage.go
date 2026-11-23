@@ -35,7 +35,7 @@ func (s *bankStage) tickPipeline() bool {
 	next := &s.cache.comp.State
 	bankPipeline := &next.BankPipelines[s.bankID]
 	bankPostBuf := &next.BankPostPipelineBufs[s.bankID]
-	return bankPipeline.Tick(bankPostBuf)
+	return bankPipeline.DrainReady(bankPostBuf)
 }
 
 func (s *bankStage) Reset() {
@@ -80,7 +80,7 @@ func (s *bankStage) canAcceptIntoPipeline(cur state) bool {
 	spec := s.cache.comp.Spec
 
 	if spec.BankLatency > 0 {
-		return cur.BankPipelines[s.bankID].CanAccept()
+		return cur.BankPipelines[s.bankID].CanPush()
 	}
 
 	// No pipeline - check post-buf capacity
@@ -129,7 +129,7 @@ func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	}
 
 	if spec.BankLatency > 0 {
-		next.BankPipelines[s.bankID].Accept(transIdx)
+		next.BankPipelines[s.bankID].Push(transIdx)
 	} else {
 		// Bypass pipeline: put directly in post-pipeline buffer
 		next.BankPostPipelineBufs[s.bankID].Push(transIdx)

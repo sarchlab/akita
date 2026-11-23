@@ -38,7 +38,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		msg := msgI
 		bankID := requestBank(spec, msg)
 
-		if !next.Banks[bankID].Pipeline.CanAccept() {
+		if !next.Banks[bankID].Pipeline.CanPush() {
 			break
 		}
 
@@ -67,7 +67,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		item := m.msgToItem(msg)
 		item.RecvTaskID = recvTaskID
 		item.PipelineTaskID = pipelineTaskID
-		next.Banks[bankID].Pipeline.Accept(item)
+		next.Banks[bankID].Pipeline.Push(item)
 		madeProgress = true
 	}
 

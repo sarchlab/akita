@@ -13,7 +13,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -153,7 +152,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
+		engine = testsim.NewClock()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
@@ -173,7 +172,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			req.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: addrs}
 			ctrlPort.Deliver(req)
 			for i := 1; i < 100; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 				if ack, ok := ctrlPort.RetrieveOutgoing(); ok {
 					require.Equal(t, req.ID, ack.RspTo)
 					return i
@@ -194,7 +193,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		older := makeRead(addr)
 		topPort.Deliver(older)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fetch, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -206,7 +205,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(later)
 		topPort.Deliver(makeRead(addr + 64))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		unrelated, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok, "unrelated miss behind the later read must issue while the target is held")
@@ -221,7 +220,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.NoError(t, comp.LoadCheckpoint(&saved))
 		botPort.Deliver(makeFillRsp(fetch))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		reply, ok := topPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -248,7 +247,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		first := store(7)
 		topPort.Deliver(first)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fill, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -258,7 +257,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(later)
 		botPort.Deliver(makeFillRsp(fill))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		write, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -272,7 +271,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.False(t, ok)
 		botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		ack, ok := ctrlPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -303,10 +302,10 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		}
 		ctrlPort.Deliver(cmd)
 		topPort.Deliver(makeRead(a))
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 		require.Len(t, comp.State.Maintenance.Tags, 2)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		for _, addr := range []uint64{a, b} {
 			blocks := comp.State.DirectoryState.Sets[cache.DirectorySetID(addr, blockSize, comp.Spec.NumSets)].Blocks
@@ -321,7 +320,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			ctrlPort.RetrieveOutgoing()
 		}
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		var ack messaging.Msg
 		for {
@@ -349,7 +348,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		}
 		topPort.Deliver(makeRead(addr))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		var write messaging.Msg
 		for {
@@ -365,13 +364,13 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.Equal(t, victim, write.Payload.(memprotocol.WriteReq).Address)
 		ctrlPort.Deliver(makeFilteredCtrlReq(memcontrolprotocol.CmdFlush, []uint64{victim}))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		_, ok := ctrlPort.PeekOutgoing()
 		require.False(t, ok, "victim data still in flight")
 		botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		ack, ok := ctrlPort.RetrieveOutgoing()
 		require.True(t, ok, "unrelated replacement's unanswered read must not delay flush")
@@ -392,7 +391,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		flush.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush, PID: owner, Addresses: addrs}
 		ctrlPort.Deliver(flush)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		firstWrite, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -408,7 +407,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			topPort.Deliver(r)
 		}
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		for range addrs {
 			fetch, present := botPort.RetrieveOutgoing()
@@ -421,7 +420,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			botPort.Deliver(fill)
 		}
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		for range addrs {
 			response, present := topPort.RetrieveOutgoing()
@@ -436,7 +435,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		ackWrite := func(write messaging.Msg) {
 			botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
 			for range 32 {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 			}
 		}
 		ackWrite(firstWrite)
@@ -458,7 +457,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		flush := makeFilteredCtrlReq(memcontrolprotocol.CmdFlush, []uint64{addr})
 		ctrlPort.Deliver(flush)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		write, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -470,7 +469,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		}
 		topPort.Deliver(makeRead(replacement))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		block := &comp.State.DirectoryState.Sets[set].Blocks[0]
 		require.True(t, block.IsLocked)
@@ -479,7 +478,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.False(t, ok)
 		botPort.Deliver(messaging.Msg{ID: sim.NewID(), RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		ack, ok := ctrlPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -489,7 +488,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.Equal(t, replacement, fetch.Payload.(memprotocol.ReadReq).Address)
 		botPort.Deliver(makeFillRsp(fetch))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		require.Equal(t, replacement, block.Tag)
 		require.True(t, block.IsValid)
@@ -501,7 +500,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		const addr = uint64(0x1000)
 		topPort.Deliver(makeRead(addr))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fetch, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -512,7 +511,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		ctrlPort.Deliver(reset)
 		topPort.Deliver(makeRead(addr))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		head, ok := ctrlPort.PeekIncoming()
 		require.True(t, ok)
@@ -522,7 +521,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.False(t, ok)
 		botPort.Deliver(makeFillRsp(fetch))
 		for i := 0; i < 32; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if _, present := ctrlPort.PeekOutgoing(); present {
 				break
 			}
@@ -533,7 +532,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		require.Empty(t, comp.State.Maintenance.Deferred)
 		require.Positive(t, comp.State.DirStageBuf.Size())
 		for range 4 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		second, ok := ctrlPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -557,7 +556,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		// can answer later. Until we answer, the cache cannot be quiescent.
 		botReads := make([]messaging.Msg, 0, n)
 		for i := 0; i < 64 && len(botReads) < n; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := botPort.RetrieveOutgoing()
 				if !ok {
@@ -582,7 +581,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		// Tick a small window WITHOUT answering Bottom. Drain must wait: no
 		// ControlRsp yet, state is Draining, still not quiescent.
 		for range 5 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
 					require.NotEqual(t, memcontrolprotocol.CmdDrain, rsp.Command, "Drain must not ack before in-flight misses finish")
@@ -603,7 +602,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		var drainRsp messaging.Msg
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -647,7 +646,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		// Pause is not dequeued, so it is never acked and the flush state is
 		// preserved (aborting it would strand the flusher).
 		for range 16 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			_, present0 := ctrlPort.RetrieveOutgoing()
 			require.False(t, present0)
 		}
@@ -666,7 +665,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing is
@@ -687,7 +686,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			// Get a transaction in flight via one read miss.
 			topPort.Deliver(makeRead(0x10000))
 			for i := 0; i < 64 && len(comp.State.Transactions) == 0; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 			}
 			require.NotEmpty(t, comp.State.Transactions)
 
@@ -699,7 +698,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			var rsp messaging.Msg
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
 					rsp = out
@@ -732,7 +731,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 
 		var rsps []messaging.Msg
 		for range 16 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -775,7 +774,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		var rsp messaging.Msg
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
 				rsp = out
@@ -812,7 +811,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		var rsp messaging.Msg
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
 				rsp = out
@@ -852,7 +851,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		var flushRsp messaging.Msg
 		gotFlushRsp := false
 		for i := 0; i < 4096 && !gotFlushRsp; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := botPort.RetrieveOutgoing()
 				if !ok {
@@ -925,7 +924,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		t.Helper()
 		var written []uint64
 		for range 4096 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := botPort.RetrieveOutgoing()
 				if !ok {
@@ -1025,7 +1024,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 			residentLines(t, 0x1000, 0x1040, 0x1080)
 			ctrlPort.Deliver(makeReq())
 			for i := 1; i < 200; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 				if _, ok := ctrlPort.RetrieveOutgoing(); ok {
 					for si := range comp.State.DirectoryState.Sets {
 						require.False(t, comp.State.DirectoryState.Sets[si].Blocks[0].IsValid)
@@ -1057,7 +1056,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		inv.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 7,
 			HasRange: true, Range: memcontrolprotocol.AddressRange{Start: 1, End: ^uint64(0)}}
 		ctrlPort.Deliver(inv)
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 		op := &comp.State.Maintenance
 		require.True(t, op.SweepSets)
 		require.LessOrEqual(t, len(op.Lines)+op.LookupsInFlight, comp.Spec.NumSets,
@@ -1086,7 +1085,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		older := makeRead(addr + 0x40)
 		topPort.Deliver(older)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fetch, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -1097,7 +1096,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(later)
 		topPort.Deliver(makeRead(addr + 0x80))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		unrelated, ok := botPort.RetrieveOutgoing()
 		require.True(t, ok, "a line after the range must not be held")
@@ -1116,7 +1115,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 
 		botPort.Deliver(makeFillRsp(fetch))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		reply, ok := topPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -1136,7 +1135,7 @@ func TestWriteBackCacheControlBehavior(t *testing.T) {
 		comp.State.CacheState = int(cacheStatePaused)
 		flush := makeRangeCtrlReq(memcontrolprotocol.CmdFlush, 0x1040, 0x1041)
 		ctrlPort.Deliver(flush)
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 		require.True(t, comp.State.HasProcessingFlush)
 		require.Empty(t, comp.State.FlusherBlockToEvictRefs, "the lines are selected after the checkpoint")
 

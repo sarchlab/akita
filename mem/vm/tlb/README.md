@@ -12,8 +12,9 @@ Translation requests arrive on the `Top` port as `addrtransprotocol.Req` message
 flow through a fixed-latency pipeline before lookup:
 
 1. **Insert / pipeline** — Incoming requests are accepted into a
-   `queueing.Pipeline` that imposes `Latency` cycles. Up to `NumReqPerCycle`
-   requests move per tick.
+   `queueing.FastPipeline` that imposes `Latency` cycles. Up to `NumReqPerCycle`
+   requests move per tick. A latency of zero bypasses the pipeline. The TLB
+   sleeps while requests only travel and ticks again when one is ready.
 2. **Lookup** — On exit from the pipeline the request is looked up in the set
    selected by `vAddr / 2^Log2PageSize % NumSets`.
    - **Hit** (entry present and `Valid`): a `addrtransprotocol.Rsp` carrying the

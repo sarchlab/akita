@@ -62,16 +62,16 @@ const (
 
 // state contains mutable runtime data for the TLB.
 type state struct {
-	TLBState           string                                 `json:"tlb_state"`
-	PendingDrainRsp    bool                                   `json:"pending_drain_rsp"`
-	CurrentCmdID       uint64                                 `json:"current_cmd_id"`
-	CurrentCmdSrc      messaging.RemotePort                   `json:"current_cmd_src"`
-	Sets               []setState                             `json:"sets"`
-	MSHREntries        []mshrEntryState                       `json:"mshr_entries"`
-	HasRespondingMSHR  bool                                   `json:"has_responding_mshr"`
-	RespondingMSHRData mshrEntryState                         `json:"responding_mshr_data"`
-	Pipeline           queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
-	BufferItems        queueing.Buffer[pipelineTLBReqState]   `json:"buffer_items"`
+	TLBState           string                                     `json:"tlb_state"`
+	PendingDrainRsp    bool                                       `json:"pending_drain_rsp"`
+	CurrentCmdID       uint64                                     `json:"current_cmd_id"`
+	CurrentCmdSrc      messaging.RemotePort                       `json:"current_cmd_src"`
+	Sets               []setState                                 `json:"sets"`
+	MSHREntries        []mshrEntryState                           `json:"mshr_entries"`
+	HasRespondingMSHR  bool                                       `json:"has_responding_mshr"`
+	RespondingMSHRData mshrEntryState                             `json:"responding_mshr_data"`
+	Pipeline           queueing.FastPipeline[pipelineTLBReqState] `json:"pipeline"`
+	BufferItems        queueing.Buffer[pipelineTLBReqState]       `json:"buffer_items"`
 }
 
 // blockState is a serializable representation of an internal block.

@@ -14,7 +14,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -169,7 +168,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
+		engine = testsim.NewClock()
 		sim = testsim.New(engine, false)
 		storage = mem.NewStorage(4 * mem.GB)
 		build()
@@ -188,7 +187,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			req.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: addrs}
 			ctrlPort.Deliver(req)
 			for i := 1; i < 100; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 				if ack, ok := ctrlPort.RetrieveOutgoing(); ok {
 					require.Equal(t, req.ID, ack.RspTo)
 					return i
@@ -209,7 +208,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		older := makeRead(addr)
 		topPort.Deliver(older)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fetch, ok := bottomPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -221,7 +220,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(later)
 		topPort.Deliver(makeRead(addr + 64))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		unrelated, ok := bottomPort.RetrieveOutgoing()
 		require.True(t, ok, "unrelated miss behind the later read must issue while the target is held")
@@ -236,7 +235,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		require.NoError(t, comp.LoadCheckpoint(&saved))
 		bottomPort.Deliver(makeFill(fetch))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		reply, ok := topPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -260,7 +259,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		store.Payload = memprotocol.WriteReq{Address: addr, Data: []byte{0xaa}}
 		topPort.Deliver(store)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		write, ok := bottomPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -270,7 +269,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		inv.Payload = memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, Addresses: []uint64{addr}}
 		ctrlPort.Deliver(inv)
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		_, ok = ctrlPort.PeekOutgoing()
 		require.False(t, ok)
@@ -279,7 +278,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		bottomPort.Deliver(messaging.Msg{ID: sim.NewID(), Src: "LowerCache", Dst: bottomPort.AsRemote(),
 			RspTo: write.ID, Payload: memprotocol.WriteDoneRsp{}})
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		done, ok := topPort.RetrieveOutgoing()
 		require.True(t, ok)
@@ -304,7 +303,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		// in-flight transactions waiting on them.
 		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) < n; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		require.Len(t, bottomReads, n)
@@ -320,7 +319,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		// Tick a window WITHOUT feeding any bottom responses. Drain must wait
 		// because transactions are still in flight.
 		for range 16 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			// No completion can occur, so no DataReadyRsp should leave Top.
 			_, present0 := topPort.RetrieveOutgoing()
 			require.False(t, present0)
@@ -341,7 +340,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 
 			for {
 				out, ok := topPort.RetrieveOutgoing()
@@ -383,7 +382,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(makeRead(0))
 		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		require.Len(t, bottomReads, 1)
@@ -395,12 +394,12 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		// strand the drain.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 		require.True(t, comp.State.IsDraining)
 
 		pause := makeCtrlReq(memcontrolprotocol.CmdPause)
 		ctrlPort.Deliver(pause)
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 
 		// Feed the fill; the in-flight read retires and the drain still acks.
 		for _, br := range bottomReads {
@@ -408,7 +407,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		}
 		drainAcked, pauseAcked := false, false
 		for i := 0; i < 4096 && !drainAcked; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -440,7 +439,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(makeRead(0))
 		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		require.Len(t, bottomReads, 1)
@@ -451,7 +450,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		ctrlPort.Deliver(pause)
 		pausedAck := false
 		for i := 0; i < 64 && !pausedAck; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok &&
 					out.
@@ -478,7 +477,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		var drainRsp messaging.Msg
 		found := false
 		for i := 0; i < 4096 && !found; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 					Command == memcontrolprotocol.CmdDrain {
@@ -506,7 +505,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing
@@ -527,7 +526,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			// Get a read miss in flight.
 			topPort.Deliver(makeRead(0))
 			for i := 0; i < 256 && inflightCount() == 0; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 			}
 			require.Greater(t, inflightCount(), 0)
 
@@ -539,7 +538,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				modelingtest.Tick(comp)
+				tickCycle(engine, comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					_, found = out.Payload.(memcontrolprotocol.Rsp)
 					rsp = out
@@ -584,7 +583,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 
 		var rsps []messaging.Msg
 		for range 16 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -612,7 +611,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		ctrlPort.Deliver(req)
 
 		for range 64 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok &&
 					out.
@@ -721,7 +720,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 	driveRange := func(req messaging.Msg) (messaging.Msg, bool) {
 		ctrlPort.Deliver(req)
 		for range 4096 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok && out.RspTo == req.ID {
 				return out, true
 			}
@@ -785,7 +784,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		resident := seedLines(t, 0x1000, 1<<40)
 		inv := makeRangeReq(memcontrolprotocol.CmdInvalidate, 0, 0, ^uint64(0))
 		ctrlPort.Deliver(inv)
-		modelingtest.Tick(comp)
+		tickCycle(engine, comp)
 		op := &comp.State.Maintenance
 		require.True(t, op.HasRange)
 		require.True(t, op.SweepSets)
@@ -796,7 +795,7 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 		read := makeRead(1 << 40)
 		topPort.Deliver(read)
 		for range 4 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		require.Len(t, op.Deferred, 1)
 
@@ -809,14 +808,14 @@ func TestWritethroughCacheControlBehavior(t *testing.T) {
 
 		var ack messaging.Msg
 		for i := 0; i < 4096 && ack.ID == 0; i++ {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 			ack, _ = ctrlPort.RetrieveOutgoing()
 		}
 		require.Equal(t, inv.ID, ack.RspTo)
 		require.True(t, ack.Payload.(memcontrolprotocol.Rsp).Success)
 		require.False(t, resident(0x1000))
 		for range 32 {
-			modelingtest.Tick(comp)
+			tickCycle(engine, comp)
 		}
 		fetches := captureBottomReads()
 		require.Len(t, fetches, 1, "the held read must miss after the invalidation")

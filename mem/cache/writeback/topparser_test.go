@@ -34,10 +34,10 @@ func TestTopParser(t *testing.T) {
 			},
 			MSHRStageBuf:       queueing.MakeBuffer[int](4),
 			WriteBufferBuf:     queueing.MakeBuffer[int](4),
-			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPipeline:        stageDirPipeline(4, 1),
 			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
-			BankPipelines: []queueing.Pipeline[int]{
-				queueing.MakePipeline[int](4, 10),
+			BankPipelines: []queueing.FastPipeline[int]{
+				stageBankPipeline(4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),
@@ -55,6 +55,7 @@ func TestTopParser(t *testing.T) {
 
 		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
+		m.comp.State.AfterCheckpointLoad(m.comp)
 
 		parser = m.topParser
 	}
