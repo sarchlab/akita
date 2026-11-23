@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/noc/packetization"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -14,9 +14,12 @@ import (
 
 // Drive whole middleware cycles with real ports, controlling downstream draining
 // explicitly so throughput and backpressure can be observed cycle by cycle.
-func throughputSwitch(t *testing.T, inputs, inputWidth, outputWidth, latency int) (*Comp, []*twowaybuffered.Port) {
+func throughputSwitch(
+	t *testing.T, inputs, inputWidth, outputWidth, latency int,
+) (*Comp, []*twowaybuffered.Port, *testsim.Clock) {
 	t.Helper()
-	s := sim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	s := testsim.New(clock, false)
 	t.Cleanup(func() { require.NoError(t, s.Terminate()) })
 	links := make([]Link, inputs+1)
 	for i := range links {
@@ -35,14 +38,14 @@ func throughputSwitch(t *testing.T, inputs, inputWidth, outputWidth, latency int
 		ports[i] = p
 	}
 	require.NoError(t, s.Initialize())
-	return sw, ports
+	return sw, ports, clock
 }
 
 func TestSwitchSustainedThroughput(t *testing.T) {
 	for _, widths := range [][2]int{{1, 1}, {4, 4}, {4, 2}, {2, 4}} {
 		for _, latency := range []int{0, 3} {
 			t.Run(fmt.Sprintf("in%d_out%d_latency%d", widths[0], widths[1], latency), func(t *testing.T) {
-				sw, ports := throughputSwitch(t, 1, widths[0], widths[1], latency)
+				sw, ports, clock := throughputSwitch(t, 1, widths[0], widths[1], latency)
 				sent, received := uint64(0), uint64(0)
 				steady := 0
 				seen := make(map[uint64]bool)
@@ -53,6 +56,7 @@ func TestSwitchSustainedThroughput(t *testing.T) {
 							ports[0].Deliver(messaging.Msg{ID: sent, Payload: packetization.Flit{Dst: "Destination"}})
 						}
 					}
+					clock.Step(sw.Spec.Freq)
 					sw.Middlewares.RouteForwardSend.Handle(nil)
 					sw.Middlewares.ReceivePipeline.Handle(nil)
 					count := 0
@@ -83,7 +87,7 @@ func TestSwitchSustainedThroughput(t *testing.T) {
 }
 
 func TestSwitchContentionAndBackpressure(t *testing.T) {
-	sw, ports := throughputSwitch(t, 2, 4, 2, 2)
+	sw, ports, clock := throughputSwitch(t, 2, 4, 2, 2)
 	sent := [2]int{}
 	received := [2]int{}
 	blocked := false
@@ -98,6 +102,7 @@ func TestSwitchContentionAndBackpressure(t *testing.T) {
 				}
 			}
 		}
+		clock.Step(sw.Spec.Freq)
 		sw.Middlewares.RouteForwardSend.Handle(nil)
 		sw.Middlewares.ReceivePipeline.Handle(nil)
 		// Stop the consumer long enough to propagate backpressure to both inputs.

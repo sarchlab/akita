@@ -3,18 +3,18 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/stretchr/testify/require"
 )
 
-func newSingleStageTLB(t *testing.T) *Comp {
+func newSingleStageTLB(t *testing.T) (*Comp, *testsim.Clock) {
 	t.Helper()
-	sim := akitasim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, false)
 	spec := DefaultSpec()
 	spec.Latency = 1
 	spec.NumReqPerCycle = 1
@@ -27,7 +27,7 @@ func newSingleStageTLB(t *testing.T) *Comp {
 	comp.BindPort("Control", ports.Control)
 	plugNoopConn(comp)
 	require.NoError(t, sim.Initialize())
-	return comp
+	return comp, clock
 }
 
 func deliverSingleStageRequest(comp *Comp) messaging.Msg {
@@ -39,23 +39,23 @@ func deliverSingleStageRequest(comp *Comp) messaging.Msg {
 	return req
 }
 
-func tickSingleStageLookup(t *testing.T, comp *Comp) {
+func tickSingleStageLookup(t *testing.T, comp *Comp, clock *testsim.Clock) {
 	t.Helper()
 	// Admission, pipeline output (Latency=1), and post-pipeline lookup.
 	for tick := range 3 {
-		require.True(t, modelingtest.Tick(comp), "tick %d must make progress", tick+1)
+		require.True(t, tickCycle(clock, comp), "tick %d must make progress", tick+1)
 	}
 	require.Empty(t, comp.State.Pipeline.Stages())
 	require.Zero(t, comp.State.BufferItems.Size())
 }
 
 func TestSingleStageTLBHitCompletes(t *testing.T) {
-	comp := newSingleStageTLB(t)
+	comp, clock := newSingleStageTLB(t)
 	page := vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000, Valid: true}
 	setUpdate(&comp.State.Sets[0], 0, page)
 	setVisit(&comp.State.Sets[0], 0)
 	req := deliverSingleStageRequest(comp)
-	tickSingleStageLookup(t, comp)
+	tickSingleStageLookup(t, comp, clock)
 	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, req.ID, rsp.RspTo)
@@ -65,9 +65,9 @@ func TestSingleStageTLBHitCompletes(t *testing.T) {
 }
 
 func TestSingleStageTLBMissCompletes(t *testing.T) {
-	comp := newSingleStageTLB(t)
+	comp, clock := newSingleStageTLB(t)
 	req := deliverSingleStageRequest(comp)
-	tickSingleStageLookup(t, comp)
+	tickSingleStageLookup(t, comp, clock)
 	fetch, ok := comp.Ports.Bottom.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, req.Payload, fetch.Payload)
@@ -76,8 +76,8 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 		ID: comp.NewID(), Src: "Walker", Dst: comp.Ports.Bottom.AsRemote(),
 		RspTo: fetch.ID, Payload: addrtransprotocol.Rsp{Page: page},
 	})
-	require.True(t, modelingtest.Tick(comp)) // Receive the downstream mapping.
-	require.True(t, modelingtest.Tick(comp)) // Respond to the original requester.
+	require.True(t, tickCycle(clock, comp)) // Receive the downstream mapping.
+	require.True(t, tickCycle(clock, comp)) // Respond to the original requester.
 	rsp, ok := comp.Ports.Top.RetrieveOutgoing()
 	require.True(t, ok)
 	require.Equal(t, req.ID, rsp.RspTo)
@@ -89,7 +89,8 @@ func TestSingleStageTLBMissCompletes(t *testing.T) {
 // TestTLBPipelineAcceptsEveryCycle guards against a stage-0 dwell, which made
 // each request hold the pipeline entry for two cycles and halved throughput.
 func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
-	sim := akitasim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, false)
 	spec := DefaultSpec()
 	spec.Latency = 4
 	spec.NumReqPerCycle = 1
@@ -105,7 +106,7 @@ func TestTLBPipelineAcceptsEveryCycle(t *testing.T) {
 
 	for i := 1; i <= spec.Latency; i++ {
 		deliverSingleStageRequest(comp)
-		require.True(t, modelingtest.Tick(comp))
+		require.True(t, tickCycle(clock, comp))
 		require.Len(t, comp.State.Pipeline.Stages(), i,
 			"a new request must enter the pipeline every cycle")
 	}

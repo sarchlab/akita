@@ -107,7 +107,7 @@ func (m *receivePipelineMW) movePipeline(cycle uint64) (madeProgress bool) {
 		if pcs.Latency == 0 {
 			continue
 		}
-		pcs.Pipeline.StepTo(cycle)
+		pcs.Pipeline.AdvanceTo(cycle)
 		madeProgress = pcs.Pipeline.DrainReady(&pcs.RouteBuffer) || madeProgress
 	}
 

@@ -421,18 +421,6 @@ func TestFastPipelineDrainReadyDeliversOnePerLanePerCycle(t *testing.T) {
 	require.Equal(t, []int{1, 2}, sink.Elements())
 }
 
-func TestFastPipelineStepToMovesAtLeastOneCycle(t *testing.T) {
-	p := MakeFastPipeline[int](1, 2)
-	p.StepTo(5)
-	require.Equal(t, uint64(5), p.Cycle())
-	p.StepTo(5)
-	require.Equal(t, uint64(6), p.Cycle(), "a repeated cycle still takes one step")
-	p.StepTo(2)
-	require.Equal(t, uint64(7), p.Cycle(), "an earlier cycle still takes one step")
-	p.StepTo(20)
-	require.Equal(t, uint64(20), p.Cycle())
-}
-
 // TestFastPipelineDrainReadyConservesItemsUnderBackpressure checks that random
 // backpressure neither loses nor duplicates an item, shortens its latency, or
 // reorders a lane.

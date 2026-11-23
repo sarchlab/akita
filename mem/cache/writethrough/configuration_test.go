@@ -60,7 +60,7 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 }
 
 func stepDirectory(c *Comp) {
-	c.State.DirPipeline.StepTo(c.State.DirPipeline.Cycle() + 1)
+	c.State.DirPipeline.AdvanceTo(c.State.DirPipeline.Cycle() + 1)
 	c.State.DirPipeline.DrainReady(&c.State.DirPostBuf)
 }
 

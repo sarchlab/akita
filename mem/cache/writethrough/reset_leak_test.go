@@ -3,6 +3,7 @@ package writethrough
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -10,7 +11,6 @@ import (
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
@@ -21,7 +21,8 @@ import (
 // transaction table, so each started task must be ended by endInflightTasks or
 // it leaks.
 func TestResetEndsInflightTracingTasks(t *testing.T) {
-	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, true)
 
 	storage := mem.NewStorage(4 * mem.GB)
 
@@ -80,7 +81,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// bottom request.
 	bottomSent := false
 	for i := 0; i < 256 && !bottomSent; i++ {
-		modelingtest.Tick(comp)
+		tickCycle(clock, comp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.Payload.(memprotocol.ReadReq); ok {
 				bottomSent = true
@@ -123,7 +124,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		modelingtest.Tick(comp)
+		tickCycle(clock, comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 				Command == memcontrolprotocol.CmdReset {

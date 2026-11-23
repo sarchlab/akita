@@ -3,6 +3,7 @@ package writeback
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/internal/tracingtest"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -10,7 +11,6 @@ import (
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/tasks"
 )
 
@@ -21,7 +21,8 @@ import (
 // task the transaction opened is ended. A mid-flight Reset that drops the
 // transaction table must leave no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) {
-	sim := akitasim.MakeBuilder().WithTaskTracking().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, true)
 
 	storage := mem.NewStorage(1 * mem.MB)
 
@@ -77,7 +78,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// Do NOT answer the Bottom read; the request stays genuinely in flight.
 	inFlight := false
 	for i := 0; i < 64 && !inFlight; i++ {
-		modelingtest.Tick(comp)
+		tickCycle(clock, comp)
 		for j := range comp.State.Transactions {
 			if comp.State.Transactions[j].HasFetchReadReq {
 				inFlight = true
@@ -105,7 +106,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		modelingtest.Tick(comp)
+		tickCycle(clock, comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 				Command == memcontrolprotocol.CmdReset {

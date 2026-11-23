@@ -35,7 +35,7 @@ func (s *bankStage) tickPipeline() bool {
 	next := &s.cache.comp.State
 	bankPipeline := &next.BankPipelines[s.bankID]
 	bankPostBuf := &next.BankPostPipelineBufs[s.bankID]
-	bankPipeline.StepTo(s.cache.currentCycle())
+	bankPipeline.AdvanceTo(s.cache.currentCycle())
 	return bankPipeline.DrainReady(bankPostBuf)
 }
 

@@ -78,7 +78,7 @@ on making a component, message, or event checkpointable, see
 **Deprecated:** use [`FastPipeline[T]`](#fastpipelinet). `Pipeline[T]` and
 `MakePipeline` remain available for existing models, and no Akita component uses
 them. To migrate a `Pipeline` that drains into a post-pipeline buffer, replace
-`pipe.Tick(&buf)` with `pipe.StepTo(cycle)` and `pipe.DrainReady(&buf)`, and
+`pipe.Tick(&buf)` with `pipe.AdvanceTo(cycle)` and `pipe.DrainReady(&buf)`, and
 schedule a tick at `NextReadyCycle`. The buffer keeps its capacity. Items that
 complete in the same cycle now enter it oldest first, and a component that
 sleeps no longer runs per-tick work on the cycles it skips.
@@ -159,7 +159,6 @@ if due, ok := pipe.NextReadyCycle(); ok {
 | Method | Description |
 |--------|-------------|
 | `AdvanceTo(cycle uint64)` | Bring all items forward; panics if cycle moves backward |
-| `StepTo(cycle uint64)` | Advance to `cycle`, or by one cycle if `cycle` is not ahead of the pipeline |
 | `SkipTo(cycle uint64)` | Move the clock without advancing items, to resume after a freeze |
 | `CanAccept() bool` | True if a lane has stage 0 free in this cycle |
 | `Accept(item T)` | Insert at stage 0 of the lowest free lane; panics if none |

@@ -177,6 +177,7 @@ func TestTLBMilestones(t *testing.T) {
 	// and been looked up, or until a generous tick budget is exhausted.
 	drive := func(maxTicks int) {
 		for i := 0; i < maxTicks; i++ {
+			engine.(*milestoneClock).now += 1000
 			modelingtest.Tick(tlbComp)
 		}
 	}
