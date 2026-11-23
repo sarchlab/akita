@@ -89,21 +89,21 @@ func (p *Pipeline[T]) recordStageWrite(tracked bool) {
 	}
 }
 
-// invalidateStages advances the shared generation without updating seenGen, so
-// every copy stops trusting its cache. It returns the generation Tick may adopt
-// on normal completion. If another write intervened, it returns the prior
-// token, which is stale and keeps the receiver untracked.
-func (p *Pipeline[T]) invalidateStages(start *atomic.Uint64, trusted uint64) uint64 {
+// invalidateStages ensures no copy trusts its cache across a stage write,
+// without updating seenGen. Given the tracker and version Tick last invalidated,
+// it skips the update while that invalidation still holds for this value, and
+// returns the tracker and version now in effect.
+func (p *Pipeline[T]) invalidateStages(
+	gen *atomic.Uint64, version uint64,
+) (*atomic.Uint64, uint64) {
 	if p.stageGen == nil {
-		return trusted
+		return nil, 0
+	}
+	if p.stageGen == gen && p.seenGen != version && gen.Load() == version {
+		return gen, version
 	}
 
-	gen := p.stageGen.Add(1)
-	if p.stageGen == start && gen == trusted+1 {
-		return gen
-	}
-
-	return trusted
+	return p.stageGen, p.stageGen.Add(1)
 }
 
 // CanAccept returns true if there is at least one free lane at stage 0.
@@ -199,9 +199,11 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		return false
 	}
 
-	startedTracked := p.tracked()
+	// exclusive holds while this Tick's own write is the only one since it began.
+	exclusive := p.tracked()
 	startGen, startSeen := p.stageGen, p.seenGen
-	trustedGen := startSeen
+	var writeGen *atomic.Uint64
+	writeVersion := startSeen
 	moved := false
 	blocked := false
 	lastStage := p.numStages - 1
@@ -214,11 +216,11 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		}
 		if sink.CanPush() {
 			sink.Push(s.Item)
-			// A later sink call can observe or interrupt this swap, so invalidate
-			// every cache first and leave seenGen behind until Tick returns.
-			if !moved {
-				trustedGen = p.invalidateStages(startGen, trustedGen)
-			}
+			// A later sink call can observe or interrupt this swap, and the last
+			// one may have replaced this value, so invalidate the current storage
+			// first and leave seenGen behind until Tick returns.
+			writeGen, writeVersion = p.invalidateStages(writeGen, writeVersion)
+			exclusive = exclusive && writeGen == startGen && writeVersion == startSeen+1
 			p.stages[i] = p.stages[n-1]
 			n--
 			moved = true
@@ -228,21 +230,17 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 	}
 
 	p.stages = p.stages[:n]
-	published := moved
 
 	// A sink call may have replaced this value or written through a copy.
 	intact := p.stageGen == startGen && p.seenGen == startSeen
-	tracked := startedTracked && intact && startGen.Load() == trustedGen
+	tracked := exclusive && intact && startGen.Load() == writeVersion
 
 	moved = p.advanceStages(tracked, blocked) || moved
-	if moved && !published {
-		trustedGen = p.invalidateStages(startGen, trustedGen)
+	if moved || !intact {
+		writeGen, writeVersion = p.invalidateStages(writeGen, writeVersion)
 	}
-
-	if !intact {
-		p.invalidateStages(startGen, trustedGen)
-	} else if startedTracked {
-		p.seenGen = trustedGen
+	if tracked {
+		p.seenGen = writeVersion
 	}
 
 	return moved
