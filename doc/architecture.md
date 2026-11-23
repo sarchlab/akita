@@ -193,4 +193,7 @@ change, loading is best effort: if it loads, it is used; otherwise loading
 reports an error. Breaking checkpoint compatibility is never a concern when
 changing code, and checkpoints carry no version or configuration-hash checks.
 Components save State (and their scheduler guard); Spec, Resources and Ports
-are rebuilt by setup and are not serialized or compared.
+are rebuilt by setup and are not serialized or compared. Loading decodes State
+into a fresh value, so a State holding a runtime-only dependency, such as a
+`queueing.FastPipeline` clock, reattaches it in an optional pointer-receiver
+`AfterCheckpointLoad(*Comp)` method.

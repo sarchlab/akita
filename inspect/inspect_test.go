@@ -74,6 +74,8 @@ var expectedErrors = []struct {
 	{"value receiver initializer", "fixtures/valueinitializer", "must use a pointer receiver"},
 	{"invalid State initializer", "fixtures/badstateinitializer", "State.Initialize must have signature"},
 	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer", "Middlewares.Initialize must have signature"},
+	{"value receiver checkpoint hook", "fixtures/valuecheckpointload", "AfterCheckpointLoad must use a pointer receiver"},
+	{"invalid checkpoint hook", "fixtures/badcheckpointload", "State.AfterCheckpointLoad must have signature"},
 	{"middleware without Handle", "fixtures/badmiddleware",
 		"implement ticking.Middleware"},
 }

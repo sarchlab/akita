@@ -23,16 +23,16 @@ func (m *wakeMW) Handle(e timing.Event) bool {
 	}
 
 	spec := m.comp.Spec
-	now := spec.Freq.Cycle(e.Time())
-	next, found := uint64(0), false
-	consider := func(cycle uint64) {
-		if cycle > now && (!found || cycle < next) {
-			next, found = cycle, true
+	now := e.Time()
+	next, found := timing.VTimeInPicoSec(0), false
+	consider := func(at timing.VTimeInPicoSec) {
+		if at > now && (!found || at < next) {
+			next, found = at, true
 		}
 	}
 
 	for i := range state.Banks {
-		if due, ok := state.Banks[i].Pipeline.NextReadyCycle(); ok {
+		if due, ok := state.Banks[i].Pipeline.NextReadyTime(); ok {
 			consider(due)
 		}
 	}
@@ -43,14 +43,14 @@ func (m *wakeMW) Handle(e timing.Event) bool {
 	if state.ControlState == controlStateEnabled {
 		if msg, ok := m.comp.Ports.Top.PeekIncoming(); ok {
 			bank := &state.Banks[requestBank(spec, msg)]
-			if due, ok := bank.Pipeline.NextAcceptCycle(); ok {
+			if due, ok := bank.Pipeline.NextPushTime(); ok {
 				consider(due)
 			}
 		}
 	}
 
 	if found {
-		m.comp.TickAt(cycleEdge(spec, next))
+		m.comp.TickAt(next)
 	}
 
 	return false

@@ -25,13 +25,14 @@ func (m *tlbMiddleware) bottomPort() messaging.Port {
 func (m *tlbMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	next := &m.comp.State
-	cycle := m.currentCycle()
 
+	// The tick that observes a pause does no pipeline work, and the tick that
+	// observes its end is the first cycle of pipeline work after it.
 	if next.TLBState == tlbStatePause {
-		m.freezePipeline(cycle)
+		next.Pipeline.Pause()
 		return false
 	}
-	m.resumePipeline(cycle)
+	next.Pipeline.Resume()
 
 	if next.TLBState == tlbStateDrain {
 		madeProgress = m.handleDrain() || madeProgress
@@ -42,50 +43,17 @@ func (m *tlbMiddleware) Handle(_ timing.Event) bool {
 	// A drain that finishes in this tick has already moved the pipeline, so
 	// pipeline time stops here. The drain response goes out on the next tick.
 	if next.TLBState == tlbStatePause {
-		next.PipelineFrozen = true
+		next.Pipeline.Pause()
 		return madeProgress || next.PendingDrainRsp
 	}
 
 	if !madeProgress {
-		if due, ok := next.Pipeline.NextReadyCycle(); ok {
-			m.comp.TickAt(timing.VTimeInPicoSec(due) * m.comp.Spec.Freq.Period())
+		if due, ok := next.Pipeline.NextReadyTime(); ok {
+			m.comp.TickAt(due)
 		}
 	}
 
 	return madeProgress
-}
-
-// currentCycle returns the clock cycle of the current simulation time.
-func (m *tlbMiddleware) currentCycle() uint64 {
-	return m.comp.Spec.Freq.Cycle(m.comp.CurrentTime())
-}
-
-// freezePipeline stops pipeline time at the end of the cycle before cycle: the
-// tick that observes the pause does no pipeline work.
-func (m *tlbMiddleware) freezePipeline(cycle uint64) {
-	next := &m.comp.State
-	if next.PipelineFrozen {
-		return
-	}
-	next.PipelineFrozen = true
-
-	if cycle > next.Pipeline.Cycle() {
-		next.Pipeline.AdvanceTo(cycle - 1)
-	}
-}
-
-// resumePipeline discards the paused cycles, so this tick is the first cycle of
-// pipeline work after the freeze.
-func (m *tlbMiddleware) resumePipeline(cycle uint64) {
-	next := &m.comp.State
-	if !next.PipelineFrozen {
-		return
-	}
-	next.PipelineFrozen = false
-
-	if cycle > next.Pipeline.Cycle() {
-		next.Pipeline.SkipTo(cycle - 1)
-	}
 }
 
 func (m *tlbMiddleware) processPipeline() bool {
@@ -100,7 +68,6 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) tickPipeline() bool {
 	next := &m.comp.State
-	next.Pipeline.AdvanceTo(m.currentCycle())
 	return next.Pipeline.DrainReady(&next.BufferItems)
 }
 
@@ -118,7 +85,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		}
 
 		bypass := spec.Latency == 0
-		if bypass && !next.BufferItems.CanPush() || !bypass && !next.Pipeline.CanAccept() {
+		if bypass && !next.BufferItems.CanPush() || !bypass && !next.Pipeline.CanPush() {
 			break
 		}
 
@@ -149,7 +116,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		if bypass {
 			next.BufferItems.Push(item)
 		} else {
-			next.Pipeline.Accept(item)
+			next.Pipeline.Push(item)
 		}
 
 		madeProgress = true

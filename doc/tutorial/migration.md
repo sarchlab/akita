@@ -1290,10 +1290,10 @@ The `queueing` package provides generic buffer and pipeline value types. V4's in
 | V4 | V5 |
 |---|---|
 | `sim.NewBuffer("MyBuffer", 100)`, returning the `sim.Buffer` interface | `queueing.MakeBuffer[int](100)`, returning a `queueing.Buffer[int]` value |
-| A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakeFastPipeline[int](width, numStages)`; `AdvanceTo(cycle)` moves items, and the consumer pulls ready items or drains them into a buffer with `DrainReady(sink)` |
+| A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakeFastPipeline[int](width, numStages, freq, clock)`; items move with the injected clock, and the consumer pulls ready items with `Peek` and `Pop` or drains them into a buffer with `DrainReady(sink)` |
 | A buffer has a name and hook positions | A buffer has neither; a component's State field already names it |
 
-A component sleeps while items travel by calling `TickAt` for `NextReadyCycle`. To migrate an existing `Pipeline`, replace `pipe.Tick(&buf)` with `pipe.AdvanceTo(cycle)` and `pipe.DrainReady(&buf)`; the buffer keeps its capacity, and items completing in the same cycle enter it oldest first. A sleeping component skips per-tick work, so round-robin state that advances each tick can pick a different winner than before. `FastPipeline` requires at least one stage, so a zero-latency stage must bypass it. A checkpoint holding a push `Pipeline` reports an error when loaded into a `FastPipeline` rather than dropping in-flight items. See `sim/queueing/README.md` in the Akita repository.
+A component sleeps while items travel by calling `TickAt` with `NextReadyTime`. To migrate an existing `Pipeline`, construct it with the owner's frequency and clock, replace `pipe.Tick(&buf)` with `pipe.DrainReady(&buf)`, and rename `CanAccept`/`Accept` to `CanPush`/`Push`; the buffer keeps its capacity, and items completing in the same cycle enter it oldest first. The clock is not checkpointed, so the component's State rebinds it with `BindClock` in a pointer-receiver `AfterCheckpointLoad(c *Comp)` method. A sleeping component skips per-tick work, so round-robin state that advances each tick can pick a different winner than before. `FastPipeline` requires at least one stage, so a zero-latency stage must bypass it. A checkpoint holding a push `Pipeline` reports an error when loaded into a `FastPipeline` rather than dropping in-flight items. See `sim/queueing/README.md` in the Akita repository.
 
 ```go
 // V4
@@ -1301,7 +1301,7 @@ buffer := sim.NewBuffer("MyBuffer", 100)
 
 // V5
 buffer := queueing.MakeBuffer[int](100)
-pipeline := queueing.MakeFastPipeline[int](1, 5) // 1 lane, 5 stages
+pipeline := queueing.MakeFastPipeline[int](1, 5, c.Spec.Freq, c) // 1 lane, 5 stages
 ```
 
 ### V5 Component Integration

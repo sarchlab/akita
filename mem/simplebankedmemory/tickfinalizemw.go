@@ -15,14 +15,9 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 	return m.comp.Ports.Top
 }
 
-func (m *tickFinalizeMW) Handle(e timing.Event) bool {
+func (m *tickFinalizeMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == controlStatePaused {
 		return false
-	}
-
-	cycle := m.comp.Spec.Freq.Cycle(e.Time())
-	for i := range m.comp.State.Banks {
-		m.comp.State.Banks[i].Pipeline.AdvanceTo(cycle)
 	}
 
 	return m.finalizeBanks()
@@ -89,11 +84,10 @@ func (m *tickFinalizeMW) respondOldest(b *bankState) bool {
 		return false
 	}
 
-	lane, ok := b.Pipeline.ReadyLane()
+	item, ok := b.Pipeline.Peek()
 	if !ok {
 		return false
 	}
-	item, _ := b.Pipeline.PeekLane(lane)
 
 	// The item is leaving the bank pipeline (it is ready at the head of its
 	// lane and about to be popped). Attribute the pipeline
@@ -106,7 +100,7 @@ func (m *tickFinalizeMW) respondOldest(b *bankState) bool {
 
 	m.comp.TaskTracker().EndReqIn(item.RecvTaskID)
 
-	b.Pipeline.PopLane(lane)
+	b.Pipeline.Pop()
 
 	return true
 }

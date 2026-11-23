@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -15,16 +16,18 @@ func TestCalculatedOutputQueueStallsAndDrains(t *testing.T) {
 		c.Spec.Latency = 1
 		c.State.Initialize(c)
 		require.Equal(t, width, c.State.BufferItems.Capacity())
+		clock := testsim.NewClock()
+		c.State.Pipeline.BindClock(clock)
 		for range width {
-			c.State.Pipeline.Accept(pipelineTLBReqState{})
+			c.State.Pipeline.Push(pipelineTLBReqState{})
 		}
 		step := func() {
-			c.State.Pipeline.AdvanceTo(c.State.Pipeline.Cycle() + 1)
+			clock.Step(c.Spec.Freq)
 			c.State.Pipeline.DrainReady(&c.State.BufferItems)
 		}
 		step()
 		for range width {
-			c.State.Pipeline.Accept(pipelineTLBReqState{})
+			c.State.Pipeline.Push(pipelineTLBReqState{})
 		}
 		for range 5 {
 			step()

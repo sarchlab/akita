@@ -36,13 +36,20 @@ func (s *state) Initialize(c *Comp) {
 
 	state := state{PortComplexes: make([]portComplexState, len(ports))}
 	for i, port := range ports {
-		state.PortComplexes[i] = newPortComplex(port, links[i])
+		state.PortComplexes[i] = newPortComplex(c, port, links[i])
 	}
 
 	*s = state
 }
 
-func newPortComplex(port messaging.Port, link Link) portComplexState {
+// AfterCheckpointLoad gives the decoded port pipelines their clock.
+func (s *state) AfterCheckpointLoad(c *Comp) {
+	for i := range s.PortComplexes {
+		s.PortComplexes[i].Pipeline.BindClock(c)
+	}
+}
+
+func newPortComplex(c *Comp, port messaging.Port, link Link) portComplexState {
 	name := port.Name()
 
 	return portComplexState{
@@ -53,7 +60,8 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 		Latency:          link.Latency,
 		PipelineWidth:    link.NumInputChannel,
 		// A zero-latency port bypasses its pipeline, which stays empty.
-		Pipeline: queueing.MakeFastPipeline[routedFlit](link.NumInputChannel, max(link.Latency, 1)),
+		Pipeline: queueing.MakeFastPipeline[routedFlit](
+			link.NumInputChannel, max(link.Latency, 1), c.Spec.Freq, c),
 
 		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
 

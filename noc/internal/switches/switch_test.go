@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -24,14 +25,17 @@ func TestSwitch(t *testing.T) {
 		sw           *Comp
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
+		now          timing.VTimeInPicoSec
 	)
 
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
+		now = 0
 		mockCtrl = gomock.NewController(t)
 		engine = NewMockEngine(mockCtrl)
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
+		engine.EXPECT().CurrentTime().DoAndReturn(func() timing.VTimeInPicoSec { return now }).AnyTimes()
 		sim = testsim.New(engine, false)
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().
@@ -145,7 +149,7 @@ func TestSwitch(t *testing.T) {
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
+		next.PortComplexes[0].Pipeline.Push(routedFlit{TaskID: 1})
 
 		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port2.EXPECT().PeekIncoming().Return(messaging.Msg{}, false)
@@ -160,12 +164,13 @@ func TestSwitch(t *testing.T) {
 
 		// Place an item in pipeline stage 0 for port1
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Accept(routedFlit{
+		next.PortComplexes[0].Pipeline.Push(routedFlit{
 			Flit:   messaging.Msg{ID: 100, Payload: packetization.Flit{}},
 			TaskID: 101,
 		})
 
-		madeProgress := rpMW.movePipeline(1)
+		now = sw.Spec.Freq.Period()
+		madeProgress := rpMW.movePipeline()
 
 		require.True(t, madeProgress)
 		// For latency=1, the item should have moved to RouteBuffer

@@ -72,9 +72,6 @@ type state struct {
 	RespondingMSHRData mshrEntryState                             `json:"responding_mshr_data"`
 	Pipeline           queueing.FastPipeline[pipelineTLBReqState] `json:"pipeline"`
 	BufferItems        queueing.Buffer[pipelineTLBReqState]       `json:"buffer_items"`
-
-	// PipelineFrozen records that pipeline time stopped when the TLB paused.
-	PipelineFrozen bool `json:"pipeline_frozen"`
 }
 
 // blockState is a serializable representation of an internal block.

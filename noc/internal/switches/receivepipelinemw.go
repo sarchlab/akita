@@ -24,7 +24,7 @@ func (m *receivePipelineMW) ports() []messaging.Port {
 func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
-	madeProgress = m.movePipeline(m.comp.Spec.Freq.Cycle(m.comp.CurrentTime())) || madeProgress
+	madeProgress = m.movePipeline() || madeProgress
 	madeProgress = m.startProcessing() || madeProgress
 
 	if !madeProgress {
@@ -37,17 +37,17 @@ func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 // scheduleWake asks for a tick at the next cycle a pipeline flit becomes ready.
 func (m *receivePipelineMW) scheduleWake() {
 	state := &m.comp.State
-	wake, found := uint64(0), false
+	wake, found := timing.VTimeInPicoSec(0), false
 
 	for i := range state.PortComplexes {
-		due, ok := state.PortComplexes[i].Pipeline.NextReadyCycle()
+		due, ok := state.PortComplexes[i].Pipeline.NextReadyTime()
 		if ok && (!found || due < wake) {
 			wake, found = due, true
 		}
 	}
 
 	if found {
-		m.comp.TickAt(timing.VTimeInPicoSec(wake) * m.comp.Spec.Freq.Period())
+		m.comp.TickAt(wake)
 	}
 }
 
@@ -67,7 +67,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			if pcs.Latency == 0 && !pcs.RouteBuffer.CanPush() {
 				break
 			}
-			if pcs.Latency != 0 && !pcs.Pipeline.CanAccept() {
+			if pcs.Latency != 0 && !pcs.Pipeline.CanPush() {
 				break
 			}
 
@@ -87,7 +87,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			if pcs.Latency == 0 {
 				pcs.RouteBuffer.Push(item)
 			} else {
-				pcs.Pipeline.Accept(item)
+				pcs.Pipeline.Push(item)
 			}
 
 			port.RetrieveIncoming()
@@ -99,7 +99,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) movePipeline(cycle uint64) (madeProgress bool) {
+func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
 	state := &m.comp.State
 
 	for i := range m.ports() {
@@ -107,7 +107,6 @@ func (m *receivePipelineMW) movePipeline(cycle uint64) (madeProgress bool) {
 		if pcs.Latency == 0 {
 			continue
 		}
-		pcs.Pipeline.AdvanceTo(cycle)
 		madeProgress = pcs.Pipeline.DrainReady(&pcs.RouteBuffer) || madeProgress
 	}
 

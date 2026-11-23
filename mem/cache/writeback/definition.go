@@ -50,7 +50,8 @@ func (s *state) Initialize(c *Comp) {
 		wbToBank[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 
 		// A zero-latency stage bypasses its pipeline, which stays empty.
-		bankPipes[i] = queueing.MakeFastPipeline[int](spec.BankWidth, max(spec.BankLatency, 1))
+		bankPipes[i] = queueing.MakeFastPipeline[int](
+			spec.BankWidth, max(spec.BankLatency, 1), spec.Freq, c)
 		bankPostBufs[i] = queueing.MakeBuffer[int](spec.BankWidth)
 	}
 
@@ -65,7 +66,8 @@ func (s *state) Initialize(c *Comp) {
 
 		WriteBufferBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
-		DirPipeline:        queueing.MakeFastPipeline[int](spec.DirectoryWidth, max(spec.DirLatency, 1)),
+		DirPipeline: queueing.MakeFastPipeline[int](
+			spec.DirectoryWidth, max(spec.DirLatency, 1), dirStepFreq, dirStepClock{comp: c}),
 		DirPostPipelineBuf: queueing.MakeBuffer[int](spec.DirectoryWidth),
 
 		BankPipelines:                   bankPipes,
@@ -78,6 +80,30 @@ func (s *state) Initialize(c *Comp) {
 		spec.NumSets, spec.NumWays, 1<<spec.Log2BlockSize)
 
 	*s = initial
+}
+
+// AfterCheckpointLoad gives the decoded pipelines their clocks.
+func (s *state) AfterCheckpointLoad(c *Comp) {
+	s.DirPipeline.BindClock(dirStepClock{comp: c})
+	for i := range s.BankPipelines {
+		s.BankPipelines[i].BindClock(c)
+	}
+}
+
+// dirStepFreq makes one picosecond of dirStepClock equal one directory step, so
+// directory pipeline times are step numbers rather than simulation time.
+const dirStepFreq = 1000 * timing.GHz
+
+// dirStepClock is the directory pipeline's clock. The directory takes
+// NumReqPerCycle steps per cycle, so its pipeline counts steps; the clock reads
+// the step from the component's current State, which survives a restore.
+type dirStepClock struct {
+	comp *Comp
+}
+
+// CurrentTime returns the current directory step.
+func (c dirStepClock) CurrentTime() timing.VTimeInPicoSec {
+	return timing.VTimeInPicoSec(c.comp.State.DirStep)
 }
 
 // Initialize creates the cache's middlewares. The control middlewares and

@@ -115,8 +115,8 @@ type state struct {
 	BankPipelines []queueing.FastPipeline[int] `json:"bank_pipelines"`
 	BankPostBufs  []queueing.Buffer[int]       `json:"bank_post_bufs"`
 
-	// PipelinesFrozen records that pipeline time stopped when the cache paused.
-	PipelinesFrozen bool `json:"pipelines_frozen"`
+	// DirStep is the directory pipeline's clock, in directory steps.
+	DirStep uint64 `json:"dir_step"`
 
 	IsPaused      bool                 `json:"is_paused"`
 	IsDraining    bool                 `json:"is_draining"`

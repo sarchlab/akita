@@ -18,11 +18,11 @@ func (d *directory) Tick() (madeProgress bool) {
 	next := &d.cache.comp.State
 
 	// A transaction is admitted before the step of the same tick, so the
-	// pipeline clock reads cycle at admission and cycle+1 at the drain.
+	// directory clock reads cycle at admission and cycle+1 at the drain.
 	cycle := d.cache.currentCycle()
-	next.DirPipeline.AdvanceTo(cycle)
+	next.DirStep = cycle
 	madeProgress = d.acceptIntoPipeline() || madeProgress
-	next.DirPipeline.AdvanceTo(cycle + 1)
+	next.DirStep = cycle + 1
 	madeProgress = next.DirPipeline.DrainReady(&next.DirPostBuf) || madeProgress
 	madeProgress = d.processPostPipeline() || madeProgress
 
@@ -45,7 +45,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if dirBuf.Size() == 0 ||
 			bypass && !next.DirPostBuf.CanPush() ||
-			!bypass && !dirPipeline.CanAccept() {
+			!bypass && !dirPipeline.CanPush() {
 			break
 		}
 
@@ -60,7 +60,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 		if bypass {
 			next.DirPostBuf.Push(transIdx)
 		} else {
-			dirPipeline.Accept(transIdx)
+			dirPipeline.Push(transIdx)
 		}
 		madeProgress = true
 	}
