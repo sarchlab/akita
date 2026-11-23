@@ -164,10 +164,12 @@ func TestPipelineLiveValueStaysTracked(t *testing.T) {
 	require.False(t, full.CanAccept())
 }
 
-// callbackSink accepts every item and runs onCanPush before each admission.
+// callbackSink accepts every item, running onCanPush before each admission and
+// onPush after each insertion.
 type callbackSink struct {
 	calls     int
 	onCanPush func(call int)
+	onPush    func(call int)
 	pushed    []int
 }
 
@@ -179,7 +181,12 @@ func (s *callbackSink) CanPush() bool {
 	return true
 }
 
-func (s *callbackSink) Push(item int) { s.pushed = append(s.pushed, item) }
+func (s *callbackSink) Push(item int) {
+	s.pushed = append(s.pushed, item)
+	if s.onPush != nil {
+		s.onPush(len(s.pushed))
+	}
+}
 
 func TestPipelineSinkPanicAfterSwapInvalidatesAdmission(t *testing.T) {
 	p := MakePipeline[int](2, 2)
@@ -215,6 +222,75 @@ func TestPipelineSinkPanicAfterSwapInvalidatesAdmission(t *testing.T) {
 	// The duplicate occupies lane 0 twice, leaving lane 1 open as it always did.
 	p.Accept(4)
 	require.Equal(t, PipelineStage[int]{Lane: 1, Stage: 0, Item: 4}, p.Stages()[3])
+}
+
+func TestPipelineSinkReplacementIsInvalidatedBeforeLaterSwap(t *testing.T) {
+	for name, tc := range map[string]struct {
+		replace func(p *Pipeline[int])
+		want    []PipelineStage[int]
+	}{
+		"fresh storage": {
+			replace: func(p *Pipeline[int]) {
+				fresh := MakePipeline[int](3, 2)
+				fresh.restoreStages([]PipelineStage[int]{
+					{Lane: 0, Stage: 1, Item: 10},
+					{Lane: 1, Stage: 1, Item: 11},
+					{Lane: 0, Stage: 0, Item: 12},
+					{Lane: 1, Stage: 0, Item: 13},
+				})
+				*p = fresh
+			},
+			want: []PipelineStage[int]{
+				{Lane: 0, Stage: 1, Item: 10},
+				{Lane: 0, Stage: 0, Item: 12},
+				{Lane: 0, Stage: 0, Item: 12},
+				{Lane: 1, Stage: 0, Item: 13},
+			},
+		},
+		"up-to-date alias": {
+			replace: func(p *Pipeline[int]) {
+				p.seenGen = p.stageGen.Load()
+				p.stageZero = p.countStageZero()
+			},
+			want: []PipelineStage[int]{
+				{Lane: 0, Stage: 1, Item: 1},
+				{Lane: 0, Stage: 0, Item: 4},
+				{Lane: 0, Stage: 0, Item: 4},
+				{Lane: 0, Stage: 0, Item: 4},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := MakePipeline[int](3, 2)
+			p.restoreStages([]PipelineStage[int]{
+				{Lane: 0, Stage: 1, Item: 1},
+				{Lane: 1, Stage: 1, Item: 2},
+				{Lane: 2, Stage: 1, Item: 3},
+				{Lane: 0, Stage: 0, Item: 4},
+			})
+
+			sink := &callbackSink{
+				onPush: func(pushed int) {
+					if pushed == 2 {
+						tc.replace(&p)
+					}
+				},
+				onCanPush: func(call int) {
+					if call == 3 {
+						require.Equal(t, tc.want, p.Stages())
+						require.False(t, p.CanAccept(), "third callback")
+						panic("sink failed")
+					}
+				},
+			}
+			require.PanicsWithValue(t, "sink failed", func() { p.Tick(sink) })
+
+			require.Equal(t, tc.want, p.Stages())
+			require.False(t, p.CanAccept(), "after recovery")
+			restored := restoredCopy(t, p)
+			require.False(t, restored.CanAccept(), "after checkpoint")
+		})
+	}
 }
 
 func TestPipelineSinkPanicBeforeWriteKeepsCache(t *testing.T) {
