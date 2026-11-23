@@ -30,10 +30,10 @@ func TestBottomParser(t *testing.T) {
 			BankBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),
 			},
-			DirPipeline: queueing.MakeFastPipeline[int](4, 2),
+			DirPipeline: stageDirPipeline(4, 2),
 			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.FastPipeline[int]{
-				queueing.MakeFastPipeline[int](4, 10),
+				stageBankPipeline(4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),

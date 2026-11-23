@@ -36,12 +36,12 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 
 		// Fill the calculated output queue, then block a second batch behind it.
 		for i := range 3 {
-			c.State.DirPipeline.Accept(i)
+			c.State.DirPipeline.Push(i)
 		}
-		require.False(t, c.State.DirPipeline.CanAccept())
+		require.False(t, c.State.DirPipeline.CanPush())
 		stepDirectory(c)
 		for i := range 3 {
-			c.State.DirPipeline.Accept(i + 3)
+			c.State.DirPipeline.Push(i + 3)
 		}
 		for range 5 {
 			stepDirectory(c)
@@ -63,7 +63,7 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 }
 
 func stepDirectory(c *Comp) {
-	c.State.DirPipeline.AdvanceTo(c.State.DirPipeline.Cycle() + 1)
+	c.State.DirStep++
 	c.State.DirPipeline.DrainReady(&c.State.DirPostPipelineBuf)
 }
 

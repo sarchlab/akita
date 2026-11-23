@@ -89,42 +89,35 @@ func (m *pipelineMW) currentCycle() uint64 {
 	return m.comp.Spec.Freq.Cycle(m.comp.CurrentTime())
 }
 
-// freezePipelines stops pipeline time at the end of the cycle before cycle: the
+// freezePipelines stops pipeline time at the end of the previous cycle: the
 // tick that observes the pause does no pipeline work.
 func (m *pipelineMW) freezePipelines(cycle uint64) {
 	next := &m.comp.State
-	if next.PipelinesFrozen {
-		return
-	}
-	next.PipelinesFrozen = true
-
 	for i := range next.BankPipelines {
-		if p := &next.BankPipelines[i]; cycle > p.Cycle() {
-			p.AdvanceTo(cycle - 1)
-		}
+		next.BankPipelines[i].Pause()
 	}
-	if cycle > next.DirPipeline.Cycle() {
-		next.DirPipeline.AdvanceTo(cycle)
-	}
+
+	// Pause treats the clock as the current edge, which is the step after this
+	// cycle's admission.
+	step := max(cycle, next.DirStep)
+	next.DirStep = step + 1
+	next.DirPipeline.Pause()
+	next.DirStep = step
 }
 
 // resumePipelines discards the paused cycles, so this tick is the first cycle
 // of pipeline work after the freeze.
 func (m *pipelineMW) resumePipelines(cycle uint64) {
 	next := &m.comp.State
-	if !next.PipelinesFrozen {
-		return
-	}
-	next.PipelinesFrozen = false
-
 	for i := range next.BankPipelines {
-		if p := &next.BankPipelines[i]; cycle > p.Cycle() {
-			p.SkipTo(cycle - 1)
-		}
+		next.BankPipelines[i].Resume()
 	}
-	if cycle > next.DirPipeline.Cycle() {
-		next.DirPipeline.SkipTo(cycle)
-	}
+
+	// Resume treats the clock as the current edge, as in freezePipelines.
+	step := max(cycle, next.DirStep)
+	next.DirStep = step + 1
+	next.DirPipeline.Resume()
+	next.DirStep = step
 }
 
 // scheduleWake asks for a tick at the next cycle a pipeline item becomes ready.
@@ -132,24 +125,25 @@ func (m *pipelineMW) resumePipelines(cycle uint64) {
 // the progress of the stage that unblocks it.
 func (m *pipelineMW) scheduleWake() {
 	next := &m.comp.State
-	wake, found := uint64(0), false
-	consider := func(cycle uint64) {
-		if !found || cycle < wake {
-			wake, found = cycle, true
+	wake, found := timing.VTimeInPicoSec(0), false
+	consider := func(at timing.VTimeInPicoSec) {
+		if !found || at < wake {
+			wake, found = at, true
 		}
 	}
 
 	for i := range next.BankPipelines {
-		if due, ok := next.BankPipelines[i].NextReadyCycle(); ok {
+		if due, ok := next.BankPipelines[i].NextReadyTime(); ok {
 			consider(due)
 		}
 	}
-	if due, ok := next.DirPipeline.NextReadyCycle(); ok {
-		consider(due - 1)
+	if due, ok := next.DirPipeline.NextReadyTime(); ok {
+		// Step s drains in cycle s-1.
+		consider(timing.VTimeInPicoSec(uint64(due)-1) * m.comp.Spec.Freq.Period())
 	}
 
 	if found {
-		m.comp.TickAt(timing.VTimeInPicoSec(wake) * m.comp.Spec.Freq.Period())
+		m.comp.TickAt(wake)
 	}
 }
 

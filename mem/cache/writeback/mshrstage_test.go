@@ -49,10 +49,10 @@ func TestMSHRStage(t *testing.T) {
 			},
 			MSHRStageBuf:       queueing.MakeBuffer[int](4),
 			WriteBufferBuf:     queueing.MakeBuffer[int](4),
-			DirPipeline:        queueing.MakeFastPipeline[int](4, 1),
+			DirPipeline:        stageDirPipeline(4, 1),
 			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.FastPipeline[int]{
-				queueing.MakeFastPipeline[int](4, 10),
+				stageBankPipeline(4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](4),
@@ -73,6 +73,7 @@ func TestMSHRStage(t *testing.T) {
 
 		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
+		m.comp.State.AfterCheckpointLoad(m.comp)
 
 		ms = m.mshrStage
 	}

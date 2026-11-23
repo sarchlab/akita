@@ -250,6 +250,60 @@ func TestPausedCacheStopsPipelineTime(t *testing.T) {
 	require.Equal(t, []uint64{baseline.sends[0] + pausedCycles}, r.sends)
 }
 
+// TestPauseDuringDirectorySubstepsShiftsByPausedCycles pauses while a request is
+// in the directory, which takes NumReqPerCycle steps per cycle.
+func TestPauseDuringDirectorySubstepsShiftsByPausedCycles(t *testing.T) {
+	for _, requests := range []int{1, 2, 3, 4} {
+		spec := sleepSpec()
+		spec.NumReqPerCycle, spec.DirLatency = requests, 41
+
+		baseline := newSleepRig(t, spec, 8)
+		baseline.write(5, 0x40, 1)
+		require.NoError(t, baseline.engine.Run())
+		require.Len(t, baseline.sends, 1)
+
+		const pausedCycles = 200
+		r := newSleepRig(t, spec, 8)
+		r.write(5, 0x40, 1)
+		r.command(8, memcontrolprotocol.CmdPause)
+		r.command(8+pausedCycles, memcontrolprotocol.CmdEnable)
+		require.NoError(t, r.engine.Run())
+
+		require.Equal(t, []uint64{baseline.sends[0] + pausedCycles}, r.sends, "requests %d", requests)
+	}
+}
+
+func TestCheckpointWhilePausedInDirectoryResumesExactly(t *testing.T) {
+	for _, requests := range []int{1, 3} {
+		path := filepath.Join(t.TempDir(), "ck.tar.gz")
+		spec := sleepSpec()
+		spec.NumReqPerCycle, spec.DirLatency = requests, 41
+
+		ref := newSleepRig(t, spec, 8)
+		ref.write(5, 0x40, 9)
+		ref.command(8, memcontrolprotocol.CmdPause)
+		stop := timing.VTimeInPicoSec(40) * spec.Freq.Period()
+		require.NoError(t, ref.engine.RunUntil(stop))
+		require.Equal(t, 1, ref.comp.State.DirPipeline.Size())
+		require.NoError(t, ref.sim.SaveCheckpoint(path))
+
+		resumed := newSleepRig(t, spec, 8)
+		require.NoError(t, resumed.sim.LoadCheckpoint(path))
+		require.Equal(t, ref.comp.State.DirPipeline.Stages(), resumed.comp.State.DirPipeline.Stages())
+		require.Equal(t, ref.comp.State.DirStep, resumed.comp.State.DirStep)
+
+		ref.ticks = nil
+		for _, r := range []*sleepRig{ref, resumed} {
+			r.command(100, memcontrolprotocol.CmdEnable)
+			require.NoError(t, r.engine.Run())
+		}
+
+		require.Len(t, ref.sends, 1)
+		require.Equal(t, ref.sends, resumed.sends, "requests %d", requests)
+		require.Equal(t, ref.ticks, resumed.ticks, "requests %d", requests)
+	}
+}
+
 func TestCheckpointKeepsPendingBankWake(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 

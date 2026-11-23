@@ -3,11 +3,14 @@ package writethrough
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -65,8 +68,19 @@ func buildStageTestCache(setupSim1 *akitasim.Simulation,
 	}
 
 	comp.State = state
+	comp.State.AfterCheckpointLoad(comp)
 
 	return comp.Middlewares.Pipeline
+}
+
+// stageBankPipeline and stageDirPipeline create pipelines for a hand-built
+// State. buildStageTestCache gives them the component's clocks.
+func stageBankPipeline(width, numStages int) queueing.FastPipeline[int] {
+	return queueing.MakeFastPipeline[int](width, numStages, 1*timing.GHz, testsim.NewClock())
+}
+
+func stageDirPipeline(width, numStages int) queueing.FastPipeline[int] {
+	return queueing.MakeFastPipeline[int](width, numStages, dirStepFreq, testsim.NewClock())
 }
 
 func TestValidateState(t *testing.T) {

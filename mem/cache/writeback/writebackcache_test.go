@@ -17,9 +17,21 @@ import (
 	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
+
+// stageBankPipeline and stageDirPipeline create pipelines for a hand-built
+// State. A fixture gives them the component's clocks with AfterCheckpointLoad
+// once it installs that State.
+func stageBankPipeline(width, numStages int) queueing.FastPipeline[int] {
+	return queueing.MakeFastPipeline[int](width, numStages, 1*timing.GHz, testsim.NewClock())
+}
+
+func stageDirPipeline(width, numStages int) queueing.FastPipeline[int] {
+	return queueing.MakeFastPipeline[int](width, numStages, dirStepFreq, testsim.NewClock())
+}
 
 // makePorts creates the ports of the writeback cache named name, each with
 // bufSize slots in each direction.

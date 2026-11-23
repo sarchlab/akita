@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,7 +14,9 @@ import (
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
+	"github.com/syifan/goseth"
 )
 
 type inventoryState struct {
@@ -44,6 +47,34 @@ func TestMonitorDiscoversBuffersInRecursiveState(t *testing.T) {
 	type noBuffer []noBuffer
 	data := []noBuffer{{}, {nil}}
 	require.Empty(t, appendStateBuffers(nil, "Data", reflect.ValueOf(&data).Elem()))
+}
+
+// clockedRoot owns a pipeline whose clock points back at it, as a component's
+// does.
+type clockedRoot struct {
+	State struct {
+		Pipe queueing.FastPipeline[int]
+	}
+}
+
+func (*clockedRoot) CurrentTime() timing.VTimeInPicoSec { return 0 }
+
+// A pipeline is not a buffer, and its bound clock must not lead the monitor's
+// walks back through the component.
+func TestMonitorInspectsPipelineWithBoundClock(t *testing.T) {
+	root := &clockedRoot{}
+	root.State.Pipe = queueing.MakeFastPipeline[int](1, 2, timing.GHz, root)
+	root.State.Pipe.Push(42)
+
+	require.Empty(t, appendStateBuffers(nil, "Comp.State", reflect.ValueOf(&root.State).Elem()))
+
+	serializer := goseth.NewSerializer()
+	serializer.SetRoot(root)
+	serializer.SetMaxDepth(1)
+	require.NoError(t, serializer.SetEntryPoint([]string{"State", "Pipe"}))
+	var out bytes.Buffer
+	require.NoError(t, serializer.Serialize(&out))
+	require.True(t, json.Valid(out.Bytes()))
 }
 
 type inventoryComponent = wakeup.Component[struct{}, inventoryState, modeling.None, modeling.None, modeling.None]

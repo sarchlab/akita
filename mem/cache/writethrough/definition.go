@@ -48,7 +48,9 @@ func (s *state) Initialize(c *Comp) {
 	for i := 0; i < spec.NumBanks; i++ {
 		bankPipelines[i] = queueing.MakeFastPipeline[int](
 			spec.BankWidth,
-			max(spec.BankLatency, 1))
+			max(spec.BankLatency, 1),
+			spec.Freq,
+			c)
 	}
 
 	bankPostBufs := make([]queueing.Buffer[int], spec.NumBanks)
@@ -62,7 +64,9 @@ func (s *state) Initialize(c *Comp) {
 		BankBufs: bankBufs,
 		DirPipeline: queueing.MakeFastPipeline[int](
 			spec.DirectoryWidth,
-			max(spec.DirLatency, 1)),
+			max(spec.DirLatency, 1),
+			dirStepFreq,
+			dirStepClock{comp: c}),
 
 		DirPostBuf: queueing.MakeBuffer[int](spec.DirectoryWidth),
 
@@ -75,6 +79,30 @@ func (s *state) Initialize(c *Comp) {
 		spec.blockSize())
 
 	*s = initial
+}
+
+// AfterCheckpointLoad gives the decoded pipelines their clocks.
+func (s *state) AfterCheckpointLoad(c *Comp) {
+	s.DirPipeline.BindClock(dirStepClock{comp: c})
+	for i := range s.BankPipelines {
+		s.BankPipelines[i].BindClock(c)
+	}
+}
+
+// dirStepFreq makes one picosecond of dirStepClock equal one directory step, so
+// directory pipeline times are step numbers rather than simulation time.
+const dirStepFreq = 1000 * timing.GHz
+
+// dirStepClock is the directory pipeline's clock. The directory admits at step
+// c and drains at step c+1 within cycle c; the clock reads the step from the
+// component's current State, which survives a restore.
+type dirStepClock struct {
+	comp *Comp
+}
+
+// CurrentTime returns the current directory step.
+func (c dirStepClock) CurrentTime() timing.VTimeInPicoSec {
+	return timing.VTimeInPicoSec(c.comp.State.DirStep)
 }
 
 // Initialize creates the cache's middlewares. The pipeline middleware

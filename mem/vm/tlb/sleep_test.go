@@ -240,6 +240,33 @@ func TestZeroLatencyLookupCompletes(t *testing.T) {
 	require.Equal(t, uint64(0x2000)<<8, rsp.Payload.(addrtransprotocol.Rsp).Page.PAddr)
 }
 
+func TestCheckpointWhilePausedKeepsFrozenPipelineTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+
+	ref := newSleepRig(t, 100, 8)
+	ref.translate(5, 0x1000)
+	ref.command(40, memcontrolprotocol.CmdPause)
+	stop := timing.VTimeInPicoSec(80) * ref.comp.Spec.Freq.Period()
+	require.NoError(t, ref.engine.RunUntil(stop))
+	require.Equal(t, 1, ref.comp.State.Pipeline.Size())
+	require.NoError(t, ref.sim.SaveCheckpoint(path))
+
+	resumed := newSleepRig(t, 100, 8)
+	require.NoError(t, resumed.sim.LoadCheckpoint(path))
+	require.Equal(t, ref.comp.State.Pipeline.Stages()[0].Stage,
+		resumed.comp.State.Pipeline.Stages()[0].Stage)
+
+	ref.ticks = nil
+	for _, r := range []*sleepRig{ref, resumed} {
+		r.command(340, memcontrolprotocol.CmdEnable)
+		require.NoError(t, r.engine.Run())
+	}
+
+	require.Len(t, ref.sends, 1)
+	require.Equal(t, ref.sends, resumed.sends)
+	require.Equal(t, ref.ticks, resumed.ticks)
+}
+
 func TestCheckpointKeepsPendingLookupWake(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 

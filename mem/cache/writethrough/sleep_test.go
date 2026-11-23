@@ -308,6 +308,57 @@ func TestZeroLatencyStagesComplete(t *testing.T) {
 	}
 }
 
+func TestPauseDuringDirectoryShiftsByPausedCycles(t *testing.T) {
+	spec := sleepSpec()
+	spec.DirLatency = 41
+
+	baseline := newSleepRig(t, spec, 8)
+	baseline.read(5, 0x40)
+	baseline.fill(80, 1)
+	require.NoError(t, baseline.engine.Run())
+	require.Len(t, baseline.sends, 1)
+
+	const pausedCycles = 200
+	r := newSleepRig(t, spec, 8)
+	r.read(5, 0x40)
+	r.fill(80+pausedCycles, 1)
+	r.command(12, memcontrolprotocol.CmdPause)
+	r.command(12+pausedCycles, memcontrolprotocol.CmdEnable)
+	require.NoError(t, r.engine.Run())
+
+	require.Equal(t, []uint64{baseline.sends[0] + pausedCycles}, r.sends)
+}
+
+func TestCheckpointWhilePausedInDirectoryResumesExactly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+	spec := sleepSpec()
+	spec.DirLatency = 41
+
+	ref := newSleepRig(t, spec, 8)
+	ref.read(5, 0x40)
+	ref.command(12, memcontrolprotocol.CmdPause)
+	stop := timing.VTimeInPicoSec(40) * spec.Freq.Period()
+	require.NoError(t, ref.engine.RunUntil(stop))
+	require.Equal(t, 1, ref.comp.State.DirPipeline.Size())
+	require.NoError(t, ref.sim.SaveCheckpoint(path))
+
+	resumed := newSleepRig(t, spec, 8)
+	require.NoError(t, resumed.sim.LoadCheckpoint(path))
+	require.Equal(t, ref.comp.State.DirPipeline.Stages(), resumed.comp.State.DirPipeline.Stages())
+	require.Equal(t, ref.comp.State.DirStep, resumed.comp.State.DirStep)
+
+	ref.ticks = nil
+	for _, r := range []*sleepRig{ref, resumed} {
+		r.command(100, memcontrolprotocol.CmdEnable)
+		r.fill(200, 9)
+		require.NoError(t, r.engine.Run())
+	}
+
+	require.Len(t, ref.sends, 1)
+	require.Equal(t, ref.sends, resumed.sends)
+	require.Equal(t, ref.ticks, resumed.ticks)
+}
+
 func TestCheckpointKeepsPendingBankWake(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 

@@ -2,6 +2,7 @@ package switches
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/noc/packetization"
@@ -32,6 +33,16 @@ func (c *tickCounter) Func(ctx hooking.HookCtx) {
 // sleepSwitch builds a one-input switch with real ports on a serial engine.
 func sleepSwitch(t *testing.T, latency int) (*Comp, []*twowaybuffered.Port, *timing.SerialEngine) {
 	t.Helper()
+	sw, ports, engine, _ := sleepSwitchIn(t, latency)
+
+	return sw, ports, engine
+}
+
+// sleepSwitchIn is sleepSwitch that also returns the simulation.
+func sleepSwitchIn(
+	t *testing.T, latency int,
+) (*Comp, []*twowaybuffered.Port, *timing.SerialEngine, *sim.Simulation) {
+	t.Helper()
 	s := sim.MakeBuilder().Build()
 	t.Cleanup(func() { require.NoError(t, s.Terminate()) })
 	links := []Link{
@@ -50,7 +61,7 @@ func sleepSwitch(t *testing.T, latency int) (*Comp, []*twowaybuffered.Port, *tim
 	}
 	require.NoError(t, s.Initialize())
 
-	return sw, ports, s.Engine().(*timing.SerialEngine)
+	return sw, ports, s.Engine().(*timing.SerialEngine), s
 }
 
 func TestSwitchSleepsWhileFlitsTravel(t *testing.T) {
@@ -105,6 +116,31 @@ func TestFirstTickAtEdgeZeroMatchesForcedTicks(t *testing.T) {
 		require.Len(t, sparse, 1, "latency %d", latency)
 		require.Equal(t, forced, sparse, "latency %d", latency)
 	}
+}
+
+func TestCheckpointRebindsPipelineClock(t *testing.T) {
+	const latency = 50
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+
+	run := func(sw *Comp, ports []*twowaybuffered.Port, engine *timing.SerialEngine) []uint64 {
+		rec := &sendCycleRecorder{engine: engine, freq: sw.Spec.Freq}
+		ports[1].AcceptHook(rec)
+		require.NoError(t, engine.Run())
+		return rec.cycles
+	}
+
+	sw, ports, engine, s := sleepSwitchIn(t, latency)
+	ports[0].Deliver(messaging.Msg{ID: 1, Payload: packetization.Flit{Dst: "Destination"}})
+	require.NoError(t, engine.RunUntil(10*sw.Spec.Freq.Period()))
+	require.Equal(t, 1, sw.State.PortComplexes[0].Pipeline.Size())
+	require.NoError(t, s.SaveCheckpoint(path))
+	want := run(sw, ports, engine)
+
+	restored, restoredPorts, restoredEngine, restoredSim := sleepSwitchIn(t, latency)
+	require.NoError(t, restoredSim.LoadCheckpoint(path))
+
+	require.Len(t, want, 1)
+	require.Equal(t, want, run(restored, restoredPorts, restoredEngine))
 }
 
 func TestSwitchWakesBlockedPipelineAfterBackpressure(t *testing.T) {

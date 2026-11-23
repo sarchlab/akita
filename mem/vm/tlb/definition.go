@@ -33,10 +33,17 @@ func (s *state) Initialize(c *Comp) {
 		// A zero-latency lookup bypasses the pipeline, which stays empty.
 		Pipeline: queueing.MakeFastPipeline[pipelineTLBReqState](
 			spec.NumReqPerCycle,
-			max(spec.Latency, 1)),
+			max(spec.Latency, 1),
+			spec.Freq,
+			c),
 
 		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](spec.NumReqPerCycle),
 	}
+}
+
+// AfterCheckpointLoad gives the decoded pipeline its clock.
+func (s *state) AfterCheckpointLoad(c *Comp) {
+	s.Pipeline.BindClock(c)
 }
 
 func (m *middlewares) Initialize(c *Comp) {

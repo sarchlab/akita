@@ -92,7 +92,12 @@ func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
 // LoadCheckpoint restores the State and wakeup guard (best effort).
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
 	base.RequireInitialized(&c.ComponentBase)
-	return componentcheckpoint.Read(r, &c.State, c.wakeups)
+	if err := componentcheckpoint.Read(r, &c.State, c.wakeups); err != nil {
+		return err
+	}
+	base.RebindState(&c.State, c)
+
+	return nil
 }
 
 // Name returns the instance name given to Build.

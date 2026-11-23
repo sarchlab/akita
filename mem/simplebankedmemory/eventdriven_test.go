@@ -98,6 +98,11 @@ func newWakeRig(t *testing.T, spec Spec, outgoing int) *wakeRig {
 	return r
 }
 
+// cycleEdge returns the time of the clock edge of cycle.
+func cycleEdge(spec Spec, cycle uint64) timing.VTimeInPicoSec {
+	return timing.VTimeInPicoSec(cycle) * spec.Freq.Period()
+}
+
 func (r *wakeRig) at(cycle uint64, action func()) {
 	r.engine.Schedule(driverEvent{
 		EventBase: timing.MakeEventBase(r.sim.NewID(), cycleEdge(r.comp.Spec, cycle), "Driver"),
@@ -230,7 +235,7 @@ func TestFullBlockedLaneHoldsExactlyItsStages(t *testing.T) {
 			require.Equal(t, 4-i, s.Stage)
 			require.Equal(t, i == 0, s.Item.Committed)
 		}
-		require.False(t, r.comp.State.Banks[0].Pipeline.CanAccept())
+		require.False(t, r.comp.State.Banks[0].Pipeline.CanPush())
 		require.Equal(t, 2, r.top.IncomingBuf().Size())
 		require.Equal(t, []uint64{6, 7, 8, 9, 10, 11, 12}, r.ticks, "a blocked lane must sleep")
 	})
@@ -720,6 +725,30 @@ func TestCheckpointKeepsBlockedCommittedResponse(t *testing.T) {
 	require.Equal(t, []uint64{101}, resumed.sends)
 	require.Equal(t, []uint64{101, 102}, resumed.ticks)
 	require.True(t, resumed.quiescent())
+}
+
+func TestCheckpointWhilePausedKeepsFrozenPipelineTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+	ref := newWakeRig(t, wakeSpec(20), 4)
+	ref.deliverReads(5, 0)
+	ref.control(9, memcontrolprotocol.CmdPause)
+	require.NoError(t, ref.engine.RunUntil(cycleEdge(ref.comp.Spec, 50)))
+	require.NoError(t, ref.sim.SaveCheckpoint(path))
+
+	resumed := newWakeRig(t, wakeSpec(20), 4)
+	require.NoError(t, resumed.sim.LoadCheckpoint(path))
+	require.Equal(t, ref.comp.State.Banks[0].Pipeline.Stages()[0].Stage,
+		resumed.comp.State.Banks[0].Pipeline.Stages()[0].Stage)
+
+	ref.ticks = nil
+	for _, r := range []*wakeRig{ref, resumed} {
+		r.control(109, memcontrolprotocol.CmdEnable)
+		require.NoError(t, r.engine.Run())
+	}
+
+	require.Equal(t, []uint64{126}, ref.sends)
+	require.Equal(t, ref.sends, resumed.sends)
+	require.Equal(t, ref.ticks, resumed.ticks)
 }
 
 func TestParallelEngineCompletesTraffic(t *testing.T) {

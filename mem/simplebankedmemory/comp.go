@@ -84,8 +84,7 @@ type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
-	// TickFinalize brings the bank pipelines to the current cycle, commits the
-	// requests that are ready, and responds to them.
+	// TickFinalize commits the requests that are ready and responds to them.
 	TickFinalize *tickFinalizeMW
 
 	// Dispatch moves incoming requests into their banks' pipelines.
@@ -112,12 +111,6 @@ func bankPipelineShape(spec Spec) (width, numStages int) {
 	}
 
 	return spec.BankPipelineWidth, latency
-}
-
-// cycleEdge returns the time of the clock edge of cycle, the inverse of
-// Freq.Cycle at clock edges.
-func cycleEdge(spec Spec, cycle uint64) timing.VTimeInPicoSec {
-	return timing.VTimeInPicoSec(cycle) * spec.Freq.Period()
 }
 
 // requestBank returns the bank that serves a read or write request.
