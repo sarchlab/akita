@@ -43,11 +43,12 @@ func (s *state) Initialize(c *Comp) {
 		bankBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
-	bankPipelines := make([]queueing.Pipeline[int], spec.NumBanks)
+	// A zero-latency stage bypasses its pipeline, which stays empty.
+	bankPipelines := make([]queueing.FastPipeline[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankPipelines[i] = queueing.MakePipeline[int](
+		bankPipelines[i] = queueing.MakeFastPipeline[int](
 			spec.BankWidth,
-			spec.BankLatency)
+			max(spec.BankLatency, 1))
 	}
 
 	bankPostBufs := make([]queueing.Buffer[int], spec.NumBanks)
@@ -59,9 +60,9 @@ func (s *state) Initialize(c *Comp) {
 		DirBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankBufs: bankBufs,
-		DirPipeline: queueing.MakePipeline[int](
+		DirPipeline: queueing.MakeFastPipeline[int](
 			spec.DirectoryWidth,
-			spec.DirLatency),
+			max(spec.DirLatency, 1)),
 
 		DirPostBuf: queueing.MakeBuffer[int](spec.DirectoryWidth),
 

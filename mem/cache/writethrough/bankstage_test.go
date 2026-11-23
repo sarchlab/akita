@@ -30,10 +30,10 @@ func TestBankstage(t *testing.T) {
 			BankBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](1),
 			},
-			DirPipeline: queueing.MakePipeline[int](1, 2),
+			DirPipeline: queueing.MakeFastPipeline[int](1, 2),
 			DirPostBuf:  queueing.MakeBuffer[int](4),
-			BankPipelines: []queueing.Pipeline[int]{
-				queueing.MakePipeline[int](1, 10),
+			BankPipelines: []queueing.FastPipeline[int]{
+				queueing.MakeFastPipeline[int](1, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
 				queueing.MakeBuffer[int](1),

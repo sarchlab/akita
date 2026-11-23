@@ -17,8 +17,12 @@ type directory struct {
 func (d *directory) Tick() (madeProgress bool) {
 	next := &d.cache.comp.State
 
+	// A transaction is admitted before the step of the same tick.
+	step := max(d.cache.currentCycle()+1, next.DirPipeline.Cycle()+1)
+	next.DirPipeline.AdvanceTo(step - 1)
 	madeProgress = d.acceptIntoPipeline() || madeProgress
-	madeProgress = next.DirPipeline.Tick(&next.DirPostBuf) || madeProgress
+	next.DirPipeline.AdvanceTo(step)
+	madeProgress = next.DirPipeline.DrainReady(&next.DirPostBuf) || madeProgress
 	madeProgress = d.processPostPipeline() || madeProgress
 
 	return madeProgress
@@ -35,8 +39,12 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 	dirBuf := &next.DirBuf
 	dirPipeline := &next.DirPipeline
 
+	bypass := spec.DirLatency == 0
+
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if !dirPipeline.CanAccept() || dirBuf.Size() == 0 {
+		if dirBuf.Size() == 0 ||
+			bypass && !next.DirPostBuf.CanPush() ||
+			!bypass && !dirPipeline.CanAccept() {
 			break
 		}
 
@@ -48,7 +56,11 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 			What:     d.cache.comp.Name() + ".dir_pipeline",
 		})
 
-		dirPipeline.Accept(transIdx)
+		if bypass {
+			next.DirPostBuf.Push(transIdx)
+		} else {
+			dirPipeline.Accept(transIdx)
+		}
 		madeProgress = true
 	}
 

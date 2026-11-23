@@ -19,14 +19,36 @@ func (m *receivePipelineMW) ports() []messaging.Port {
 	return m.comp.Ports.Links
 }
 
-// Handle runs movePipeline → startProcessing on every tick.
+// Handle runs movePipeline → startProcessing on every tick. When the tick makes
+// no progress, the switch sleeps until a flit in a pipeline is due.
 func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
-	madeProgress = m.movePipeline() || madeProgress
+	madeProgress = m.movePipeline(m.comp.Spec.Freq.Cycle(m.comp.CurrentTime())) || madeProgress
 	madeProgress = m.startProcessing() || madeProgress
 
+	if !madeProgress {
+		m.scheduleWake()
+	}
+
 	return madeProgress
+}
+
+// scheduleWake asks for a tick at the next cycle a pipeline flit becomes ready.
+func (m *receivePipelineMW) scheduleWake() {
+	state := &m.comp.State
+	wake, found := uint64(0), false
+
+	for i := range state.PortComplexes {
+		due, ok := state.PortComplexes[i].Pipeline.NextReadyCycle()
+		if ok && (!found || due < wake) {
+			wake, found = due, true
+		}
+	}
+
+	if found {
+		m.comp.TickAt(timing.VTimeInPicoSec(wake) * m.comp.Spec.Freq.Period())
+	}
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
@@ -77,7 +99,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
+func (m *receivePipelineMW) movePipeline(cycle uint64) (madeProgress bool) {
 	state := &m.comp.State
 
 	for i := range m.ports() {
@@ -85,7 +107,8 @@ func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
 		if pcs.Latency == 0 {
 			continue
 		}
-		madeProgress = pcs.Pipeline.Tick(&pcs.RouteBuffer) || madeProgress
+		pcs.Pipeline.StepTo(cycle)
+		madeProgress = pcs.Pipeline.DrainReady(&pcs.RouteBuffer) || madeProgress
 	}
 
 	return madeProgress

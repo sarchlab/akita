@@ -18,19 +18,23 @@ func TestCalculatedOutputQueueStallsAndDrains(t *testing.T) {
 		for range width {
 			c.State.Pipeline.Accept(pipelineTLBReqState{})
 		}
-		c.State.Pipeline.Tick(&c.State.BufferItems)
+		step := func() {
+			c.State.Pipeline.StepTo(c.State.Pipeline.Cycle() + 1)
+			c.State.Pipeline.DrainReady(&c.State.BufferItems)
+		}
+		step()
 		for range width {
 			c.State.Pipeline.Accept(pipelineTLBReqState{})
 		}
 		for range 5 {
-			c.State.Pipeline.Tick(&c.State.BufferItems)
+			step()
 		}
 		require.Equal(t, width, c.State.BufferItems.Size())
 		require.Len(t, c.State.Pipeline.Stages(), width)
 		for range 2 * width {
 			_, ok := c.State.BufferItems.Pop()
 			require.True(t, ok)
-			c.State.Pipeline.Tick(&c.State.BufferItems)
+			step()
 		}
 		require.Zero(t, c.State.BufferItems.Size())
 		require.Empty(t, c.State.Pipeline.Stages())

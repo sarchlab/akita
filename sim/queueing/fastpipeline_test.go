@@ -384,6 +384,135 @@ func TestFastPipelineJSONRejectsPushPipelineSnapshot(t *testing.T) {
 	}
 }
 
+func TestFastPipelineDrainReadyIsOldestFirstAndKeepsBlockedHeads(t *testing.T) {
+	p := MakeFastPipeline[int](3, 2)
+	p.Accept(1)
+	p.Accept(2)
+	p.Accept(3)
+	p.AdvanceTo(2)
+
+	sink := MakeBuffer[int](2)
+	require.True(t, p.DrainReady(&sink))
+	require.Equal(t, []int{1, 2}, sink.Elements())
+	require.Equal(t, 1, p.Size(), "a head that does not fit stays in its lane")
+	require.False(t, p.DrainReady(&sink), "a full sink takes nothing")
+
+	sink.Pop()
+	require.True(t, p.DrainReady(&sink))
+	require.Equal(t, []int{2, 3}, sink.Elements())
+	require.Zero(t, p.Size())
+	require.False(t, p.DrainReady(&sink), "an empty pipeline has nothing to drain")
+}
+
+func TestFastPipelineDrainReadyDeliversOnePerLanePerCycle(t *testing.T) {
+	p := MakeFastPipeline[int](1, 2)
+	p.Accept(1)
+	p.AdvanceTo(1)
+	p.Accept(2)
+	p.AdvanceTo(5)
+
+	sink := MakeBuffer[int](4)
+	require.True(t, p.DrainReady(&sink))
+	require.Equal(t, []int{1}, sink.Elements())
+	require.False(t, p.DrainReady(&sink), "the follower is not ready until the next cycle")
+
+	p.AdvanceTo(6)
+	require.True(t, p.DrainReady(&sink))
+	require.Equal(t, []int{1, 2}, sink.Elements())
+}
+
+func TestFastPipelineStepToMovesAtLeastOneCycle(t *testing.T) {
+	p := MakeFastPipeline[int](1, 2)
+	p.StepTo(5)
+	require.Equal(t, uint64(5), p.Cycle())
+	p.StepTo(5)
+	require.Equal(t, uint64(6), p.Cycle(), "a repeated cycle still takes one step")
+	p.StepTo(2)
+	require.Equal(t, uint64(7), p.Cycle(), "an earlier cycle still takes one step")
+	p.StepTo(20)
+	require.Equal(t, uint64(20), p.Cycle())
+}
+
+// TestFastPipelineDrainReadyConservesItemsUnderBackpressure checks that random
+// backpressure neither loses nor duplicates an item, shortens its latency, or
+// reorders a lane.
+func TestFastPipelineDrainReadyConservesItemsUnderBackpressure(t *testing.T) {
+	for seed := int64(0); seed < 100; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		width, numStages := 1+rng.Intn(4), 1+rng.Intn(6)
+		capacity := 1 + rng.Intn(width+1)
+		p, sink := MakeFastPipeline[int](width, numStages), MakeBuffer[int](capacity)
+		acceptedAt, laneOf, lastInLane := map[int]uint64{}, map[int]int{}, map[int]int{}
+		delivered := map[int]bool{}
+		next := 0
+
+		pop := func(cycle uint64) {
+			item, ok := sink.Pop()
+			if !ok {
+				return
+			}
+			require.False(t, delivered[item], "seed %d item %d delivered twice", seed, item)
+			delivered[item] = true
+			require.GreaterOrEqual(t, cycle, acceptedAt[item]+uint64(numStages), "seed %d", seed)
+			if last, seen := lastInLane[laneOf[item]]; seen {
+				require.Greater(t, item, last, "seed %d lane reordered", seed)
+			}
+			lastInLane[laneOf[item]] = item
+		}
+
+		cycle := uint64(1)
+		for ; cycle < 400; cycle++ {
+			p.AdvanceTo(cycle)
+			p.DrainReady(&sink)
+			for range rng.Intn(capacity + 1) {
+				pop(cycle)
+			}
+			for rng.Intn(3) != 0 && p.CanAccept() {
+				p.Accept(next)
+				stages := p.Stages()
+				laneOf[next], acceptedAt[next] = stages[len(stages)-1].Lane, cycle
+				next++
+			}
+			require.LessOrEqual(t, p.Size(), width*numStages, "seed %d", seed)
+		}
+
+		for ; p.Size() > 0 || sink.Size() > 0; cycle++ {
+			p.AdvanceTo(cycle)
+			p.DrainReady(&sink)
+			pop(cycle)
+		}
+		require.Len(t, delivered, next, "seed %d", seed)
+	}
+}
+
+// TestFastPipelineDrainMatchesPushPipelineWithoutBackpressure checks that items
+// leave in the same cycles as the deprecated pipeline when the sink never fills.
+func TestFastPipelineDrainMatchesPushPipelineWithoutBackpressure(t *testing.T) {
+	for seed := int64(0); seed < 50; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		width, numStages := 1+rng.Intn(4), 1+rng.Intn(6)
+		push, pushBuf := MakePipeline[int](width, numStages), MakeBuffer[int](width)
+		fast, fastBuf := MakeFastPipeline[int](width, numStages), MakeBuffer[int](width)
+		next := 0
+
+		for cycle := uint64(1); cycle < 300; cycle++ {
+			push.Tick(&pushBuf)
+			fast.AdvanceTo(cycle)
+			fast.DrainReady(&fastBuf)
+			require.ElementsMatch(t, pushBuf.Elements(), fastBuf.Elements(), "seed %d cycle %d", seed, cycle)
+			pushBuf.Clear()
+			fastBuf.Clear()
+
+			require.Equal(t, push.CanAccept(), fast.CanAccept(), "seed %d cycle %d", seed, cycle)
+			for rng.Intn(3) != 0 && fast.CanAccept() {
+				push.Accept(next)
+				fast.Accept(next)
+				next++
+			}
+		}
+	}
+}
+
 // steppedPipeline is a cycle-by-cycle reference: lanes[l][s] holds the item at
 // stage s of lane l, or -1.
 type steppedPipeline struct {

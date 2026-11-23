@@ -36,12 +36,12 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 			c.State.DirPipeline.Accept(i)
 		}
 		require.False(t, c.State.DirPipeline.CanAccept())
-		c.State.DirPipeline.Tick(&c.State.DirPostBuf)
+		stepDirectory(c)
 		for i := range 3 {
 			c.State.DirPipeline.Accept(i + 3)
 		}
 		for range 5 {
-			c.State.DirPipeline.Tick(&c.State.DirPostBuf)
+			stepDirectory(c)
 		}
 		require.Equal(t, 3, c.State.DirPostBuf.Size())
 		require.Len(t, c.State.DirPipeline.Stages(), 3)
@@ -50,7 +50,7 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 			value, ok := c.State.DirPostBuf.Pop()
 			require.True(t, ok)
 			got = append(got, value)
-			c.State.DirPipeline.Tick(&c.State.DirPostBuf)
+			stepDirectory(c)
 		}
 		require.ElementsMatch(t, []int{0, 1, 2, 3, 4, 5}, got)
 		require.Zero(t, c.State.DirPostBuf.Size())
@@ -58,6 +58,12 @@ func TestDirectGeometryAndCalculatedQueues(t *testing.T) {
 		t.Logf("dispatch %d, directory 3, bank 2: calculated queues stall and drain six entries without loss", requests)
 	}
 }
+
+func stepDirectory(c *Comp) {
+	c.State.DirPipeline.StepTo(c.State.DirPipeline.Cycle() + 1)
+	c.State.DirPipeline.DrainReady(&c.State.DirPostBuf)
+}
+
 func TestInvalidDirectGeometryAndWidths(t *testing.T) {
 	for _, modify := range []func(*Spec){
 		func(s *Spec) { s.NumSets = 0 }, func(s *Spec) { s.NumWays = 0 },

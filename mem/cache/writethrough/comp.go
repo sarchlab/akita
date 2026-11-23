@@ -108,12 +108,15 @@ type state struct {
 	// Transactions stores all transaction states as a flat list.
 	Transactions []transactionState `json:"transactions"`
 
-	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
-	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
-	DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
-	DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
-	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
+	DirBuf        queueing.Buffer[int]         `json:"dir_buf"`
+	BankBufs      []queueing.Buffer[int]       `json:"bank_bufs"`
+	DirPipeline   queueing.FastPipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf    queueing.Buffer[int]         `json:"dir_post_buf"`
+	BankPipelines []queueing.FastPipeline[int] `json:"bank_pipelines"`
+	BankPostBufs  []queueing.Buffer[int]       `json:"bank_post_bufs"`
+
+	// PipelinesFrozen records that pipeline time stopped when the cache paused.
+	PipelinesFrozen bool `json:"pipelines_frozen"`
 
 	IsPaused      bool                 `json:"is_paused"`
 	IsDraining    bool                 `json:"is_draining"`

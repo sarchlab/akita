@@ -165,7 +165,7 @@ func TestSwitch(t *testing.T) {
 			TaskID: 101,
 		})
 
-		madeProgress := rpMW.movePipeline()
+		madeProgress := rpMW.movePipeline(1)
 
 		require.True(t, madeProgress)
 		// For latency=1, the item should have moved to RouteBuffer

@@ -75,6 +75,14 @@ on making a component, message, or event checkpointable, see
 
 ## Pipeline[T]
 
+**Deprecated:** use [`FastPipeline[T]`](#fastpipelinet). `Pipeline[T]` and
+`MakePipeline` remain available for existing models, and no Akita component uses
+them. To migrate a `Pipeline` that drains into a post-pipeline buffer, replace
+`pipe.Tick(&buf)` with `pipe.StepTo(cycle)` and `pipe.DrainReady(&buf)`, and
+schedule a tick at `NextReadyCycle`. The buffer keeps its capacity. Items that
+complete in the same cycle now enter it oldest first, and a component that
+sleeps no longer runs per-tick work on the cycles it skips.
+
 A multi-lane, multi-stage pipeline that models fixed-latency processing. Items
 enter at stage 0 and advance one stage per tick until they exit the last stage
 into a `Sink[T]`. Total latency through the pipeline equals `numStages` ticks.
@@ -151,6 +159,7 @@ if due, ok := pipe.NextReadyCycle(); ok {
 | Method | Description |
 |--------|-------------|
 | `AdvanceTo(cycle uint64)` | Bring all items forward; panics if cycle moves backward |
+| `StepTo(cycle uint64)` | Advance to `cycle`, or by one cycle if `cycle` is not ahead of the pipeline |
 | `SkipTo(cycle uint64)` | Move the clock without advancing items, to resume after a freeze |
 | `CanAccept() bool` | True if a lane has stage 0 free in this cycle |
 | `Accept(item T)` | Insert at stage 0 of the lowest free lane; panics if none |
@@ -158,6 +167,7 @@ if due, ok := pipe.NextReadyCycle(); ok {
 | `PeekLane(lane int) (T, bool)` | Read the ready head of a lane |
 | `UpdateReady(update func(T) T)` | Apply idempotent work to every ready lane head, oldest first, keeping results attached while blocked |
 | `PopLane(lane int) (T, bool)` | Remove the ready head of a lane |
+| `DrainReady(sink Sink[T]) bool` | Move ready heads into a sink, oldest first, while it has room; true if any moved |
 | `NextReadyCycle() (uint64, bool)` | Earliest future cycle a lane head becomes ready, assuming no further pops; already-ready heads are excluded |
 | `NextAcceptCycle() (uint64, bool)` | Earliest cycle `CanAccept` holds without a pop; false when all lanes are full |
 | `Stages() []PipelineStage[T]` | Copy of occupancy, oldest accepted first |
@@ -177,6 +187,8 @@ if due, ok := pipe.NextReadyCycle(); ok {
 - `ReadyLane` picks the oldest accepted item, which makes cross-lane order
   deterministic. A consumer may instead pop any ready lane directly.
 - Unlike a `Pipeline` draining into a `Buffer`, there is no separate output
-  queue: capacity is exactly `width * numStages`.
+  queue unless the component keeps one with `DrainReady`: the pipeline's own
+  capacity is exactly `width * numStages`.
+- `numStages` must be positive. A zero-latency stage bypasses its pipeline.
 - A push `Pipeline` snapshot cannot be restored into a `FastPipeline`. Loading
   one reports an error rather than dropping its in-flight items.

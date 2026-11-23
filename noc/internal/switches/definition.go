@@ -52,7 +52,8 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 		NumOutputChannel: link.NumOutputChannel,
 		Latency:          link.Latency,
 		PipelineWidth:    link.NumInputChannel,
-		Pipeline:         queueing.MakePipeline[routedFlit](link.NumInputChannel, link.Latency),
+		// A zero-latency port bypasses its pipeline, which stays empty.
+		Pipeline: queueing.MakeFastPipeline[routedFlit](link.NumInputChannel, max(link.Latency, 1)),
 
 		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
 
