@@ -93,6 +93,14 @@ type milestoneClock struct {
 
 func (c *milestoneClock) CurrentTime() timing.VTimeInPicoSec { return c.now }
 
+// tickNextCycle moves the clock to c's next edge and ticks c once. The bank
+// pipelines advance by elapsed cycles, so a manual tick must move the clock.
+func tickNextCycle(c *Comp, clock *milestoneClock) bool {
+	clock.now = c.Spec.Freq.NextTick(clock.now)
+
+	return modelingtest.Tick(c)
+}
+
 func TestSimpleBankedMemoryAdmissionMilestones(t *testing.T) {
 	var (
 		engine  timing.Engine
@@ -223,7 +231,7 @@ func TestSimpleBankedMemoryPipelineTraversalMilestones(t *testing.T) {
 	// agent has received the response, or a tick budget is exhausted.
 	drive := func() {
 		for i := 0; i < 64 && len(agent.received) == 0; i++ {
-			modelingtest.Tick(memComp)
+			tickNextCycle(memComp, engine.(*milestoneClock))
 			conn.transfer()
 		}
 	}

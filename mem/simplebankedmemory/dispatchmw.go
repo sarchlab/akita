@@ -36,26 +36,9 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 			break
 		}
 		msg := msgI
-		var address uint64
-		switch req := msg.Payload.(type) {
-		case memprotocol.ReadReq:
-			address = req.Address
-		case memprotocol.WriteReq:
-			address = req.Address
-		default:
-			log.Panicf("simplebankedmemory: unsupported message type %T", msgI.Payload)
-		}
+		bankID := requestBank(spec, msg)
 
-		if spec.NumBanks == 0 {
-			log.Panic("simplebankedmemory: no banks configured")
-		}
-
-		bankID := selectBank(spec, bankSelectionAddress(spec, address))
-		if bankID < 0 || bankID >= spec.NumBanks {
-			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
-		}
-
-		if !pipelineCanAccept(next.Banks[bankID], spec) {
+		if !next.Banks[bankID].Pipeline.CanAccept() {
 			break
 		}
 
@@ -71,7 +54,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// Admit the request: open req_in at retrieve, then open the pipeline
 		// subtask as a child of req_in so the bank-pipeline latency is attributed
 		// rather than left as a gap between the buffer task (which ends at
-		// retrieve) and the post-pipeline finalize milestones on req_in. The task
+		// retrieve) and the pipeline-exit finalize milestones on req_in. The task
 		// ID rides on the item through the pipeline and is closed at finalize.
 		recvTaskID := m.comp.TaskTracker().StartReqIn(m.comp, msg)
 
@@ -84,7 +67,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		item := m.msgToItem(msg)
 		item.RecvTaskID = recvTaskID
 		item.PipelineTaskID = pipelineTaskID
-		pipelineAccept(&next.Banks[bankID], spec, item)
+		next.Banks[bankID].Pipeline.Accept(item)
 		madeProgress = true
 	}
 
