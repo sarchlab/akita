@@ -60,6 +60,8 @@ Input/output widths must be positive and are configured separately. Changing
 frequency does not change flit size. Network-owned buffers are calculated:
 incoming port queues hold `InputWidth` flits, and send and outgoing port
 queues hold `OutputWidth` flits. Each switch ingress also shares
-`2 * InputWidth` waiting slots across all destination outputs. Device-facing ports remain caller-owned with their original sizes.
+`2 * InputWidth` waiting slots across all destination outputs. Endpoint network
+ports hold `InputWidth` incoming flits and `OutputWidth` outgoing flits.
+Device-facing ports remain caller-owned with their original sizes.
 Forwarding shares each output's width among contenders, limits each input to
 its input width, and rotates priority in binding order each cycle.

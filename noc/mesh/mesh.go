@@ -68,8 +68,8 @@ func (b Builder) WithSwitchLatency(cycles int) Builder { b.switchLatency = cycle
 // WithFlitSize sets the number of bytes per flit.
 func (b Builder) WithFlitSize(size int) Builder { b.flitSize = size; return b }
 
-// WithInputWidth sets flits per input per cycle and the calculated incoming,
-// routing, and forwarding queue capacities.
+// WithInputWidth sets the admission rate and incoming port capacity to n flits
+// per cycle and n flits, respectively. Each switch ingress shares 2*n waiting slots.
 func (b Builder) WithInputWidth(n int) Builder { b.inputWidth = n; return b }
 
 // WithOutputWidth sets flits per output per cycle and the calculated send and

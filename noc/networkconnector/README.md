@@ -29,10 +29,11 @@ Repeated explicit names append ports only when switch and configuration match.
 
 `InputWidth` and `OutputWidth` are positive flits-per-cycle limits.
 `Latency` is nonnegative processing latency inside the receiving switch.
-Network-owned incoming ports, route queues, and forward queues each hold
-`InputWidth` flits. Send queues and outgoing ports hold `OutputWidth`
-flits. Endpoint network ports follow the same input/output rule. Device ports
-supplied by the caller retain their own capacities. The topology wrappers
+Network-owned incoming ports hold `InputWidth` flits. Each switch ingress
+shares `2 * InputWidth` waiting slots across all destination outputs. Send
+queues and outgoing ports hold `OutputWidth` flits. Endpoint network ports
+follow the same input/output rule. Device ports supplied by the caller retain
+their own capacities. The topology wrappers
 provide width defaults; hand-written end parameters must specify both widths.
 
 ## Routing and lifecycle

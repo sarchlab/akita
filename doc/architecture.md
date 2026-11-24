@@ -90,9 +90,10 @@ than With methods. Use WithFreq consistently. Core configuration specifies indep
 Builders must not translate bandwidth or capacity targets into other model
 choices. Future calculators may return explicit configurations before Build.
 Internal pipeline queues and network-owned port buffers are implementation
-state, sized from processing widths at initialization/construction. NoC incoming queues use input width. Each switch ingress shares twice its
-input width in waiting slots across destination outputs. Send and outgoing
-queues use output width. Cache request queues use request width and pipeline output queues use
+state, sized from processing widths at initialization/construction. NoC incoming
+queues use input width. Each switch ingress shares twice its input width in
+waiting slots across destination outputs. Send and outgoing queues use output
+width. Cache request queues use request width and pipeline output queues use
 their respective pipeline widths; TLB output queues use lookup width. Caller-owned
 ports and architectural capacities (MSHR entries and buffered cache lines)
 remain configurable. Use NumSets, NumWays, and NumMSHREntries across Cache/TLB.

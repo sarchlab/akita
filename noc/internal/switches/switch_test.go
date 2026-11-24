@@ -226,7 +226,7 @@ func TestSwitch(t *testing.T) {
 			ID: sim.NewID(),
 		}
 
-		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
+		// Queue a flit on port1 for port2.
 		next := &sw.State
 		next.PortComplexes[0].Waiting =
 			queueing.MakeBuffer[routedFlit](1)
@@ -254,7 +254,7 @@ func TestSwitch(t *testing.T) {
 			ID: sim.NewID(),
 		}
 
-		// Fill sendOut buffer to capacity, forward buffer targets port2
+		// Queue a flit for port2 and fill its send-out buffer.
 		next := &sw.State
 		next.PortComplexes[0].Waiting =
 			queueing.MakeBuffer[routedFlit](1)
@@ -326,6 +326,24 @@ func TestSwitch(t *testing.T) {
 		next = &sw.State
 		require.Equal(t, 1, next.PortComplexes[1].SendOutBuffer.Size())
 	})
+}
+
+func TestWaitingCheckpointRoundTrip(t *testing.T) {
+	port := portComplexState{
+		NumInputChannel: 1,
+		Waiting:         queueing.MakeBuffer[routedFlit](2),
+		Ready:           1,
+	}
+	port.Waiting.Push(routedFlit{Flit: messaging.Msg{ID: 101}, TaskID: 1, OutputBufIdx: 0})
+	port.Waiting.Push(routedFlit{Flit: messaging.Msg{ID: 102}, TaskID: 2, OutputBufIdx: 1})
+
+	data, err := json.Marshal(port)
+	require.NoError(t, err)
+	var restored portComplexState
+	require.NoError(t, json.Unmarshal(data, &restored))
+	require.Equal(t, 2, restored.Waiting.Capacity())
+	require.Equal(t, port.Waiting.Elements(), restored.Waiting.Elements())
+	require.Equal(t, 1, restored.Ready)
 }
 
 func TestWaitingCheckpointBounds(t *testing.T) {
