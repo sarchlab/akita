@@ -173,7 +173,7 @@ jobs:
         run: python3 internal/tracecompare/determinism_test.py --race
 
   mem_acceptance_test:
-    runs-on: Github-Large-1
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [akita_build_lint_test]
     steps:
