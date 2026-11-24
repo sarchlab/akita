@@ -69,12 +69,20 @@ func (ds *directoryStage) processTransaction() bool {
 			break
 		}
 
+		// A transaction that cannot proceed stays at the head with its gates
+		// unchanged, so repeating it within this step cannot succeed.
+		var processed bool
 		if trans.HasRead {
-			madeProgress = ds.doRead(idx, trans) || madeProgress
-			continue
+			processed = ds.doRead(idx, trans)
+		} else {
+			processed = ds.doWrite(idx, trans)
 		}
 
-		madeProgress = ds.doWrite(idx, trans) || madeProgress
+		if !processed {
+			break
+		}
+
+		madeProgress = true
 	}
 
 	return madeProgress

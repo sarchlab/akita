@@ -178,7 +178,11 @@ func (m *pipelineMW) tickParseBottomStage() bool {
 
 	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseBottomStage.Tick() || madeProgress
+		// A response blocked on its bank buffer stays at the head of Bottom.
+		if !m.parseBottomStage.Tick() {
+			break
+		}
+		madeProgress = true
 	}
 
 	return madeProgress
@@ -201,7 +205,12 @@ func (m *pipelineMW) tickIntakeStage() bool {
 	madeProgress := false
 	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.intakeStage.Tick() || madeProgress
+		// The first failed attempt records the head's admission wait; a repeat
+		// finds the same head and gates and records nothing more.
+		if !m.intakeStage.Tick() {
+			break
+		}
+		madeProgress = true
 	}
 
 	return madeProgress

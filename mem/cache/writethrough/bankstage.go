@@ -19,14 +19,22 @@ func (s *bankStage) Reset() {
 func (s *bankStage) Tick() bool {
 	madeProgress := false
 
+	// Each phase fails only on an empty input or a full output, which a repeat
+	// in this tick would find unchanged.
 	for i := 0; i < s.numReqPerCycle; i++ {
-		madeProgress = s.finalizeTrans() || madeProgress
+		if !s.finalizeTrans() {
+			break
+		}
+		madeProgress = true
 	}
 
 	madeProgress = s.tickPipeline() || madeProgress
 
 	for i := 0; i < s.numReqPerCycle; i++ {
-		madeProgress = s.extractFromBuf() || madeProgress
+		if !s.extractFromBuf() {
+			break
+		}
+		madeProgress = true
 	}
 
 	return madeProgress

@@ -163,32 +163,38 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 	return madeProgress
 }
 
-func (m *tlbMiddleware) handleEnable() bool {
+// processResponses responds to the top and then parses bottom responses. Each
+// batch ends at its first failure: the same response is still blocked, or its
+// queue is empty.
+func (m *tlbMiddleware) processResponses() bool {
 	madeProgress := false
 	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respondMSHREntry() || madeProgress
+		if !m.respondMSHREntry() {
+			break
+		}
+		madeProgress = true
 	}
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseBottom() || madeProgress
+		if !m.parseBottom() {
+			break
+		}
+		madeProgress = true
 	}
 
+	return madeProgress
+}
+
+func (m *tlbMiddleware) handleEnable() bool {
+	madeProgress := m.processResponses()
 	madeProgress = m.processPipeline() || madeProgress
 
 	return madeProgress
 }
 
 func (m *tlbMiddleware) handleDrain() bool {
-	madeProgress := false
-	spec := m.comp.Spec
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respondMSHREntry() || madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseBottom() || madeProgress
-	}
+	madeProgress := m.processResponses()
 
 	// Draining advances in-flight pipeline work but admits no new Top
 	// requests (insertIntoPipeline), per the protocol's "Drain stops
@@ -220,6 +226,10 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 		return false
 	}
+	if !m.topPort().CanSend() {
+		return false
+	}
+
 	mshrEntry := &next.RespondingMSHRData
 	page := mshrEntry.Page
 	req := mshrEntry.Requests[0]
@@ -232,10 +242,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		Src:   m.topPort().AsRemote(),
 		Dst:   reqMsg.Src,
 		RspTo: reqMsg.ID,
-	}
-
-	if !m.topPort().CanSend() {
-		return false
 	}
 
 	m.topPort().Send(rspToTop)
