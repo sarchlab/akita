@@ -266,15 +266,11 @@ func mustStayInPage(name string, req incomingReqState, log2PageSize uint64) {
 		size = uint64(len(req.Data))
 	}
 
-	if size == 0 {
-		return
-	}
-
-	if addrToPageID(req.Address, log2PageSize) !=
-		addrToPageID(req.Address+size-1, log2PageSize) {
+	pageSize := uint64(1) << log2PageSize
+	if size > pageSize-req.Address%pageSize {
 		log.Panicf("%s: access to %#x of %d bytes of PID %d crosses a page "+
 			"boundary of %d-byte pages", name, req.Address, size, req.PID,
-			uint64(1)<<log2PageSize)
+			pageSize)
 	}
 }
 

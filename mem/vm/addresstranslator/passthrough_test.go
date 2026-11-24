@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"math"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -137,6 +138,15 @@ func TestVirtualAccessMustNotCrossAPage(t *testing.T) {
 	h = newHoldHarness(t)
 	h.top.Deliver(messaging.Msg{
 		Payload: memprotocol.WriteReq{Address: 0x10fc0, Data: make([]byte, 96), PID: 1},
+		ID:      h.sim.NewID(), Src: "Agent", Dst: h.top.AsRemote(),
+	})
+	require.Panics(t, func() { h.tick() })
+
+	// A size whose end wraps around the address space is not mistaken for
+	// one that stays in the page.
+	h = newHoldHarness(t)
+	h.top.Deliver(messaging.Msg{
+		Payload: memprotocol.ReadReq{Address: 0x1002, AccessByteSize: math.MaxUint64, PID: 1},
 		ID:      h.sim.NewID(), Src: "Agent", Dst: h.top.AsRemote(),
 	})
 	require.Panics(t, func() { h.tick() })
