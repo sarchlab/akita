@@ -75,6 +75,8 @@ func (m *parseTranslateMW) translate() bool {
 		return m.passThrough(itemI, incoming)
 	}
 
+	mustStayInPage(m.comp.Name(), incoming, m.comp.Spec.Log2PageSize)
+
 	if isPageHeld(nextState, incoming.PID, incoming.Address,
 		m.comp.Spec.Log2PageSize) {
 		// The page is held or faulted: the access waits in the held list
@@ -110,12 +112,17 @@ func (m *parseTranslateMW) translate() bool {
 
 // passThrough forwards a PID-0 access, whose address is already physical, to
 // the bottom at the same address, without a translation and regardless of
-// Holds.
+// Holds. It takes turns on the Bottom port with the translated accesses
+// (State.PreferTranslated).
 func (m *parseTranslateMW) passThrough(
 	msg messaging.Msg,
 	incoming incomingReqState,
 ) bool {
 	if !m.bottomPort().CanSend() {
+		return false
+	}
+
+	if m.comp.State.PreferTranslated && translatedWaitsForBottom(m.comp) {
 		return false
 	}
 
@@ -135,6 +142,7 @@ func (m *parseTranslateMW) passThrough(
 
 	nextState := &m.comp.State
 	nextState.InflightReqToBottom = append(nextState.InflightReqToBottom, reqToBot)
+	nextState.PreferTranslated = true
 	nextState.NextReqSeq++
 	m.topPort().RetrieveIncoming()
 

@@ -17,7 +17,8 @@ protocol reference.
   that it intersects. `Req.Addresses` is deprecated; v6 will address by range
   only. `Req.AddressingError` is the check that receivers apply.
 - **Error strings** — `ErrUnsupported`, `ErrMustBePausedOrDrained`,
-  `ErrCanceledByReset`, `ErrInvalidRange`, and `ErrAmbiguousAddressing`.
+  `ErrCanceledByReset`, `ErrInvalidRange`, `ErrAmbiguousAddressing`, and
+  `ErrInvalidPID`.
 - Zero is not a valid `Command`; receivers reject it as unsupported.
 
 Component states are private implementation details. The protocol specifies

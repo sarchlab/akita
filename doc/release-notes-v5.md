@@ -465,7 +465,10 @@ translator to copy virtual memory.
 The address translator forwards a request with PID 0 to `Bottom` at the same
 address, without a translation and regardless of Holds. **Result-changing:** a
 caller that sent PID-0 requests through a translator for translation must now
-give them a nonzero PID.
+give them a nonzero PID. A Hold or Release of PID 0 is rejected with the new
+`memcontrolprotocol.ErrInvalidPID`. A virtual access (nonzero PID) that
+crosses a page boundary now panics, since only its start is translated. When
+PID-0 and translated requests are both ready for `Bottom`, they take turns.
 
 `addrtransprotocol.Req` and `pagefaultprotocol.Req` gain `NoMigrate`, and the
 address translator gains `Spec.NoMigrate`, which sets it on every translation

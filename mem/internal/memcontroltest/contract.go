@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -401,9 +402,15 @@ func checkVerb(
 }
 
 // newControlReq builds a ControlReq addressed to the component's
-// Control port from a fixed pseudo-source "ContractAgent".
+// Control port from a fixed pseudo-source "ContractAgent". A Hold or Release
+// names process 1, since PID 0 is not a process an address translator holds.
 func newControlReq(h *Harness, cmd memcontrolprotocol.Command) messaging.Msg {
-	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+	var pid vm.PID
+	if cmd == memcontrolprotocol.CmdHold || cmd == memcontrolprotocol.CmdRelease {
+		pid = 1
+	}
+
+	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd, PID: pid},
 		ID:  h.Sim.NewID(),
 		Src: messaging.RemotePort("ContractAgent"),
 		Dst: h.Ctrl.AsRemote(),

@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -243,12 +244,57 @@ type state struct {
 	// responses.
 	NumHeldReqs uint64 `json:"num_held_reqs"`
 	NumFaults   uint64 `json:"num_faults"`
+
+	// PreferTranslated gives the Bottom port to a translated request ready to
+	// be sent before the next PID-0 request. A PID-0 request sets it and a
+	// translated request clears it, so neither kind starves the other.
+	PreferTranslated bool `json:"prefer_translated"`
 }
 
 // Helper functions
 
 func addrToPageID(addr, log2PageSize uint64) uint64 {
 	return (addr >> log2PageSize) << log2PageSize
+}
+
+// mustStayInPage panics if a virtual access crosses a page boundary: only
+// the page of its start address is translated, so the rest would reach the
+// wrong frame.
+func mustStayInPage(name string, req incomingReqState, log2PageSize uint64) {
+	size := req.AccessByteSize
+	if req.Type == "memprotocol.WriteReq" {
+		size = uint64(len(req.Data))
+	}
+
+	if size == 0 {
+		return
+	}
+
+	if addrToPageID(req.Address, log2PageSize) !=
+		addrToPageID(req.Address+size-1, log2PageSize) {
+		log.Panicf("%s: access to %#x of %d bytes of PID %d crosses a page "+
+			"boundary of %d-byte pages", name, req.Address, size, req.PID,
+			uint64(1)<<log2PageSize)
+	}
+}
+
+// translatedWaitsForBottom reports whether the translation response at the
+// head of the Translation port is ready to be sent on the Bottom port.
+func translatedWaitsForBottom(c *Comp) bool {
+	rsp, ok := c.Ports.Translation.PeekIncoming()
+	if !ok {
+		return false
+	}
+
+	transIdx := findTransactionByReqID(c.State.Transactions, rsp.RspTo)
+	if transIdx < 0 {
+		return false
+	}
+
+	req := c.State.Transactions[transIdx].IncomingReqs[0]
+
+	return !rsp.Payload.(addrtransprotocol.Rsp).Fault &&
+		!isPageHeld(&c.State, req.PID, req.Address, c.Spec.Log2PageSize)
 }
 
 // insertBySeq adds req to reqs, a list in the order the requests were taken

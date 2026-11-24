@@ -38,8 +38,23 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 A request with PID 0 is already physical. It is sent on `Bottom` at the same
 address, without a translation request, and is not subject to Holds or
 faults; its response returns on `Top` like any other. Translated requests
-also leave with PID 0. A Hold of PID 0 still waits for the PID-0 accesses in
-flight to its pages before it is acknowledged.
+also leave with PID 0. Since PID 0 is never held, a Hold or Release of PID 0
+is rejected with `memcontrolprotocol.ErrInvalidPID`, and a Hold of another
+process does not wait for physical accesses.
+
+When a PID-0 request and a translated request are both ready for `Bottom`,
+they take turns: a PID-0 request that is sent lets the next translated
+request go first (`State.PreferTranslated`), so neither kind starves the
+other.
+
+### Accesses within a page
+
+Only the page of the start address of a virtual access (nonzero PID) is
+translated, so the whole access, `[Address, Address+AccessByteSize)` or the
+length of a write's data, must lie in one page of `1 << Log2PageSize` bytes.
+An access that crosses a page boundary panics before it is translated.
+PID-0 accesses are not checked. A data mover side that goes through a
+translator therefore uses a granularity that divides the page size.
 
 ### No-migrate translation
 

@@ -20,4 +20,9 @@ const (
 	// ErrAmbiguousAddressing means the request has both HasRange and a
 	// nonempty Addresses.
 	ErrAmbiguousAddressing = "both range and addresses"
+
+	// ErrInvalidPID means the request names a process that the verb cannot
+	// select at this component, such as PID 0 in a Hold or Release of an
+	// address translator, whose PID-0 accesses are physical and never held.
+	ErrInvalidPID = "invalid PID"
 )

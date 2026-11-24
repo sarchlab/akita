@@ -77,7 +77,9 @@ Every read of a copy carries the request's `SrcPID` and every write carries
 its `DstPID`. Zero, the default, names a physical address. A nonzero PID lets
 a side whose port goes through an address translator copy virtual memory;
 the two sides take separate PIDs because one can be physical while the other
-is virtual.
+is virtual. The translator translates only the start of each unit, so the
+granularity of a virtual side must divide the translator's page size; an
+address translator panics on a unit that crosses a page.
 
 ## Key Types
 

@@ -103,6 +103,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	sendTaskID := m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 	m.bottomPort().Send(translatedReq)
 
+	nextState.PreferTranslated = false
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
 	nextTrans.Page = content.Page
