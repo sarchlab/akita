@@ -198,3 +198,60 @@ func TestPipelineFullAcceptDoesNotChangeContents(t *testing.T) {
 	p.Tick(sink)
 	assert.ElementsMatch(t, []int{0, 1}, sink.Elements())
 }
+
+func TestPipelinePartialBackpressureStallsOnlyBlockedLane(t *testing.T) {
+	p := newPipeline(2, 3)
+	sink := newPostBuf(1)
+	p.Accept(10)
+	p.Accept(20)
+	p.Tick(sink)
+	p.Accept(30)
+	p.Accept(40)
+	p.Tick(sink)
+	p.Accept(50)
+	p.Accept(60)
+	assert.False(t, p.CanAccept())
+
+	// The sink takes lane 1's output, so only lane 1 advances behind it.
+	assert.True(t, p.Tick(sink))
+	assert.Equal(t, []int{20}, sink.Elements())
+	assert.Equal(t, []PipelineStage[int]{
+		{Lane: 0, Stage: 2, Item: 10},
+		{Lane: 1, Stage: 1, Item: 60},
+		{Lane: 0, Stage: 1, Item: 30},
+		{Lane: 1, Stage: 2, Item: 40},
+		{Lane: 0, Stage: 0, Item: 50},
+	}, p.Stages())
+
+	// Lane 0 is still stalled at stage 0, so the next item takes lane 1.
+	assert.True(t, p.CanAccept())
+	p.Accept(70)
+	assert.Equal(t, PipelineStage[int]{Lane: 1, Stage: 0, Item: 70}, p.Stages()[5])
+	assert.False(t, p.CanAccept())
+}
+
+func TestPipelineOutputOrderAndStageZeroAcceptance(t *testing.T) {
+	p := newPipeline(3, 2)
+	sink := newPostBuf(3)
+	p.Accept(1)
+	p.Accept(2)
+	p.Accept(3)
+	p.Tick(sink)
+	p.Accept(4)
+
+	assert.True(t, p.Tick(sink))
+	assert.Equal(t, []int{3, 2, 1}, sink.Elements())
+	assert.Equal(t, []PipelineStage[int]{{Lane: 0, Stage: 1, Item: 4}}, p.Stages())
+
+	// Stage 0 is empty again, so all lanes are available in order.
+	p.Accept(5)
+	p.Accept(6)
+	p.Accept(7)
+	assert.Equal(t, []PipelineStage[int]{
+		{Lane: 0, Stage: 1, Item: 4},
+		{Lane: 0, Stage: 0, Item: 5},
+		{Lane: 1, Stage: 0, Item: 6},
+		{Lane: 2, Stage: 0, Item: 7},
+	}, p.Stages())
+	assert.False(t, p.CanAccept())
+}

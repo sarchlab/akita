@@ -20,18 +20,39 @@ func (m *tlbMiddleware) bottomPort() messaging.Port {
 	return m.comp.Ports.Bottom
 }
 
+// Handle runs one cycle of the TLB unless it is paused. When the cycle makes no
+// progress, the TLB sleeps until a pipeline item is due.
 func (m *tlbMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	next := &m.comp.State
 
-	switch next.TLBState {
-	case tlbStateDrain:
-		madeProgress = m.handleDrain() || madeProgress
-	case tlbStatePause:
+	// The tick that observes a pause does no pipeline work, and the tick that
+	// observes its end is the first cycle of pipeline work after it.
+	if next.TLBState == tlbStatePause {
+		next.Pipeline.Pause()
 		return false
-	default:
+	}
+	next.Pipeline.Resume()
+
+	if next.TLBState == tlbStateDrain {
+		madeProgress = m.handleDrain() || madeProgress
+	} else {
 		madeProgress = m.handleEnable() || madeProgress
 	}
+
+	// A drain that finishes in this tick has already moved the pipeline, so
+	// pipeline time stops here. The drain response goes out on the next tick.
+	if next.TLBState == tlbStatePause {
+		next.Pipeline.Pause()
+		return madeProgress || next.PendingDrainRsp
+	}
+
+	if !madeProgress {
+		if due, ok := next.Pipeline.NextReadyTime(); ok {
+			m.comp.TickAt(due)
+		}
+	}
+
 	return madeProgress
 }
 
@@ -47,7 +68,7 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) tickPipeline() bool {
 	next := &m.comp.State
-	return next.Pipeline.Tick(&next.BufferItems)
+	return next.Pipeline.DrainReady(&next.BufferItems)
 }
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
@@ -63,7 +84,8 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		if !next.Pipeline.CanAccept() {
+		bypass := spec.Latency == 0
+		if bypass && !next.BufferItems.CanPush() || !bypass && !next.Pipeline.CanPush() {
 			break
 		}
 
@@ -90,9 +112,12 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 		// Each stage takes one cycle, so a request spends spec.Latency
 		// cycles in the pipeline and a new request can enter every cycle.
-		next.Pipeline.Accept(pipelineTLBReqState{
-			Msg: msg, RecvTaskID: recvTaskID, PipelineTaskID: pid,
-		})
+		item := pipelineTLBReqState{Msg: msg, RecvTaskID: recvTaskID, PipelineTaskID: pid}
+		if bypass {
+			next.BufferItems.Push(item)
+		} else {
+			next.Pipeline.Push(item)
+		}
 
 		madeProgress = true
 	}

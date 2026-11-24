@@ -1,7 +1,10 @@
 package simplebankedmemory
 
 import (
+	"log"
+
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
@@ -10,12 +13,17 @@ import (
 
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct {
-	Freq                timing.Freq `json:"freq"`
-	NumBanks            int         `json:"num_banks"`
-	BankPipelineWidth   int         `json:"bank_pipeline_width"`
-	BankPipelineDepth   int         `json:"bank_pipeline_depth"`
-	StageLatency        int         `json:"stage_latency"`
-	PostPipelineBufSize int         `json:"post_pipeline_buf_size"`
+	Freq              timing.Freq `json:"freq"`
+	NumBanks          int         `json:"num_banks"`
+	BankPipelineWidth int         `json:"bank_pipeline_width"`
+	BankPipelineDepth int         `json:"bank_pipeline_depth"`
+	StageLatency      int         `json:"stage_latency"`
+
+	// Deprecated: PostPipelineBufSize is ignored for every value, including
+	// zero and negative ones, and remains for source and JSON compatibility.
+	// Completed requests now wait in the final stage of their bank pipeline,
+	// so a blocked response backpressures that lane.
+	PostPipelineBufSize int `json:"post_pipeline_buf_size"`
 
 	BankSelectorLog2InterleaveSize uint64 `json:"bank_selector_log2_interleave_size"`
 
@@ -40,10 +48,10 @@ type bankPipelineItemState struct {
 	PipelineTaskID uint64 `json:"pipeline_task_id"`
 }
 
-// bankState captures one bank pipeline + buffer contents.
+// bankState captures one bank pipeline. A completed item stays in the final
+// stage, with its committed state, until its response is sent.
 type bankState struct {
-	Pipeline        queueing.Pipeline[bankPipelineItemState] `json:"pipeline"`
-	PostPipelineBuf queueing.Buffer[bankPipelineItemState]   `json:"post_pipeline_buf"`
+	Pipeline queueing.FastPipeline[bankPipelineItemState] `json:"pipeline"`
 }
 
 // state contains mutable runtime data for the simple banked memory.
@@ -71,60 +79,62 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// middlewares holds the memory's behavior, run in field order every cycle.
+// middlewares holds the memory's behavior, run in field order on every tick.
 type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
-	// TickFinalize commits requests leaving the bank pipelines, responds to
-	// them, and advances the pipelines.
+	// TickFinalize commits the requests that are ready and responds to them.
 	TickFinalize *tickFinalizeMW
 
 	// Dispatch moves incoming requests into their banks' pipelines.
 	Dispatch *dispatchMW
+
+	// Wake schedules the next cycle at which a bank can do work.
+	Wake *wakeMW
 }
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
 // It is a ticking component specialized to this package's five structs.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
-// --- Free functions for pipeline / buffer / bank-selection / address conversion ---
+// --- Free functions for pipeline shape / bank-selection / address conversion ---
 
-func pipelineCanAccept(bank bankState, spec Spec) bool {
-	if spec.BankPipelineDepth == 0 {
-		return bank.PostPipelineBuf.CanPush()
+// bankPipelineShape returns the width and stage count of a bank pipeline. A
+// request accepted in cycle c responds in cycle c + numStages when unblocked,
+// and the final stage is the only place a completed request waits. Without
+// pipeline latency, the pipeline is one stage with at least one lane.
+func bankPipelineShape(spec Spec) (width, numStages int) {
+	latency := spec.BankPipelineDepth * spec.StageLatency
+	if latency <= 0 {
+		return max(spec.BankPipelineWidth, 1), 1
 	}
 
-	return bank.Pipeline.CanAccept()
+	return spec.BankPipelineWidth, latency
 }
 
-func pipelineAccept(
-	bank *bankState,
-	spec Spec,
-	item bankPipelineItemState,
-) {
-	if spec.BankPipelineDepth == 0 {
-		bank.PostPipelineBuf.Push(item)
-		return
+// requestBank returns the bank that serves a read or write request.
+func requestBank(spec Spec, msg messaging.Msg) int {
+	var address uint64
+	switch req := msg.Payload.(type) {
+	case memprotocol.ReadReq:
+		address = req.Address
+	case memprotocol.WriteReq:
+		address = req.Address
+	default:
+		log.Panicf("simplebankedmemory: unsupported message type %T", msg.Payload)
 	}
 
-	bank.Pipeline.Accept(item)
-}
-
-func pipelineTick(bank *bankState) bool {
-	return bank.Pipeline.Tick(&bank.PostPipelineBuf)
-}
-
-func bufferPeek(bank bankState) (bankPipelineItemState, bool) {
-	return bank.PostPipelineBuf.Peek()
-}
-
-func bufferPop(bank *bankState) {
-	if bank.PostPipelineBuf.Size() == 0 {
-		return
+	if spec.NumBanks == 0 {
+		log.Panic("simplebankedmemory: no banks configured")
 	}
 
-	bank.PostPipelineBuf.Pop()
+	bankID := selectBank(spec, bankSelectionAddress(spec, address))
+	if bankID < 0 || bankID >= spec.NumBanks {
+		log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
+	}
+
+	return bankID
 }
 
 // selectBank chooses the bank for a (bank-selection) address. Callers pass the

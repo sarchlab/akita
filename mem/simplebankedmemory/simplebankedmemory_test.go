@@ -7,12 +7,10 @@ import (
 	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
@@ -186,8 +184,9 @@ const (
 	readSize    = 64
 )
 
-func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.Freq) {
-	sim := akitasim.MakeBuilder().Build()
+func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, *milestoneClock, timing.Freq) {
+	clock := &milestoneClock{Engine: timing.NewSerialEngine()}
+	sim := testsim.New(clock, false)
 
 	freq := 1 * timing.GHz
 
@@ -214,7 +213,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 		panic(err)
 	}
 
-	return memComp, agent, conn, freq
+	return memComp, agent, conn, clock, freq
 }
 
 func makeReadReq(ids interface{ NewID() uint64 }, src, dst messaging.RemotePort, index int) messaging.Msg {
@@ -252,7 +251,7 @@ func collectLatency(
 
 func TestSimpleBankedMemory(t *testing.T) {
 	var (
-		engine  timing.Engine
+		clock   *milestoneClock
 		sim     *testsim.Simulation
 		memComp *Comp
 		storage *mem.Storage
@@ -263,8 +262,8 @@ func TestSimpleBankedMemory(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
-		sim = testsim.New(engine, false)
+		clock = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = testsim.New(clock, false)
 		storage = mem.NewStorage(4 * mem.GB)
 
 		spec := DefaultSpec()
@@ -316,7 +315,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 		agent.send(t, read)
 
 		for i := 0; i < 6; i++ {
-			modelingtest.Tick(memComp)
+			tickNextCycle(memComp, clock)
 		}
 
 		require.Len(t, agent.received, 1)
@@ -361,7 +360,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 		agent.send(t, read)
 
 		for i := 0; i < 10; i++ {
-			modelingtest.Tick(memComp)
+			tickNextCycle(memComp, clock)
 		}
 
 		require.Len(t, agent.received, 2)
@@ -380,7 +379,8 @@ func TestSimpleBankedMemory(t *testing.T) {
 		t.Cleanup(func() { cleanup2(t) })
 		setup1(t)
 
-		sim = testsim.New(engine, false)
+		clock = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = testsim.New(clock, false)
 		// Storage is global: a request's address indexes the backing store
 		// directly, with no per-controller conversion.
 		spec := DefaultSpec()
@@ -431,7 +431,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 		agent.send(t, read)
 
 		for i := 0; i < 12; i++ {
-			modelingtest.Tick(memComp)
+			tickNextCycle(memComp, clock)
 		}
 
 		require.Len(t, agent.received, 2)
@@ -443,7 +443,7 @@ func TestSimpleBankedMemory(t *testing.T) {
 }
 
 func Example() {
-	memComp, agent, conn, freq := setupExampleSystem()
+	memComp, agent, conn, clock, freq := setupExampleSystem()
 	topPort := memComp.Ports.Top
 	srcRemote := agent.port.AsRemote()
 	dstRemote := topPort.AsRemote()
@@ -470,7 +470,7 @@ func Example() {
 			conn.transfer()
 		}
 
-		modelingtest.Tick(memComp)
+		tickNextCycle(memComp, clock)
 		conn.transfer()
 
 		latencySum += collectLatency(agent, startCycles, cycles, &processed)
@@ -486,7 +486,7 @@ func Example() {
 	fmt.Printf("Average latency: %.2f cycles\n", avgLatencyCycles)
 	// Output:
 	// Achieved bandwidth: 64.00 GB/s
-	// Average latency: 7.00 cycles
+	// Average latency: 6.00 cycles
 }
 
 func (a *testAgent) BindPort(slot string, p messaging.Port)      { p.BindOwner(a, a.Name()+"."+slot) }

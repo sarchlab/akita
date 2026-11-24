@@ -108,12 +108,15 @@ type state struct {
 	// Transactions stores all transaction states as a flat list.
 	Transactions []transactionState `json:"transactions"`
 
-	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
-	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
-	DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
-	DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
-	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
+	DirBuf        queueing.Buffer[int]         `json:"dir_buf"`
+	BankBufs      []queueing.Buffer[int]       `json:"bank_bufs"`
+	DirPipeline   queueing.FastPipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf    queueing.Buffer[int]         `json:"dir_post_buf"`
+	BankPipelines []queueing.FastPipeline[int] `json:"bank_pipelines"`
+	BankPostBufs  []queueing.Buffer[int]       `json:"bank_post_bufs"`
+
+	// DirStep is the directory pipeline's clock, in directory steps.
+	DirStep uint64 `json:"dir_step"`
 
 	IsPaused      bool                 `json:"is_paused"`
 	IsDraining    bool                 `json:"is_draining"`

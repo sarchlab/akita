@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -412,8 +413,12 @@ func newControlReq(h *Harness, cmd memcontrolprotocol.Command) messaging.Msg {
 }
 
 // tick hands the component a ticking.Event at the current time, as the engine
-// does on every cycle.
+// does on every cycle. A testsim.Clock moves to its next 1 GHz edge first, for
+// components that measure elapsed time.
 func (h *Harness) tick() {
+	if clock, ok := h.Sim.Engine().(*testsim.Clock); ok {
+		clock.Step(timing.GHz)
+	}
 	h.Comp.Handle(ticking.MakeEvent(
 		h.Sim.NewID(), h.Sim.Engine().CurrentTime(), h.Comp.Name()))
 }

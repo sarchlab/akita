@@ -175,9 +175,12 @@ Put necessary component-specific checks at the start of the relevant initializer
 An initializer panic leaves the simulation unusable; rebuild it instead of retrying.
 There is no separate validator or creator registration callback,
 and no promise to collect all component-specific errors before initialization.
-Checkpoint restore overwrites State after normal initialization; it does not rerun
-initializers. Runtime shape checks and static inspection recognize the same element
-method signatures.
+Checkpoint restore overwrites State with a freshly decoded value after normal
+initialization; it does not rerun initializers. A State holding a runtime-only
+dependency that is not serialized, such as a `queueing.FastPipeline` clock, may
+define a pointer-receiver `AfterCheckpointLoad(c *Comp)` method to reattach it.
+Runtime shape checks and static inspection recognize the same element method
+signatures.
 
 Middleware fields must be exported because initialization uses reflection to
 extract their values into an ordered pipeline. The containing struct may be

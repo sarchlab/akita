@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling"
-	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +108,7 @@ func TestBankSelectionAcrossInterleavedControllers(t *testing.T) {
 // offset and exercise more than one bank.
 func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 	var (
-		engine  timing.Engine
+		clock   *milestoneClock
 		sim     *testsim.Simulation
 		memComp *Comp
 		agent   *testAgent
@@ -119,8 +118,8 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 	setup1 := func(t *testing.T) {
 		t.Helper()
 
-		engine = timing.NewSerialEngine()
-		sim = testsim.New(engine, false)
+		clock = &milestoneClock{Engine: timing.NewSerialEngine()}
+		sim = testsim.New(clock, false)
 
 		spec := DefaultSpec()
 		spec.NumBanks = 4
@@ -177,7 +176,7 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 		}
 
 		for i := 0; i < 20; i++ {
-			modelingtest.Tick(memComp)
+			tickNextCycle(memComp, clock)
 		}
 
 		for i, a := range addrs {
@@ -192,7 +191,7 @@ func TestBankSelectionDataCorrectnessWithGlobalStorage(t *testing.T) {
 			agent.send(t, r)
 
 			for j := 0; j < 20; j++ {
-				modelingtest.Tick(memComp)
+				tickNextCycle(memComp, clock)
 			}
 			_, ok := agent.received[len(agent.received)-1].Payload.(memprotocol.DataReadyRsp)
 			rsp := agent.received[len(agent.received)-1]

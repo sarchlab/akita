@@ -19,14 +19,21 @@ func DefaultSpec() Spec {
 }
 
 func (s *state) Initialize(c *Comp) {
-	name, spec := c.Name(), c.Spec
+	spec := c.Spec
 	if spec.StageLatency < 0 {
 		panic("simplebankedmemory: StageLatency must be nonnegative")
 	}
 	spec.BankAddressConversion.validate()
 
 	*s = state{
-		Banks: buildInitialBanks(name, spec),
+		Banks: buildInitialBanks(c),
+	}
+}
+
+// AfterCheckpointLoad gives the decoded bank pipelines their clock.
+func (s *state) AfterCheckpointLoad(c *Comp) {
+	for i := range s.Banks {
+		s.Banks[i].Pipeline.BindClock(c)
 	}
 }
 
@@ -39,19 +46,18 @@ func (m *middlewares) Initialize(c *Comp) {
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},
+		Wake:         &wakeMW{comp: c},
 	}
 }
 
-// buildInitialBanks returns the empty banks of the memory named name.
-func buildInitialBanks(name string, spec Spec) []bankState {
+// buildInitialBanks returns the empty banks of the memory c.
+func buildInitialBanks(c *Comp) []bankState {
+	spec := c.Spec
+	width, numStages := bankPipelineShape(spec)
 	banks := make([]bankState, spec.NumBanks)
 	for i := range banks {
 		banks[i] = bankState{
-			Pipeline: queueing.MakePipeline[bankPipelineItemState](
-				spec.BankPipelineWidth,
-				spec.BankPipelineDepth*spec.StageLatency),
-
-			PostPipelineBuf: queueing.MakeBuffer[bankPipelineItemState](spec.PostPipelineBufSize),
+			Pipeline: queueing.MakeFastPipeline[bankPipelineItemState](width, numStages, spec.Freq, c),
 		}
 	}
 

@@ -9,13 +9,15 @@ import (
 
 func fullPipeline(width, stages int) Pipeline[int] {
 	p := MakePipeline[int](width, stages)
+	items := make([]PipelineStage[int], 0, width*stages)
 	for stage := 0; stage < stages; stage++ {
 		for lane := 0; lane < width; lane++ {
-			p.stages = append(p.stages, PipelineStage[int]{
+			items = append(items, PipelineStage[int]{
 				Lane: lane, Stage: stage, Item: stage*width + lane,
 			})
 		}
 	}
+	p.restoreStages(items)
 	return p
 }
 
@@ -59,6 +61,35 @@ func TestPipelineRestoreRebuildsOccupancy(t *testing.T) {
 	p.Clear()
 	p.Accept(99)
 	require.Equal(t, []int{99}, drainPipeline(&p))
+}
+
+func TestPipelineRestoreFullIngress(t *testing.T) {
+	data, err := json.Marshal(fullPipeline(2, 2))
+	require.NoError(t, err)
+
+	restored := MakePipeline[int](2, 2)
+	require.NoError(t, json.Unmarshal(data, &restored))
+	require.False(t, restored.CanAccept())
+	require.Panics(t, func() { restored.Accept(8) })
+
+	// Releasing lane 1 frees only that lane at stage 0.
+	sink := MakeBuffer[int](1)
+	require.True(t, restored.Tick(&sink))
+	require.Equal(t, []int{3}, sink.Elements())
+	require.True(t, restored.CanAccept())
+	restored.Accept(8)
+	require.Equal(t, []PipelineStage[int]{
+		{Lane: 0, Stage: 0, Item: 0},
+		{Lane: 1, Stage: 1, Item: 1},
+		{Lane: 0, Stage: 1, Item: 2},
+		{Lane: 1, Stage: 0, Item: 8},
+	}, restored.Stages())
+	require.False(t, restored.CanAccept())
+
+	restored.Clear()
+	require.True(t, restored.CanAccept())
+	restored.Accept(9)
+	require.Equal(t, []PipelineStage[int]{{Lane: 0, Stage: 0, Item: 9}}, restored.Stages())
 }
 
 func BenchmarkPipelineBlocked(b *testing.B) {

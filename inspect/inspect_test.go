@@ -74,6 +74,8 @@ var expectedErrors = []struct {
 	{"value receiver initializer", "fixtures/valueinitializer", "must use a pointer receiver"},
 	{"invalid State initializer", "fixtures/badstateinitializer", "State.Initialize must have signature"},
 	{"invalid Middlewares initializer", "fixtures/badmiddlewareinitializer", "Middlewares.Initialize must have signature"},
+	{"value receiver checkpoint hook", "fixtures/valuecheckpointload", "AfterCheckpointLoad must use a pointer receiver"},
+	{"invalid checkpoint hook", "fixtures/badcheckpointload", "State.AfterCheckpointLoad must have signature"},
 	{"middleware without Handle", "fixtures/badmiddleware",
 		"implement ticking.Middleware"},
 }
@@ -186,6 +188,12 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 	t.Run("omitted initializers", func(t *testing.T) {
 		if _, ok := byPkg[fixturePath("nomiddlewares")]; !ok {
 			t.Fatal("zero-value elements must not require initializers")
+		}
+	})
+
+	t.Run("State field may use the checkpoint hook name", func(t *testing.T) {
+		if _, ok := byPkg[fixturePath("checkpointloadfield")]; !ok {
+			t.Fatal("a field named AfterCheckpointLoad is not the optional hook")
 		}
 	})
 

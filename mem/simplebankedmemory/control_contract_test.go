@@ -48,9 +48,7 @@ func TestControlContract(t *testing.T) {
 			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				for i := range comp.State.Banks {
-					b := &comp.State.Banks[i]
-					if len(b.Pipeline.Stages()) != 0 ||
-						b.PostPipelineBuf.Size() != 0 {
+					if !bankIsQuiescent(&comp.State.Banks[i]) {
 						return false
 					}
 				}

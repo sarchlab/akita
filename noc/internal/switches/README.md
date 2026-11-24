@@ -34,7 +34,9 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 1. **startProcessing** — pull flits from each input port into the port's
    latency pipeline (or directly into the route buffer when latency is 0).
 2. **movePipeline** — advance pipelines, draining completed flits into route
-   buffers.
+   buffers. The switch sleeps while flits only travel and ticks again when one
+   is ready. The arbitration cursor advances once per tick, so it does not move
+   during those skipped cycles.
 3. **route** — look up each flit's final `Dst` in the `routing.Table`, resolve
    it to an output port index, and move it to the forward buffer.
 4. **forward** — arbitrate (round-robin across input ports) and copy flits into

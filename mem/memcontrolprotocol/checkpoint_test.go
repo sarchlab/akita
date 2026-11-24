@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/internal/testsim"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	akitasim "github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
@@ -39,6 +39,7 @@ const cpBlockSize = 64 // 1 << Log2BlockSize(6)
 // by a hand-rolled message ferry, so the test has full per-tick control
 // (the engine is never run) while the backing store is a real component.
 type cacheOverDRAM struct {
+	clock       *testsim.Clock
 	cache       *writeback.Comp
 	dram        *idealmemcontroller.Comp
 	dramStorage *mem.Storage
@@ -52,6 +53,7 @@ type cacheOverDRAM struct {
 // tick advances both components one step and ferries messages across the
 // cache.Bottom <-> dram.Top link in both directions.
 func (h *cacheOverDRAM) tick() {
+	h.clock.Step(h.cache.Spec.Freq)
 	modelingtest.Tick(h.cache)
 	modelingtest.Tick(h.dram)
 
@@ -71,10 +73,17 @@ func (h *cacheOverDRAM) tick() {
 	}
 }
 
+// tickCache advances only the cache one step.
+func (h *cacheOverDRAM) tickCache() {
+	h.clock.Step(h.cache.Spec.Freq)
+	modelingtest.Tick(h.cache)
+}
+
 func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	t.Helper()
 
-	sim := akitasim.MakeBuilder().Build()
+	clock := testsim.NewClock()
+	sim := testsim.New(clock, false)
 
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
@@ -126,6 +135,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		Build())
 
 	h := &cacheOverDRAM{
+		clock:       clock,
 		cache:       cache,
 		dram:        dram,
 		dramStorage: dramStorage,
@@ -331,7 +341,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	var fetch messaging.Msg
 	for i := 0; i < 4096 && fetch.ID == 0; i++ {
-		modelingtest.Tick(h.cache)
+		h.tickCache()
 		if out, ok := h.bottom.RetrieveOutgoing(); ok {
 			fetch = out
 			_ = out.Payload.(memprotocol.ReadReq)
@@ -351,7 +361,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	h.ctrl.Deliver(rst)
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		modelingtest.Tick(h.cache)
+		h.tickCache()
 		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
 				Command == memcontrolprotocol.CmdReset {
@@ -375,7 +385,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Processing the orphan must not panic; it is simply dropped.
 	for range 16 {
-		modelingtest.Tick(h.cache)
+		h.tickCache()
 	}
 
 	// The cache still works: a fresh read re-fetches from the backing store.
