@@ -472,13 +472,18 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	// A fault response is forwarded to the requests but not filled: the
-	// requests translate again once the fault is serviced.
+	// requests translate again once the fault is serviced. A page already
+	// filled, for example by the NoMigrate or normal miss of the same page,
+	// keeps its way; only an absent page evicts one.
 	if !content.Fault {
 		setID := vAddrToSetID(page.VAddr, spec)
-		wayID, ok := setEvict(&next.Sets[setID])
-
-		if !ok {
-			panic("failed to evict")
+		wayID, _, found := setLookup(&next.Sets[setID], page.PID, page.VAddr)
+		if !found {
+			var ok bool
+			wayID, ok = setEvict(&next.Sets[setID])
+			if !ok {
+				panic("failed to evict")
+			}
 		}
 
 		setUpdate(&next.Sets[setID], wayID, page)

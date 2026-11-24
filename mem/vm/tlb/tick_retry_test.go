@@ -21,12 +21,15 @@ func (p *retrySendPort) CanSend() bool {
 	return p.Port.CanSend()
 }
 
-func newRetryTLB(t *testing.T) (*Comp, *retrySendPort) {
+func newRetryTLB(t *testing.T, configure ...func(*Spec)) (*Comp, *retrySendPort) {
 	t.Helper()
 	sim := testsim.New(testsim.NewClock(), false)
 	spec := DefaultSpec()
 	spec.NumReqPerCycle = 4
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
+	for _, f := range configure {
+		f(&spec)
+	}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts(sim, "TLB")
 	top := &retrySendPort{Port: ports.Top}

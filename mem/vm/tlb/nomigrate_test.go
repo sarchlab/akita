@@ -63,3 +63,44 @@ func TestNoMigrateMissIsForwardedAndNotMerged(t *testing.T) {
 	require.Len(t, remaining.Requests, 1)
 	require.Equal(t, normal.Msg.ID, remaining.Requests[0].Msg.ID)
 }
+
+// TestNoMigrateAndNormalFillsShareOneWay delivers the successful responses
+// of a NoMigrate miss and a normal miss of one page. The second fill reuses
+// the page's way, so an unrelated resident page survives.
+func TestNoMigrateAndNormalFillsShareOneWay(t *testing.T) {
+	comp, _ := newRetryTLB(t, func(s *Spec) { s.NumWays = 2 })
+	mw := comp.Middlewares.TLB
+
+	// An unrelated page, filled first, is the least recently used.
+	set := &comp.State.Sets[0]
+	resident := vm.Page{PID: 1, VAddr: 0x9000, Valid: true}
+	wayID, ok := setEvict(set)
+	require.True(t, ok)
+	setUpdate(set, wayID, resident)
+	setVisit(set, wayID)
+
+	require.True(t, mw.lookup(transReqItem(comp, false)))
+	normalFetch, ok := comp.Ports.Bottom.RetrieveOutgoing()
+	require.True(t, ok)
+	require.True(t, mw.lookup(transReqItem(comp, true)))
+	noMigrateFetch, ok := comp.Ports.Bottom.RetrieveOutgoing()
+	require.True(t, ok)
+
+	for _, fetch := range []messaging.Msg{normalFetch, noMigrateFetch} {
+		deliverBottomRsp(comp, fetch.ID, 0x1000)
+		require.True(t, mw.parseBottom())
+		comp.State.HasRespondingMSHR = false
+	}
+
+	_, page, found := setLookup(set, 1, 0x9000)
+	require.True(t, found)
+	require.Equal(t, resident, page)
+
+	ways := 0
+	for _, b := range set.Blocks {
+		if b.Page.Valid && b.Page.PID == 1 && b.Page.VAddr == 0x1000 {
+			ways++
+		}
+	}
+	require.Equal(t, 1, ways)
+}

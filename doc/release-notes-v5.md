@@ -478,5 +478,5 @@ answers it directly even under `ConsultRemote`, and forwards it with
 decisions are kept per device and `NoMigrate`. The TLB forwards `NoMigrate` on
 a miss and does not merge NoMigrate and normal misses of one page; it matches
 bottom responses to MSHR entries by request ID. The MMU cache and the GMMU
-forward `NoMigrate`, and the fixed-latency MMU does not fault for it. With the
-defaults, behavior and timing are unchanged.
+forward `NoMigrate`, and the fixed-latency MMU does not fault for it. With
+`NoMigrate` false, translations fault and migrate as before.
