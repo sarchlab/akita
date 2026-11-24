@@ -48,20 +48,26 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 				return messaging.Msg{ID: s.NewID(), Src: "Source", Dst: port.AsRemote(),
 					Payload: packetization.Flit{Dst: "Destination"}}
 			}
-			first, second := flit(), flit()
-			port.Deliver(first)
-			require.True(t, sw.Middlewares.ReceivePipeline.startProcessing())
-			require.Equal(t, 1, rec.NumStarted())
-			port.Deliver(second)
-
-			// The first flit occupies either the zero-latency route buffer or
-			// the pipeline input. Retrying the second must not create tasks.
+			admitted := 1
+			if latency == 0 {
+				admitted = sw.State.PortComplexes[0].Waiting.Capacity()
+			}
+			var want []uint64
+			for range admitted {
+				msg := flit()
+				want = append(want, msg.ID)
+				port.Deliver(msg)
+				require.True(t, sw.Middlewares.ReceivePipeline.startProcessing())
+			}
+			last := flit()
+			want = append(want, last.ID)
+			port.Deliver(last)
 			for range 10 {
 				require.False(t, sw.Middlewares.ReceivePipeline.startProcessing())
 			}
 			require.Equal(t, 1, port.IncomingBuf().Size())
-			require.Equal(t, 1, rec.NumStarted(), "blocked attempts must not start phantom tasks")
-			require.Len(t, rec.OpenTasks(), 1)
+			require.Equal(t, admitted, rec.NumStarted(), "blocked attempts must not start phantom tasks")
+			require.Len(t, rec.OpenTasks(), admitted)
 
 			var delivered []uint64
 			for range 20 {
@@ -72,11 +78,10 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 					delivered = append(delivered, msg.ID)
 				}
 			}
-			require.Equal(t, []uint64{first.ID, second.ID}, delivered)
+			require.Equal(t, want, delivered)
 			require.Zero(t, port.IncomingBuf().Size())
-			require.Equal(t, 2, rec.NumStarted())
+			require.Equal(t, len(want), rec.NumStarted())
 			require.Empty(t, rec.OpenTasks(), rec.OpenSummary())
-			t.Logf("latency %d: 10 blocked retries, 2 admitted flits delivered, 2 tasks ended, no open tasks", latency)
 		})
 	}
 }

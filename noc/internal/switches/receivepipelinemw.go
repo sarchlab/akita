@@ -1,6 +1,7 @@
 package switches
 
 import (
+	"fmt"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
@@ -9,8 +10,9 @@ import (
 )
 
 type receivePipelineMW struct {
-	comp      *Comp
-	portIndex map[messaging.RemotePort]int
+	comp         *Comp
+	portIndex    map[messaging.RemotePort]int
+	routingTable RoutingTable
 }
 
 // ports returns the switch's local ports, in index order aligned with
@@ -64,7 +66,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			// Start work only when admission commits; blocked retries have no task.
-			if pcs.Latency == 0 && !pcs.RouteBuffer.CanPush() {
+			if pcs.Latency == 0 && !pcs.Waiting.CanPush() {
 				break
 			}
 			if pcs.Latency != 0 && !pcs.Pipeline.CanPush() {
@@ -79,13 +81,13 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				Detail:   flit,
 			})
 			item := routedFlit{
-				Flit:    flit,
-				TaskID:  taskID,
-				RouteTo: flit.Payload.(packetization.Flit).Dst,
+				Flit:         flit,
+				TaskID:       taskID,
+				OutputBufIdx: m.resolveOutputBufIdx(flit.Payload.(packetization.Flit).Dst),
 			}
 
 			if pcs.Latency == 0 {
-				pcs.RouteBuffer.Push(item)
+				pcs.Waiting.Push(item)
 			} else {
 				pcs.Pipeline.Push(item)
 			}
@@ -107,8 +109,24 @@ func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
 		if pcs.Latency == 0 {
 			continue
 		}
-		madeProgress = pcs.Pipeline.DrainReady(&pcs.RouteBuffer) || madeProgress
+		madeProgress = pcs.Pipeline.DrainReady(&pcs.Waiting) || madeProgress
 	}
 
 	return madeProgress
+}
+
+func (m *receivePipelineMW) resolveOutputBufIdx(msgDst messaging.RemotePort) int {
+	outPort := m.routingTable.FindPort(msgDst)
+	if outPort == "" {
+		panic(fmt.Sprintf("%s: no output port for %s",
+			m.comp.Name(), msgDst))
+	}
+
+	idx, ok := m.portIndex[outPort]
+	if !ok {
+		panic(fmt.Sprintf("%s: no port index for %s",
+			m.comp.Name(), outPort))
+	}
+
+	return idx
 }

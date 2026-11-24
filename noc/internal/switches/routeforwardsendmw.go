@@ -1,8 +1,6 @@
 package switches
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -10,9 +8,7 @@ import (
 )
 
 type routeForwardSendMW struct {
-	comp         *Comp
-	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
-	routingTable RoutingTable
+	comp *Comp
 }
 
 // ports returns the switch's local ports, in index order aligned with
@@ -32,58 +28,24 @@ func (m *routeForwardSendMW) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
+// route completes one cycle of route processing in place. The immutable
+// output index was resolved at admission. Only this prefix can arbitrate
+// on the next tick, even when the rest of the shared buffer is occupied.
 func (m *routeForwardSendMW) route() (madeProgress bool) {
-	state := &m.comp.State
-
-	for i := range m.ports() {
-		pcs := &state.PortComplexes[i]
-
-		for j := 0; j < pcs.NumInputChannel; j++ {
-			if pcs.RouteBuffer.Size() == 0 {
-				break
-			}
-
-			if !pcs.ForwardBuffer.CanPush() {
-				break
-			}
-
-			item, _ := pcs.RouteBuffer.Pop()
-			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
-			item.OutputBufIdx = outputBufIdx
-
-			pcs.ForwardBuffer.Push(item)
-
-			// The flit waited in the route buffer until a forward-buffer slot
-			// opened (behind other flits / for downstream credit).
-			if m.comp.TaskTracker() != nil {
-				m.comp.TaskTracker().AddMilestone(tasks.Milestone{
-					TaskID: item.TaskID,
-					Kind:   tasks.MilestoneKindQueue,
-					What:   m.comp.Name() + ".RouteBuffer",
+	for i := range m.comp.State.PortComplexes {
+		port := &m.comp.State.PortComplexes[i]
+		for ; port.Ready < port.Waiting.Size(); port.Ready++ {
+			if tracker := m.comp.TaskTracker(); tracker != nil {
+				item, _ := port.Waiting.PeekAt(port.Ready)
+				tracker.AddMilestone(tasks.Milestone{
+					TaskID: item.TaskID, Kind: tasks.MilestoneKindQueue,
+					What: m.comp.Name() + ".Route",
 				})
 			}
-
 			madeProgress = true
 		}
 	}
-
 	return madeProgress
-}
-
-func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst messaging.RemotePort) int {
-	outPort := m.routingTable.FindPort(msgDst)
-	if outPort == "" {
-		panic(fmt.Sprintf("%s: no output port for %s",
-			m.comp.Name(), msgDst))
-	}
-
-	idx, ok := m.portIndex[outPort]
-	if !ok {
-		panic(fmt.Sprintf("%s: no port index for %s",
-			m.comp.Name(), outPort))
-	}
-
-	return idx
 }
 
 func (m *routeForwardSendMW) forward() (madeProgress bool) {
@@ -94,32 +56,33 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 		i := (state.NextArbPort + offset) % len(m.ports())
 		pcs := &state.PortComplexes[i]
 
-		for n := 0; n < pcs.NumInputChannel && pcs.ForwardBuffer.Size() > 0; n++ {
-			item, _ := pcs.ForwardBuffer.Peek()
+		// Visit flits oldest first. A blocked output stays blocked throughout
+		// this pass, so skipping it preserves each virtual output queue's FIFO.
+		for idx, sent := 0, 0; idx < pcs.Ready && sent < pcs.NumInputChannel; {
+			item, _ := pcs.Waiting.PeekAt(idx)
 			outIdx := item.OutputBufIdx
-
-			if sentToOutput[outIdx] >= state.PortComplexes[outIdx].NumOutputChannel {
-				break
+			out := &state.PortComplexes[outIdx]
+			sendBuf := &out.SendOutBuffer
+			if sentToOutput[outIdx] >= out.NumOutputChannel || !sendBuf.CanPush() {
+				idx++
+				continue
 			}
 
-			sendBuf := &state.PortComplexes[outIdx].SendOutBuffer
-			if !sendBuf.CanPush() {
-				break
-			}
-
-			pcs.ForwardBuffer.Pop()
+			pcs.Waiting.PopAt(idx)
+			pcs.Ready--
+			sent++
 			// Push the whole routedFlit (carrying its TaskID) so the in-switch
 			// "flit" task can be ended in sendOut, once the flit actually
 			// leaves on the output link, rather than here.
 			sendBuf.Push(item)
 
-			// The flit waited in the forward buffer for the output port to win
+			// The flit waited in its virtual output queue for the output port to win
 			// arbitration and for a send-buffer slot downstream.
 			if m.comp.TaskTracker() != nil {
 				m.comp.TaskTracker().AddMilestone(tasks.Milestone{
 					TaskID: item.TaskID,
 					Kind:   tasks.MilestoneKindNetworkBusy,
-					What:   m.comp.Name() + ".ForwardBuffer",
+					What:   m.comp.Name() + ".Waiting",
 				})
 			}
 

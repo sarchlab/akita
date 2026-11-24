@@ -62,8 +62,7 @@ func TestTopologyDirectConfigurationAndDelivery(t *testing.T) {
 					for i, pc := range c.State.PortComplexes {
 						require.Equal(t, 3, pc.NumInputChannel)
 						require.Equal(t, 2, pc.NumOutputChannel)
-						require.Equal(t, 3, pc.RouteBuffer.Capacity())
-						require.Equal(t, 3, pc.ForwardBuffer.Capacity())
+						require.Equal(t, 6, pc.Waiting.Capacity())
 						require.Equal(t, 2, pc.SendOutBuffer.Capacity())
 						require.Equal(t, 3, c.Ports.Links[i].IncomingBuf().Capacity())
 						require.Equal(t, 2, c.Ports.Links[i].OutgoingBuf().Capacity())

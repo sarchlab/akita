@@ -1,6 +1,9 @@
 package switches
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/queueing"
@@ -57,8 +60,7 @@ type Ports struct {
 
 // middlewares holds the switch's behavior, run in field order every cycle.
 type middlewares struct {
-	// RouteForwardSend sends flits out, forwards them to their output
-	// buffers, and routes them.
+	// RouteForwardSend sends, arbitrates, and completes the routing cycle.
 	RouteForwardSend *routeForwardSendMW
 
 	// ReceivePipeline moves flits through the per-port pipelines and takes
@@ -69,9 +71,8 @@ type middlewares struct {
 // routedFlit is a flit that has been received and assigned a route destination.
 type routedFlit struct {
 	Flit         messaging.Msg
-	TaskID       uint64               `json:"task_id"`
-	RouteTo      messaging.RemotePort `json:"route_to"`
-	OutputBufIdx int                  `json:"output_buf_idx"`
+	TaskID       uint64 `json:"task_id"`
+	OutputBufIdx int    `json:"output_buf_idx"`
 }
 
 // portComplexState is the serializable state of one port complex.
@@ -83,12 +84,30 @@ type portComplexState struct {
 	Latency          int                               `json:"latency"`
 	PipelineWidth    int                               `json:"pipeline_width"`
 	Pipeline         queueing.FastPipeline[routedFlit] `json:"pipeline"`
-	RouteBuffer      queueing.Buffer[routedFlit]       `json:"route_buffer"`
-	ForwardBuffer    queueing.Buffer[routedFlit]       `json:"forward_buffer"`
+	// Waiting holds all virtual output queues in arrival order, sharing one capacity.
+	Waiting queueing.Buffer[routedFlit] `json:"waiting"`
+	// Ready counts the prefix that has completed its routing cycle.
+	Ready int `json:"ready"`
 	// SendOutBuffer holds routedFlits (not bare Flits) so the in-switch "flit"
 	// task can stay open until the flit is actually sent out the port, charging
 	// the time the flit waits here for the output link.
 	SendOutBuffer queueing.Buffer[routedFlit] `json:"send_out_buffer"`
+}
+
+// UnmarshalJSON checks the shared buffer before installing decoded state.
+// A checkpoint without this buffer cannot restore the waiting flits.
+func (p *portComplexState) UnmarshalJSON(data []byte) error {
+	type decodedPort portComplexState
+	var port decodedPort
+	if err := json.Unmarshal(data, &port); err != nil {
+		return err
+	}
+	if port.NumInputChannel <= 0 || port.Waiting.Capacity() != 2*port.NumInputChannel ||
+		port.Waiting.Size() > port.Waiting.Capacity() || port.Ready < 0 || port.Ready > port.Waiting.Size() {
+		return fmt.Errorf("switches: invalid waiting buffer on %s", port.LocalPortName)
+	}
+	*p = portComplexState(port)
+	return nil
 }
 
 // state contains mutable runtime data for the switch.

@@ -63,16 +63,13 @@ func newPortComplex(c *Comp, port messaging.Port, link Link) portComplexState {
 		Pipeline: queueing.MakeFastPipeline[routedFlit](
 			link.NumInputChannel, max(link.Latency, 1), c.Spec.Freq, c),
 
-		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
-
-		ForwardBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
+		Waiting: queueing.MakeBuffer[routedFlit](2 * link.NumInputChannel),
 
 		SendOutBuffer: queueing.MakeBuffer[routedFlit](link.NumOutputChannel),
 	}
 }
 
-// Initialize creates the middlewares. Both share the index from a port,
-// local or remote, to its port complex.
+// Initialize creates the middlewares. The receiver resolves local and remote routes at admission.
 func (m *middlewares) Initialize(c *Comp) {
 	table := c.Resources.Wiring.Routes()
 	links := c.Resources.Wiring.Links()
@@ -89,13 +86,12 @@ func (m *middlewares) Initialize(c *Comp) {
 
 	*m = middlewares{
 		RouteForwardSend: &routeForwardSendMW{
+			comp: c,
+		},
+		ReceivePipeline: &receivePipelineMW{
 			comp:         c,
 			portIndex:    portIndex,
 			routingTable: table,
-		},
-		ReceivePipeline: &receivePipelineMW{
-			comp:      c,
-			portIndex: portIndex,
 		},
 	}
 }

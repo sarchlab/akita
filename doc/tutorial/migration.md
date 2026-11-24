@@ -1393,8 +1393,9 @@ migration is deferred until after the Akita v5 release and is not part of this P
   widths. The old PCIe flit size was rounded bytes/second divided by frequency:
   default Gen4 x16 at 1 GHz becomes 34 bytes; Gen3 x16 becomes 17. Hardware-target
   calculators are deferred. There are no public internal-buffer setters.
-- Network-owned incoming, route, and forwarding queues use input width; send
-  and outgoing queues use output width. Remove capacity fields from link-end
+- Network-owned incoming queues use input width. Switch ingresses share twice
+  their input width in waiting slots across outputs. Send and outgoing queues
+  use output width. Remove capacity fields from link-end
   parameters and capacity setters from topology builders. Caller-supplied device
   ports keep their sizes. PCIe/NVLink default port queues change from 16 to 1 at
   width one. Switch forwarding now enforces both widths, instead of limiting

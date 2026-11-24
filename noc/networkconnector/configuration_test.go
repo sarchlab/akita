@@ -27,8 +27,7 @@ func TestNamedSwitchAndCalculatedPortQueues(t *testing.T) {
 	require.Equal(t, 3, port.IncomingBuf().Capacity())
 	require.Equal(t, 2, port.OutgoingBuf().Capacity())
 	state := &c.switches[a].sw.State.PortComplexes[0]
-	require.Equal(t, 3, state.RouteBuffer.Capacity())
-	require.Equal(t, 3, state.ForwardBuffer.Capacity())
+	require.Equal(t, 6, state.Waiting.Capacity())
 	require.Equal(t, 2, state.SendOutBuffer.Capacity())
 	require.Equal(t, 3, state.NumInputChannel)
 	require.Equal(t, 2, state.NumOutputChannel)
