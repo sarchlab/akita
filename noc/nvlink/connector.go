@@ -81,8 +81,8 @@ func (b Builder) WithNVLinkSwitchLatency(numCycle int) Builder {
 // WithFlitSize sets bytes per flit independently of frequency.
 func (b Builder) WithFlitSize(size int) Builder { b.flitByteSize = size; return b }
 
-// WithInputWidth sets flits per input per cycle and the calculated incoming,
-// routing, and forwarding queue capacities.
+// WithInputWidth sets the admission rate and incoming port capacity to n flits
+// per cycle and n flits, respectively. Each switch ingress shares 2*n waiting slots.
 func (b Builder) WithInputWidth(n int) Builder { b.inputWidth = n; return b }
 
 // WithOutputWidth sets flits per output per cycle and the calculated send and

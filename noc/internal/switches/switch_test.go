@@ -1,6 +1,7 @@
 package switches
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -102,7 +103,7 @@ func TestSwitch(t *testing.T) {
 		}
 
 		rfsMW = sw.Middlewares.RouteForwardSend
-		rfsMW.routingTable = routingTable
+
 		rpMW = sw.Middlewares.ReceivePipeline
 	}
 
@@ -124,6 +125,7 @@ func TestSwitch(t *testing.T) {
 		port1.EXPECT().RetrieveIncoming()
 		port2.EXPECT().PeekIncoming().Return(messaging.Msg{}, false)
 
+		routingTable.EXPECT().FindPort(dstPort.AsRemote()).Return(port2.AsRemote())
 		madeProgress := rpMW.startProcessing()
 
 		require.True(t, madeProgress)
@@ -173,68 +175,42 @@ func TestSwitch(t *testing.T) {
 		madeProgress := rpMW.movePipeline()
 
 		require.True(t, madeProgress)
-		// For latency=1, the item should have moved to RouteBuffer
+		// For latency=1, the item should have moved to Waiting
 		next = &sw.State
 		require.Len(t, next.PortComplexes[0].Pipeline.Stages(), 0)
-		require.Equal(t, 1, next.PortComplexes[0].RouteBuffer.Size())
+		require.Equal(t, 1, next.PortComplexes[0].Waiting.Size())
 	})
 
-	t.Run("should route", func(t *testing.T) {
+	t.Run("blocked output shares waiting slots and preserves each output FIFO", func(t *testing.T) {
 		setup1(t)
-
-		msg := messaging.Msg{
-			ID:  sim.NewID(),
-			Src: dstPort.AsRemote(),
-			Dst: dstPort.AsRemote(),
+		a, b := &sw.State.PortComplexes[0], &sw.State.PortComplexes[1]
+		a.NumInputChannel = 2
+		a.Waiting = queueing.MakeBuffer[routedFlit](4)
+		for i, dst := range []int{0, 1, 0, 1} {
+			a.Waiting.Push(routedFlit{TaskID: uint64(i + 1), OutputBufIdx: dst})
 		}
-		flit := messaging.Msg{Payload: packetization.Flit{
-			MsgID: msg.ID, Dst: msg.Dst},
-			ID: sim.NewID(),
+		a.SendOutBuffer.Push(routedFlit{})
+		require.False(t, a.Waiting.CanPush())
+		require.False(t, rfsMW.forward(), "new arrivals need one routing cycle")
+		require.True(t, rfsMW.route())
+		for _, id := range []uint64{2, 4} {
+			require.True(t, rfsMW.forward())
+			item, ok := b.SendOutBuffer.Pop()
+			require.True(t, ok)
+			require.Equal(t, id, item.TaskID)
+			// A single blocked output can claim every slot freed by B.
+			a.Waiting.Push(routedFlit{TaskID: id + 4, OutputBufIdx: 0})
+			require.True(t, rfsMW.route())
 		}
-
-		// Place item in route buffer for port1
-		next := &sw.State
-		next.PortComplexes[0].RouteBuffer =
-			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].RouteBuffer.Push(routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
-
-		routingTable.EXPECT().
-			FindPort(dstPort.AsRemote()).
-			Return(port2.AsRemote())
-
-		madeProgress := rfsMW.route()
-
-		require.True(t, madeProgress)
-		next = &sw.State
-		require.Equal(t, 0, next.PortComplexes[0].RouteBuffer.Size())
-		require.Equal(t, 1, next.PortComplexes[0].ForwardBuffer.Size())
-	})
-
-	t.Run("should not route if forward buffer is full", func(t *testing.T) {
-		setup1(t)
-
-		msg := messaging.Msg{
-			ID:  sim.NewID(),
-			Src: dstPort.AsRemote(),
-			Dst: dstPort.AsRemote(),
+		require.False(t, a.Waiting.CanPush())
+		require.False(t, rfsMW.forward())
+		a.SendOutBuffer.Pop()
+		for _, id := range []uint64{1, 3, 6, 8} {
+			require.True(t, rfsMW.forward())
+			item, ok := a.SendOutBuffer.Pop()
+			require.True(t, ok)
+			require.Equal(t, id, item.TaskID)
 		}
-		flit := messaging.Msg{Payload: packetization.Flit{
-			MsgID: msg.ID, Dst: msg.Dst},
-			ID: sim.NewID(),
-		}
-
-		// Place item in route buffer and fill forward buffer
-		next := &sw.State
-		next.PortComplexes[0].RouteBuffer =
-			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].RouteBuffer.Push(routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
-		next.PortComplexes[0].ForwardBuffer =
-			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: messaging.Msg{ID: 300, Payload: packetization.Flit{}}})
-
-		madeProgress := rfsMW.route()
-
-		require.False(t, madeProgress)
 	})
 
 	t.Run("should forward", func(t *testing.T) {
@@ -250,17 +226,18 @@ func TestSwitch(t *testing.T) {
 			ID: sim.NewID(),
 		}
 
-		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
+		// Queue a flit on port1 for port2.
 		next := &sw.State
-		next.PortComplexes[0].ForwardBuffer =
+		next.PortComplexes[0].Waiting =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
+		next.PortComplexes[0].Waiting.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
 
+		require.True(t, rfsMW.route())
 		madeProgress := rfsMW.forward()
 
 		require.True(t, madeProgress)
 		next = &sw.State
-		require.Equal(t, 0, next.PortComplexes[0].ForwardBuffer.Size())
+		require.Equal(t, 0, next.PortComplexes[0].Waiting.Size())
 		require.Equal(t, 1, next.PortComplexes[1].SendOutBuffer.Size())
 	})
 
@@ -277,15 +254,16 @@ func TestSwitch(t *testing.T) {
 			ID: sim.NewID(),
 		}
 
-		// Fill sendOut buffer to capacity, forward buffer targets port2
+		// Queue a flit for port2 and fill its send-out buffer.
 		next := &sw.State
-		next.PortComplexes[0].ForwardBuffer =
+		next.PortComplexes[0].Waiting =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
+		next.PortComplexes[0].Waiting.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: messaging.Msg{ID: 400, Payload: packetization.Flit{}}})
 
+		require.True(t, rfsMW.route())
 		madeProgress := rfsMW.forward()
 
 		require.False(t, madeProgress)
@@ -348,4 +326,33 @@ func TestSwitch(t *testing.T) {
 		next = &sw.State
 		require.Equal(t, 1, next.PortComplexes[1].SendOutBuffer.Size())
 	})
+}
+
+func TestWaitingCheckpointRoundTrip(t *testing.T) {
+	port := portComplexState{
+		NumInputChannel: 1,
+		Waiting:         queueing.MakeBuffer[routedFlit](2),
+		Ready:           1,
+	}
+	port.Waiting.Push(routedFlit{Flit: messaging.Msg{ID: 101}, TaskID: 1, OutputBufIdx: 0})
+	port.Waiting.Push(routedFlit{Flit: messaging.Msg{ID: 102}, TaskID: 2, OutputBufIdx: 1})
+
+	data, err := json.Marshal(port)
+	require.NoError(t, err)
+	var restored portComplexState
+	require.NoError(t, json.Unmarshal(data, &restored))
+	require.Equal(t, 2, restored.Waiting.Capacity())
+	require.Equal(t, port.Waiting.Elements(), restored.Waiting.Elements())
+	require.Equal(t, 1, restored.Ready)
+}
+
+func TestWaitingCheckpointBounds(t *testing.T) {
+	for _, data := range []string{
+		`{"num_input_channel":1,"route_buffer":{"cap":1},"forward_buffer":{"cap":1}}`,
+		`{"num_input_channel":1,"waiting":{"cap":2},"ready":1}`,
+		`{"num_input_channel":1,"waiting":{"cap":2},"ready":-1}`,
+	} {
+		var port portComplexState
+		require.ErrorContains(t, json.Unmarshal([]byte(data), &port), "invalid waiting buffer")
+	}
 }

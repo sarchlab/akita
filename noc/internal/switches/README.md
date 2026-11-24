@@ -20,7 +20,7 @@ determines arbitration order. Changing routing
 tables after initialization is not supported.
 
 `State` holds one `portComplexState` per port — each with an input
-pipeline (modeling per-port latency), a route buffer, a forward buffer, and a
+pipeline (modeling per-port latency), a shared ingress waiting buffer, and a
 send-out buffer (all `queueing` types). The number of input/output channels on a
 port controls how many flits may be injected/ejected per cycle.
 
@@ -31,18 +31,18 @@ every cycle.
 
 Each tick the switch runs two middlewares as a five-stage pipeline:
 
-1. **startProcessing** — pull flits from each input port into the port's
-   latency pipeline (or directly into the route buffer when latency is 0).
-2. **movePipeline** — advance pipelines, draining completed flits into route
-   buffers. The switch sleeps while flits only travel and ticks again when one
-   is ready. The arbitration cursor advances once per tick, so it does not move
-   during those skipped cycles.
-3. **route** — look up each flit's final `Dst` in the `routing.Table`, resolve
-   it to an output port index, and move it to the forward buffer.
-4. **forward** — arbitrate (round-robin across input ports) and copy flits into
-   the chosen output port's send-out buffer, one per output port per tick.
-5. **sendOut** — send buffered flits out, stamping each flit's hop `Src`/`Dst`
-   with the local port and its connected remote port.
+1. **startProcessing** resolves each admitted flit's destination and puts it in
+   the input latency pipeline. A zero-latency input goes directly into waiting.
+2. **movePipeline** drains ready flits into the shared ingress buffer. When only
+   the pipeline is active, the switch sleeps until a flit becomes ready.
+3. **route** completes one routing cycle in place. The eligible prefix of the
+   waiting buffer can arbitrate starting on the next tick.
+4. **forward** visits ingress ports in round-robin order. Within an ingress, it
+   forwards the oldest eligible flits whose outputs have credit, preserving FIFO
+   order for each destination output. Input and output channel counts bound the
+   number forwarded on each side per tick. All outputs share twice the input
+   width in waiting slots per ingress. A blocked output can occupy every slot.
+5. **sendOut** sends buffered flits and stamps each hop's source and destination.
 
 ## Assembly and checkpoints
 
