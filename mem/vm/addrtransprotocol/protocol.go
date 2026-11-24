@@ -26,12 +26,16 @@ var (
 	Notifier  = Protocol.Role("notifier")
 )
 
-// Req is a translation request.
+// Req is a translation request. NoMigrate asks for any valid mapping of the
+// page, wherever it is placed: an MMU that finds one returns it, and a fault
+// handler that is consulted must not migrate the page for this request. A
+// data mover's translator sets it.
 type Req struct {
 	VAddr        uint64
 	PID          vm.PID
 	DeviceID     uint64
 	TransLatency uint64
+	NoMigrate    bool
 }
 
 // Rsp is a translation response carrying the physical address. When Fault is

@@ -58,8 +58,15 @@ for later walks. `Blocked`
 returns an ordinary translation NACK carrying the original PID and page base,
 which existing TLBs use to drain their MSHR.
 
+A request with `NoMigrate` (from `addrtransprotocol.Req` on `Top` or
+`pagefaultprotocol.Req` on `FaultIn`), such as a data mover's, takes any
+valid mapping the walk finds, even under `ConsultRemote` when another device
+owns the page. Without a valid mapping it goes to the fault handler with
+`NoMigrate` set, and the handler must not migrate the page for it.
+
 Walks merge on PID and VPN. Pending decisions also match the requesting
-device. Admission and output arbitration each get `AdmissionWidth` slots per
+device and its `NoMigrate`, so the results of a device's no-migrate and
+normal requests never mix. Admission and output arbitration each get `AdmissionWidth` slots per
 cycle. Input remains on the port when either the walk array or the matching
 waiter list is full. A completed entry remains occupied while replies wait
 for a port. Each accepted message receives its own response ID and `RspTo`.
@@ -161,7 +168,8 @@ With simulation task tracking enabled, each incoming translation, forwarded
 fault and control command has its own request task. Coalesced waiters share
 the initiating request's filter or prefix lookup pipeline and PTE reads.
 Their milestones distinguish waiting for shared work from performing it.
-Fault response milestones apply to the requesting device's waiters. Control
+Fault response milestones apply to the waiters of the decision's device and
+`NoMigrate`. Control
 milestones identify protected walks draining, the final zeroing ACK for each
 node, and acknowledged pointer and leaf writes. Each physical request has a
 separate child task, including overlapping zeroing writes.

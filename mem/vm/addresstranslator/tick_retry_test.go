@@ -59,7 +59,7 @@ func newRetryRig(t *testing.T, tracking bool) *retryRig {
 
 func (r *retryRig) deliverRead(addr uint64) {
 	r.top.Deliver(messaging.Msg{ID: r.comp.NewID(), Src: "Agent", Dst: r.top.AsRemote(),
-		Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4}})
+		Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4, PID: 1}})
 }
 
 func TestTranslateStopsAtBlockedPortWithoutAllocatingIDs(t *testing.T) {

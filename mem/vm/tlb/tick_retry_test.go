@@ -21,12 +21,15 @@ func (p *retrySendPort) CanSend() bool {
 	return p.Port.CanSend()
 }
 
-func newRetryTLB(t *testing.T) (*Comp, *retrySendPort) {
+func newRetryTLB(t *testing.T, configure ...func(*Spec)) (*Comp, *retrySendPort) {
 	t.Helper()
 	sim := testsim.New(testsim.NewClock(), false)
 	spec := DefaultSpec()
 	spec.NumReqPerCycle = 4
 	spec.Bottom.Destinations = []messaging.RemotePort{"Walker"}
+	for _, f := range configure {
+		f(&spec)
+	}
 	comp := modeling.MakeBuilder[*Comp](spec).WithSimulation(sim).Build("TLB")
 	ports := defaultPorts(sim, "TLB")
 	top := &retrySendPort{Port: ports.Top}
@@ -80,7 +83,7 @@ func TestRespondNoWaiterCleanupLetsBottomParse(t *testing.T) {
 func TestParseBottomDrainsStaleThenStopsAtStagedResponse(t *testing.T) {
 	comp, _ := newRetryTLB(t)
 	var idx int
-	comp.State.MSHREntries, idx = mshrAdd(comp.State.MSHREntries, comp.Spec.NumMSHREntries, 1, 0x1000)
+	comp.State.MSHREntries, idx = mshrAdd(comp.State.MSHREntries, comp.Spec.NumMSHREntries, 1, 0x1000, false)
 	comp.State.MSHREntries[idx].ReqToBottom = messaging.Msg{ID: 50}
 	deliverBottomRsp(comp, 98, 0x2000)
 	deliverBottomRsp(comp, 99, 0x3000)

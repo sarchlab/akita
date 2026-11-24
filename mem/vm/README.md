@@ -51,9 +51,10 @@ Address translation uses a request/response protocol:
 ```go
 // Request: virtual → physical translation
 type Req struct {
-    VAddr    uint64
-    PID      PID
-    DeviceID uint64
+    VAddr     uint64
+    PID       PID
+    DeviceID  uint64
+    NoMigrate bool // take any valid mapping; never ask to migrate the page
 }
 
 // Response: carries the resolved Page

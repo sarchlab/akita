@@ -237,7 +237,7 @@ func TestTLB(t *testing.T) {
 				Requests: []pipelineTLBReqState{{Msg: req}},
 			}
 			// Also add the MSHR entry
-			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
+			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100, false)
 
 			madeProgress := tlbMW.parseBottom()
 
@@ -252,8 +252,8 @@ func TestTLB(t *testing.T) {
 
 			// Add MSHR entry
 			next := &tlbComp.State
-			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
-			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100)
+			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100, false)
+			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100, false)
 			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, pipelineTLBReqState{Msg: req})
 			next.MSHREntries[idx].HasReqToBottom = true
 			next.MSHREntries[idx].ReqToBottom = fetchBottom
@@ -276,8 +276,8 @@ func TestTLB(t *testing.T) {
 			bottomPort.Deliver(rsp)
 
 			next := &tlbComp.State
-			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100)
-			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100)
+			next.MSHREntries, _ = mshrAdd(next.MSHREntries, 4, 1, 0x100, false)
+			idx, _ := mshrGetEntry(next.MSHREntries, 1, 0x100, false)
 			next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, pipelineTLBReqState{Msg: req})
 			next.MSHREntries[idx].HasReqToBottom = true
 			next.MSHREntries[idx].ReqToBottom = fetchBottom

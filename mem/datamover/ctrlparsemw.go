@@ -75,6 +75,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		ByteSize:      req.ByteSize,
 		SrcSide:       req.SrcSide,
 		DstSide:       req.DstSide,
+		SrcPID:        req.SrcPID,
+		DstPID:        req.DstPID,
 		NextReadAddr:  req.SrcAddress,
 		NextWriteAddr: req.DstAddress,
 		PendingRead:   make(map[uint64]pendingReadState),

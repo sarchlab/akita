@@ -20,18 +20,28 @@ flow through a fixed-latency pipeline before lookup:
    - **Hit** (entry present and `Valid`): a `addrtransprotocol.Rsp` carrying the
      `vm.Page` is sent back on `Top`, and the matched way is marked
      most-recently-used.
-   - **MSHR hit**: an outstanding miss already covers this `(PID, VAddr)`, so the
-     request is attached to the existing MSHR entry.
-   - **Miss**: an MSHR entry is allocated and a `addrtransprotocol.Req` is forwarded
-     on the `Bottom` port to the translation provider resolved by
-     the Spec routing value.
-3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
-   the page, and replay every request queued in the matching MSHR entry back to
-   `Top`. A fault response (`addrtransprotocol.Rsp.Fault`) is forwarded to the
-   queued requests but not filled.
+   - **MSHR hit**: an outstanding miss already covers this
+     `(PID, VAddr, NoMigrate)`, so the request is attached to the existing MSHR
+     entry.
+   - **Miss**: an MSHR entry is allocated and a `addrtransprotocol.Req`, with the
+     request's `NoMigrate`, is forwarded on the `Bottom` port to the
+     translation provider resolved by the Spec routing value.
+3. **Fill / respond** — A response returning on `Bottom` is matched to its MSHR
+   entry by the ID of the forwarded request. It reuses the way of the page if
+   the page is already valid in the set (filled by the other of a `NoMigrate`
+   and a normal miss), and otherwise evicts an LRU way, also for a page
+   invalidated in place. It installs the page and replays every request queued in that entry back to `Top`. A
+   fault response (`addrtransprotocol.Rsp.Fault`) is forwarded to the queued
+   requests but not filled.
+
+A `NoMigrate` miss and a normal miss of the same page use separate MSHR
+entries, so neither gets the other's result. Hits ignore `NoMigrate`: a page
+filled by a `NoMigrate` miss, which may be placed on another device, answers
+later normal requests too. A TLB that serves `NoMigrate` requesters, such as a
+data mover's, is therefore kept apart from the TLBs of compute units.
 
 Replacement order within each set is tracked by `lruset.Set`; in-flight misses
-are tracked by the shared `mshr` package.
+are tracked in `State.MSHREntries`.
 
 ## Key Types
 

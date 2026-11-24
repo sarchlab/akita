@@ -146,8 +146,9 @@ type Rsp struct {
     Error   string // Empty on success. memcontrolprotocol.ErrUnsupported,
                    // memcontrolprotocol.ErrMustBePausedOrDrained,
                    // memcontrolprotocol.ErrCanceledByReset,
-                   // memcontrolprotocol.ErrInvalidRange, or
-                   // memcontrolprotocol.ErrAmbiguousAddressing on failure.
+                   // memcontrolprotocol.ErrInvalidRange,
+                   // memcontrolprotocol.ErrAmbiguousAddressing, or
+                   // memcontrolprotocol.ErrInvalidPID on failure.
 }
 ```
 
@@ -336,6 +337,9 @@ Error: "must be paused or drained"`.
   by range or by address, leaves the other pages of the range held.
 - A Hold or a Release whose addressing is not valid is answered at once, also
   when earlier Holds are not acknowledged yet.
+- A Hold or a Release of PID 0 is answered at once with `ErrInvalidPID`. The
+  translator forwards PID-0 accesses as physical without holding them, so
+  PID 0 selects no page.
 - A Release clears the `Faulted` mark only for the fault responses that
   have already arrived. A fault response still on its way through the TLBs
   marks the page again after the Release, and its access then waits for

@@ -230,7 +230,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // the ack, until a Release.
 func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	req := msg.Payload.(memcontrolprotocol.Req)
-	if errStr := req.AddressingError(); errStr != "" {
+	if errStr := selectorError(req); errStr != "" {
 		return m.reject(msg, errStr)
 	}
 
@@ -254,6 +254,19 @@ func (m *ctrlMiddleware) handleHold(msg messaging.Msg) bool {
 	m.ctrlPort().RetrieveIncoming()
 
 	return true
+}
+
+// selectorError returns the error of a Hold or Release whose pages are not a
+// valid selection, or "" if they are. PID 0 selects nothing: its accesses are
+// physical and pass through without being held.
+func selectorError(req memcontrolprotocol.Req) string {
+	if errStr := req.AddressingError(); errStr != "" {
+		return errStr
+	}
+	if req.PID == 0 {
+		return memcontrolprotocol.ErrInvalidPID
+	}
+	return ""
 }
 
 // completePendingHolds acknowledges the Holds whose pages have no access and
@@ -332,7 +345,7 @@ func (m *ctrlMiddleware) inFlight(hold pendingHoldState) bool {
 // order.
 func (m *ctrlMiddleware) handleRelease(msg messaging.Msg) bool {
 	req := msg.Payload.(memcontrolprotocol.Req)
-	if errStr := req.AddressingError(); errStr != "" {
+	if errStr := selectorError(req); errStr != "" {
 		return m.reject(msg, errStr)
 	}
 

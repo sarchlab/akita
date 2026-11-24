@@ -1,6 +1,8 @@
 package tlb
 
 import (
+	"slices"
+
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -269,7 +271,7 @@ func (m *tlbMiddleware) lookup(item pipelineTLBReqState) bool {
 	spec := m.comp.Spec
 	next := &m.comp.State
 
-	_, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr)
+	_, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr, request.NoMigrate)
 	if found {
 		return m.processTLBMSHRHit(item)
 	}
@@ -375,7 +377,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	request := msg.Payload.(addrtransprotocol.Req)
 
 	next := &m.comp.State
-	idx, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr)
+	idx, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr, request.NoMigrate)
 	if !found {
 		return false
 	}
@@ -396,9 +398,10 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 	spec := m.comp.Spec
 
 	fetchBottom := messaging.Msg{Payload: addrtransprotocol.Req{
-		PID:      request.PID,
-		VAddr:    request.VAddr,
-		DeviceID: request.DeviceID},
+		PID:       request.PID,
+		VAddr:     request.VAddr,
+		DeviceID:  request.DeviceID,
+		NoMigrate: request.NoMigrate},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
 		Dst: spec.Bottom.Find(request.VAddr),
@@ -419,7 +422,8 @@ func (m *tlbMiddleware) fetchBottom(item pipelineTLBReqState) bool {
 
 	next := &m.comp.State
 	var idx int
-	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.NumMSHREntries, request.PID, request.VAddr)
+	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.NumMSHREntries,
+		request.PID, request.VAddr, request.NoMigrate)
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, item)
 	next.MSHREntries[idx].HasReqToBottom = true
 	next.MSHREntries[idx].ReqToBottom = fetchBottom
@@ -443,13 +447,14 @@ func (m *tlbMiddleware) parseBottom() bool {
 	content := item.Payload.(addrtransprotocol.Rsp)
 	page := content.Page
 
-	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
-	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {
-		// Either no request is outstanding for this page, or this is a stale
-		// response whose request was discarded by a Reset (the current MSHR
-		// entry, if any, belongs to a newer request). Correlating by the
-		// outstanding request's ID keeps a stale pre-reset translation from
-		// filling the reset TLB and satisfying a fresh request.
+	mshrIdx, found := mshrGetEntryByReqID(next.MSHREntries, item.RspTo)
+	if !found {
+		// This is a stale response whose request was discarded by a Reset
+		// (the current MSHR entry for the page, if any, belongs to a newer
+		// request). Correlating by the outstanding request's ID keeps a stale
+		// pre-reset translation from filling the reset TLB and satisfying a
+		// fresh request, and tells apart the NoMigrate and normal entries of
+		// one page.
 		m.bottomPort().RetrieveIncoming()
 		return true
 	}
@@ -467,13 +472,19 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	// A fault response is forwarded to the requests but not filled: the
-	// requests translate again once the fault is serviced.
+	// requests translate again once the fault is serviced. A page already
+	// valid in the set, for example filled by the NoMigrate or normal miss
+	// of the same page, keeps its way; otherwise a way is evicted, also for
+	// a page invalidated in place.
 	if !content.Fault {
 		setID := vAddrToSetID(page.VAddr, spec)
-		wayID, ok := setEvict(&next.Sets[setID])
-
-		if !ok {
-			panic("failed to evict")
+		wayID, resident, found := setLookup(&next.Sets[setID], page.PID, page.VAddr)
+		if !found || !resident.Valid {
+			var ok bool
+			wayID, ok = setEvict(&next.Sets[setID])
+			if !ok {
+				panic("failed to evict")
+			}
 		}
 
 		setUpdate(&next.Sets[setID], wayID, page)
@@ -488,7 +499,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	// Get reqToBottom for tracing before removing
 	sendTaskID := next.MSHREntries[mshrIdx].SendTaskID
 
-	next.MSHREntries = mshrRemove(next.MSHREntries, page.PID, page.VAddr)
+	next.MSHREntries = slices.Delete(next.MSHREntries, mshrIdx, mshrIdx+1)
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {

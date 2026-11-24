@@ -73,6 +73,14 @@ that is not a multiple of that side's granularity, because requests are routed
 by their aligned unit base. Responses return on Top in
 admission order after each copy's writes have been acknowledged.
 
+Every read of a copy carries the request's `SrcPID` and every write carries
+its `DstPID`. Zero, the default, names a physical address. A nonzero PID lets
+a side whose port goes through an address translator copy virtual memory;
+the two sides take separate PIDs because one can be physical while the other
+is virtual. The translator translates only the start of each unit, so the
+granularity of a virtual side must divide the translator's page size; an
+address translator panics on a unit that crosses a page.
+
 ## Key Types
 
 ```go
@@ -82,6 +90,7 @@ type Req struct {
     SrcAddress, DstAddress uint64
     ByteSize               uint64
     SrcSide, DstSide       Side // "inside" or "outside"
+    SrcPID, DstPID         vm.PID
 }
 
 type Rsp struct {

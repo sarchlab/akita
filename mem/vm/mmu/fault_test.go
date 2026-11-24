@@ -178,6 +178,29 @@ func TestMMUDoesNotFaultOnPinnedLocalOrNonUnifiedPages(t *testing.T) {
 	}
 }
 
+func TestMMUDoesNotFaultForNoMigrate(t *testing.T) {
+	mmuComp, pageTable := buildFaultingMMU(t, "Driver.PageMigration", 16)
+	page := remoteUnifiedPage()
+	pageTable.Insert(page)
+	mmuComp.State.WalkingTranslations = []transactionState{{
+		ReqID:     1,
+		ReqSrc:    "DMATLB.Bottom",
+		PID:       uint32(page.PID),
+		VAddr:     page.VAddr,
+		DeviceID:  1,
+		NoMigrate: true,
+	}}
+	require.True(t, mmuComp.Middlewares.Translation.Handle(nil))
+
+	msgs := outgoing(mmuComp.Ports.Top)
+	require.Len(t, msgs, 1)
+	rsp := msgs[0].Payload.(addrtransprotocol.Rsp)
+	require.False(t, rsp.Fault)
+	require.Equal(t, uint64(2), rsp.Page.DeviceID)
+	require.Empty(t, mmuComp.State.PendingFaults)
+	require.Zero(t, mmuComp.State.NumFaults)
+}
+
 func TestMMUCheckpointKeepsPendingFaults(t *testing.T) {
 	mmuComp, pageTable := buildFaultingMMU(t, "Driver.PageMigration", 16)
 	walk(t, mmuComp, pageTable, remoteUnifiedPage())

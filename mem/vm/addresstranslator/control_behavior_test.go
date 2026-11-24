@@ -68,7 +68,8 @@ func TestAddressTranslatorControlBehavior(t *testing.T) {
 	makeRead := func(addr uint64) messaging.Msg {
 		req := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        addr,
-			AccessByteSize: 4},
+			AccessByteSize: 4,
+			PID:            1},
 			ID:  sim.NewID(),
 			Src: messaging.RemotePort("Agent"),
 			Dst: topPort.AsRemote(),

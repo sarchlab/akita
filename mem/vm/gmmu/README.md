@@ -20,8 +20,9 @@ The GMMU is configured with a `DeviceID` and is driven by two middlewares
    the page in the shared `vm.PageTable`:
    - If `page.DeviceID == DeviceID` (local), it finalizes the walk and returns a
      `addrtransprotocol.Rsp` on `Top`.
-   - Otherwise it forwards a `addrtransprotocol.Req` on the `Bottom` port to the
-     configured `Bottom`, remembering the transaction by request ID.
+   - Otherwise it forwards a `addrtransprotocol.Req`, with the request's
+     `NoMigrate`, on the `Bottom` port to the configured `Bottom`, remembering
+     the transaction by request ID.
 
 ### respondMW — bottom→top path
 

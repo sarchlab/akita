@@ -84,7 +84,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		Address: addr,
 
 		AccessByteSize: granularity,
-		PID:            0},
+		PID:            trans.SrcPID},
 		ID: m.comp.NewID(),
 
 		Src: srcP.AsRemote(),
@@ -212,6 +212,7 @@ func fullUnitWrite(addr, granularity uint64, payload []byte) memprotocol.WriteRe
 func (m *dataTransferMW) sendWrite(dstP messaging.Port, trans *dataMoverTransactionState, payload []byte) {
 	granularity := resolveByteGranularity(m.comp.Spec, trans.DstSide)
 	write := fullUnitWrite(trans.NextWriteAddr, granularity, payload)
+	write.PID = trans.DstPID
 	req := messaging.Msg{Payload: write,
 		ID: m.comp.NewID(),
 

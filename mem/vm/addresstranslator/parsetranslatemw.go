@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/tasks"
@@ -19,6 +20,10 @@ func (m *parseTranslateMW) topPort() messaging.Port {
 
 func (m *parseTranslateMW) translationPort() messaging.Port {
 	return m.comp.Ports.Translation
+}
+
+func (m *parseTranslateMW) bottomPort() messaging.Port {
+	return m.comp.Ports.Bottom
 }
 
 // Handle runs translate while the component is enabled. Pause, Drain, and
@@ -66,6 +71,12 @@ func (m *parseTranslateMW) translate() bool {
 	nextState := &m.comp.State
 	incoming.Seq = nextState.NextReqSeq
 
+	if incoming.PID == 0 {
+		return m.passThrough(itemI, incoming)
+	}
+
+	mustStayInPage(m.comp.Name(), incoming, m.comp.Spec.Log2PageSize)
+
 	if isPageHeld(nextState, incoming.PID, incoming.Address,
 		m.comp.Spec.Log2PageSize) {
 		// The page is held or faulted: the access waits in the held list
@@ -93,6 +104,45 @@ func (m *parseTranslateMW) translate() bool {
 
 	incoming.RecvTaskID = m.comp.TaskTracker().StartReqIn(m.comp, itemI)
 	m.sendTranslation(incoming, transReq)
+	nextState.NextReqSeq++
+	m.topPort().RetrieveIncoming()
+
+	return true
+}
+
+// passThrough forwards a PID-0 access, whose address is already physical, to
+// the bottom at the same address, without a translation and regardless of
+// Holds. It takes turns on the Bottom port with the translated accesses
+// (State.PreferTranslated).
+func (m *parseTranslateMW) passThrough(
+	msg messaging.Msg,
+	incoming incomingReqState,
+) bool {
+	if !m.bottomPort().CanSend() {
+		return false
+	}
+
+	if m.comp.State.PreferTranslated && translatedWaitsForBottom(m.comp) {
+		return false
+	}
+
+	spec := m.comp.Spec
+	page := vm.Page{PAddr: addrToPageID(incoming.Address, spec.Log2PageSize)}
+	req := createTranslatedReq(m.comp.NewID, incoming, page,
+		spec.Log2PageSize, m.bottomPort().AsRemote(), spec.Bottom)
+
+	m.topPort().AddIncomingMilestone(tasks.Reason(
+		tasks.MilestoneKindNetworkBusy, m.bottomPort().Name()))
+
+	tracker := m.comp.TaskTracker()
+	incoming.RecvTaskID = tracker.StartReqIn(m.comp, msg)
+	reqToBot := buildReqToBottom(incoming, req)
+	reqToBot.SendTaskID = tracker.StartReqOut(m.comp, req, incoming.RecvTaskID)
+	m.bottomPort().Send(req)
+
+	nextState := &m.comp.State
+	nextState.InflightReqToBottom = append(nextState.InflightReqToBottom, reqToBot)
+	nextState.PreferTranslated = true
 	nextState.NextReqSeq++
 	m.topPort().RetrieveIncoming()
 
@@ -136,9 +186,10 @@ func (m *parseTranslateMW) translationReq(incoming incomingReqState) messaging.M
 	spec := m.comp.Spec
 
 	return messaging.Msg{Payload: addrtransprotocol.Req{
-		PID:      incoming.PID,
-		VAddr:    addrToPageID(incoming.Address, spec.Log2PageSize),
-		DeviceID: spec.DeviceID},
+		PID:       incoming.PID,
+		VAddr:     addrToPageID(incoming.Address, spec.Log2PageSize),
+		DeviceID:  spec.DeviceID,
+		NoMigrate: spec.NoMigrate},
 		ID:  m.comp.NewID(),
 		Src: m.translationPort().AsRemote(),
 		Dst: spec.Translation.Find(incoming.Address),

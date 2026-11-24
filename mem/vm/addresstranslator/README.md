@@ -33,6 +33,37 @@ saved in a transaction record while the translation is outstanding.
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
+### Physical accesses (PID 0)
+
+A request with PID 0 is already physical. It is sent on `Bottom` at the same
+address, without a translation request, and is not subject to Holds or
+faults; its response returns on `Top` like any other. Translated requests
+also leave with PID 0. Since PID 0 is never held, a Hold or Release of PID 0
+is rejected with `memcontrolprotocol.ErrInvalidPID`, and a Hold of another
+process does not wait for physical accesses.
+
+When a PID-0 request and a translated request are both ready for `Bottom`,
+they take turns: a PID-0 request that is sent lets the next translated
+request go first (`State.PreferTranslated`), so neither kind starves the
+other.
+
+### Accesses within a page
+
+Only the page of the start address of a virtual access (nonzero PID) is
+translated, so the whole access, `[Address, Address+AccessByteSize)` or the
+length of a write's data, must lie in one page of `1 << Log2PageSize` bytes.
+An access that crosses a page boundary panics before it is translated.
+PID-0 accesses are not checked. A data mover side that goes through a
+translator therefore uses a granularity that divides the page size.
+
+### No-migrate translation
+
+With `Spec.NoMigrate` set, every translation request carries
+`addrtransprotocol.Req.NoMigrate`: the MMUs return any valid mapping of the
+page, wherever it is placed, and a fault handler that is consulted must not
+migrate the page for it. A translator in front of a data mover, which copies
+memory without running on the device, sets it. The default is false.
+
 ### Holds, faults, and releases
 
 Page migration stops and restarts the accesses of a translator with
@@ -78,8 +109,8 @@ answers the Holds that are not acknowledged yet with
 
 ## Key Types
 
-- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
-  `NumReqPerCycle`. Port buffer sizes are chosen by the system builder when it
+- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`,
+  `NumReqPerCycle`, and `NoMigrate`. Port buffer sizes are chosen by the system builder when it
   creates the port instances, not in the `Spec`.
 - `State` — mutable runtime data: the control state, the in-flight translation
   transactions, the requests forwarded to the bottom port awaiting

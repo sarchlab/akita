@@ -154,7 +154,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 	}
 
 	makeRead := func(addr uint64) messaging.Msg {
-		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4, PID: 1},
 			ID:           sim.NewID(),
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),
@@ -165,7 +165,7 @@ func TestAddressTranslatorMilestones(t *testing.T) {
 	}
 
 	makeWrite := func(addr uint64, data []byte) messaging.Msg {
-		req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
+		req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data, PID: 1},
 			ID:           sim.NewID(),
 			Src:          messaging.RemotePort("Agent"),
 			Dst:          topPort.AsRemote(),

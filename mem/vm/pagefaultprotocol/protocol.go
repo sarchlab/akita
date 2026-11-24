@@ -17,13 +17,16 @@ var (
 )
 
 // Req preserves the original virtual address and requesting device at every hop.
-// Mapping is meaningful only when HasMapping is set.
+// Mapping is meaningful only when HasMapping is set. NoMigrate carries
+// addrtransprotocol.Req.NoMigrate: the requester accepts any valid mapping,
+// and the handler must not migrate the page for it.
 type Req struct {
 	PID        vm.PID
 	VAddr      uint64
 	DeviceID   uint64
 	HasMapping bool
 	Mapping    vm.Page
+	NoMigrate  bool
 }
 
 // Result is the handler's decision for this transaction.

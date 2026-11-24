@@ -62,10 +62,10 @@ func (w *walk) finishLookupTask(c *Comp, stage string) {
 	}
 }
 
-func (w *walk) markDecision(c *Comp, device uint64, kind tasks.MilestoneKind) {
+func (w *walk) markDecision(c *Comp, d decision, kind tasks.MilestoneKind) {
 	if t := c.TaskTracker(); t != nil {
 		for i := range w.Waiters {
-			if w.Waiters[i].Device == device {
+			if d.answers(w.Waiters[i]) {
 				w.Waiters[i].mark(t, kind, c.Ports.PageFault.Name())
 			}
 		}

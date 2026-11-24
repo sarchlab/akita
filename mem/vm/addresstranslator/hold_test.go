@@ -38,9 +38,16 @@ func newHoldHarness(t *testing.T) *holdHarness {
 func newHoldHarnessWithControlBuf(t *testing.T, bufSize int) *holdHarness {
 	t.Helper()
 
+	return newHoldHarnessWithSpec(t, bufSize, bottomBufSize, DefaultSpec())
+}
+
+// newHoldHarnessWithSpec builds the harness from spec, adding the routing,
+// with Control and Bottom ports that buffer ctrlBuf and bottomBuf messages.
+func newHoldHarnessWithSpec(t *testing.T, ctrlBuf, bottomBuf int, spec Spec) *holdHarness {
+	t.Helper()
+
 	sim := testsim.New(timing.NewSerialEngine(), false)
 
-	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"MemPort"}
 	spec.Translation.Destinations = []messaging.RemotePort{"TranslationProvider"}
 
@@ -50,7 +57,11 @@ func newHoldHarnessWithControlBuf(t *testing.T, bufSize int) *holdHarness {
 	ports := makePorts(sim, "AddressTranslator", topBufSize)
 	ports.Control = twowaybuffered.MakeBuilder().
 		WithSimulation(sim).
-		WithSpec(twowaybuffered.Spec{IncomingCapacity: bufSize, OutgoingCapacity: bufSize}).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: ctrlBuf, OutgoingCapacity: ctrlBuf}).
+		Build()
+	ports.Bottom = twowaybuffered.MakeBuilder().
+		WithSimulation(sim).
+		WithSpec(twowaybuffered.Spec{IncomingCapacity: bottomBuf, OutgoingCapacity: bottomBuf}).
 		Build()
 	at.BindPort("Top", ports.Top)
 	at.BindPort("Bottom", ports.Bottom)
