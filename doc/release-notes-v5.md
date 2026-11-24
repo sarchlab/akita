@@ -454,3 +454,26 @@ best effort: if it decodes, it is used; otherwise loading reports an error.
   payload, because it computes routes at Initialize.
 - Loading a checkpoint saved by an earlier release is best effort, like any
   checkpoint from a different executable.
+
+## Data mover translation and no-migrate translations
+
+`datamoverprotocol.Req` gains `SrcPID` and `DstPID`. Every read of a copy
+carries `SrcPID` and every write carries `DstPID`; zero, the default, keeps the
+physical behavior. A data mover side can then go through an address
+translator to copy virtual memory.
+
+The address translator forwards a request with PID 0 to `Bottom` at the same
+address, without a translation and regardless of Holds. **Result-changing:** a
+caller that sent PID-0 requests through a translator for translation must now
+give them a nonzero PID.
+
+`addrtransprotocol.Req` and `pagefaultprotocol.Req` gain `NoMigrate`, and the
+address translator gains `Spec.NoMigrate`, which sets it on every translation
+request. A NoMigrate request takes any valid mapping: the memory-backed MMU
+answers it directly even under `ConsultRemote`, and forwards it with
+`NoMigrate` to the fault handler only without a valid mapping. Its fault
+decisions are kept per device and `NoMigrate`. The TLB forwards `NoMigrate` on
+a miss and does not merge NoMigrate and normal misses of one page; it matches
+bottom responses to MSHR entries by request ID. The MMU cache and the GMMU
+forward `NoMigrate`, and the fixed-latency MMU does not fault for it. With the
+defaults, behavior and timing are unchanged.

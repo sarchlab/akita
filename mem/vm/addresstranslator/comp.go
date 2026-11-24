@@ -26,6 +26,12 @@ type Spec struct {
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
+
+	// NoMigrate sets addrtransprotocol.Req.NoMigrate on every translation
+	// request, so the MMUs answer with any valid mapping instead of asking
+	// the fault handler to migrate the page. A translator in front of a data
+	// mover sets it.
+	NoMigrate bool `json:"no_migrate"`
 }
 
 // Ports holds the AddressTranslator's ports.

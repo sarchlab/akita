@@ -59,7 +59,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) {
 	// then awaits the translation response (which never comes — the request is in
 	// flight). Tick until the transaction is created and the Req has
 	// actually gone out the Translation port.
-	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4},
+	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4, PID: 1},
 		ID:           sim.NewID(),
 		Src:          messaging.RemotePort("Agent"),
 		Dst:          topPort.AsRemote(),

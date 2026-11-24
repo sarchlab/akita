@@ -33,6 +33,22 @@ saved in a transaction record while the translation is outstanding.
 
 Up to `NumReqPerCycle` translations and responses are handled each tick.
 
+### Physical accesses (PID 0)
+
+A request with PID 0 is already physical. It is sent on `Bottom` at the same
+address, without a translation request, and is not subject to Holds or
+faults; its response returns on `Top` like any other. Translated requests
+also leave with PID 0. A Hold of PID 0 still waits for the PID-0 accesses in
+flight to its pages before it is acknowledged.
+
+### No-migrate translation
+
+With `Spec.NoMigrate` set, every translation request carries
+`addrtransprotocol.Req.NoMigrate`: the MMUs return any valid mapping of the
+page, wherever it is placed, and a fault handler that is consulted must not
+migrate the page for it. A translator in front of a data mover, which copies
+memory without running on the device, sets it. The default is false.
+
 ### Holds, faults, and releases
 
 Page migration stops and restarts the accesses of a translator with
@@ -78,8 +94,8 @@ answers the Holds that are not acknowledged yet with
 
 ## Key Types
 
-- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
-  `NumReqPerCycle`. Port buffer sizes are chosen by the system builder when it
+- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`,
+  `NumReqPerCycle`, and `NoMigrate`. Port buffer sizes are chosen by the system builder when it
   creates the port instances, not in the `Spec`.
 - `State` — mutable runtime data: the control state, the in-flight translation
   transactions, the requests forwarded to the bottom port awaiting

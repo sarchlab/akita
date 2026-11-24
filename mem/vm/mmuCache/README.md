@@ -21,7 +21,8 @@ On a request arriving from the `Top` port:
    miss.
 2. **sendReqToBottom** — A `addrtransprotocol.Req` is forwarded on the `Bottom` port
    to `Spec.LowModule`, carrying the remaining latency in its `TransLatency`
-   field so the downstream provider can account for the cached levels.
+   field so the downstream provider can account for the cached levels, and
+   the request's `NoMigrate`.
 3. **handleRsp** — When a `addrtransprotocol.Rsp` returns on `Bottom`, every level is
    filled with the resolved page's segments (using LRU replacement within each
    level) and a `addrtransprotocol.Rsp` is relayed up to `Spec.UpModule`.

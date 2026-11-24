@@ -102,10 +102,11 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 	return m.doPageWalkHit(walkingIndex)
 }
 
-// faults reports whether a walk faults: faults are enabled, and the page is
-// unified, on another device than the requester, and not pinned.
+// faults reports whether a walk faults: faults are enabled, the request is
+// not NoMigrate, and the page is unified, on another device than the
+// requester, and not pinned. A NoMigrate request takes the remote page.
 func (m *translationMW) faults(walking transactionState, page vm.Page) bool {
-	return m.comp.Spec.FaultHandler != "" && page.Unified &&
+	return m.comp.Spec.FaultHandler != "" && !walking.NoMigrate && page.Unified &&
 		page.DeviceID != walking.DeviceID && !page.IsPinned
 }
 
@@ -252,6 +253,7 @@ func (m *translationMW) startWalking(req messaging.Msg) {
 		VAddr:        req.Payload.(addrtransprotocol.Req).VAddr,
 		DeviceID:     req.Payload.(addrtransprotocol.Req).DeviceID,
 		TransLatency: req.Payload.(addrtransprotocol.Req).TransLatency,
+		NoMigrate:    req.Payload.(addrtransprotocol.Req).NoMigrate,
 		CycleLeft:    spec.Latency,
 	}
 

@@ -100,6 +100,11 @@ type mshrEntryState struct {
 	// Fault is set when the translation fetched for the entry faulted. A
 	// fault response is forwarded to the requests but never filled.
 	Fault bool `json:"fault"`
+
+	// NoMigrate is the addrtransprotocol.Req.NoMigrate of the requests the
+	// entry merges. A NoMigrate miss and a normal miss of the same page get
+	// separate entries, so that neither gets the other's result.
+	NoMigrate bool `json:"no_migrate"`
 }
 
 // Matches reports whether the MSHR entry has the given PID and virtual address.
@@ -162,12 +167,36 @@ func initSets(numSets, numWays int) []setState {
 
 // --- Free functions for MSHR operations (delegating to shared mshr package) ---
 
-func mshrGetEntry(entries []mshrEntryState, pid vm.PID, vAddr uint64) (int, bool) {
-	return mshr.Find(entries, pid, vAddr)
+// mshrGetEntry finds the entry of the page vAddr of pid that merges requests
+// with the given NoMigrate.
+func mshrGetEntry(
+	entries []mshrEntryState, pid vm.PID, vAddr uint64, noMigrate bool,
+) (int, bool) {
+	for i, e := range entries {
+		if e.Matches(pid, vAddr) && e.NoMigrate == noMigrate {
+			return i, true
+		}
+	}
+
+	return -1, false
 }
 
-func mshrAdd(entries []mshrEntryState, capacity int, pid vm.PID, vAddr uint64) ([]mshrEntryState, int) {
-	if mshr.IsPresent(entries, pid, vAddr) {
+// mshrGetEntryByReqID finds the entry whose request to the bottom has the
+// given ID.
+func mshrGetEntryByReqID(entries []mshrEntryState, id uint64) (int, bool) {
+	for i, e := range entries {
+		if e.ReqToBottom.ID == id {
+			return i, true
+		}
+	}
+
+	return -1, false
+}
+
+func mshrAdd(
+	entries []mshrEntryState, capacity int, pid vm.PID, vAddr uint64, noMigrate bool,
+) ([]mshrEntryState, int) {
+	if _, found := mshrGetEntry(entries, pid, vAddr, noMigrate); found {
 		panic("entry already in mshr")
 	}
 
@@ -176,17 +205,14 @@ func mshrAdd(entries []mshrEntryState, capacity int, pid vm.PID, vAddr uint64) (
 	}
 
 	entry := mshrEntryState{
-		PID:   uint32(pid),
-		VAddr: vAddr,
+		PID:       uint32(pid),
+		VAddr:     vAddr,
+		NoMigrate: noMigrate,
 	}
 
 	entries = append(entries, entry)
 
 	return entries, len(entries) - 1
-}
-
-func mshrRemove(entries []mshrEntryState, pid vm.PID, vAddr uint64) []mshrEntryState {
-	return mshr.Remove(entries, pid, vAddr)
 }
 
 func mshrIsFull(entries []mshrEntryState, capacity int) bool {

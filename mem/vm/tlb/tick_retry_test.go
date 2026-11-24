@@ -80,7 +80,7 @@ func TestRespondNoWaiterCleanupLetsBottomParse(t *testing.T) {
 func TestParseBottomDrainsStaleThenStopsAtStagedResponse(t *testing.T) {
 	comp, _ := newRetryTLB(t)
 	var idx int
-	comp.State.MSHREntries, idx = mshrAdd(comp.State.MSHREntries, comp.Spec.NumMSHREntries, 1, 0x1000)
+	comp.State.MSHREntries, idx = mshrAdd(comp.State.MSHREntries, comp.Spec.NumMSHREntries, 1, 0x1000, false)
 	comp.State.MSHREntries[idx].ReqToBottom = messaging.Msg{ID: 50}
 	deliverBottomRsp(comp, 98, 0x2000)
 	deliverBottomRsp(comp, 99, 0x3000)

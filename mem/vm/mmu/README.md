@@ -30,6 +30,8 @@ Invalidate and Flush are answered as unsupported.
      `State.PendingFaults` and sent from `Notification[0]` to `FaultHandler`. The MMU
      never holds a walk while a fault is serviced; the requester holds the
      access and translates it again when the fault handler releases it.
+     A request with `NoMigrate` set never faults: it receives the page
+     wherever it is placed.
 
 ## Key Types
 

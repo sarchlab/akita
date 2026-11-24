@@ -38,9 +38,15 @@ func newHoldHarness(t *testing.T) *holdHarness {
 func newHoldHarnessWithControlBuf(t *testing.T, bufSize int) *holdHarness {
 	t.Helper()
 
+	return newHoldHarnessWithSpec(t, bufSize, DefaultSpec())
+}
+
+// newHoldHarnessWithSpec builds the harness from spec, adding the routing.
+func newHoldHarnessWithSpec(t *testing.T, bufSize int, spec Spec) *holdHarness {
+	t.Helper()
+
 	sim := testsim.New(timing.NewSerialEngine(), false)
 
-	spec := DefaultSpec()
 	spec.Bottom.Destinations = []messaging.RemotePort{"MemPort"}
 	spec.Translation.Destinations = []messaging.RemotePort{"TranslationProvider"}
 

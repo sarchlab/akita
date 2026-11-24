@@ -38,12 +38,13 @@ func (m *walkMiddleware) admit(faultIn bool) bool {
 	}
 	var pid vm.PID
 	var va, device uint64
+	var noMigrate bool
 	if faultIn {
 		req := msg.Payload.(pagefaultprotocol.Req)
-		pid, va, device = req.PID, req.VAddr, req.DeviceID
+		pid, va, device, noMigrate = req.PID, req.VAddr, req.DeviceID, req.NoMigrate
 	} else {
 		req := msg.Payload.(addrtransprotocol.Req)
-		pid, va, device = req.PID, req.VAddr, req.DeviceID
+		pid, va, device, noMigrate = req.PID, req.VAddr, req.DeviceID, req.NoMigrate
 	}
 	vpn := va >> c.Spec.Log2PageSize
 	if c.State.Update.protects(c.Spec, pid, vpn) {
@@ -65,6 +66,7 @@ func (m *walkMiddleware) admit(faultIn bool) bool {
 	}
 	w.Waiters = append(w.Waiters, waiter{
 		ID: msg.ID, Src: msg.Src, VA: va, Device: device, FaultIn: faultIn,
+		NoMigrate:    noMigrate,
 		requestTrace: startRequest(c, msg),
 	})
 	return true

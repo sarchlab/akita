@@ -94,6 +94,7 @@ func (m *walkMW) startWalking(req messaging.Msg) {
 		PID:        uint64(req.Payload.(addrtransprotocol.Req).PID),
 		VAddr:      req.Payload.(addrtransprotocol.Req).VAddr,
 		DeviceID:   req.Payload.(addrtransprotocol.Req).DeviceID,
+		NoMigrate:  req.Payload.(addrtransprotocol.Req).NoMigrate,
 		CycleLeft:  spec.Latency,
 	}
 
@@ -182,9 +183,10 @@ func (m *walkMW) processRemoteMemReq(
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := messaging.Msg{Payload: addrtransprotocol.Req{
-		PID:      vm.PID(walking.PID),
-		VAddr:    walking.VAddr,
-		DeviceID: walking.DeviceID},
+		PID:       vm.PID(walking.PID),
+		VAddr:     walking.VAddr,
+		DeviceID:  walking.DeviceID,
+		NoMigrate: walking.NoMigrate},
 		ID:  m.comp.NewID(),
 		Src: m.bottomPort().AsRemote(),
 		Dst: spec.Bottom,

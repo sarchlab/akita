@@ -118,6 +118,27 @@ func TestMMUCacheControlBehavior(t *testing.T) {
 		build()
 	}
 
+	t.Run("forwards NoMigrate to the bottom", func(t *testing.T) {
+		for _, noMigrate := range []bool{false, true} {
+			setup1(t)
+
+			req := makeTranslationReq(0x1000)
+			payload := req.Payload.(addrtransprotocol.Req)
+			payload.NoMigrate = noMigrate
+			req.Payload = payload
+			topPort.Deliver(req)
+
+			var out messaging.Msg
+			ok := false
+			for i := 0; i < 16 && !ok; i++ {
+				modelingtest.Tick(comp)
+				out, ok = bottomPort.RetrieveOutgoing()
+			}
+			require.True(t, ok)
+			require.Equal(t, noMigrate, out.Payload.(addrtransprotocol.Req).NoMigrate)
+		}
+	})
+
 	t.Run("waits for outstanding bottom walks before acking Drain", func(t *testing.T) {
 		setup1(t)
 

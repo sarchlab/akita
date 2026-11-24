@@ -174,6 +174,32 @@ func TestGMMU(t *testing.T) {
 			req := reqI
 			require.Equal(t, lowModulePort, req.Dst)
 			require.Equal(t, uint64(0x10000000), req.Payload.(addrtransprotocol.Req).VAddr)
+			require.False(t, req.Payload.(addrtransprotocol.Req).NoMigrate)
+		})
+
+		t.Run("should forward NoMigrate remotely", func(t *testing.T) {
+			setup1(t)
+
+			pageTable.Insert(vm.Page{
+				PID:      vm.PID(1),
+				VAddr:    0x10000000,
+				DeviceID: 1,
+				Valid:    true,
+			})
+
+			req := makeTranslationReq(0x10000000)
+			payload := req.Payload.(addrtransprotocol.Req)
+			payload.NoMigrate = true
+			req.Payload = payload
+			topPort.Deliver(req)
+
+			for range 3 {
+				modelingtest.Tick(gmmuComp)
+			}
+
+			sent, ok := bottomPort.RetrieveOutgoing()
+			require.True(t, ok)
+			require.True(t, sent.Payload.(addrtransprotocol.Req).NoMigrate)
 		})
 
 		t.Run("should return response from remote page table", func(t *testing.T) {

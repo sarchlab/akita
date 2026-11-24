@@ -59,6 +59,7 @@ type transactionState struct {
 	VAddr        uint64               `json:"vaddr"`
 	DeviceID     uint64               `json:"device_id"`
 	TransLatency uint64               `json:"trans_latency"`
+	NoMigrate    bool                 `json:"no_migrate"`
 	Page         vm.Page              `json:"page"`
 	CycleLeft    int                  `json:"cycle_left"`
 	// WalkTaskID is the pipeline subtask that spans the local page-table-walk

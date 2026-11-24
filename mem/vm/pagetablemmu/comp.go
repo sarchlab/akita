@@ -78,21 +78,32 @@ type Ports struct {
 	Control   messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/pagetableprotocol.responder"`
 }
 
+// NoMigrate is the request's addrtransprotocol.Req.NoMigrate or
+// pagefaultprotocol.Req.NoMigrate.
 type waiter struct {
 	requestTrace
-	ID      uint64
-	Src     messaging.RemotePort
-	VA      uint64
-	Device  uint64
-	FaultIn bool
+	ID        uint64
+	Src       messaging.RemotePort
+	VA        uint64
+	Device    uint64
+	FaultIn   bool
+	NoMigrate bool
 }
 
-// A decision lives only while this device has waiters for the active walk.
+// A decision answers the waiters of one device with one NoMigrate, and lives
+// only while the active walk has such waiters. Separate decisions keep the
+// results of NoMigrate and normal requests of a device apart.
 type decision struct {
-	Device   uint64
-	ID       uint64
-	Task     uint64
-	Response pagefaultprotocol.Rsp
+	Device    uint64
+	NoMigrate bool
+	ID        uint64
+	Task      uint64
+	Response  pagefaultprotocol.Rsp
+}
+
+// answers reports whether the decision is the one for the waiter.
+func (d decision) answers(w waiter) bool {
+	return d.Device == w.Device && d.NoMigrate == w.NoMigrate
 }
 
 type walk struct {

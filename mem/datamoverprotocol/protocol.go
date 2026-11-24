@@ -3,7 +3,10 @@
 // roles ports bind to.
 package datamoverprotocol
 
-import "github.com/sarchlab/akita/v5/sim/messaging"
+import (
+	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+)
 
 // Protocol is the data move protocol: a requester asks the data mover to copy
 // a byte range between its inside and outside sides, and the data mover
@@ -43,10 +46,17 @@ type Rsp struct {
 // memory controller or be otherwise serialized. With controllers that share one
 // mem.Storage and interleave more finely than the unit, or with parallel direct
 // storage writes to that unit, a neighboring update can be lost.
+//
+// SrcPID and DstPID are the process IDs of the source and destination
+// addresses. Every read of the copy carries SrcPID and every write carries
+// DstPID, so a side whose memory requests go through an address translator
+// can name virtual addresses. Zero means a physical address.
 type Req struct {
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
 	SrcSide    Side
 	DstSide    Side
+	SrcPID     vm.PID
+	DstPID     vm.PID
 }

@@ -31,15 +31,20 @@ func (m *walkMiddleware) respond() bool {
 	return progress
 }
 
+// replyOrForward answers a waiter of a finished walk. A valid mapping is used
+// directly unless ConsultRemote asks to consult the fault handler about a
+// mapping owned by another device; a NoMigrate waiter takes any valid
+// mapping.
 func (m *walkMiddleware) replyOrForward(w *walk) bool {
 	for i, wait := range w.Waiters {
-		if w.Page.Valid && (!m.c.Spec.ConsultRemote || w.Page.DeviceID == wait.Device) {
+		if w.Page.Valid &&
+			(wait.NoMigrate || !m.c.Spec.ConsultRemote || w.Page.DeviceID == wait.Device) {
 			if m.reply(w, i, pagefaultprotocol.Rsp{Result: pagefaultprotocol.Resolved, Mapping: w.Page}) {
 				return true
 			}
 			continue
 		}
-		d := slices.IndexFunc(w.Decisions, func(d decision) bool { return d.Device == wait.Device })
+		d := slices.IndexFunc(w.Decisions, func(d decision) bool { return d.answers(wait) })
 		if d < 0 {
 			if m.forward(w, wait) {
 				return true
@@ -60,10 +65,12 @@ func (m *walkMiddleware) forward(w *walk, wait waiter) bool {
 		return false
 	}
 	req := messaging.Msg{ID: c.NewID(), Src: p.AsRemote(), Dst: c.Spec.FaultHandler, Payload: pagefaultprotocol.Req{
-		PID: w.PID, VAddr: wait.VA, DeviceID: wait.Device, HasMapping: w.Page.Valid, Mapping: w.Page}}
+		PID: w.PID, VAddr: wait.VA, DeviceID: wait.Device, HasMapping: w.Page.Valid, Mapping: w.Page,
+		NoMigrate: wait.NoMigrate}}
 	task := c.TaskTracker().StartReqOut(c, req, wait.Task)
-	w.markDecision(c, wait.Device, tasks.MilestoneKindHardwareResource)
-	w.Decisions = append(w.Decisions, decision{Device: wait.Device, ID: req.ID, Task: task})
+	d := decision{Device: wait.Device, NoMigrate: wait.NoMigrate, ID: req.ID, Task: task}
+	w.markDecision(c, d, tasks.MilestoneKindHardwareResource)
+	w.Decisions = append(w.Decisions, d)
 	p.Send(req)
 	return true
 }
@@ -94,7 +101,7 @@ func (m *walkMiddleware) receiveDecision() bool {
 				panic("pagetablemmu: invalid fault result")
 			}
 			d.Response = rsp
-			w.markDecision(c, d.Device, tasks.MilestoneKindTranslation)
+			w.markDecision(c, *d, tasks.MilestoneKindTranslation)
 			c.TaskTracker().EndReqOut(d.Task)
 			return true
 		}
@@ -127,8 +134,10 @@ func (m *walkMiddleware) reply(w *walk, i int, answer pagefaultprotocol.Rsp) boo
 		*w = walk{}
 		return true
 	}
-	if !slices.ContainsFunc(w.Waiters, func(v waiter) bool { return v.Device == wait.Device }) {
-		w.Decisions = slices.DeleteFunc(w.Decisions, func(d decision) bool { return d.Device == wait.Device })
+	if !slices.ContainsFunc(w.Waiters, func(v waiter) bool {
+		return v.Device == wait.Device && v.NoMigrate == wait.NoMigrate
+	}) {
+		w.Decisions = slices.DeleteFunc(w.Decisions, func(d decision) bool { return d.answers(wait) })
 	}
 	return true
 }

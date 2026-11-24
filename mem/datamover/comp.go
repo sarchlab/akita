@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -94,6 +95,8 @@ type dataMoverTransactionState struct {
 	ByteSize      uint64                      `json:"byte_size"`
 	SrcSide       datamoverprotocol.Side      `json:"src_side"`
 	DstSide       datamoverprotocol.Side      `json:"dst_side"`
+	SrcPID        vm.PID                      `json:"src_pid"`
+	DstPID        vm.PID                      `json:"dst_pid"`
 	NextReadAddr  uint64                      `json:"next_read_addr"`
 	NextWriteAddr uint64                      `json:"next_write_addr"`
 	PendingRead   map[uint64]pendingReadState `json:"pending_read"`
