@@ -52,7 +52,7 @@ func TestTrackedSwitchBackpressure(t *testing.T) {
 			if latency == 0 {
 				admitted = sw.State.PortComplexes[0].Waiting.Capacity()
 			}
-			var want []uint64
+			want := make([]uint64, 0, admitted+1)
 			for range admitted {
 				msg := flit()
 				want = append(want, msg.ID)
