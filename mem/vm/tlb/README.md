@@ -27,8 +27,10 @@ flow through a fixed-latency pipeline before lookup:
      request's `NoMigrate`, is forwarded on the `Bottom` port to the
      translation provider resolved by the Spec routing value.
 3. **Fill / respond** — A response returning on `Bottom` is matched to its MSHR
-   entry by the ID of the forwarded request. It evicts an LRU way, installs
-   the page, and replays every request queued in that entry back to `Top`. A
+   entry by the ID of the forwarded request. It reuses the way of the page if
+   the page is already valid in the set (filled by the other of a `NoMigrate`
+   and a normal miss), and otherwise evicts an LRU way, also for a page
+   invalidated in place. It installs the page and replays every request queued in that entry back to `Top`. A
    fault response (`addrtransprotocol.Rsp.Fault`) is forwarded to the queued
    requests but not filled.
 

@@ -3,6 +3,8 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/mem/internal/addrfilter"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addrtransprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -103,4 +105,35 @@ func TestNoMigrateAndNormalFillsShareOneWay(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, ways)
+}
+
+// TestRefillOfInvalidatedPageEvictsLRU checks that a page invalidated in
+// place, whose lookup key stays in the set, is refilled into the LRU way, as
+// before resident ways were reused: the unrelated LRU page is evicted.
+func TestRefillOfInvalidatedPageEvictsLRU(t *testing.T) {
+	comp, _ := newRetryTLB(t, func(s *Spec) { s.NumWays = 2 })
+	mw := comp.Middlewares.TLB
+	set := &comp.State.Sets[0]
+
+	for _, vAddr := range []uint64{0x9000, 0x1000} {
+		wayID, ok := setEvict(set)
+		require.True(t, ok)
+		setUpdate(set, wayID, vm.Page{PID: 1, VAddr: vAddr, Valid: true})
+		setVisit(set, wayID)
+	}
+	invalidateEntries(&comp.State, addrfilter.FromReq(memcontrolprotocol.Req{
+		Command: memcontrolprotocol.CmdInvalidate, Addresses: []uint64{0x1000}, PID: 1,
+	}, comp.Spec.Log2PageSize), 1)
+
+	require.True(t, mw.lookup(transReqItem(comp, false)))
+	fetch, ok := comp.Ports.Bottom.RetrieveOutgoing()
+	require.True(t, ok)
+	deliverBottomRsp(comp, fetch.ID, 0x1000)
+	require.True(t, mw.parseBottom())
+
+	_, page, found := setLookup(set, 1, 0x1000)
+	require.True(t, found)
+	require.True(t, page.Valid)
+	_, _, found = setLookup(set, 1, 0x9000)
+	require.False(t, found, "the LRU page is evicted")
 }
